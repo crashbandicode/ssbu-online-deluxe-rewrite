@@ -476,6 +476,68 @@
           "hash40": "0x10eb389f5a"
         }
       ]
+    },
+    {
+      "label": "Palutena Explosive Flame",
+      "source_group": "vanilla ACMD creation names corroborated with local effect archive",
+      "source_url": "https://github.com/WuBoytH/SSBU-Dumped-Scripts/tree/59004685238a3f6f93bae905d3a4e079701c40b4/smashline/lua2cpp_palutena/palutena_explosiveflame",
+      "targets": [
+        {
+          "name": "palutena_bomb",
+          "hash40": "0x0d7ab47912"
+        },
+        {
+          "name": "palutena_bomb_appear",
+          "hash40": "0x14a8eca673"
+        },
+        {
+          "name": "palutena_bomb_finish",
+          "hash40": "0x14e4533359"
+        }
+      ]
+    },
+    {
+      "label": "Sephiroth Shadow Flare",
+      "source_group": "vanilla ACMD creation names corroborated with local effect archive",
+      "source_url": "https://github.com/WuBoytH/SSBU-Dumped-Scripts/tree/59004685238a3f6f93bae905d3a4e079701c40b4/smashline/lua2cpp_edge",
+      "targets": [
+        {
+          "name": "edge_shadowflare_start",
+          "hash40": "0x16e8f5ecc5"
+        },
+        {
+          "name": "edge_shadowflare_hold",
+          "hash40": "0x159443d106"
+        },
+        {
+          "name": "edge_shadowflare_aura",
+          "hash40": "0x155cd1737a"
+        },
+        {
+          "name": "edge_shadowflare_beam",
+          "hash40": "0x153a1b725d"
+        },
+        {
+          "name": "edge_shadowflare_beam_hit",
+          "hash40": "0x19169146d2"
+        },
+        {
+          "name": "edge_shadowflare_bullet",
+          "hash40": "0x172c6d1442"
+        },
+        {
+          "name": "edge_shadowflare_bullet_attack",
+          "hash40": "0x1e7e664d1f"
+        },
+        {
+          "name": "edge_shadowflare_bullet_hit",
+          "hash40": "0x1bdf00dda8"
+        },
+        {
+          "name": "edge_shadowflare_bullet_end",
+          "hash40": "0x1b852ec858"
+        }
+      ]
     }
   ],
   "sephiroth_core_preserve_recommended": [
@@ -510,8 +572,8 @@
     "0x1126af6d01",
     "0x11ea056d9f"
   ],
-  "ness_lucas_defer_without_owner_and_move_context": true,
   "scope": "Names extracted from peer source, narrowed to move-qualified resource names. Presence in source does not prove every name reaches EffectModule request methods.",
   "ffi_reference": "skyline-smash bed642e/src/cpp.rs:5006",
-  "rewrite_scope": "Off includes named Sephiroth core rings; Reduced will preserve these. No unnamed raw candidate hashes imported."
+  "rewrite_scope": "Off includes named Sephiroth core rings; Reduced will preserve these. No unnamed raw candidate hashes imported.",
+  "expanded_policy": "fx-expanded-policy.json adds qualified Ness/Lucas and the remaining named character groups."
 }

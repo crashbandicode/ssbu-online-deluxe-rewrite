@@ -33,9 +33,32 @@ impl FxMode {
     }
 }
 
+/// Restricts both Off and future Reduced policies; it never overrides FX On.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[repr(u8)]
+pub enum FxScope {
+    #[default]
+    Online = 0,
+    All = 1,
+}
+
+impl FxScope {
+    pub const fn allows(self, online: bool) -> bool {
+        matches!(self, Self::All) || online
+    }
+
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Online => "Online",
+            Self::All => "All",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Config {
     pub effects: FxMode,
+    pub effects_scope: FxScope,
     /// -1 means Auto; explicit values must be in 0..=25.
     pub input_buffer: i8,
 }
@@ -44,6 +67,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             effects: FxMode::On,
+            effects_scope: FxScope::Online,
             input_buffer: -1,
         }
     }
@@ -51,7 +75,7 @@ impl Default for Config {
 
 pub fn parse(text: &str) -> Result<Config, String> {
     let mut config = Config::default();
-    let mut seen = [false; 3];
+    let mut seen = [false; 4];
     for (index, raw) in text.lines().enumerate() {
         let line = raw.split('#').next().unwrap_or_default().trim();
         if line.is_empty() {
@@ -67,6 +91,7 @@ pub fn parse(text: &str) -> Result<Config, String> {
             "version" => 0,
             "effects" => 1,
             "input_buffer" => 2,
+            "effects_scope" => 3,
             _ => return Err(error(&format!("unknown key '{key}'"))),
         };
         if seen[slot] {
@@ -84,6 +109,13 @@ pub fn parse(text: &str) -> Result<Config, String> {
                         return Err(error("Reduced FX is unavailable; choose on or off"));
                     }
                     _ => return Err(error("effects must be on or off (Reduced is unavailable)")),
+                };
+            }
+            "effects_scope" => {
+                config.effects_scope = match value {
+                    "online" => FxScope::Online,
+                    "all" => FxScope::All,
+                    _ => return Err(error("effects_scope must be online or all")),
                 };
             }
             "input_buffer" => {
@@ -120,12 +152,16 @@ pub fn serialize(config: &Config) -> String {
         FxMode::Off => "off",
         FxMode::Reduced => "reduced",
     };
+    let effects_scope = match config.effects_scope {
+        FxScope::Online => "online",
+        FxScope::All => "all",
+    };
     let input_buffer = if config.input_buffer == -1 {
         "auto".to_owned()
     } else {
         config.input_buffer.to_string()
     };
-    format!("# Online Deluxe settings\nversion=1\neffects={effects}\ninput_buffer={input_buffer}\n")
+    format!("# Online Deluxe settings\nversion=1\neffects={effects}\neffects_scope={effects_scope}\ninput_buffer={input_buffer}\n")
 }
 
 impl Config {
@@ -154,6 +190,7 @@ mod tests {
             for input_buffer in [-1, 0, 25] {
                 let config = Config {
                     effects,
+                    effects_scope: FxScope::Online,
                     input_buffer,
                 };
                 assert_eq!(parse(&config.serialize()).unwrap(), config);
@@ -189,5 +226,27 @@ mod tests {
             .contains("unavailable"));
         assert!(!FxMode::Reduced.available());
         assert_eq!(FxMode::Reduced.effective(), FxMode::On);
+    }
+    #[test]
+    fn scope_defaults_migrates_and_round_trips() {
+        let old = parse("version=1\neffects=off\ninput_buffer=auto").unwrap();
+        assert_eq!(old.effects_scope, FxScope::Online);
+        for effects_scope in [FxScope::Online, FxScope::All] {
+            let config = Config {
+                effects_scope,
+                ..old.clone()
+            };
+            assert_eq!(parse(&config.serialize()).unwrap(), config);
+        }
+        for text in [
+            "version=1\neffects_scope=offline",
+            "version=1\neffects_scope=all\neffects_scope=online",
+        ] {
+            assert!(parse(text).is_err());
+        }
+        assert!(!FxScope::Online.allows(false));
+        assert!(FxScope::Online.allows(true));
+        assert!(FxScope::All.allows(false));
+        assert!(FxScope::All.allows(true));
     }
 }

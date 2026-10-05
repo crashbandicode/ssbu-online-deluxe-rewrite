@@ -36,6 +36,10 @@ pub enum Code {
     ConfigSaved = 24,
     OverlayHealth = 25,
     OverlayBackendReady = 26,
+    AcmdEffectSeen = 27,
+    AcmdEffectSuppressed = 28,
+    AcmdStackRejected = 29,
+    FxOnlineContext = 30,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

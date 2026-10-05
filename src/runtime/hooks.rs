@@ -1,9 +1,11 @@
 //! Source-verified 13.0.5 offsets with conservative coexistence checks.
 use super::{record, Code, INPUT_BUFFER};
 use skyline::hooks::{getRegionAddress, InlineCtx, Region};
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 const ONLINE_LATENCY: usize = 0x16ccab8;
+static LATENCY_INSTALLED: AtomicBool = AtomicBool::new(false);
+static BUFFER_ENABLED: AtomicBool = AtomicBool::new(false);
 
 // This detects common trampolines, NOT an original-instruction signature.
 pub(super) unsafe fn preflight(offset: usize) -> bool {
@@ -31,6 +33,10 @@ pub(super) unsafe fn preflight(offset: usize) -> bool {
 
 #[skyline::hook(offset = ONLINE_LATENCY, inline)]
 unsafe fn set_online_latency(ctx: &InlineCtx) {
+    super::online::mark_match();
+    if !BUFFER_ENABLED.load(Ordering::Relaxed) {
+        return;
+    }
     let pointer = ctx.registers[19].x() as *mut u8;
     // Retain fork's Quickplay null guard and unrestricted online hook.
     if pointer.is_null() {
@@ -46,11 +52,24 @@ unsafe fn set_online_latency(ctx: &InlineCtx) {
     record(Code::LatencyApplied, automatic as u64, applied as u64);
 }
 
-pub(super) fn install_latency() {
+/// Shared positive online-match signal, independent of buffer mutation.
+pub(super) fn install_match_setup() -> bool {
+    if LATENCY_INSTALLED.load(Ordering::Relaxed) {
+        return true;
+    }
     unsafe {
-        if preflight(ONLINE_LATENCY) {
-            skyline::install_hook!(set_online_latency);
-            record(Code::HookInstalled, ONLINE_LATENCY as u64, 0);
+        if !preflight(ONLINE_LATENCY) {
+            return false;
         }
+        skyline::install_hook!(set_online_latency);
+    }
+    LATENCY_INSTALLED.store(true, Ordering::Relaxed);
+    record(Code::HookInstalled, ONLINE_LATENCY as u64, 0);
+    true
+}
+
+pub(super) fn install_latency() {
+    if install_match_setup() {
+        BUFFER_ENABLED.store(true, Ordering::Relaxed);
     }
 }

@@ -46,7 +46,9 @@ Use the faulting plugin's base/ELF, not the game's main-module base.
 
 For controlled bisection, create empty DISABLE_MENU, DISABLE_FX or DISABLE_BUFFER files
 in the data directory and restart. They skip the corresponding hook family.
-All three produce observer-only behavior. Remove to re-enable.
+DISABLE_BUFFER disables input-buffer writes; the shared setup observer can remain
+installed for FX scope. DISABLE_FX skips FX requests and scene tracking. All three
+flags together produce observer-only behavior. Remove to re-enable.
 These differ from FX On, which keeps passthrough hooks installed.
 
 | Code | Meaning |
@@ -67,6 +69,10 @@ These differ from FX On, which keeps passthrough hooks installed.
 | 24 | Config saved: generation / effective FX mode |
 | 25 | Overlay health: backend ready / bootstrap-call count |
 | 26 | Embedded backend initialization complete |
+| 27 | ACMD request seen while Off: hook ID / hash; first and every 256 per hook |
+| 28 | ACMD suppression: original hash / (hook ID shifted 32 bits, suppression count low bits); first 32 and every 128 |
+| 29 | ACMD stack refused: hook ID / argument type; first 8 only |
+| 30 | FX online context changed: online boolean / source scene or latency-setup offset |
 
 Codes 12/13 and 18–20 describe historical CSS builds; they are no longer emitted.
 No game-owned pane or font is modified by the global window.

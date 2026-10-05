@@ -1,0 +1,1581 @@
+{
+  "source_sha256": "96fc254992a2880a5eaa087b598f631d260d60e46645920c5f74fa573b2036d0",
+  "global_source_groups": [
+    "aegis_legacy_effect_scale",
+    "legacy_charge_effect_scale",
+    "legacy_charge_effect_replacement",
+    "reduced_charge_effect_scale"
+  ],
+  "global_names": [
+    "P_EflameAirFSlash",
+    "P_EflameAirNSwordBlur",
+    "P_EflameAttack100",
+    "P_EflameAttack100Finish",
+    "P_EflameAttack100Hand",
+    "P_EflameAttackDash",
+    "P_EflameAttackS4S",
+    "P_EflameAttackS4SExplosion",
+    "P_EflameAttackS4SGround",
+    "P_EflameAttackSpeedLine",
+    "P_EflameBlazeEdgeScrape",
+    "P_EflameBlazeEdgeScrape2",
+    "P_EflameBlazeEndIllusion",
+    "P_EflameBlazeEndRing",
+    "P_EflameChangeEnd",
+    "P_EflameChangeStart",
+    "P_EflameChangeWin3",
+    "P_EflameNovaExplosion",
+    "P_EflameNovaExplosion2",
+    "P_EflameNovaExplosion3",
+    "P_EflameNovaHoldBody",
+    "P_EflameNovaHoldSword",
+    "P_EflameNovaRing",
+    "P_EflameNovaRing1",
+    "P_EflameNovaRing2",
+    "P_EflameNovaRingflame",
+    "P_EflameNovaSword",
+    "P_EflameNovaSwordClose",
+    "P_EflameNovaTrail",
+    "P_EflamePromRevoltFirepillar",
+    "P_EflamePromRevoltFirepillarGround",
+    "P_EflamePromRevoltFirepillarImpact",
+    "P_EflamePromRevoltFlash",
+    "P_EflamePromRevoltSpeedLine",
+    "P_EflamePromRevoltSwordFire",
+    "P_EflamePromRevoltSwordFire2",
+    "P_EflamePromRevoltSwordFireTail",
+    "P_EflamePromRevoltSwordSmoke",
+    "P_EflamePromRevoltSwordStab",
+    "P_EflameSwordAura",
+    "P_EflameSwordBeam",
+    "P_EflameSwordBeamL",
+    "P_EflameSwordBeamL2",
+    "P_EflameSwordBeamM",
+    "P_EflameSwordBeamM2",
+    "P_EflameSwordBeamS",
+    "P_EflameSwordBeamS4",
+    "P_EflameSwordBeamTrail",
+    "P_EflameSwordClose",
+    "P_EflameSwordCloseS",
+    "P_EflameSwordCoreStart",
+    "P_EflameSwordFire",
+    "P_EflameSwordFire2",
+    "P_EflameSwordFire3",
+    "P_EflameSwordFireTrail",
+    "P_EflameSwordFireTrailEnd",
+    "P_EflameSwordFlare",
+    "P_EflameSwordOpen",
+    "P_ElightAirFSlash",
+    "P_ElightAirNSlash",
+    "P_ElightAttack100",
+    "P_ElightAttack100Finish",
+    "P_ElightAttack100Hand",
+    "P_ElightAttackSpeedLine",
+    "P_ElightBusterFlash",
+    "P_ElightBusterHold",
+    "P_ElightBusterSword",
+    "P_ElightBusterSword2",
+    "P_ElightBusterSwordLensFlare",
+    "P_ElightBusterSwordLight",
+    "P_ElightBusterSwordLinear",
+    "P_ElightBusterSwordMax",
+    "P_ElightBusterWind",
+    "P_ElightChangeEnd",
+    "P_ElightChangeStart",
+    "P_ElightChangeWin3",
+    "P_ElightDashBodyLight",
+    "P_ElightDashLight",
+    "P_ElightForesight",
+    "P_ElightForesight2",
+    "P_ElightForesightBody",
+    "P_ElightForesightLensFlare",
+    "P_ElightForesightMove",
+    "P_ElightLayDust",
+    "P_ElightPhotonBodyLight",
+    "P_ElightPhotonFlash",
+    "P_ElightPhotonSlash",
+    "P_ElightPhotonSlash1",
+    "P_ElightPhotonSlash1Light",
+    "P_ElightPhotonSlash2",
+    "P_ElightPhotonSlash2Light",
+    "P_ElightPhotonSlash3",
+    "P_ElightPhotonSlash3Light",
+    "P_ElightPhotonSlash4",
+    "P_ElightPhotonSlash4Light",
+    "P_ElightPhotonSlash5",
+    "P_ElightPhotonSlash5Light",
+    "P_ElightPhotonSpeedLine",
+    "P_ElightPhotonStart",
+    "P_ElightPhotonSword",
+    "P_ElightPhotonSwordClose",
+    "P_ElightSwordBeamL",
+    "P_ElightSwordBeamM",
+    "P_ElightSwordBeamS",
+    "P_ElightSwordCloseL",
+    "P_ElightSwordCloseM",
+    "P_ElightSwordCloseS",
+    "P_ElightSwordLight",
+    "P_ElightSwordLightFew",
+    "P_ElightSwordLightRandom",
+    "P_ElightSwordOpen",
+    "P_ElightSwordOpenL",
+    "P_IkeVolcanoMax",
+    "chrom_mc_aura",
+    "chrom_mc_aura_hi",
+    "chrom_mc_aura_lw",
+    "chrom_mc_aura_s",
+    "chrom_sword_aura",
+    "chrom_sword_purple",
+    "chrom_volcano_a",
+    "chrom_volcano_b",
+    "chrom_volcano_c",
+    "chrom_volcano_d",
+    "chrom_volcano_hold_1",
+    "chrom_volcano_hold_2",
+    "chrom_volcano_parts_1",
+    "chrom_volcano_parts_1b",
+    "chrom_volcano_parts_2",
+    "chrom_volcano_parts_3",
+    "chrom_volcano_spark",
+    "eflame_airf_slash",
+    "eflame_airn_sword_blur",
+    "eflame_attack100",
+    "eflame_attack100_finish",
+    "eflame_attack100_hand",
+    "eflame_attack_dash",
+    "eflame_attack_s4s",
+    "eflame_attack_s4s_explosion",
+    "eflame_attack_s4s_ground",
+    "eflame_blur00",
+    "eflame_change_end",
+    "eflame_change_start",
+    "eflame_change_win3",
+    "eflame_fire00",
+    "eflame_fire02",
+    "eflame_fire03",
+    "eflame_fireimpact00",
+    "eflame_fireimpact04",
+    "eflame_impactflash00",
+    "eflame_line01",
+    "eflame_line02_",
+    "eflame_nova_explosion",
+    "eflame_nova_explosion2",
+    "eflame_nova_explosion3",
+    "eflame_nova_hold_body",
+    "eflame_nova_hold_sword",
+    "eflame_nova_ring",
+    "eflame_nova_ring1",
+    "eflame_nova_ring2",
+    "eflame_nova_ringflame",
+    "eflame_nova_sword",
+    "eflame_nova_sword_close",
+    "eflame_nova_trail",
+    "eflame_pillar00",
+    "eflame_promrevolt_firepillar",
+    "eflame_promrevolt_firepillar_ground",
+    "eflame_promrevolt_firepillar_impact",
+    "eflame_promrevolt_speed_line",
+    "eflame_promrevolt_sword_fire",
+    "eflame_promrevolt_sword_fire2",
+    "eflame_promrevolt_sword_firetrail",
+    "eflame_promrevolt_sword_smoke",
+    "eflame_promrevolt_sword_stab",
+    "eflame_ring00",
+    "eflame_slash00",
+    "eflame_sword00",
+    "eflame_sword01",
+    "eflame_sword_beam_m",
+    "eflame_sword_beam_m2",
+    "eflame_sword_beam_s",
+    "eflame_sword_close",
+    "eflame_sword_close_s",
+    "eflame_sword_core_start",
+    "eflame_sword_fire",
+    "eflame_sword_fire2",
+    "eflame_sword_fire3",
+    "eflame_sword_firetrail",
+    "eflame_sword_firetrail_end",
+    "eflame_sword_open",
+    "eflame_trace00",
+    "eflame_trace02",
+    "elight_airf_slash",
+    "elight_airn_slash",
+    "elight_attack100",
+    "elight_attack100_finish",
+    "elight_attack100_hand",
+    "elight_aura00",
+    "elight_aura01",
+    "elight_aura02",
+    "elight_buster_flash",
+    "elight_buster_hold",
+    "elight_buster_sword",
+    "elight_buster_sword2",
+    "elight_buster_sword_lensflare",
+    "elight_buster_sword_light",
+    "elight_buster_sword_linear",
+    "elight_buster_sword_max",
+    "elight_buster_wind",
+    "elight_change_end",
+    "elight_change_start",
+    "elight_change_win3",
+    "elight_dash_body_light",
+    "elight_dash_light",
+    "elight_flashline00",
+    "elight_foresight_lensflare",
+    "elight_grade00",
+    "elight_grade01",
+    "elight_impact00",
+    "elight_impact01",
+    "elight_impact02",
+    "elight_line00",
+    "elight_line01",
+    "elight_ring00",
+    "elight_ring01",
+    "elight_slash00",
+    "elight_slash01",
+    "elight_slash02",
+    "elight_slash03",
+    "elight_sword00",
+    "elight_sword_beam_m",
+    "elight_sword_beam_s",
+    "elight_sword_close_m",
+    "elight_sword_close_s",
+    "elight_sword_light",
+    "elight_sword_light_few",
+    "elight_sword_light_rdm",
+    "elight_sword_open",
+    "elight_wind00",
+    "ganon_majinken_flash",
+    "ganon_majinken_start",
+    "ganon_sword_flare",
+    "ike_firepiller02",
+    "ike_iaigiri_hold",
+    "ike_sword",
+    "ike_volcano",
+    "ike_volcano_ground",
+    "ike_volcano_hold",
+    "ike_volcano_max",
+    "inkling_attack_arc",
+    "inkling_brush",
+    "inkling_roller",
+    "inkling_splash",
+    "master_axe_aura",
+    "master_axe_hold",
+    "master_axe_hold2",
+    "master_axe_hold_end",
+    "master_axe_slash_edge",
+    "master_axe_slash_particle",
+    "master_axeflare1",
+    "master_axeflare2",
+    "master_axeflare3",
+    "master_axeflare_sp1",
+    "master_axeflare_sp1_end",
+    "master_axeflare_sp2",
+    "master_axeflare_sp2_end",
+    "master_axeflare_sp3",
+    "master_axeflare_sp3_end",
+    "master_bow_hold1",
+    "master_bow_hold2",
+    "master_bowflare",
+    "master_smash_s_flash",
+    "master_smash_s_line",
+    "master_smash_s_speedline",
+    "master_smash_s_wind",
+    "master_spear_aura",
+    "master_spear_aura_particle",
+    "master_spearflare",
+    "master_swordflare",
+    "master_wire_hit",
+    "palutena_atk_lw_arc",
+    "palutena_backlight",
+    "palutena_explosiveflame",
+    "palutena_meteor",
+    "palutena_pressure",
+    "palutena_smash_lw_trace",
+    "palutena_smash_s_trace",
+    "palutena_throw_twinkle",
+    "palutena_twinkle",
+    "palutena_wand_atk1",
+    "palutena_wand_finish",
+    "palutena_wand_light2",
+    "palutena_wand_light4",
+    "palutena_wand_light_trace",
+    "palutena_wand_trace_01",
+    "palutena_wand_trace_02",
+    "palutena_wand_trace_03",
+    "palutena_wand_trace_04",
+    "palutena_wand_trace_05",
+    "palutena_wand_trace_06",
+    "palutena_wand_trace_07",
+    "palutena_wand_trace_08",
+    "roy_attack_fire",
+    "roy_eruption",
+    "roy_eruption_bomb_main",
+    "roy_eruption_bomb_start_high",
+    "roy_eruption_bomb_start_middle",
+    "roy_eruption_hold",
+    "roy_eruption_middle",
+    "roy_erupution_hold",
+    "roy_fire",
+    "roy_mc_aura_hi",
+    "roy_mc_aura_lw",
+    "roy_mc_aura_s",
+    "roy_sword"
+  ],
+  "profiles": {
+    "KazuyaFSmash": {
+      "source_groups": [
+        "is_kazuya_fsmash_named_visual_hash"
+      ],
+      "names": [
+        "demon_atk_impact",
+        "demon_atkimpact",
+        "demon_attack_speedline",
+        "demon_attack_speedline_kick",
+        "demon_attackspeedline",
+        "demon_attackspeedlinekick",
+        "demon_devil_aura",
+        "demon_devil_aura2",
+        "demon_devil_elec",
+        "demon_devil_end",
+        "demon_devil_sign_flash",
+        "demon_devil_start",
+        "demon_devil_start_aura",
+        "demon_devil_start_elec",
+        "demon_devilaura",
+        "demon_devilaura2",
+        "demon_devilelec",
+        "demon_devilend",
+        "demon_devilfist",
+        "demon_devilfist_elec",
+        "demon_devilfist_end",
+        "demon_devilfist_line",
+        "demon_devilfistelec",
+        "demon_devilfistend",
+        "demon_devilfistline",
+        "demon_devilsignflash",
+        "demon_devilstart",
+        "demon_devilstartaura",
+        "demon_devilstartelec",
+        "demon_devilwing_edge_l",
+        "demon_devilwing_edge_r",
+        "demon_devilwing_speedline",
+        "demon_devilwingspeedline",
+        "demon_final_flash",
+        "demon_final_sparks",
+        "demon_finalflash",
+        "demon_finalsparks",
+        "demon_hit_normal_l",
+        "demon_hit_normal_m",
+        "demon_hit_normal_s",
+        "demon_hit_normal_s2",
+        "demon_hit_normal_shock_l",
+        "demon_hit_normal_shock_m",
+        "demon_hit_normal_shock_s",
+        "demon_hitnormall",
+        "demon_hitnormalm",
+        "demon_hitnormals",
+        "demon_hitnormals2",
+        "demon_hitnormalshockl",
+        "demon_hitnormalshockm",
+        "demon_hitnormalshocks",
+        "demon_impact",
+        "demon_smash_arc",
+        "demon_smash_arc2",
+        "demon_smash_arc3",
+        "demon_smash_line",
+        "demon_smasharc",
+        "demon_smasharc2",
+        "demon_smasharc3",
+        "demon_smashline"
+      ],
+      "excluded_raw": []
+    },
+    "FalconPunch": {
+      "source_groups": [
+        "is_falcon_punch_named_visual_hash"
+      ],
+      "names": [
+        "captain_at_impact",
+        "captain_at_thrust",
+        "captain_fp_body_l",
+        "captain_fp_body_r",
+        "captain_fp_flash",
+        "captain_fp_hit_l",
+        "captain_fp_hit_r",
+        "captain_fp_hold",
+        "captain_fp_wing_l",
+        "captain_fp_wing_r"
+      ],
+      "excluded_raw": []
+    },
+    "NessUpB": {
+      "source_groups": [
+        "is_ness_pk_thunder_visual_hash"
+      ],
+      "names": [
+        "P_NessPKThunderAttack",
+        "P_NessPKThunderBomb",
+        "P_NessPsiAttack",
+        "P_NessPsiHold",
+        "P_NessPsiRush",
+        "ness_impact00",
+        "ness_impact01",
+        "ness_impact02",
+        "ness_impact04",
+        "ness_impact05",
+        "ness_impact06",
+        "ness_impact07",
+        "ness_impact08",
+        "ness_impactline00",
+        "ness_impactline01",
+        "ness_pkt_attack",
+        "ness_pkt_bomb",
+        "ness_pkt_hold",
+        "sys_flash"
+      ],
+      "excluded_raw": [
+        "0x0d329f37f3",
+        "0x0fecb6c5d4"
+      ],
+      "vanilla_source": "https://github.com/WuBoytH/SSBU-Dumped-Scripts/blob/59004685238a3f6f93bae905d3a4e079701c40b4/smashline/lua2cpp_ness/ness/SpecialAirHi.txt"
+    },
+    "LucasUpB": {
+      "source_groups": [
+        "is_lucas_pk_thunder_visual_hash"
+      ],
+      "names": [
+        "P_LucasPKThunderAttack",
+        "P_LucasPKThunderBomb",
+        "P_LucasPKThunderBullet",
+        "P_LucasPKThunderHold",
+        "P_LucasPKThunderTailA",
+        "P_LucasPsiAttack",
+        "P_LucasPsiAttackHi",
+        "P_LucasPsiAttackLw",
+        "P_LucasPsiHold",
+        "lucas_flare01",
+        "lucas_flash00",
+        "lucas_flash01",
+        "lucas_gradation00",
+        "lucas_gradation04",
+        "lucas_gradation06",
+        "lucas_grade00",
+        "lucas_impact07",
+        "lucas_impact08",
+        "lucas_impactline00",
+        "lucas_impactline01",
+        "lucas_indirect01",
+        "lucas_light00",
+        "lucas_line00",
+        "lucas_line02",
+        "lucas_line05",
+        "lucas_pkt_attack",
+        "lucas_pkt_bomb",
+        "lucas_pkt_hold",
+        "lucas_psi_atk",
+        "lucas_psi_hold",
+        "lucas_ring00",
+        "lucas_ring01",
+        "lucas_square00",
+        "lucas_square01",
+        "lucas_star00",
+        "lucas_stripe00",
+        "sys_flash"
+      ],
+      "excluded_raw": [
+        "0x09e9785222",
+        "0x0dbbe7c8c4",
+        "0x1026b98ea3",
+        "0x12ef97fd1b",
+        "0x16e2e07deb",
+        "0x1b2f70b017"
+      ],
+      "vanilla_source": "https://github.com/WuBoytH/SSBU-Dumped-Scripts/blob/59004685238a3f6f93bae905d3a4e079701c40b4/smashline/lua2cpp_lucas/lucas/SpecialAirHi.txt"
+    },
+    "IkeNeutralB": {
+      "source_groups": [
+        "is_ike_neutral_b_visual_hash",
+        "is_ike_neutral_b_keep_scaled_hash"
+      ],
+      "names": [
+        "P_IkeVolcano",
+        "P_IkeVolcanoAdd",
+        "P_IkeVolcanoAdd2",
+        "P_IkeVolcanoAdd3",
+        "P_IkeVolcanoAdd4",
+        "P_IkeVolcanoFlash",
+        "P_IkeVolcanoFlash2",
+        "P_IkeVolcanoFlash2Ground",
+        "P_IkeVolcanoFlash3",
+        "P_IkeVolcanoFlash3Ground",
+        "P_IkeVolcanoFlashGround",
+        "P_IkeVolcanoGround",
+        "P_IkeVolcanoHold",
+        "P_IkeVolcanoMax",
+        "P_IkeVolcanoMiddle",
+        "ike_fireground00",
+        "ike_firepiller00",
+        "ike_firepiller01",
+        "ike_firepiller02",
+        "ike_sword",
+        "ike_volcano",
+        "ike_volcano_add",
+        "ike_volcano_add1",
+        "ike_volcano_add2",
+        "ike_volcano_add3",
+        "ike_volcano_add4",
+        "ike_volcano_bomb",
+        "ike_volcano_fire",
+        "ike_volcano_flash",
+        "ike_volcano_flash2",
+        "ike_volcano_flash3",
+        "ike_volcano_ground",
+        "ike_volcano_hold",
+        "ike_volcano_max",
+        "ike_volcano_middle"
+      ],
+      "excluded_raw": [
+        "0x0a66ea88cc",
+        "0x0f5a0576b2",
+        "0x0fcb698218",
+        "0x107ce9ece0",
+        "0x10958a49d5",
+        "0x10b8983479",
+        "0x10e28d7943",
+        "0x12a165a8af",
+        "0x133258931d",
+        "0x1434b2a183",
+        "0x143570cbb4"
+      ]
+    },
+    "ChromNeutralB": {
+      "source_groups": [
+        "is_chrom_neutral_b_visual_hash"
+      ],
+      "names": [
+        "P_ChromVolcanoA",
+        "P_ChromVolcanoB",
+        "P_ChromVolcanoC",
+        "P_ChromVolcanoD",
+        "P_ChromVolcanoE",
+        "P_ChromVolcanoF",
+        "P_ChromVolcanoHold",
+        "P_ChromVolcanoHold1",
+        "P_ChromVolcanoHold2",
+        "P_ChromVolcanoParts1",
+        "P_ChromVolcanoParts1b",
+        "P_ChromVolcanoParts2",
+        "P_ChromVolcanoParts3",
+        "P_ChromVolcanoSpark",
+        "chrom_flash01",
+        "chrom_flash02",
+        "chrom_ground00",
+        "chrom_lightning00",
+        "chrom_line00",
+        "chrom_ring00",
+        "chrom_sword_purple",
+        "chrom_volcano_a",
+        "chrom_volcano_b",
+        "chrom_volcano_c",
+        "chrom_volcano_d",
+        "chrom_volcano_e",
+        "chrom_volcano_f",
+        "chrom_volcano_hold",
+        "chrom_volcano_hold_1",
+        "chrom_volcano_hold_2",
+        "chrom_volcano_parts_1",
+        "chrom_volcano_parts_1b",
+        "chrom_volcano_parts_2",
+        "chrom_volcano_parts_3",
+        "chrom_volcano_spark",
+        "chrom_zigzagline00",
+        "ike_firepiller02"
+      ],
+      "excluded_raw": []
+    },
+    "RoyNeutralB": {
+      "source_groups": [
+        "is_roy_neutral_b_visual_hash"
+      ],
+      "names": [
+        "P_RoyAttackFire",
+        "P_RoyEruption",
+        "P_RoyEruptionBombMain",
+        "P_RoyEruptionBombStart",
+        "P_RoyEruptionBombStart_High",
+        "P_RoyEruptionBombStart_Max",
+        "P_RoyEruptionBombStart_Middle",
+        "P_RoyEruptionHold",
+        "P_RoyEruptionMax",
+        "P_RoyEruptionMiddle",
+        "P_RoyFire",
+        "P_RoyFire1",
+        "P_RoyFireSmall",
+        "ike_fireground00",
+        "ike_firepiller00",
+        "roy_attack_fire",
+        "roy_circle00",
+        "roy_circle01",
+        "roy_circle02",
+        "roy_eruption",
+        "roy_eruption_bomb_main",
+        "roy_eruption_bomb_start",
+        "roy_eruption_bomb_start_high",
+        "roy_eruption_bomb_start_max",
+        "roy_eruption_bomb_start_middle",
+        "roy_eruption_hold",
+        "roy_eruption_max",
+        "roy_eruption_middle",
+        "roy_erupution_hold",
+        "roy_fire",
+        "roy_flash01",
+        "roy_flash02",
+        "roy_impact00",
+        "roy_lens00",
+        "roy_lens01",
+        "roy_lightning00",
+        "roy_line00",
+        "roy_line01",
+        "roy_line02",
+        "roy_line03",
+        "roy_ring00",
+        "roy_ring01",
+        "roy_streak00",
+        "roy_trace00",
+        "roy_wind00",
+        "roy_wind01",
+        "roy_zigzagline00"
+      ],
+      "excluded_raw": []
+    },
+    "PalutenaRapidJab": {
+      "source_groups": [
+        "is_palutena_rapid_jab_visual_hash"
+      ],
+      "names": [
+        "P_PalutenaTwinkle",
+        "P_PalutenaWandAtk1",
+        "P_PalutenaWandFinish",
+        "P_PalutenaWandLight1",
+        "P_PalutenaWandLight2",
+        "P_PalutenaWandLight3",
+        "P_PalutenaWandLight4",
+        "P_PalutenaWandLight5",
+        "P_PalutenaWandLightTrace",
+        "P_PalutenaWandSpark",
+        "P_PalutenaWandTrace01",
+        "P_PalutenaWandTrace02",
+        "P_PalutenaWandTrace03",
+        "P_PalutenaWandTrace04",
+        "P_PalutenaWandTrace05",
+        "P_PalutenaWandTrace06",
+        "P_PalutenaWandTrace07",
+        "P_PalutenaWandTrace08",
+        "palutena_twinkle",
+        "palutena_wand_atk1",
+        "palutena_wand_finish",
+        "palutena_wand_light1",
+        "palutena_wand_light2",
+        "palutena_wand_light3",
+        "palutena_wand_light4",
+        "palutena_wand_light5",
+        "palutena_wand_light_trace",
+        "palutena_wand_spark",
+        "palutena_wand_trace_01",
+        "palutena_wand_trace_02",
+        "palutena_wand_trace_03",
+        "palutena_wand_trace_04",
+        "palutena_wand_trace_05",
+        "palutena_wand_trace_06",
+        "palutena_wand_trace_07",
+        "palutena_wand_trace_08"
+      ],
+      "excluded_raw": []
+    },
+    "PalutenaNeutralB": {
+      "source_groups": [
+        "is_palutena_neutral_b_staff_glow_hash"
+      ],
+      "names": [
+        "P_PalutenaBullet",
+        "P_PalutenaBulletShot",
+        "P_PalutenaLockOn",
+        "P_PalutenaSightRange",
+        "P_PalutenaTarget",
+        "P_PalutenaWandLight1",
+        "P_PalutenaWandLight2",
+        "P_PalutenaWandLight3",
+        "P_PalutenaWandLight4",
+        "P_PalutenaWandLight5",
+        "P_PalutenaWandLightTrace",
+        "P_PalutenaWandSpark",
+        "palutena_backlight00",
+        "palutena_backlight01",
+        "palutena_backlight02",
+        "palutena_backlight03",
+        "palutena_bullet01",
+        "palutena_bullet02",
+        "palutena_flash00",
+        "palutena_flash01",
+        "palutena_flashline00",
+        "palutena_lightning00",
+        "palutena_lockon",
+        "palutena_ring00",
+        "palutena_sight_range",
+        "palutena_target",
+        "palutena_target00",
+        "palutena_target01",
+        "palutena_wand_light1",
+        "palutena_wand_light2",
+        "palutena_wand_light3",
+        "palutena_wand_light4",
+        "palutena_wand_light5",
+        "palutena_wand_light_trace",
+        "palutena_wand_spark"
+      ],
+      "excluded_raw": []
+    },
+    "PalutenaUpB": {
+      "source_groups": [
+        "is_palutena_up_b_visual_hash"
+      ],
+      "names": [
+        "P_PalutenaBackLight",
+        "P_PalutenaEscapeEnd",
+        "P_PalutenaEscapeStart",
+        "P_PalutenaEscapeTwinkle",
+        "P_PalutenaFeather",
+        "P_PalutenaTeleportEnd",
+        "P_PalutenaTeleportFeather",
+        "P_PalutenaTeleportStart",
+        "palutena_backlight",
+        "palutena_escape_end",
+        "palutena_escape_start",
+        "palutena_escape_twinkle",
+        "palutena_feather",
+        "palutena_gate",
+        "palutena_teleport_end",
+        "palutena_teleport_feather",
+        "palutena_teleport_start"
+      ],
+      "excluded_raw": []
+    },
+    "PalutenaSideB": {
+      "source_groups": [
+        "is_palutena_side_b_visual_hash",
+        "is_palutena_side_b_glow_hash"
+      ],
+      "names": [
+        "P_PalutenaBomb",
+        "P_PalutenaBombAppear",
+        "P_PalutenaBombFinish",
+        "P_PalutenaBullet",
+        "P_PalutenaBulletBound",
+        "P_PalutenaBulletBreak",
+        "P_PalutenaBulletHit",
+        "P_PalutenaBulletHitShock",
+        "P_PalutenaBulletShot",
+        "P_PalutenaPressure",
+        "palutena_backlight00",
+        "palutena_backlight01",
+        "palutena_backlight02",
+        "palutena_backlight03",
+        "palutena_bomb",
+        "palutena_bomb_appear",
+        "palutena_bomb_finish",
+        "palutena_bullet_bound",
+        "palutena_bullet_break",
+        "palutena_bullet_hit",
+        "palutena_bullet_hit_shock",
+        "palutena_explosiveflame",
+        "palutena_fire00",
+        "palutena_flash00",
+        "palutena_flash01",
+        "palutena_flashline00",
+        "palutena_lightning00",
+        "palutena_pressure",
+        "palutena_ring00"
+      ],
+      "excluded_raw": []
+    },
+    "PalutenaUpSmash": {
+      "source_groups": [
+        "is_palutena_up_smash_visual_hash"
+      ],
+      "names": [
+        "P_PalutenaBackLight",
+        "P_PalutenaTwinkle",
+        "palutena_backlight",
+        "palutena_lightning00",
+        "palutena_meteor",
+        "palutena_twinkle"
+      ],
+      "excluded_raw": []
+    },
+    "PalutenaTilts": {
+      "source_groups": [
+        "is_palutena_staff_light_visual_hash"
+      ],
+      "names": [
+        "P_PalutenaWandLight1",
+        "P_PalutenaWandLight2",
+        "P_PalutenaWandLight3",
+        "P_PalutenaWandLight4",
+        "P_PalutenaWandLight5",
+        "P_PalutenaWandLightTrace",
+        "P_PalutenaWandSpark",
+        "palutena_wand_light1",
+        "palutena_wand_light2",
+        "palutena_wand_light3",
+        "palutena_wand_light4",
+        "palutena_wand_light5",
+        "palutena_wand_light_trace",
+        "palutena_wand_spark"
+      ],
+      "excluded_raw": []
+    },
+    "PalutenaWingSmash": {
+      "source_groups": [
+        "is_palutena_wing_feather_visual_hash"
+      ],
+      "names": [
+        "P_PalutenaAppealFeather",
+        "P_PalutenaFeather",
+        "palutena_appeal_feather",
+        "palutena_feather",
+        "palutena_feather00"
+      ],
+      "excluded_raw": []
+    },
+    "PalutenaUpAir": {
+      "source_groups": [
+        "is_palutena_up_air_glow_hash",
+        "is_palutena_up_air_hitbox_hash",
+        "is_palutena_wing_feather_visual_hash"
+      ],
+      "names": [
+        "P_PalutenaAppealFeather",
+        "P_PalutenaBackLight",
+        "P_PalutenaFeather",
+        "P_PalutenaTwinkle",
+        "palutena_appeal_feather",
+        "palutena_backlight",
+        "palutena_feather",
+        "palutena_feather00",
+        "palutena_twinkle"
+      ],
+      "excluded_raw": []
+    },
+    "EdgeNeutralB": {
+      "source_groups": [
+        "is_edge_neutral_b_heavy_visual_hash",
+        "is_edge_neutral_b_keep_scaled_hash",
+        "is_edge_fire_burst_child_visual_hash"
+      ],
+      "names": [
+        "P_EdgeFire2Burst",
+        "P_EdgeFire2Burst2",
+        "P_EdgeFire2Smoke",
+        "P_EdgeFire3Burst",
+        "P_EdgeFire3Burst2",
+        "P_EdgeFire3Smoke",
+        "aura1",
+        "aura2",
+        "burn1",
+        "circle1",
+        "edge_explosion00",
+        "edge_fire04",
+        "edge_fire05",
+        "edge_fire06",
+        "edge_fire2_burst",
+        "edge_fire2_burst2",
+        "edge_fire2_smoke",
+        "edge_fire3_burst",
+        "edge_fire3_burst2",
+        "edge_fire3_smoke",
+        "edge_fireimpact00",
+        "edge_grade02",
+        "fire1B",
+        "fire1_bk",
+        "fireBlack",
+        "flare1",
+        "flare2",
+        "flare3",
+        "impact2",
+        "impact_flash1",
+        "impactring1",
+        "impactring1b",
+        "impactring2",
+        "impactring2_b",
+        "light1_bk",
+        "lightning1",
+        "lightning2",
+        "smoke1",
+        "smoke2",
+        "sparks2",
+        "sphere1"
+      ],
+      "excluded_raw": [
+        "0x0f4d251078",
+        "0x0f8679c3dd",
+        "0x107937dd24",
+        "0x10df40d690",
+        "0x1126af6d01",
+        "0x11ea056d9f"
+      ]
+    },
+    "EdgeDownB": {
+      "source_groups": [
+        "is_edge_down_b_damage_star_hash",
+        "is_edge_down_b_star_child_visual_hash"
+      ],
+      "names": [
+        "Flare1",
+        "FlashLine1",
+        "P_EdgeSenkouAttack",
+        "P_EdgeSenkouEnd",
+        "P_EdgeSenkouHold",
+        "P_EdgeSenkouStart",
+        "circle1",
+        "edge_senkou_attack",
+        "edge_senkou_end",
+        "edge_senkou_hold",
+        "edge_senkou_start",
+        "flareblack1",
+        "light",
+        "light3",
+        "line1",
+        "line1_1",
+        "line2",
+        "line2_1",
+        "line_rainbow1",
+        "sparks2"
+      ],
+      "excluded_raw": []
+    },
+    "EdgePurpleDash": {
+      "source_groups": [
+        "is_edge_purple_dash_visual_hash",
+        "is_edge_purple_dash_aura_visual_hash"
+      ],
+      "names": [
+        "P_EdgeAttackDash",
+        "P_EdgeAttackDash2",
+        "P_EdgeAttackDashAura",
+        "P_EdgeAttackDashHit",
+        "P_EdgeAttackLine",
+        "P_EdgeAttackSpeedLine",
+        "aura1",
+        "edge_attack_dash",
+        "edge_attack_dash2",
+        "edge_attack_dash_aura",
+        "edge_attack_dash_hit",
+        "edge_attack_line",
+        "edge_attack_speedline",
+        "edge_line00",
+        "edge_line01",
+        "edge_line02",
+        "edge_slash_aura",
+        "edge_speedline00",
+        "edge_speedline01",
+        "edge_sword_flare",
+        "edge_sword_flash2",
+        "fire1",
+        "fire2",
+        "flare1",
+        "impact_star_b1",
+        "impact_star_b2",
+        "impact_star_f1",
+        "impact_star_f2"
+      ],
+      "excluded_raw": [
+        "0x0a7774373a",
+        "0x0d0679b24d",
+        "0x0f4abc959c",
+        "0x0fcb698218",
+        "0x0fd3b5c426",
+        "0x10415ff720",
+        "0x10d4301f9c",
+        "0x10fea7724f",
+        "0x11588507d8",
+        "0x116e7e1f9d",
+        "0x11e3b8517d",
+        "0x13dc51f3a8",
+        "0x14a9ada5d4",
+        "0x1557ceb733",
+        "0x16a766a00e",
+        "0x16dddd9b51",
+        "0x17d7023eda"
+      ]
+    },
+    "EdgeFSmash": {
+      "source_groups": [
+        "is_edge_forward_smash_visual_hash"
+      ],
+      "names": [
+        "P_EdgeSlashLight",
+        "P_EdgeSword",
+        "P_EdgeSwordFlare",
+        "P_EdgeSwordFlash",
+        "P_EdgeSwordFlash2",
+        "P_EdgeSwordLight3",
+        "P_EdgeSwordSmashFlash",
+        "edge_slash_light",
+        "edge_sword",
+        "edge_sword_flare",
+        "edge_sword_flash",
+        "edge_sword_flash2",
+        "edge_sword_light3",
+        "edge_sword_smash_flash",
+        "sys_smash_flash",
+        "sys_smash_flash_s"
+      ],
+      "excluded_raw": []
+    }
+  },
+  "excluded": "Gameplay articles/posture, camera/LOD, global timer cleanup, unidentified raw hashes, generic hit/shield/KO feedback, afterimage and color/flash command hooks; no broad kill sweeps.",
+  "context_rules": [
+    {
+      "profile": "KazuyaFSmash",
+      "kind_name": "FIGHTER_KIND_DEMON",
+      "kind": 92,
+      "motions": [
+        "attack_s4",
+        "attack_s4_s",
+        "attack_s4_hold",
+        "attack_s4_start"
+      ],
+      "statuses": [
+        {
+          "name": "FIGHTER_STATUS_KIND_ATTACK_S4_START",
+          "value": 45
+        },
+        {
+          "name": "FIGHTER_STATUS_KIND_ATTACK_S4_HOLD",
+          "value": 46
+        },
+        {
+          "name": "FIGHTER_STATUS_KIND_ATTACK_S4",
+          "value": 47
+        }
+      ],
+      "require_both": false
+    },
+    {
+      "profile": "FalconPunch",
+      "kind_name": "FIGHTER_KIND_CAPTAIN",
+      "kind": 11,
+      "motions": [
+        "special_n",
+        "special_air_n",
+        "special_n_turn",
+        "special_air_n_turn"
+      ],
+      "statuses": [
+        {
+          "name": "FIGHTER_STATUS_KIND_SPECIAL_N",
+          "value": 476
+        },
+        {
+          "name": "FIGHTER_CAPTAIN_STATUS_KIND_SPECIAL_N_TURN",
+          "value": 481
+        }
+      ],
+      "require_both": false
+    },
+    {
+      "profile": "NessUpB",
+      "kind_name": "FIGHTER_KIND_NESS",
+      "kind": 10,
+      "motions": [
+        "special_hi",
+        "special_air_hi",
+        "special_hi_hold",
+        "special_air_hi_hold",
+        "special_hi_attack",
+        "special_air_hi_attack",
+        "special_hi_end",
+        "special_air_hi_end"
+      ],
+      "statuses": [
+        {
+          "name": "FIGHTER_STATUS_KIND_SPECIAL_HI",
+          "value": 478
+        }
+      ],
+      "require_both": false
+    },
+    {
+      "profile": "LucasUpB",
+      "kind_name": "FIGHTER_KIND_LUCAS",
+      "kind": 40,
+      "motions": [
+        "special_hi",
+        "special_air_hi",
+        "special_hi_hold",
+        "special_air_hi_hold",
+        "special_hi_attack",
+        "special_air_hi_attack",
+        "special_hi_end",
+        "special_air_hi_end"
+      ],
+      "statuses": [
+        {
+          "name": "FIGHTER_STATUS_KIND_SPECIAL_HI",
+          "value": 478
+        },
+        {
+          "name": "FIGHTER_LUCAS_STATUS_KIND_SPECIAL_HI_HOLD",
+          "value": 484
+        },
+        {
+          "name": "FIGHTER_LUCAS_STATUS_KIND_SPECIAL_HI_END",
+          "value": 485
+        },
+        {
+          "name": "FIGHTER_LUCAS_STATUS_KIND_SPECIAL_HI_ATTACK",
+          "value": 486
+        },
+        {
+          "name": "FIGHTER_LUCAS_STATUS_KIND_SPECIAL_HI_REFLECT",
+          "value": 487
+        },
+        {
+          "name": "FIGHTER_LUCAS_STATUS_KIND_SPECIAL_HI_AGAIN",
+          "value": 488
+        }
+      ],
+      "require_both": false
+    },
+    {
+      "profile": "IkeNeutralB",
+      "kind_name": "FIGHTER_KIND_IKE",
+      "kind": 35,
+      "motions": [
+        "special_n",
+        "special_air_n",
+        "special_n_start",
+        "special_air_n_start",
+        "special_n_loop",
+        "special_air_n_loop",
+        "special_n_hold",
+        "special_air_n_hold",
+        "special_n_end",
+        "special_air_n_end",
+        "special_n_end_max",
+        "special_air_n_end_max"
+      ],
+      "statuses": [
+        {
+          "name": "FIGHTER_STATUS_KIND_SPECIAL_N",
+          "value": 476
+        }
+      ],
+      "require_both": false
+    },
+    {
+      "profile": "ChromNeutralB",
+      "kind_name": "FIGHTER_KIND_CHROM",
+      "kind": 27,
+      "motions": [
+        "special_n",
+        "special_air_n",
+        "special_n_start",
+        "special_air_n_start",
+        "special_n_loop",
+        "special_air_n_loop",
+        "special_n_hold",
+        "special_air_n_hold",
+        "special_n_end",
+        "special_air_n_end",
+        "special_n_end_max",
+        "special_air_n_end_max"
+      ],
+      "statuses": [
+        {
+          "name": "FIGHTER_STATUS_KIND_SPECIAL_N",
+          "value": 476
+        }
+      ],
+      "require_both": false
+    },
+    {
+      "profile": "RoyNeutralB",
+      "kind_name": "FIGHTER_KIND_ROY",
+      "kind": 26,
+      "motions": [
+        "special_n",
+        "special_air_n",
+        "special_n_start",
+        "special_air_n_start",
+        "special_n_loop",
+        "special_air_n_loop",
+        "special_n_hold",
+        "special_air_n_hold",
+        "special_n_end",
+        "special_air_n_end",
+        "special_n_end_max",
+        "special_air_n_end_max"
+      ],
+      "statuses": [
+        {
+          "name": "FIGHTER_STATUS_KIND_SPECIAL_N",
+          "value": 476
+        }
+      ],
+      "require_both": false
+    },
+    {
+      "profile": "PalutenaRapidJab",
+      "kind_name": "FIGHTER_KIND_PALUTENA",
+      "kind": 54,
+      "motions": [
+        "attack_100",
+        "attack_100_start",
+        "attack_100_end"
+      ],
+      "statuses": [
+        {
+          "name": "FIGHTER_STATUS_KIND_ATTACK_100",
+          "value": 40
+        }
+      ],
+      "require_both": false
+    },
+    {
+      "profile": "PalutenaNeutralB",
+      "kind_name": "FIGHTER_KIND_PALUTENA",
+      "kind": 54,
+      "motions": [
+        "special_n",
+        "special_air_n",
+        "special_n_start",
+        "special_air_n_start",
+        "special_n_shoot",
+        "special_air_n_shoot",
+        "special_n_end",
+        "special_air_n_end"
+      ],
+      "statuses": [
+        {
+          "name": "FIGHTER_STATUS_KIND_SPECIAL_N",
+          "value": 476
+        }
+      ],
+      "require_both": false
+    },
+    {
+      "profile": "PalutenaUpB",
+      "kind_name": "FIGHTER_KIND_PALUTENA",
+      "kind": 54,
+      "motions": [
+        "special_hi",
+        "special_air_hi",
+        "special_hi_start",
+        "special_air_hi_start",
+        "special_hi_end",
+        "special_air_hi_end"
+      ],
+      "statuses": [
+        {
+          "name": "FIGHTER_STATUS_KIND_SPECIAL_HI",
+          "value": 478
+        }
+      ],
+      "require_both": false
+    },
+    {
+      "profile": "PalutenaSideB",
+      "kind_name": "FIGHTER_KIND_PALUTENA",
+      "kind": 54,
+      "motions": [
+        "special_s",
+        "special_air_s",
+        "special_s_start",
+        "special_air_s_start",
+        "special_s_shoot",
+        "special_air_s_shoot",
+        "special_s_end",
+        "special_air_s_end"
+      ],
+      "statuses": [
+        {
+          "name": "FIGHTER_STATUS_KIND_SPECIAL_S",
+          "value": 477
+        }
+      ],
+      "require_both": false
+    },
+    {
+      "profile": "PalutenaUpSmash",
+      "kind_name": "FIGHTER_KIND_PALUTENA",
+      "kind": 54,
+      "motions": [
+        "attack_hi4",
+        "attack_hi4_hold",
+        "attack_hi4_start"
+      ],
+      "statuses": [
+        {
+          "name": "FIGHTER_STATUS_KIND_ATTACK_HI4",
+          "value": 53
+        },
+        {
+          "name": "FIGHTER_STATUS_KIND_ATTACK_HI4_HOLD",
+          "value": 52
+        },
+        {
+          "name": "FIGHTER_STATUS_KIND_ATTACK_HI4_START",
+          "value": 51
+        }
+      ],
+      "require_both": false
+    },
+    {
+      "profile": "PalutenaTilts",
+      "kind_name": "FIGHTER_KIND_PALUTENA",
+      "kind": 54,
+      "motions": [
+        "attack_s3",
+        "attack_s3_s",
+        "attack_s3_hi",
+        "attack_s3_lw",
+        "attack_hi3",
+        "attack_lw3"
+      ],
+      "statuses": [
+        {
+          "name": "FIGHTER_STATUS_KIND_ATTACK_S3",
+          "value": 42
+        },
+        {
+          "name": "FIGHTER_STATUS_KIND_ATTACK_HI3",
+          "value": 43
+        },
+        {
+          "name": "FIGHTER_STATUS_KIND_ATTACK_LW3",
+          "value": 44
+        }
+      ],
+      "require_both": false
+    },
+    {
+      "profile": "PalutenaWingSmash",
+      "kind_name": "FIGHTER_KIND_PALUTENA",
+      "kind": 54,
+      "motions": [
+        "attack_s4",
+        "attack_s4_s",
+        "attack_s4_hi",
+        "attack_s4_lw",
+        "attack_lw4",
+        "attack_s4_hold",
+        "attack_lw4_hold",
+        "attack_s4_start",
+        "attack_lw4_start"
+      ],
+      "statuses": [
+        {
+          "name": "FIGHTER_STATUS_KIND_ATTACK_S4",
+          "value": 47
+        },
+        {
+          "name": "FIGHTER_STATUS_KIND_ATTACK_S4_HOLD",
+          "value": 46
+        },
+        {
+          "name": "FIGHTER_STATUS_KIND_ATTACK_S4_START",
+          "value": 45
+        },
+        {
+          "name": "FIGHTER_STATUS_KIND_ATTACK_LW4",
+          "value": 50
+        },
+        {
+          "name": "FIGHTER_STATUS_KIND_ATTACK_LW4_HOLD",
+          "value": 49
+        },
+        {
+          "name": "FIGHTER_STATUS_KIND_ATTACK_LW4_START",
+          "value": 48
+        }
+      ],
+      "require_both": false
+    },
+    {
+      "profile": "PalutenaUpAir",
+      "kind_name": "FIGHTER_KIND_PALUTENA",
+      "kind": 54,
+      "motions": [
+        "attack_air_hi"
+      ],
+      "statuses": [
+        {
+          "name": "FIGHTER_STATUS_KIND_ATTACK_AIR",
+          "value": 54
+        }
+      ],
+      "require_both": true
+    },
+    {
+      "profile": "EdgeFSmash",
+      "kind_name": "FIGHTER_KIND_EDGE",
+      "kind": 89,
+      "motions": [
+        "attack_s4",
+        "attack_s4_s",
+        "attack_s4_hold",
+        "attack_s4_start"
+      ],
+      "statuses": [
+        {
+          "name": "FIGHTER_STATUS_KIND_ATTACK_S4",
+          "value": 47
+        }
+      ],
+      "require_both": false
+    },
+    {
+      "profile": "EdgePurpleDash",
+      "kind_name": "FIGHTER_KIND_EDGE",
+      "kind": 89,
+      "motions": [
+        "attack_dash"
+      ],
+      "statuses": [
+        {
+          "name": "FIGHTER_STATUS_KIND_ATTACK_DASH",
+          "value": 41
+        }
+      ],
+      "require_both": false
+    },
+    {
+      "profile": "EdgeNeutralB",
+      "kind_name": "FIGHTER_KIND_EDGE",
+      "kind": 89,
+      "motions": [
+        "special_n_shoot",
+        "special_air_n_shoot"
+      ],
+      "statuses": [
+        {
+          "name": "FIGHTER_EDGE_STATUS_KIND_SPECIAL_N_SHOOT",
+          "value": 485
+        }
+      ],
+      "require_both": false
+    },
+    {
+      "profile": "EdgeDownB",
+      "kind_name": "FIGHTER_KIND_EDGE",
+      "kind": 89,
+      "motions": [
+        "special_lw",
+        "special_air_lw",
+        "special_lw_hit",
+        "special_air_lw_hit",
+        "special_lw_end",
+        "special_air_lw_end"
+      ],
+      "statuses": [
+        {
+          "name": "FIGHTER_STATUS_KIND_SPECIAL_LW",
+          "value": 479
+        },
+        {
+          "name": "FIGHTER_EDGE_STATUS_KIND_SPECIAL_LW_HIT",
+          "value": 494
+        },
+        {
+          "name": "FIGHTER_EDGE_STATUS_KIND_SPECIAL_LW_END",
+          "value": 495
+        }
+      ],
+      "require_both": false
+    }
+  ],
+  "weapon_rules": [
+    {
+      "kind": 97,
+      "name": "WEAPON_KIND_NESS_PK_THUNDER",
+      "profile": "NessUpB"
+    },
+    {
+      "kind": 355,
+      "name": "WEAPON_KIND_LUCAS_PK_THUNDER",
+      "profile": "LucasUpB"
+    },
+    {
+      "kind": 272,
+      "name": "WEAPON_KIND_PALUTENA_EXPLOSIVEFLAME",
+      "profile": "PalutenaSideB"
+    },
+    {
+      "kind": 273,
+      "name": "WEAPON_KIND_PALUTENA_EXPLOSIVEFLAME_RESERVE",
+      "profile": "PalutenaSideB"
+    },
+    {
+      "kind": 582,
+      "name": "WEAPON_KIND_EDGE_FIRE",
+      "statuses": [
+        4,
+        5
+      ],
+      "profile": "EdgeNeutralB"
+    },
+    {
+      "kind": 583,
+      "name": "WEAPON_KIND_EDGE_FLASH",
+      "profile": "EdgeDownB"
+    }
+  ],
+  "off_semantics": "Off nulls included named character effects, including those the peer only scaled. Reduced remains unavailable; this is not byte-for-byte peer parity.",
+  "runtime_status": "Expanded catalog and context gating await Eden/Switch move validation. Named aliases are source candidates, not confirmed emitters.",
+  "excluded_cues": [
+    "P_EflameBlazeEndSword",
+    "P_EflameBlazeEndThrow",
+    "P_EflameBlazeEndTrail",
+    "P_EflameBlazeEndTrailLast",
+    "P_EflameBlazeEndTrailLastBack",
+    "P_EflameBlazeEndTrailLastSpin",
+    "P_ElightLayBullet",
+    "P_ElightLayDustExplosion",
+    "P_ElightLayDustShot",
+    "P_ElightLayExplosion",
+    "P_ElightLayShot",
+    "P_ElightPhotonAppear",
+    "P_ElightPhotonVanish",
+    "P_PalutenaBackLight2",
+    "eflame_blazeend_sword",
+    "eflame_blazeend_trail",
+    "eflame_blazeend_trail_last",
+    "eflame_blazeend_trail_last_back",
+    "eflame_blazeend_trail_last_spin",
+    "elight_lay_lump",
+    "elight_lay_shot",
+    "inkling_blaster",
+    "inkling_blaster_muzzle",
+    "inkling_inkbullet",
+    "inkling_slosher",
+    "inkling_splashbomb",
+    "inkling_squid",
+    "inkling_squid_change",
+    "inkling_superjump_drop",
+    "ness_psi_atk",
+    "ness_psi_hold",
+    "ness_psi_rush",
+    "palutena_autoaimbullet",
+    "palutena_backlight2",
+    "palutena_bullet",
+    "palutena_bullet_shot",
+    "palutena_counter_attack",
+    "palutena_counter_flash",
+    "palutena_counter_success",
+    "palutena_mirror_break",
+    "palutena_reflectionboard"
+  ],
+  "excluded_cues_reason": "Keep reflector, projectile/position and hitbox cues visible; evaluate lighter versions individually for Reduced."
+}

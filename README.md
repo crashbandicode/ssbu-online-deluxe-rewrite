@@ -7,7 +7,7 @@ Implemented:
 - Global top-left Player Info window with the fork's table/navigation UX: character FX **On / Off**, default **On**. Reduced is unavailable.
 - Online input buffer **Auto / 0–25**, retaining the fork's Quickplay null-pointer guard.
 - Bounded events, persistent install checkpoints, panic diagnostics, build identity and matching debug symbols.
-- Targeted effects for Byleth, Ike, Roy, Chrom, Falcon and Sephiroth: [exact scope](docs/FX.md).
+- Expanded named character effects from the supplied peer mod: [exact scope](docs/FX.md).
 
 **Rendering remains Vanilla.** LessLag/Ultra/Doubles reconstruction, automatic profile application,
 network-player telemetry, overclocking and performance scaling are pending.
@@ -60,14 +60,19 @@ Current Eden keyboard mapping: **Q/E = L/R**, arrow keys = D-pad.
 The window retains the fork's Name/Ping/NetLatency/NetProfile table and frame graph,
 with an added FX row. Ping telemetry is pending (---); NetProfile stays Vanilla
 until the render engine is implemented. Frame statistics measure intervals between
-overlay render callbacks. Main-menu appearance is confirmed in Eden; other scene
-transitions and console behavior still need validation.
+overlay render callbacks. Main-menu/CSS/match appearance, SGPO and Training Modpack
+menu/save-load coexistence are confirmed on the prior Eden candidate. Expanded
+effect coverage, online scope transitions and console behavior await validation.
 
 The first controller (or handheld fallback) operates it. Ordinary game input is not
 suppressed. No game-owned text pane or Layout::Draw hook is used.
 Settings save to sd:/ultimate/ssbu_online_deluxe_rewrite/config.ini; config.previous.ini
 retains the last good version for recovery across interrupted replacement.
 On/Off changes future requests; existing effects expire normally.
+effects_scope=online is the default. Use effects_scope=all for offline + online testing;
+INI changes require restarting the game. See [default config](config/default.ini) and
+[Eden test override](config/eden-test.ini). Install the test config with the matching
+new NRO; the older live test build cannot parse this new key.
 
 Build/tests do not establish runtime compatibility or lag reduction.
 See [debugging](docs/DEBUGGING.md), [validation](docs/VALIDATION.md) and [status](docs/STATUS.md).

@@ -30,6 +30,20 @@ fn note(hash: u64) {
     }
 }
 
+// Resolve actor context only for scoped names, before forwarding the original
+// request. On takes the existing fast path without any actor reads.
+unsafe fn rewrite(accessor: *mut OpaqueAccessor, hash: u64) -> u64 {
+    let global = effects::rewrite(FxMode::Off, hash);
+    if global != hash || !effects::needs_context(hash) {
+        return global;
+    }
+    effects::rewrite_with_context(
+        FxMode::Off,
+        hash,
+        super::effect_context::from_accessor(accessor.cast()),
+    )
+}
+
 mod abi {
     use super::{Hash40, OpaqueAccessor, Vector3f};
     extern "C" {
@@ -132,7 +146,7 @@ unsafe fn filter_req(
     arg9: i32,
 ) -> u64 {
     let effect = if effects_off() {
-        let hash = effects::rewrite(FxMode::Off, effect.hash);
+        let hash = rewrite(module_accessor, effect.hash);
         if hash != effect.hash {
             note(effect.hash);
         }
@@ -163,7 +177,7 @@ unsafe fn filter_req_2d(
     arg6: u32,
 ) -> u64 {
     let effect = if effects_off() {
-        let hash = effects::rewrite(FxMode::Off, effect.hash);
+        let hash = rewrite(module_accessor, effect.hash);
         if hash != effect.hash {
             note(effect.hash);
         }
@@ -190,7 +204,7 @@ unsafe fn filter_req_on_joint(
     arg12: i32,
 ) -> u64 {
     let effect = if effects_off() {
-        let hash = effects::rewrite(FxMode::Off, effect.hash);
+        let hash = rewrite(module_accessor, effect.hash);
         if hash != effect.hash {
             note(effect.hash);
         }
@@ -232,7 +246,7 @@ unsafe fn filter_req_follow(
     arg14: bool,
 ) -> u64 {
     let effect = if effects_off() {
-        let hash = effects::rewrite(FxMode::Off, effect.hash);
+        let hash = rewrite(module_accessor, effect.hash);
         if hash != effect.hash {
             note(effect.hash);
         }
@@ -268,7 +282,7 @@ unsafe fn filter_req_continual(
     arg6: i32,
 ) -> u64 {
     let effect = if effects_off() {
-        let hash = effects::rewrite(FxMode::Off, effect.hash);
+        let hash = rewrite(module_accessor, effect.hash);
         if hash != effect.hash {
             note(effect.hash);
         }
@@ -282,7 +296,7 @@ unsafe fn filter_req_continual(
 #[skyline::hook(replace = abi::req_common)]
 unsafe fn filter_req_common(module_accessor: *mut OpaqueAccessor, arg2: Hash40, arg3: f32) -> u64 {
     let arg2 = if effects_off() {
-        let hash = effects::rewrite(FxMode::Off, arg2.hash);
+        let hash = rewrite(module_accessor, arg2.hash);
         if hash != arg2.hash {
             note(arg2.hash);
         }
@@ -323,60 +337,34 @@ unsafe fn filter_req_screen_system(
 }
 
 pub(super) fn install() {
-    log_entry(256, abi::req as *const ());
-    skyline::install_hook!(filter_req);
-    record(Code::HookInstalled, 256, abi::req as *const () as u64);
-    log_entry(257, abi::req_2d as *const ());
-    skyline::install_hook!(filter_req_2d);
-    record(Code::HookInstalled, 257, abi::req_2d as *const () as u64);
-    log_entry(258, abi::req_on_joint as *const ());
-    skyline::install_hook!(filter_req_on_joint);
-    record(
-        Code::HookInstalled,
-        258,
-        abi::req_on_joint as *const () as u64,
-    );
-    log_entry(259, abi::req_follow as *const ());
-    skyline::install_hook!(filter_req_follow);
-    record(
-        Code::HookInstalled,
-        259,
-        abi::req_follow as *const () as u64,
-    );
-    log_entry(260, abi::req_continual as *const ());
-    skyline::install_hook!(filter_req_continual);
-    record(
-        Code::HookInstalled,
-        260,
-        abi::req_continual as *const () as u64,
-    );
-    log_entry(261, abi::req_common as *const ());
-    skyline::install_hook!(filter_req_common);
-    record(
-        Code::HookInstalled,
-        261,
-        abi::req_common as *const () as u64,
-    );
-    log_entry(262, abi::req_screen as *const ());
-    skyline::install_hook!(filter_req_screen);
-    record(
-        Code::HookInstalled,
-        262,
-        abi::req_screen as *const () as u64,
-    );
-    log_entry(263, abi::req_screen_system as *const ());
-    skyline::install_hook!(filter_req_screen_system);
-    record(
-        Code::HookInstalled,
-        263,
-        abi::req_screen_system as *const () as u64,
-    );
+    super::online::install();
+    super::acmd::install();
+    macro_rules! install {
+        ($id:expr, $target:path, $hook:ident) => {
+            if log_entry($id, $target as *const ()) {
+                skyline::install_hook!($hook);
+                record(Code::HookInstalled, $id, $target as *const () as u64);
+            }
+        };
+    }
+    install!(256, abi::req, filter_req);
+    install!(257, abi::req_2d, filter_req_2d);
+    install!(258, abi::req_on_joint, filter_req_on_joint);
+    install!(259, abi::req_follow, filter_req_follow);
+    install!(260, abi::req_continual, filter_req_continual);
+    install!(261, abi::req_common, filter_req_common);
+    install!(262, abi::req_screen, filter_req_screen);
+    install!(263, abi::req_screen_system, filter_req_screen_system);
 }
 
-fn log_entry(id: u64, address: *const ()) {
+fn log_entry(id: u64, address: *const ()) -> bool {
+    if !unsafe { super::memory::accessible(address as usize, 4, false) } {
+        record(Code::HookRejected, id, address as u64);
+        return false;
+    }
     record(Code::HookInstalling, id, address as u64);
     let word = unsafe { *(address as *const u32) };
     record(Code::HookEntryWord, id, word as u64);
-    // Persist this additional install-time observation without changing hot-path logging.
     super::logging::install_checkpoint(Code::HookEntryWord, id, word as u64);
+    true
 }

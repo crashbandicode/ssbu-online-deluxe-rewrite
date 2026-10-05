@@ -1,5 +1,6 @@
 //! Initial, explicit character-FX scope. No wildcard or global hit-effect deletion.
 use crate::config::FxMode;
+use crate::effect_context::{self, Context};
 
 pub const fn hash40(name: &str) -> u64 {
     let bytes = name.as_bytes();
@@ -22,6 +23,20 @@ pub const fn hash40(name: &str) -> u64 {
 pub const NULL_EFFECT: u64 = hash40("null");
 
 pub const TARGET_NAMES: &[&str] = &[
+    // Explosive Flame: peer May-14 source, corroborated by vanilla Explode ACMD.
+    "palutena_bomb",
+    "palutena_bomb_appear",
+    "palutena_bomb_finish",
+    // Shadow Flare: vanilla fighter/flare1/flare2 ACMD and local ef_edge.eff.
+    "edge_shadowflare_start",
+    "edge_shadowflare_hold",
+    "edge_shadowflare_aura",
+    "edge_shadowflare_beam",
+    "edge_shadowflare_beam_hit",
+    "edge_shadowflare_bullet",
+    "edge_shadowflare_bullet_attack",
+    "edge_shadowflare_bullet_hit",
+    "edge_shadowflare_bullet_end",
     "P_ChromVolcanoA",
     "P_ChromVolcanoB",
     "P_ChromVolcanoC",
@@ -136,6 +151,18 @@ pub const TARGET_NAMES: &[&str] = &[
 ];
 
 const TARGET_HASHES: &[u64] = &[
+    hash40("palutena_bomb"),
+    hash40("palutena_bomb_appear"),
+    hash40("palutena_bomb_finish"),
+    hash40("edge_shadowflare_start"),
+    hash40("edge_shadowflare_hold"),
+    hash40("edge_shadowflare_aura"),
+    hash40("edge_shadowflare_beam"),
+    hash40("edge_shadowflare_beam_hit"),
+    hash40("edge_shadowflare_bullet"),
+    hash40("edge_shadowflare_bullet_attack"),
+    hash40("edge_shadowflare_bullet_hit"),
+    hash40("edge_shadowflare_bullet_end"),
     hash40("P_ChromVolcanoA"),
     hash40("P_ChromVolcanoB"),
     hash40("P_ChromVolcanoC"),
@@ -250,11 +277,50 @@ const TARGET_HASHES: &[u64] = &[
 ];
 
 pub fn rewrite(mode: FxMode, hash: u64) -> u64 {
-    if mode == FxMode::Off && TARGET_HASHES.contains(&hash) {
+    if mode == FxMode::Off
+        && (TARGET_HASHES.contains(&hash) || crate::effects_catalog::global(hash))
+    {
         NULL_EFFECT
     } else {
         hash
     }
+}
+
+pub fn needs_context(hash: u64) -> bool {
+    crate::effects_catalog::needs_context(hash)
+}
+
+pub fn rewrite_with_context(mode: FxMode, hash: u64, context: Option<Context>) -> u64 {
+    let global = rewrite(mode, hash);
+    if global != hash || mode != FxMode::Off {
+        return global;
+    }
+    if context
+        .and_then(effect_context::profile)
+        .is_some_and(|p| crate::effects_catalog::scoped(p, hash))
+    {
+        NULL_EFFECT
+    } else {
+        hash
+    }
+}
+
+/// Build sorted lookup tables at compile time; no runtime hashing/allocation.
+pub(crate) const fn sorted_hashes<const N: usize>(names: &[&str]) -> [u64; N] {
+    assert!(names.len() == N);
+    let mut values = [0; N];
+    let mut i = 0;
+    while i < N {
+        let hash = hash40(names[i]);
+        let mut j = i;
+        while j > 0 && values[j - 1] > hash {
+            values[j] = values[j - 1];
+            j -= 1;
+        }
+        values[j] = hash;
+        i += 1;
+    }
+    values
 }
 
 pub fn suppress_screen(mode: FxMode, hash: u64) -> bool {

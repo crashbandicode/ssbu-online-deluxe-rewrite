@@ -1,20 +1,24 @@
+mod acmd;
+mod effect_context;
 mod effects;
 mod hooks;
 mod imgui;
 mod input;
 mod logging;
 mod memory;
+mod online;
 mod overlay_host;
 mod ui;
 
 use crate::{
-    config::{Config, FxMode},
+    config::{Config, FxMode, FxScope},
     diagnostics::{Code, Recorder},
 };
 use std::sync::atomic::{AtomicI8, AtomicU64, AtomicU8, Ordering};
 
 pub(super) static RECORDER: Recorder = Recorder::new();
 static FX_MODE: AtomicU8 = AtomicU8::new(0);
+static FX_SCOPE: AtomicU8 = AtomicU8::new(FxScope::Online as u8);
 static INPUT_BUFFER: AtomicI8 = AtomicI8::new(-1);
 static CONFIG_GENERATION: AtomicU64 = AtomicU64::new(0);
 pub(super) const DATA_DIR: &str = "sd:/ultimate/ssbu_online_deluxe_rewrite";
@@ -26,18 +30,25 @@ pub(super) fn settings() -> Config {
         } else {
             FxMode::On
         },
+        effects_scope: if FX_SCOPE.load(Ordering::Acquire) == FxScope::All as u8 {
+            FxScope::All
+        } else {
+            FxScope::Online
+        },
         input_buffer: INPUT_BUFFER.load(Ordering::Acquire),
     }
 }
 
 pub(super) fn publish(config: &Config) {
     FX_MODE.store(config.effects.effective() as u8, Ordering::Release);
+    FX_SCOPE.store(config.effects_scope as u8, Ordering::Release);
     INPUT_BUFFER.store(config.input_buffer, Ordering::Release);
     CONFIG_GENERATION.fetch_add(1, Ordering::Release);
 }
 
 pub(super) fn effects_off() -> bool {
     FX_MODE.load(Ordering::Relaxed) == FxMode::Off as u8
+        && (FX_SCOPE.load(Ordering::Relaxed) == FxScope::All as u8 || online::active())
 }
 
 pub(super) fn record(code: Code, a: u64, b: u64) {
@@ -81,7 +92,8 @@ pub fn main() {
         );
         return;
     }
-    // No render/scene, global draw, fighter-frame or Training input-delay hook.
+    // Scene entries are observed for FX scope only; no scene mutation, global
+    // Layout::Draw, fighter-frame or Training input-delay hook.
     if legacy_host_present() {
         record(Code::Compatibility, 1, 0);
         skyline::println!("[Deluxe] Existing SsbuSync host detected; rewrite hooks skipped");

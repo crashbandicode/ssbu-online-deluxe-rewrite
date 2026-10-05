@@ -210,7 +210,14 @@ unsafe extern "C" fn draw() {
                     } else {
                         "FX"
                     },
-                    config.effects.effective().label(),
+                    if config.effects == crate::config::FxMode::Off
+                        && config.effects_scope == crate::config::FxScope::Online
+                        && !super::online::ready()
+                    {
+                        "On (tracker unavailable)"
+                    } else {
+                        config.effects.effective().label()
+                    },
                 );
                 igEndTable();
             }
@@ -221,6 +228,15 @@ unsafe extern "C" fn draw() {
                 );
                 row("Renderer", "Vanilla");
                 row("FX", config.effects.effective().label());
+                row("FX scope", config.effects_scope.label());
+                row(
+                    "Online tracker",
+                    if super::online::ready() {
+                        "Ready"
+                    } else {
+                        "Unavailable"
+                    },
+                );
                 row("Reduced FX", "Unavailable");
                 row("LessLag", "Unavailable");
                 igEndTable();

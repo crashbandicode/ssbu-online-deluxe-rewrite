@@ -94,3 +94,25 @@ telemetry, Reduced FX, LessLag, console compatibility or performance gains.
 
 User additionally confirmed the global window at character select and the normal
 game title banner restored. Match/SGPO display test is pending.
+
+## Accepted FX build and next candidate, 2026-10-05
+
+Installed c1706bbe9589de97 (SHA256
+c1706bbe9589de979460de2b3553c9bb188eca30b257355cb2d3aed452fc9225):
+user confirmed the small global window in matches, Palutena/Sephiroth FX Off/On,
+SGPO, Training Modpack menu open/close, and Training save/load preserving Off
+with successful On restoration. Saved runtime evidence stays in that dist bundle.
+No Switch or performance acceptance is implied.
+
+The expanded candidate adds qualified actor/move tables, ten ACMD request variants,
+both effect-name slots for flips, preserved projectile/hitbox cues, and online-only
+INI scope (all for testing). Host tests: 32 passed; Clippy all-targets with
+-D warnings and no-default-features build passed. Skyline build and exact final
+bundle are recorded in HANDOFF.md. This candidate has no live acceptance yet.
+
+Fable 5.1 xhigh reviewed context/stack ABIs and scope registration. Primary addressed
+the review findings: preserve information-bearing cue names, guard install reads,
+retain original Lua Int/Hash type, and refresh online state from delay setup even
+when input-buffer changes are disabled. Main-menu reset remains unconditional.
+Live Quickplay/arena/local-wireless transitions and unknown patched sites remain
+validation items, as do the broad move catalog, both load orders and console tests.
