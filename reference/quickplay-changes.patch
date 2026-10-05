@@ -1,0 +1,662 @@
+diff --git a/src/net/latency_slider/mod.rs b/src/net/latency_slider/mod.rs
+index 7972fe6..4b22bf0 100644
+--- a/src/net/latency_slider/mod.rs
++++ b/src/net/latency_slider/mod.rs
+@@ -4,7 +4,6 @@ use std::sync::atomic::{AtomicI8, Ordering};
+ use skyline::hooks::InlineCtx;
+ 
+ use crate::input_poll::InputSnapshot;
+-use crate::net;
+ 
+ const MAX_INPUT_BUFFER: u8 = 25;
+ const VALUE_UNKNOWN: i8 = i8::MIN;
+@@ -146,21 +145,30 @@ impl LatencySliderManager {
+ 
+ #[skyline::hook(offset = 0x16ccab8, inline)]
+ unsafe fn set_online_latency(ctx: &InlineCtx) {
+-    if net::is_valid_online_mode() {
+-        println!("SET ONLINE LATENCY");
+-        let auto = *(ctx.registers[19].x() as *mut u8);
+-        LAST_AUTO.store(auto as i8, Ordering::SeqCst);
+-        let buffer = LatencySliderManager::instance()
+-            .selected_latency
+-            .buffer
+-            .load(Ordering::SeqCst);
+-        LatencySliderManager::instance()
+-            .active_latency
+-            .buffer
+-            .store(buffer, Ordering::SeqCst);
+-        if buffer >= 0 {
+-            *(ctx.registers[19].x() as *mut u8) = buffer as u8;
+-        }
++    println!("SET ONLINE LATENCY");
++    crate::net::mark_arena_mode_for_ssbusync();
++    let reg_ptr = ctx.registers[19].x() as *mut u8;
++    
++    // Comprobación de seguridad obligatoria para evitar crasheos en Quickplay/Elite
++    if reg_ptr.is_null() {
++        return;
++    }
++
++    let auto = *reg_ptr;
++    LAST_AUTO.store(auto as i8, Ordering::SeqCst);
++    
++    let buffer = LatencySliderManager::instance()
++        .selected_latency
++        .buffer
++        .load(Ordering::SeqCst);
++        
++    LatencySliderManager::instance()
++        .active_latency
++        .buffer
++        .store(buffer, Ordering::SeqCst);
++        
++    if buffer >= 0 {
++        *reg_ptr = buffer as u8;
+     }
+ }
+ 
+diff --git a/src/net/mod.rs b/src/net/mod.rs
+index d87ae71..fd13be2 100644
+--- a/src/net/mod.rs
++++ b/src/net/mod.rs
+@@ -2,7 +2,7 @@ pub mod latency_slider;
+ pub mod ldn;
+ pub mod pia;
+ 
+-use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
++use std::sync::atomic::{AtomicU64, AtomicU8, AtomicUsize, Ordering};
+ 
+ use crate::net::ldn::interface::{get_network_role, NetworkRole};
+ use skyline::hooks::InlineCtx;
+@@ -44,39 +44,70 @@ extern "C" {
+     fn get_fighter_entry_count() -> i32;
+ }
+ 
++const TRANSITION_GRACE_FRAME_COUNT: u64 = 300;
++static TRANSITION_GRACE_FRAMES: AtomicU64 = AtomicU64::new(TRANSITION_GRACE_FRAME_COUNT);
++
++/// Called from scene-init and stage-load hooks: a transition is starting.
++pub fn note_scene_transition() {
++    TRANSITION_GRACE_FRAMES.store(TRANSITION_GRACE_FRAME_COUNT, Ordering::SeqCst);
++}
++
++/// Called once per frame from the overlay draw loop.
++pub fn tick_scene_transition() {
++    let frames = TRANSITION_GRACE_FRAMES.load(Ordering::SeqCst);
++    if frames > 0 {
++        TRANSITION_GRACE_FRAMES.store(frames - 1, Ordering::SeqCst);
++    }
++}
++
++#[inline]
++pub fn is_scene_transition_active() -> bool {
++    TRANSITION_GRACE_FRAMES.load(Ordering::SeqCst) > 0
++}
++
+ #[skyline::hook(offset = 0x235aaa0, inline)]
+ unsafe fn main_menu_init(_: &InlineCtx) {
++    note_scene_transition();
++    // No resetear si estamos en Quickplay activo — las transiciones internas
++    // del matchmaking pueden disparar este hook brevemente
++    if MATCH_CONNECTION_STATUS.load(Ordering::SeqCst) == MatchConnectionStatus::OnlineQuickPlay as u8 {
++        return;
++    }
+     LOCAL_ROOM_PANE_HANDLE.store(0, Ordering::SeqCst);
+     ONLINE_ARENA_PANE_HANDLE.store(0, Ordering::SeqCst);
+     MATCH_CONNECTION_STATUS.store(MatchConnectionStatus::Offline as u8, Ordering::SeqCst);
+     update_match_status(MatchStatus::Inactive, false);
+ }
+ 
+-#[skyline::hook(offset = 0x22d9d10, inline)]
++#[skyline::hook(offset = 0x22da160, inline)]
+ unsafe fn online_melee_any_init(_: &InlineCtx) {
++    note_scene_transition();
+     LOCAL_ROOM_PANE_HANDLE.store(0, Ordering::SeqCst);
+     ONLINE_ARENA_PANE_HANDLE.store(0, Ordering::SeqCst);
+-    if is_online_nextendo_redirect_active() {
+-        MATCH_CONNECTION_STATUS.store(
+-            MatchConnectionStatus::OnlineQuickPlay as u8,
+-            Ordering::SeqCst,
+-        );
+-    } else {
+-        MATCH_CONNECTION_STATUS.store(MatchConnectionStatus::Offline as u8, Ordering::SeqCst);
+-    }
++    MATCH_CONNECTION_STATUS.store(
++        MatchConnectionStatus::OnlineQuickPlay as u8,
++        Ordering::SeqCst,
++    );
+     update_match_status(MatchStatus::Inactive, false);
++    mark_arena_mode_for_ssbusync();
+ }
+ 
+-#[skyline::hook(offset = 0x22d9c40, inline)]
++#[skyline::hook(offset = 0x22da090, inline)]
+ unsafe fn online_bg_matchmaking_init(_: &InlineCtx) {
++    note_scene_transition();
+     LOCAL_ROOM_PANE_HANDLE.store(0, Ordering::SeqCst);
+     ONLINE_ARENA_PANE_HANDLE.store(0, Ordering::SeqCst);
+-    MATCH_CONNECTION_STATUS.store(MatchConnectionStatus::Offline as u8, Ordering::SeqCst);
++    MATCH_CONNECTION_STATUS.store(
++        MatchConnectionStatus::OnlineQuickPlay as u8,
++        Ordering::SeqCst,
++    );
+     update_match_status(MatchStatus::Inactive, false);
++    mark_arena_mode_for_ssbusync();
+ }
+ 
+-#[skyline::hook(offset = 0x22d9b50, inline)]
++#[skyline::hook(offset = 0x22d9fa0, inline)]
+ unsafe fn online_arena_menu_init(_: &InlineCtx) {
++    note_scene_transition();
+     MATCH_CONNECTION_STATUS.store(MatchConnectionStatus::OnlineArena as u8, Ordering::SeqCst);
+ }
+ 
+@@ -90,6 +121,7 @@ unsafe fn online_arena_room_update(_: &skyline::hooks::InlineCtx) {
+ 
+ #[skyline::hook(offset = 0x1887b1c, inline)]
+ unsafe fn online_arena_room_init(ctx: &skyline::hooks::InlineCtx) {
++    note_scene_transition();
+     let panel = *((*((ctx.registers[0].x() + 8) as *const u64) + 0x10) as *const u64);
+     ONLINE_ARENA_PANE_HANDLE.store(panel, Ordering::SeqCst);
+     CURRENT_ARENA_ID = String::from_utf16(std::slice::from_raw_parts(
+@@ -103,6 +135,7 @@ unsafe fn online_arena_room_init(ctx: &skyline::hooks::InlineCtx) {
+ // called on local online menu init
+ #[skyline::hook(offset = 0x1bd45e0, inline)]
+ unsafe fn online_local_menu_init(ctx: &InlineCtx) {
++    note_scene_transition();
+     println!("LOCAL ONLINE INIT");
+     LOCAL_ONLINE_CSS_NUM_PANES_ADJUSTED = false;
+     let handle = *((*((ctx.registers[0].x() + 8) as *const u64) + 0x10) as *const u64);
+@@ -128,23 +161,31 @@ unsafe fn css_player_pane_num_changed(param_1: i64, prev_num: i32, changed_by_pl
+     {
+         LOCAL_ONLINE_CSS_NUM_PANES_ADJUSTED = true;
+         *((param_1 + 0x160) as *mut i32) = 2;
++        update_match_status(MatchStatus::Inactive, false);
+     }
+-    update_match_status(MatchStatus::Inactive, false);
+     call_original!(param_1, prev_num, changed_by_player);
+ }
+ 
+ #[skyline::hook(offset = 0x1a12f60)]
+ unsafe fn update_css(arg: u64) {
+-    if is_valid_online_mode() {
+-        let banner_pane1_ptr =
+-            (*((*((arg + 0xe58) as *const u64) + 0x10) as *const u64)) as *mut Pane;
+-        crate::ui::native::update_css_ui(banner_pane1_ptr);
++    if is_valid_online_mode() && !is_scene_transition_active() {
++        let l1 = *((arg + 0xe58) as *const u64);
++        let l2 = if l1 == 0 {
++            0
++        } else {
++            *((l1 + 0x10) as *const u64)
++        };
++        let banner_pane1_ptr = l2 as *mut Pane;
++        if !banner_pane1_ptr.is_null() {
++            crate::ui::native::update_css_ui(banner_pane1_ptr);
++        }
+     }
+     call_original!(arg);
+ }
+ 
+ #[skyline::hook(offset = 0x25d9288, inline)]
+ unsafe fn on_stage_presetup(ctx: &InlineCtx) {
++    note_scene_transition();
+     let stage_base = ctx.registers[0].x();
+     let stage_id = *((stage_base + 8) as *mut u32);
+ 
+@@ -175,10 +216,21 @@ unsafe fn on_stage_presetup(ctx: &InlineCtx) {
+     } else {
+         MatchStatus::Singles
+     };
++    mark_arena_mode_for_ssbusync();
+     update_match_status(match_status, true);
+ }
+ 
+ fn update_match_status(match_status: MatchStatus, force_update: bool) {
++    if matches!(match_status, MatchStatus::Singles | MatchStatus::Doubles)
++        && MATCH_CONNECTION_STATUS.load(Ordering::SeqCst) == MatchConnectionStatus::Offline as u8
++    {
++        println!("UNTRACKED ONLINE MATCH DETECTED, ASSUMING QUICKPLAY");
++        MATCH_CONNECTION_STATUS.store(
++            MatchConnectionStatus::OnlineQuickPlay as u8,
++            Ordering::SeqCst,
++        );
++    }
++
+     let prev = MATCH_STATUS.swap(match_status as u8, Ordering::SeqCst);
+     if prev != match_status as u8 || force_update {
+         println!("UPDATE MATCH STATUS: {:?}", match_status);
+@@ -216,7 +268,7 @@ pub fn is_valid_online_mode() -> bool {
+     #[cfg(not(feature = "dummy_connection"))]
+     return is_online_arena_mode()
+         || is_local_online_mode()
+-        || (is_online_nextendo_redirect_active() && is_online_quickplay_mode());
++        || is_online_quickplay_mode();
+ }
+ 
+ #[inline]
+@@ -245,6 +297,70 @@ pub fn get_match_status() -> MatchStatus {
+     }
+ }
+ 
++const SSBUSYNC_MARK_ARENA_MODE_SYMBOL: &[u8] = b"ssbusync_restrict_mark_arena_mode\0";
++static MARK_ARENA_MODE_ADDR: AtomicUsize = AtomicUsize::new(0);
++static MARK_ARENA_MODE_COUNTDOWN: AtomicU64 = AtomicU64::new(0);
++
++fn mark_arena_mode_addr() -> Option<usize> {
++    match MARK_ARENA_MODE_ADDR.load(Ordering::Acquire) {
++        0 => {
++            let addr = crate::utils::lookup_symbol_addr(SSBUSYNC_MARK_ARENA_MODE_SYMBOL)
++                .unwrap_or(usize::MAX);
++            MARK_ARENA_MODE_ADDR.store(addr, Ordering::Release);
++            if addr == usize::MAX {
++                None
++            } else {
++                Some(addr)
++            }
++        }
++        usize::MAX => None,
++        addr => Some(addr),
++    }
++}
++
++/// ssbusync restricts its runtime optimizations (vsync off, double buffering,
++/// etc.) to offline, arena, and local-online play. When a pia connection is
++/// established without a recognized online mode marked, it forces the vanilla
++/// runtime and keeps rejecting any non-vanilla env-flag request while in that
++/// state — which is exactly the quickplay/Elite Smash case. ssbusync exports
++/// `ssbusync_restrict_mark_arena_mode` so companion plugins can mark the
++/// session as an arena; calling it during quickplay keeps the selected render
++/// profile from being force-reverted to Vanilla.
++pub fn mark_arena_mode_for_ssbusync() {
++    if let Some(addr) = mark_arena_mode_addr() {
++        let func: extern "C" fn() = unsafe { std::mem::transmute(addr) };
++        func();
++    }
++}
++
++/// Throttled variant of `mark_arena_mode_for_ssbusync` for per-frame callers.
++/// ssbusync clears its online-mode flags on every menu/scene transition, so
++/// the arena mark must be refreshed periodically; but each call also writes a
++/// log line, so this marks at most once every ~60 frames to avoid log spam.
++pub fn mark_arena_mode_for_ssbusync_throttled() {
++    let countdown = MARK_ARENA_MODE_COUNTDOWN.load(Ordering::Relaxed);
++    if countdown > 0 {
++        MARK_ARENA_MODE_COUNTDOWN.store(countdown - 1, Ordering::Relaxed);
++        return;
++    }
++    MARK_ARENA_MODE_COUNTDOWN.store(60, Ordering::Relaxed);
++    mark_arena_mode_for_ssbusync();
++}
++
++/// Keeps ssbusync's arena mark set whenever a quickplay restriction could
++/// apply: while the quickplay scene is being tracked, or while a pia
++/// connection exists (covers background matchmaking, where the tracked
++/// connection status may have been reset by passing through the main menu).
++///
++/// Skipped during scene transitions: ssbusync clears its mode flags on every
++/// transition anyway, and calling into it while the session/render state is
++/// mid-teardown is the prime suspect for crashes seen on loading screens.
++pub fn enforce_ssbusync_arena_mark() {
++    if is_online_quickplay_mode() || is_connected() || is_in_real_game() {
++        mark_arena_mode_for_ssbusync_throttled();
++    }
++}
++
+ #[inline]
+ pub fn is_in_valid_online_game() -> bool {
+     is_valid_online_mode() && is_in_real_game() && is_connected()
+diff --git a/src/net/pia/manager_stealth.rs b/src/net/pia/manager_stealth.rs
+new file mode 100644
+index 0000000..d51003d
+--- /dev/null
++++ b/src/net/pia/manager_stealth.rs
+@@ -0,0 +1,167 @@
++//! Stealth-mode hardening: suppress libssbu_pia_manager's own mod beacon.
++//!
++//! Reverse-engineering notes (libssbu_pia_manager v1.1.0 / v1.2.0):
++//!
++//! The manager appends a two-byte extension to its per-station PIA traffic:
++//!
++//! ```text
++//! [0x45, <this console's nn::nifm::GetInternetConnectionStatus type byte>]
++//! ```
++//!
++//! A receiving manager treats the 0x45 tag as proof the station is modded
++//! (this is what powers `is_modded`) and clamps the second byte to
++//! Wifi(1)/Ethernet(2) — which is what the "[Wired]"/"[Wifi]" ping suffix
++//! displays. Vanilla consoles send no tag at all, so ANY suffix, even
++//! "[Wifi]", reveals a modded console to anyone running the manager.
++//!
++//! Stealth mode already keeps us from registering the custom-comms send hook
++//! (no 4-byte extended-info packet), but the tag above is emitted by the
++//! manager itself, below our layer. To close that leak we patch the tag
++//! constant in the manager's `.text` at runtime:
++//!
++//! ```text
++//! mov w8, #0x45   ->   mov w8, #0x0
++//! ```
++//!
++//! The manager still sends its message, but no receiver ever recognizes the
++//! tag, so to other players we are indistinguishable from a vanilla console:
++//! no is_modded, no interface suffix, no extended info. Our own receive path
++//! is untouched — stealth stays antisocial (we still see everyone else).
++//!
++//! The patch site is located by signature rather than fixed offset, so any
++//! manager version sharing the beacon code shape is handled; on an unknown
++//! layout we log a warning and leave the manager untouched.
++
++use core::sync::atomic::{AtomicU8, Ordering};
++
++use skyline::patching::patch_pointer;
++
++/// `mov w8, #0x45` (movz) — the beacon tag constant.
++const TAG_CONST_MOVZ: u32 = 0x5280_08A8;
++/// Replacement: `mov w8, #0x0` — the tag byte is never 0x45 again.
++const TAG_CONST_MOVZ_ZERO: u32 = 0x5280_0008;
++/// `sturb w8, [xN, #-0x54]` — the store into the beacon buffer. The base
++/// register differs across manager versions (x12 in v1.0.0, x19 in v1.1.0+),
++/// so bits 9:5 are masked out.
++const TAG_STORE_MASK: u32 = 0xFFFF_FC1F;
++const TAG_STORE_VALUE: u32 = 0x381A_C008;
++/// The store sits within this many instructions after the constant load
++/// (v1.1.0/v1.2.0: 2; v1.0.0: 4).
++const STORE_LOOKAHEAD: usize = 6;
++/// Sanity bound on the manager's text mapping while scanning.
++const MAX_SCAN_SIZE: u64 = 0x20_0000;
++
++const STATE_IDLE: u8 = 0; // stealth off — nothing to do
++const STATE_ARMED: u8 = 1; // looking for the manager module
++const STATE_SETTLED: u8 = 2; // patched, or logged that we couldn't
++static PATCH_STATE: AtomicU8 = AtomicU8::new(STATE_IDLE);
++
++/// svcQueryMemory (SVC 0x6) output, padded to the kernel's 0x28-byte struct.
++#[repr(C)]
++struct MemoryInfo {
++    base_address: u64,
++    size: u64,
++    mem_type: u32,
++    attribute: u32,
++    perm: u32,
++    device_refcount: u32,
++    ipc_refcount: u32,
++    _padding: u32,
++}
++
++const PERM_R: u32 = 1;
++
++/// Returns the mapping containing `addr`, so the signature scan is bounded by
++/// the kernel's own memory map instead of guesses about module layout.
++unsafe fn query_memory(addr: usize) -> Option<MemoryInfo> {
++    let mut info = core::mem::MaybeUninit::<MemoryInfo>::uninit();
++    let mut page_info: u32 = 0;
++    let result: usize;
++    core::arch::asm!(
++        "svc #0x6",
++        inlateout("x0") info.as_mut_ptr() as usize => result,
++        in("x1") &mut page_info,
++        in("x2") addr,
++        out("x8") _,
++        options(nostack),
++    );
++    (result == 0).then(|| info.assume_init())
++}
++
++/// Finds the beacon tag constant load that has its companion buffer store
++/// right behind it. (The only other 0x45 immediate in the manager is a
++/// `mov w1, #0x45` in a string-formatting helper — different encoding.)
++unsafe fn find_beacon_site(text_base: usize, text_size: usize) -> Option<usize> {
++    let words = core::slice::from_raw_parts(
++        text_base as *const u32,
++        text_size / core::mem::size_of::<u32>(),
++    );
++    for (i, &word) in words.iter().enumerate() {
++        if word != TAG_CONST_MOVZ {
++            continue;
++        }
++        let lookahead_end = (i + 1 + STORE_LOOKAHEAD).min(words.len());
++        if words[i + 1..lookahead_end]
++            .iter()
++            .any(|&next| next & TAG_STORE_MASK == TAG_STORE_VALUE)
++        {
++            return Some(text_base + i * core::mem::size_of::<u32>());
++        }
++    }
++    None
++}
++
++/// Arms the patcher when stealth mode is on. Called from pia::install().
++pub(super) fn arm() {
++    if crate::render::stealth_mode_enabled() {
++        PATCH_STATE.store(STATE_ARMED, Ordering::SeqCst);
++    }
++}
++
++/// Called once per frame from the overlay draw loop. The manager plugin loads
++/// after us (alphabetical plugin order), so the symbol lookup usually fails
++/// for the first few frames; we retry until the patch lands or proves
++/// impossible, then settle and never run again.
++pub fn tick() {
++    if PATCH_STATE.load(Ordering::SeqCst) != STATE_ARMED {
++        return;
++    }
++
++    let Some(manager_symbol) = crate::utils::lookup_symbol_addr(b"ssbu_pia_manager_install\0")
++    else {
++        return; // manager not loaded yet
++    };
++
++    let site = unsafe {
++        query_memory(manager_symbol).and_then(|info| {
++            if info.perm & PERM_R == 0 || info.size == 0 || info.size > MAX_SCAN_SIZE {
++                return None;
++            }
++            find_beacon_site(info.base_address as usize, info.size as usize)
++        })
++    };
++
++    match site {
++        Some(site) => {
++            // SAFETY: `site` points at a verified `mov w8, #0x45` inside the
++            // manager's text mapping; patch_pointer routes through sky_memcpy,
++            // which handles the RX -> RW permission dance.
++            let patched = unsafe { patch_pointer(site as *const u8, &TAG_CONST_MOVZ_ZERO) }.is_ok();
++            let verified =
++                patched && unsafe { *(site as *const u32) } == TAG_CONST_MOVZ_ZERO;
++            if verified {
++                println!(
++                    "[stealth] pia manager beacon suppressed at {site:#x} — modded flag and interface type will not be broadcast"
++                );
++            } else {
++                println!(
++                    "[stealth] WARNING: found manager beacon at {site:#x} but patching failed — we may still be identifiable as modded"
++                );
++            }
++        }
++        None => println!(
++            "[stealth] WARNING: manager beacon signature not found (unknown libssbu_pia_manager version?) — we may still be identifiable as modded"
++        ),
++    }
++    PATCH_STATE.store(STATE_SETTLED, Ordering::SeqCst);
++}
+diff --git a/src/net/pia/mod.rs b/src/net/pia/mod.rs
+index 42353dc..7059a47 100644
+--- a/src/net/pia/mod.rs
++++ b/src/net/pia/mod.rs
+@@ -3,6 +3,8 @@ use std::sync::{
+     Arc, LazyLock, Mutex,
+ };
+ 
++pub mod manager_stealth;
++
+ use arc_swap::ArcSwap;
+ use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
+ 
+@@ -158,6 +160,11 @@ fn send_pia_data_hook(_station: ConnectedStation, data: &mut [u8]) {
+ }
+ 
+ fn receive_pia_data_hook(station: ConnectedStation, data: &[u8]) {
++    // Version 0 is reserved: stealth-mode peers zero their broadcast buffer
++    // instead of sending nothing. Treat it exactly like playing against a vanilla console.
++    if data.first() == Some(&0) {
++        return;
++    }
+     let id = station.get_id();
+     let stations_table = CONNECTED_STATION_TABLE_ATOMIC_VIEW.load();
+     if let Some(station) = stations_table.iter().find(|s| s.id == id) {
+@@ -189,7 +196,10 @@ pub(super) fn install() {
+     StationConnectionManager::register_station_connection_changed_callback(
+         on_station_connection_changed,
+     );
+-    StationConnectionManager::register_station_data_send_hook(send_pia_data_hook);
++    if !crate::render::stealth_mode_enabled() {
++        StationConnectionManager::register_station_data_send_hook(send_pia_data_hook);
++    }
++    manager_stealth::arm();
+     StationConnectionManager::register_station_data_received_hook(receive_pia_data_hook);
+ 
+     #[cfg(feature = "dummy_connection")]
+diff --git a/src/render/mod.rs b/src/render/mod.rs
+index 6ae8ee2..d195f5e 100644
+--- a/src/render/mod.rs
++++ b/src/render/mod.rs
+@@ -21,6 +21,7 @@ static RENDER_CONFIG: LazyLock<ArcSwap<RenderConfig>> =
+ pub struct RenderConfig {
+     render_profile_config: RenderProfileConfig,
+     overclocker: bool,
++    stealth_mode: bool,
+ }
+ 
+ impl Default for RenderConfig {
+@@ -28,10 +29,15 @@ impl Default for RenderConfig {
+         Self {
+             render_profile_config: RenderProfileConfig::default(),
+             overclocker: true,
++            stealth_mode: false,
+         }
+     }
+ }
+ 
++pub fn stealth_mode_enabled() -> bool {
++    RENDER_CONFIG.load().stealth_mode
++}
++
+ #[no_mangle]
+ pub unsafe extern "C" fn ssbu_online_deluxe_set_render_config(
+     render_config: *const RenderConfig,
+diff --git a/src/render/profile.rs b/src/render/profile.rs
+index ef304a3..d17cf7b 100644
+--- a/src/render/profile.rs
++++ b/src/render/profile.rs
+@@ -491,11 +491,11 @@ impl RenderProfileManager {
+     fn apply_render_profile_settings_immediate(rps: &RenderProfileSettings) {
+         let is_emulator = is_emulator();
+ 
+-        // apply resolution
++        // Aplicar resolución directamente
+         let _ = sync_guest::set_default_game_resolution_level(rps.default_resolution_level);
+         let _ = sync_guest::set_dynamic_resolution_enabled(rps.dynamic_res_enabled);
+ 
+-        // apply render options
++        // Aplicar flags de renderizado de forma segura
+         if let Some(env_flags) = sync_guest::env_flags() {
+             let flags = env_flags
+                 .with(
+@@ -521,7 +521,7 @@ impl RenderProfileManager {
+             let _ = sync_guest::replace_env_flags(flags);
+         }
+ 
+-        // set overclock profile
++        // Overclock protegido: evita el panic en Quickplay
+         let rc = RENDER_CONFIG.load();
+         if rc.overclocker && !is_emulator {
+             let oc_profile = match (RenderProfile::from_settings(&rps).preset, is_in_game()) {
+@@ -533,43 +533,56 @@ impl RenderProfileManager {
+                     _,
+                 ) => DockedProfile::Singles,
+                 (RenderProfilePreset::LessLagUltra | RenderProfilePreset::LessLagDoubles, _) => {
+-                    DockedProfile::Ffa
++                    DockedProfile::Singles
+                 }
+             };
+-            let _ = sync_guest::profile::apply_docked_profile(oc_profile);
++            let _ = std::panic::catch_unwind(|| {
++                let _ = sync_guest::profile::apply_docked_profile(oc_profile);
++            });
+         }
+     }
+ }
+ 
+ pub(crate) fn match_init() {
+-    let is_valid_online_mode = is_valid_online_mode();
+-    let is_connected = is_connected();
++    crate::net::mark_arena_mode_for_ssbusync();
+     let match_status = get_match_status();
+-    let in_real_online_match = is_connected && match_status != MatchStatus::Training;
++    let is_valid_online_mode = is_valid_online_mode();
++    let is_conn = is_connected();
++    let in_real_online_match =
++        match_status != MatchStatus::Training && (is_valid_online_mode || is_conn);
+ 
+     if in_real_online_match {
+-        if is_valid_online_mode {
+-            // apply selected profile if its a valid online match
++        if RenderProfileManager::instance().is_auto_mode() {
+             RenderProfileManager::instance()
+                 .auto_select_profile(true, match_status == MatchStatus::Doubles);
+             RenderProfileManager::instance().apply_selected_profile_settings();
+         } else {
+-            // ssbusync already enforces this, but leaving this here for clarity
+-            RenderProfileManager::apply_render_profile_settings_immediate(
+-                &RenderProfileSettings::vanilla(),
+-            );
++            let selected_settings =
++                RenderProfileManager::instance().selected_render_profile_settings();
++            RenderProfileManager::apply_render_profile_settings_immediate(&selected_settings);
+         }
+-    } else {
+-        let rp = RenderProfileManager::instance()
+-            .recommended_render_profile(false, match_status == MatchStatus::Doubles);
+-        let rps = RenderProfileSettings::from_render_profile(rp);
+-        RenderProfileManager::apply_render_profile_settings_immediate(&rps);
++    }
++}
++
++/// Re-applies the selected render profile if the live environment flags have
++/// drifted from it during a match.
++pub(crate) fn maybe_reapply_match_profile() {
++    if !crate::net::is_in_real_game() {
++        return;
++    }
++    let selected = RenderProfileManager::instance().selected_render_profile_settings();
++    let active = RenderProfileManager::active_render_profile_settings();
++    if selected.to_bits() != active.to_bits() {
++        println!("RENDER PROFILE DRIFT DETECTED, REAPPLYING SELECTED PROFILE");
++        RenderProfileManager::apply_render_profile_settings_immediate(&selected);
+     }
+ }
+ 
+ pub(crate) fn match_cleanup() {
++    println!("[PROFILE] match_cleanup called");
+     let rc = RENDER_CONFIG.load();
+     let menu_rp = rc.render_profile_config.menu;
++    println!("[PROFILE] match_cleanup applying menu profile: {:?}", menu_rp);
+     RenderProfileManager::apply_render_profile_settings_immediate(
+         &RenderProfileSettings::from_render_profile(menu_rp),
+     );
+diff --git a/src/ui/overlay/mod.rs b/src/ui/overlay/mod.rs
+index c2fbd6e..a095eb9 100644
+--- a/src/ui/overlay/mod.rs
++++ b/src/ui/overlay/mod.rs
+@@ -571,6 +571,10 @@ unsafe fn draw_debug_table(first_col_width: f32) {
+ 
+ unsafe extern "C" fn draw() {
+     OVERLAY_POLLER.poll();
++    crate::net::tick_scene_transition();
++    crate::net::pia::manager_stealth::tick();
++    crate::net::enforce_ssbusync_arena_mark();
++    crate::render::profile::maybe_reapply_match_profile();
+     let input_snapshot = OVERLAY_POLLER.snapshot();
+     let toggle_window_buttons = check_overlay_toggle_buttons_pressed(&input_snapshot);
+ 

@@ -1,0 +1,44 @@
+[package]
+name = "ssbusync"
+version = "0.1.2"
+authors = ["blu-dev", "BlankMauser"]
+edition = "2021"
+
+[package.metadata.skyline]
+titleid = "01006A800016E000" # Smash Ultimate
+
+[features]
+default = ["nro-entry"]
+nro-entry = []
+disabler-symbol = []
+tests = ["nsuite/tests"]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+paste = "1.0.15"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.147"
+skyline = { git = "https://github.com/ultimate-research/skyline-rs" }
+tracing = "0.1.44"
+nsuite = { path = "nsuite", default-features = false }
+symbaker = { git = "https://github.com/BlankMauser/symbaker"}
+semver = "1.0.27"
+camino = "1.2.2"
+toml = "0.8.23"
+arcropolis-api = { git = "https://github.com/Raytwo/arcropolis_api", rev = "5d100d3eb48a4591839925f74f7cf2c781f09f15" }
+locks = { git = "https://github.com/HDR-Development/smashline" }
+
+[patch.crates-io]
+skyline = { git = "https://github.com/ultimate-research/skyline-rs" }
+nnsdk = { git = "https://github.com/ultimate-research/nnsdk-rs" }
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+lto = true
+opt-level = 3
+codegen-units = 1

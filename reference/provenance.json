@@ -1,0 +1,252 @@
+[
+  {
+    "source": "quickplay",
+    "path": "src/utils.rs",
+    "sha256": "c4b7313a02079b000feb8b40e7c8692b56d81807d02f869e76923090854adfaa"
+  },
+  {
+    "source": "quickplay",
+    "path": "src/logging.rs",
+    "sha256": "83196696694477ec77c25749db42a634f9a74f56cdeec6e94bc0f84be1b77f71"
+  },
+  {
+    "source": "quickplay",
+    "path": "src/lib.rs",
+    "sha256": "6af31906dffbda8674c2c16012c341401fd97875a44ab1e432dda176ad937ad4"
+  },
+  {
+    "source": "quickplay",
+    "path": "src/input_poll.rs",
+    "sha256": "cc53141a6770e48ebb07aed4fffab4652c59d06521204c578d90b99e8a2ef4f7"
+  },
+  {
+    "source": "quickplay",
+    "path": "src/ui/mod.rs",
+    "sha256": "8b1b33603687e95accd2c7550b7620857b92a708b650e30751301dd8bdfba652"
+  },
+  {
+    "source": "quickplay",
+    "path": "src/render/profile.rs",
+    "sha256": "fc9c730509c9c3128e00098ff7719b2c2feee86699ebe46e7e164393534d46b9"
+  },
+  {
+    "source": "quickplay",
+    "path": "src/render/mod.rs",
+    "sha256": "266143fe2a1884470e3a876efe6b84b126d67ffdd4512c96adf83df022123631"
+  },
+  {
+    "source": "quickplay",
+    "path": "src/perf_scaler/utils.rs",
+    "sha256": "48495e73b3eee113fa51dc7696a4d79052f5a1008660d34462701647a5efb9df"
+  },
+  {
+    "source": "quickplay",
+    "path": "src/perf_scaler/mod.rs",
+    "sha256": "1607df854a839abc6ac410f4878a745c977997adc6540076a9105299b2bc3533"
+  },
+  {
+    "source": "quickplay",
+    "path": "src/net/mod.rs",
+    "sha256": "f4920d81d38e3ae7a71d35d7ff014f8bf6c758c5b3d65f481b72c4f2148ef37f"
+  },
+  {
+    "source": "quickplay",
+    "path": "src/net/pia/mod.rs",
+    "sha256": "53d6c91a5f1b74fedcd7fb6ab5cd130ead05bf100d4720161e7d897ba3fd77c5"
+  },
+  {
+    "source": "quickplay",
+    "path": "src/net/pia/manager_stealth.rs",
+    "sha256": "4f425a0a149cb3ec888655c5997cd70f3e89c5f44afc79e63a577f6663b8b540"
+  },
+  {
+    "source": "quickplay",
+    "path": "src/net/ldn/mod.rs",
+    "sha256": "5924b4117fc4849c57a459bbaf33d9c0f6769c603835dc0421d33f69230bdecf"
+  },
+  {
+    "source": "quickplay",
+    "path": "src/net/ldn/interface.rs",
+    "sha256": "86800c730afe905a1d4bb5251968f99b0e01129462aead861d293a47531af7f2"
+  },
+  {
+    "source": "quickplay",
+    "path": "src/net/latency_slider/mod.rs",
+    "sha256": "cafcf345a207f2c816cab06c9f0983b3b6d0cb1f8467d172f7c48da7fda67999"
+  },
+  {
+    "source": "quickplay",
+    "path": "src/perf_scaler/fighter/sephiroth.rs",
+    "sha256": "4a7e9766f870865bdfed76cd932ea90830d67eb31f044b016da15773e7c3b175"
+  },
+  {
+    "source": "quickplay",
+    "path": "src/perf_scaler/fighter/mod.rs",
+    "sha256": "25c9707393e1b53aa4833be41793a2f86227d96290e8b52801d5a66b9fdc50b3"
+  },
+  {
+    "source": "quickplay",
+    "path": "src/perf_scaler/common/mod.rs",
+    "sha256": "1b0a6922c91b64ee25cfab1e41b5c6feed2ea83d6832d91ec7da5270ea879f3e"
+  },
+  {
+    "source": "quickplay",
+    "path": "src/perf_scaler/common/cut_in.rs",
+    "sha256": "3c79c6f6ae173b7c6f377abfa3a60f109d11aee0ceb290e2160a0910407e0cd8"
+  },
+  {
+    "source": "quickplay",
+    "path": "src/ui/overlay/mod.rs",
+    "sha256": "79574aa83157525e81b91ffee8dfddafab45c13c3079f2352ee459fdbf769c35"
+  },
+  {
+    "source": "quickplay",
+    "path": "src/ui/native/utils.rs",
+    "sha256": "bfc5a5f40e7a682b9489254917651017d483ce410d761907d9350e9d96189212"
+  },
+  {
+    "source": "quickplay",
+    "path": "src/ui/native/mod.rs",
+    "sha256": "3c53f705f2cb9cc705faa660d1bf992184c7ec85d34a752915cc75b113b0599b"
+  },
+  {
+    "source": "quickplay",
+    "path": "Cargo.toml",
+    "sha256": "131a1719b0c47322fe01e16e7a084cb6011bb08bcbf0a6b6541cb1b6c9a8e510"
+  },
+  {
+    "source": "quickplay",
+    "path": "Cargo.lock",
+    "sha256": "05a090b85ef6c209a96e21e8847d5fae238c50bdd6473592e90886dd21a32222"
+  },
+  {
+    "source": "quickplay",
+    "path": "README.md",
+    "sha256": "56368cb0ac6fa4d05115736ae664fdb043d5de9c9750e1d1eb1238f6f75e47c2"
+  },
+  {
+    "source": "quickplay",
+    "path": "LICENSE",
+    "sha256": "6f1e622c82a380075843bb084a7ec3b1f1d12a4a02526d75e78b0924a860aa75"
+  },
+  {
+    "source": "quickplay",
+    "commit": "35fdf7cf5fea0f8249ca9fbb848c241b590bb483",
+    "url": "https://github.com/MSFS-RyZe/ssbu-online-deluxe-quickplay-13.0.5"
+  },
+  {
+    "source": "archive",
+    "path": "src/online.rs",
+    "sha256": "dbdd28cbc24c37e83319c1050c5a90b17c95a70c74de7596cf5becd2f6d7ec55"
+  },
+  {
+    "source": "archive",
+    "path": "src/compatibility.rs",
+    "sha256": "4bebe2222988610572ecd1471f56cba6fe16b9f587c0e76a0480bb8213ec58c2"
+  },
+  {
+    "source": "archive",
+    "path": "src/swapchain.rs",
+    "sha256": "a4a41edf19536ec651463517962a8e9b770a5260466762d50098a3cafb1a841b"
+  },
+  {
+    "source": "archive",
+    "path": "src/off_by_one.rs",
+    "sha256": "0c6231e5f5c30bd6acb68a3e934209e567845429492f7f9714693f8923bf421b"
+  },
+  {
+    "source": "archive",
+    "path": "src/vsync.rs",
+    "sha256": "9ac8559d6b7a4e12d4a161b5a9a038e3caeccd5a466832534091cb23461a3e7c"
+  },
+  {
+    "source": "archive",
+    "path": "src/pacer.rs",
+    "sha256": "40bf8d4d1f3b8e8f04e43ef18df893670eadff093ed2e1e35a5c84321c224574"
+  },
+  {
+    "source": "archive",
+    "path": "src/profiling.rs",
+    "sha256": "c076973288b25ded0e5f2f1dbda885c8c82f60cc6e389418704d2126f5d0acbd"
+  },
+  {
+    "source": "archive",
+    "path": "src/sequencing.rs",
+    "sha256": "0acd8e2573476863982c8221eb8c399cc854b38195f9256a59c42f59a16c0405"
+  },
+  {
+    "source": "archive",
+    "path": "src/lib.rs",
+    "sha256": "4e16bff76e016f44edf87259be6aff353c20c3b5033a679c6e6d2ab0708dceb8"
+  },
+  {
+    "source": "archive",
+    "path": "src/frametracer.rs",
+    "sha256": "243a905b75c4b7551b23b36a2f5a5a5a55486bb01c5d5b121879df4063a12098"
+  },
+  {
+    "source": "archive",
+    "path": "src/vsync_history.rs",
+    "sha256": "930c0bb7d2eb3598cf0def89d14cc6822e86b3b7c0bd1846b7c9e3220c5a2f7d"
+  },
+  {
+    "source": "archive",
+    "path": "src/service/usb.rs",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "source": "archive",
+    "path": "src/service/overclock.rs",
+    "sha256": "c778c28fc21f3d7a5a88cca68764f5ddb7d2b164b7be5e513fbee4eb91b227d3"
+  },
+  {
+    "source": "archive",
+    "path": "src/service/mod.rs",
+    "sha256": "6e3953705a47ba23149d92f44a62aa0de7857721ddbee56bc0014dc2ef7ef655"
+  },
+  {
+    "source": "archive",
+    "path": "src/util/env.rs",
+    "sha256": "33da73f682b63ab6626833aff3707ff5c873b618a4d719e7b3920243f2544ce5"
+  },
+  {
+    "source": "archive",
+    "path": "src/util/offsets.rs",
+    "sha256": "9328453849a639dcc288a498f3c7c313192c1964e4fa8daded6c533318e2fbd8"
+  },
+  {
+    "source": "archive",
+    "path": "src/util/mod.rs",
+    "sha256": "464cb1daa9c239225d0e6a31846ed96d5cd2af3aa940bf306743114b06c583d5"
+  },
+  {
+    "source": "archive",
+    "path": "src/util/file.rs",
+    "sha256": "417e15f5191b20ef3867b676088a1fbdb39b7980bfd6fba9ba8239ca9b18c858"
+  },
+  {
+    "source": "archive",
+    "path": "src/render/buffer_swap.rs",
+    "sha256": "ef7b40928fddf29f9ac83cec140e6cd2ecc9c0f584c5a79f2b7a1a1b50e00485"
+  },
+  {
+    "source": "archive",
+    "path": "src/render/mod.rs",
+    "sha256": "dbc206ce26b0e677759b801ca42cec2c70c41602a3711f61b33c612b869316f8"
+  },
+  {
+    "source": "archive",
+    "path": "Cargo.toml",
+    "sha256": "678d7fb8e2c7c53d662fe79a6995d3436cc4b59bc2aa8b6a49e3345fbf7a8969"
+  },
+  {
+    "source": "archive",
+    "path": "Cargo.lock",
+    "sha256": "31d9fa8836342dab5c3c3b016af69a1ce877660dceebe5bc5809546842d9a4cc"
+  },
+  {
+    "source": "archive",
+    "path": "README.md",
+    "sha256": "00774cca92f01caca765b9934822a819ebc6aeaf08a7c2f9bd783b1283b83aeb"
+  }
+]

@@ -1,0 +1,11 @@
+/target/
+/dist/
+.env
+*.nro
+*.nso
+*.elf
+*.zip
+*.log
+*.dmp
+/data.arc
+/local-assets/

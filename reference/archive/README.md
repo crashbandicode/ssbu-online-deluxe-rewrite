@@ -1,0 +1,73 @@
+# `ssbu-sync`
+
+This repo contains various implementations meant to reduce smash ultimates input delay. Tentatively it can reduce 3-4 frames of input delay depending on whether you're on emulator or console. Credit for the original code goes to blujay for their amazing work hacking up smash ultimates render logic!
+
+Before reporting issues please read the following:
+
+## Known Issues (WIPs)
+
+1. High fighter counts (>= 4) might cause frame skips. This means doubles, dittos of characters like Ice Climbers, Pokemon Trainer, and Aegis.
+2. Certain stages might cause frame skips with the above fighters more often than other stages
+3. Results screen might have frame skips
+4. Final kill sparks might have frame skips
+
+Until these issues are fixed this reassures that this mod is best used AS A PRACTICE TOOL on netplay to get closer to offline performance. Please do not use this in netplay tournaments for both you and your opponent's sake.
+
+## Where's the USB Stuff?
+
+The USB stuff requires some more polish, but considering that it's a very small amount of the overall input delay removed (roughly 2.5-5ms average), I would rather release this mod in it's current state and continue working on the others when I have time.
+
+Thanks for understanding! 
+
+- [blu-dev](https://github.com/blu-dev/ssbu-less-lag/tree/console)
+
+## Library Usage
+
+This crate can also be installed from another Cargo Skyline plugin.
+
+- `ssbusync.nro`: the standalone plugin (`#[skyline::main(name = "ssbusync")]`).
+- `library plugin`: your own plugin that depends on this crate with `default-features = false`.
+- `Exported Disabler`: your library plugin exports `ssbusync_external_disabler`, and `ssbusync.nro` detects that symbol and disables itself.
+
+`Cargo.toml` Example:
+
+```toml
+[dependencies]
+ssbusync = { git = "https://github.com/BlankMauser/ssbu-sync", default-features = false }
+```
+
+### Easy External Disable
+
+To disable "ssbusync.nro" from your own plugin NRO, enable:
+
+```toml
+[dependencies]
+ssbusync = { git = "https://github.com/BlankMauser/ssbu-sync", default-features = false, features = ["disabler-symbol"] }
+```
+
+That feature exports `ssbusync_external_disabler` from your plugin (not from `ssbusync.nro`), which `ssbusync.nro` probes before loading.
+
+Install hooks from `#[skyline::main]` by creating an SsbuSyncConfig. Example given is not comprehensive and is a personal default I'm using for HDR:
+
+```rust
+fn setup_ssbu_sync() {
+    println!("[HDR] installing custom ssbusync path via Main \n");
+    let mut sync_config = SsbuSyncConfig::default();
+    sync_config.doubles_fix = false;
+    sync_config.enable_triple_buffer = true;
+    sync_config.slow_pacer_bias = true;
+    ssbusync::Install_SSBU_Sync(sync_config);
+    if ssbusync::render::buffer_swap::subscribe_buffer_mode_change(on_buffer_switch) {
+        println!("[HDR] Subscribed to buffer switch \n");
+    } else {
+        println!("[HDR] Failed to subscribe to buffer switch \n");
+    }
+}
+```
+
+Keep in mind you will crash on boot if you have multiple plugins installing SsbuSync that don't turn on "disabler-symbol." Check your plugins folder or skyline listen logs if you're a plugin developer.
+
+The install process can be time-sensitive so if there are any crashes its most likely from overlapping patches.
+
+
+

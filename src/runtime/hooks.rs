@@ -1,0 +1,58 @@
+//! Source-verified 13.0.5 offsets with conservative coexistence checks.
+use super::{record, Code, INPUT_BUFFER};
+use skyline::hooks::{getRegionAddress, InlineCtx, Region};
+use std::sync::atomic::Ordering;
+
+pub(super) const CSS_UPDATE: usize = 0x1a12f60;
+pub(super) const SET_TEXT: usize = 0x37a28a0;
+const ONLINE_LATENCY: usize = 0x16ccab8;
+
+// This detects common trampolines, NOT an original-instruction signature.
+pub(super) unsafe fn preflight(offset: usize) -> bool {
+    let base = getRegionAddress(Region::Text) as usize;
+    let end = getRegionAddress(Region::Rodata) as usize;
+    let Some(address) = base.checked_add(offset) else {
+        return false;
+    };
+    if address % 4 != 0 || address.checked_add(20).is_none_or(|v| v > end) {
+        record(Code::HookRejected, offset as u64, 1);
+        return false;
+    }
+    let word = *(address as *const u32);
+    let branch = word & 0x7c00_0000 == 0x1400_0000;
+    let indirect = word & 0xffff_fc1f == 0xd61f_0000;
+    let literal = word & 0xff00_0000 == 0x5800_0000;
+    let call = word & 0xfc00_0000 == 0x9400_0000;
+    if (branch && !call) || indirect || literal || word == 0 {
+        record(Code::HookRejected, offset as u64, word as u64);
+        return false;
+    }
+    record(Code::HookInstalling, offset as u64, word as u64);
+    true
+}
+
+#[skyline::hook(offset = ONLINE_LATENCY, inline)]
+unsafe fn set_online_latency(ctx: &InlineCtx) {
+    let pointer = ctx.registers[19].x() as *mut u8;
+    // Retain fork's Quickplay null guard and unrestricted online hook.
+    if pointer.is_null() {
+        record(Code::NullLatencyPointer, 0, 0);
+        return;
+    }
+    let selected = INPUT_BUFFER.load(Ordering::Acquire);
+    let automatic = *pointer;
+    let applied = crate::policy::apply_input_buffer(automatic, selected);
+    if applied != automatic {
+        *pointer = applied;
+    }
+    record(Code::LatencyApplied, automatic as u64, applied as u64);
+}
+
+pub(super) fn install_latency() {
+    unsafe {
+        if preflight(ONLINE_LATENCY) {
+            skyline::install_hook!(set_online_latency);
+            record(Code::HookInstalled, ONLINE_LATENCY as u64, 0);
+        }
+    }
+}

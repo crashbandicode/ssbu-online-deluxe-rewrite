@@ -1,0 +1,116 @@
+mod effects;
+mod hooks;
+mod input;
+mod logging;
+mod memory;
+mod ui;
+
+use crate::{
+    config::{Config, FxMode},
+    diagnostics::{Code, Recorder},
+};
+use std::sync::atomic::{AtomicI8, AtomicU64, AtomicU8, Ordering};
+
+pub(super) static RECORDER: Recorder = Recorder::new();
+static FX_MODE: AtomicU8 = AtomicU8::new(0);
+static INPUT_BUFFER: AtomicI8 = AtomicI8::new(-1);
+static CONFIG_GENERATION: AtomicU64 = AtomicU64::new(0);
+pub(super) const DATA_DIR: &str = "sd:/ultimate/ssbu_online_deluxe_rewrite";
+
+pub(super) fn settings() -> Config {
+    Config {
+        effects: if FX_MODE.load(Ordering::Acquire) == 1 {
+            FxMode::Off
+        } else {
+            FxMode::On
+        },
+        input_buffer: INPUT_BUFFER.load(Ordering::Acquire),
+    }
+}
+
+pub(super) fn publish(config: &Config) {
+    FX_MODE.store(config.effects.effective() as u8, Ordering::Release);
+    INPUT_BUFFER.store(config.input_buffer, Ordering::Release);
+    CONFIG_GENERATION.fetch_add(1, Ordering::Release);
+}
+
+pub(super) fn effects_off() -> bool {
+    FX_MODE.load(Ordering::Relaxed) == FxMode::Off as u8
+}
+
+pub(super) fn record(code: Code, a: u64, b: u64) {
+    let tick = unsafe { skyline::nn::os::GetSystemTick() as u64 };
+    RECORDER.record(tick, code, a, b);
+    // Startup-only checkpoints reach disk before/after each patch, so an install
+    // crash is diagnosable even before the background sink first wakes.
+    if matches!(
+        code,
+        Code::HookInstalling | Code::HookInstalled | Code::HookRejected
+    ) {
+        logging::install_checkpoint(code, a, b);
+    }
+}
+
+fn display_version() -> String {
+    let mut version = skyline::nn::oe::DisplayVersion { name: [0; 16] };
+    unsafe {
+        skyline::nn::oe::GetDisplayVersion(&mut version);
+    }
+    let end = version
+        .name
+        .iter()
+        .position(|v| *v == 0)
+        .unwrap_or(version.name.len());
+    String::from_utf8_lossy(&version.name[..end]).into_owned()
+}
+
+#[skyline::main(name = "ssbu-online-deluxe-rewrite")]
+pub fn main() {
+    let version = display_version();
+    logging::start(&version);
+    if version != "13.0.5" {
+        record(Code::UnsupportedVersion, 0, 0);
+        skyline::println!(
+            "[Deluxe] Unsupported Smash version {}; hooks skipped",
+            version
+        );
+        return;
+    }
+    // No render/scene, global draw, fighter-frame or Training input-delay hook.
+    if legacy_host_present() {
+        record(Code::Compatibility, 1, 0);
+        skyline::println!("[Deluxe] Existing SsbuSync host detected; rewrite hooks skipped");
+        return;
+    }
+    for (name, install) in [
+        ("MENU", ui::install as fn()),
+        ("FX", effects::install as fn()),
+        ("BUFFER", hooks::install_latency as fn()),
+    ] {
+        if std::path::Path::new(DATA_DIR)
+            .join(format!("DISABLE_{name}"))
+            .exists()
+        {
+            record(Code::Compatibility, 2, name.as_bytes()[0] as u64);
+            skyline::println!("[Deluxe] {} hooks disabled by diagnostic flag", name);
+        } else {
+            install();
+        }
+    }
+}
+
+fn legacy_host_present() -> bool {
+    for name in [
+        b"ssbusync_status\0".as_slice(),
+        b"ssbusync_restrict_mark_arena_mode\0".as_slice(),
+    ] {
+        let mut address = 0usize;
+        unsafe {
+            skyline::nn::ro::LookupSymbol(&mut address, name.as_ptr());
+        }
+        if address != 0 {
+            return true;
+        }
+    }
+    false
+}

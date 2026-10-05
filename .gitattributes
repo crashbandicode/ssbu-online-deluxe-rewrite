@@ -1,0 +1,2 @@
+# Keep imported reference snapshots byte-for-byte for provenance checks.
+reference/** -text -whitespace
