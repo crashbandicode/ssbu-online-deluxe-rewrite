@@ -116,3 +116,10 @@ retain original Lua Int/Hash type, and refresh online state from delay setup eve
 when input-buffer changes are disabled. Main-menu reset remains unconditional.
 Live Quickplay/arena/local-wireless transitions and unknown patched sites remain
 validation items, as do the broad move catalog, both load orders and console tests.
+
+Final clean-source bundle: dist/1087e7b01f288ef4, implementation commit
+8b8eb34ac4fe224547254744c054f318c2bbcad1. NRO SHA256
+1087e7b01f288ef4b29b7c0461109fc62c63ab107c59bc1f9e0a5a891ee02689.
+Verified NRO/ELF executable match and retained .debug_info, .debug_line and .symtab.
+The bundle includes the scope=all test INI. It has NOT replaced the accepted
+c1706bbe Eden installation; no rewrite was deployed to Switch.
