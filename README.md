@@ -9,8 +9,11 @@ Implemented:
 - Bounded events, persistent install checkpoints, panic diagnostics, build identity and matching debug symbols.
 - Expanded named character effects from the supplied peer mod: [exact scope](docs/FX.md).
 
-**Rendering remains Vanilla.** LessLag/Ultra/Doubles reconstruction, automatic profile application,
-network-player telemetry, overclocking and performance scaling are pending.
+**Rendering defaults to Vanilla.** An opt-in, restart-only `lesslag_core` experiment
+reconstructs the two-texture ring and OneBehind flush/index behavior, with runtime
+readback and bounded API traces. It is a partial engine, not full LessLag parity
+or proven input-lag reduction. Ultra, automatic profiles, network-player telemetry,
+overclocking and performance scaling remain pending. Doubles work is deferred.
 The fork's original source and exact changes are preserved under [reference](reference/README.md).
 See the [parity ledger](docs/STATUS.md).
 
@@ -58,8 +61,8 @@ The menu draws independently of the game UI. Hold **L+R** or **ZL+ZR**, then tap
 
 Current Eden keyboard mapping: **Q/E = L/R**, arrow keys = D-pad.
 The window retains the fork's Name/Ping/NetLatency/NetProfile table and frame graph,
-with an added FX row. Ping telemetry is pending (---); NetProfile stays Vanilla
-until the render engine is implemented. Frame statistics measure intervals between
+with an added FX row. Ping telemetry is pending (---); NetProfile reports the active
+render mode. Frame statistics measure intervals between
 overlay render callbacks. Main-menu/CSS/match appearance, SGPO and Training Modpack
 menu/save-load coexistence are confirmed on the prior Eden candidate. Expanded
 effect coverage, online scope transitions and console behavior await validation.
@@ -70,9 +73,10 @@ Settings save to sd:/ultimate/ssbu_online_deluxe_rewrite/config.ini; config.prev
 retains the last good version for recovery across interrupted replacement.
 On/Off changes future requests; existing effects expire normally.
 effects_scope=online is the default. Use effects_scope=all for offline + online testing;
-INI changes require restarting the game. See [default config](config/default.ini) and
+INI changes, including `render_mode=vanilla|lesslag_core`, require restarting the game.
+See [performance measurements](docs/PERFORMANCE.md), [default config](config/default.ini) and
 [Eden test override](config/eden-test.ini). Install the test config with the matching
-new NRO; the older live test build cannot parse this new key.
+new NRO; older builds may reject configuration keys they do not recognize.
 
 Build/tests do not establish runtime compatibility or lag reduction.
 See [debugging](docs/DEBUGGING.md), [validation](docs/VALIDATION.md) and [status](docs/STATUS.md).

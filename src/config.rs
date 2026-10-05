@@ -55,12 +55,53 @@ impl FxScope {
     }
 }
 
+/// Experimental startup-only pipeline subsets; not full fork preset parity.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[repr(u8)]
+pub enum RenderMode {
+    #[default]
+    Vanilla = 0,
+    LessLagCore = 1,
+    DoublesCore = 2,
+}
+impl RenderMode {
+    pub const fn from_byte(value: u8) -> Self {
+        match value {
+            1 => Self::LessLagCore,
+            2 => Self::DoublesCore,
+            _ => Self::Vanilla,
+        }
+    }
+    pub const fn key(self) -> &'static str {
+        match self {
+            Self::Vanilla => "vanilla",
+            Self::LessLagCore => "lesslag_core",
+            Self::DoublesCore => "doubles_core",
+        }
+    }
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Vanilla => "Vanilla",
+            Self::LessLagCore => "LessLag core",
+            Self::DoublesCore => "Doubles core",
+        }
+    }
+    pub const fn textures(self) -> i32 {
+        match self {
+            Self::LessLagCore => 2,
+            _ => 3,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Config {
     pub effects: FxMode,
     pub effects_scope: FxScope,
     /// -1 means Auto; explicit values must be in 0..=25.
     pub input_buffer: i8,
+    /// Read once at startup; changing this requires a full restart.
+    pub render_mode: RenderMode,
 }
 
 impl Default for Config {
@@ -69,13 +110,14 @@ impl Default for Config {
             effects: FxMode::On,
             effects_scope: FxScope::Online,
             input_buffer: -1,
+            render_mode: RenderMode::Vanilla,
         }
     }
 }
 
 pub fn parse(text: &str) -> Result<Config, String> {
     let mut config = Config::default();
-    let mut seen = [false; 4];
+    let mut seen = [false; 5];
     for (index, raw) in text.lines().enumerate() {
         let line = raw.split('#').next().unwrap_or_default().trim();
         if line.is_empty() {
@@ -92,6 +134,7 @@ pub fn parse(text: &str) -> Result<Config, String> {
             "effects" => 1,
             "input_buffer" => 2,
             "effects_scope" => 3,
+            "render_mode" => 4,
             _ => return Err(error(&format!("unknown key '{key}'"))),
         };
         if seen[slot] {
@@ -116,6 +159,18 @@ pub fn parse(text: &str) -> Result<Config, String> {
                     "online" => FxScope::Online,
                     "all" => FxScope::All,
                     _ => return Err(error("effects_scope must be online or all")),
+                };
+            }
+            "render_mode" => {
+                config.render_mode = match value {
+                    "vanilla" => RenderMode::Vanilla,
+                    "lesslag_core" => RenderMode::LessLagCore,
+                    "doubles_core" => RenderMode::DoublesCore,
+                    _ => {
+                        return Err(error(
+                            "render_mode must be vanilla, lesslag_core or doubles_core",
+                        ))
+                    }
                 };
             }
             "input_buffer" => {
@@ -161,7 +216,7 @@ pub fn serialize(config: &Config) -> String {
     } else {
         config.input_buffer.to_string()
     };
-    format!("# Online Deluxe settings\nversion=1\neffects={effects}\neffects_scope={effects_scope}\ninput_buffer={input_buffer}\n")
+    format!("# Online Deluxe settings\nversion=1\neffects={effects}\neffects_scope={effects_scope}\ninput_buffer={input_buffer}\nrender_mode={}\n", config.render_mode.key())
 }
 
 impl Config {
@@ -192,10 +247,29 @@ mod tests {
                     effects,
                     effects_scope: FxScope::Online,
                     input_buffer,
+                    render_mode: RenderMode::Vanilla,
                 };
                 assert_eq!(parse(&config.serialize()).unwrap(), config);
             }
         }
+    }
+
+    #[test]
+    fn renderer_selection_is_explicit_and_round_trips() {
+        for render_mode in [
+            RenderMode::Vanilla,
+            RenderMode::LessLagCore,
+            RenderMode::DoublesCore,
+        ] {
+            let config = Config {
+                render_mode,
+                ..Config::default()
+            };
+            assert_eq!(parse(&config.serialize()).unwrap(), config);
+        }
+        assert!(parse("version=1\nrender_mode=lesslag").is_err());
+        assert!(parse("version=1\nrender_mode=vanilla\nrender_mode=vanilla").is_err());
+        assert_eq!(RenderMode::from_byte(255), RenderMode::Vanilla);
     }
 
     #[test]

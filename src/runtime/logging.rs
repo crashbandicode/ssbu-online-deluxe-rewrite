@@ -205,8 +205,10 @@ pub(super) fn start(version: &str) {
             loop {
                 std::thread::sleep(Duration::from_millis(500));
                 timing.poll();
+                super::presentation::poll();
                 iteration += 1;
                 if iteration % 10 == 0 {
+                    super::nvn::write_status();
                     record(Code::Heartbeat, settings().effects as u64, iteration);
                     record(
                         Code::OverlayHealth,

@@ -55,7 +55,9 @@ pub(super) fn observe(buttons: u64) {
 
 #[derive(Default)]
 pub(super) struct Service {
-    current: Option<(String, Instant)>,
+    current: Option<(String, Instant, &'static str)>,
+    callback_ready: Option<crate::timing::Snapshot>,
+    api_ready: Option<crate::render_trace::Snapshot>,
     request_error_reported: bool,
 }
 
@@ -84,11 +86,23 @@ fn read_request() -> io::Result<Option<String>> {
 impl Service {
     /// Called only by the existing background sink, once every 500 ms.
     pub(super) fn poll(&mut self) {
-        if let Some((label, started)) = &self.current {
+        if let Some((label, started, engine)) = &self.current {
             if started.elapsed().as_secs() >= 30 {
                 CAPTURE.finish();
+                super::api_trace::TRACE.finish();
             }
-            if let Some(snapshot) = CAPTURE.take_ready() {
+            if self.callback_ready.is_none() {
+                self.callback_ready = CAPTURE.take_ready();
+            }
+            if self.api_ready.is_none() {
+                self.api_ready = super::api_trace::TRACE.take_ready();
+            }
+            if let (Some(snapshot), Some(api)) = (&self.callback_ready, &self.api_ready) {
+                let engine = if *engine == super::renderer::mode().label() {
+                    *engine
+                } else {
+                    "Mixed"
+                };
                 let path = Path::new(DATA_DIR).join(format!("timing-{}.csv", snapshot.id));
                 let result = (|| -> io::Result<()> {
                     let mut file = OpenOptions::new()
@@ -100,11 +114,26 @@ impl Service {
                         .open(&path)?;
                     crate::timing::write_csv(
                         &mut file,
-                        &snapshot,
+                        snapshot,
                         crate::build_info::BUILD_ID,
                         label,
+                        engine,
                     )?;
                     file.sync_all()?;
+                    let api_path = Path::new(DATA_DIR).join(format!("api-{}.csv", api.id));
+                    let mut api_file = OpenOptions::new()
+                        .write(true)
+                        .create(true)
+                        .create_new(true)
+                        .open(api_path)?;
+                    crate::render_trace::write_csv(
+                        &mut api_file,
+                        api,
+                        crate::build_info::BUILD_ID,
+                        label,
+                        engine,
+                    )?;
+                    api_file.sync_all()?;
                     write_status(&format!("saved {}", path.display()))
                 })();
                 STATUS.store(if result.is_ok() { 2 } else { 3 }, Ordering::Release);
@@ -113,6 +142,8 @@ impl Service {
                     let _ = write_status(&format!("timing export failed: {error}"));
                 }
                 self.current = None;
+                self.callback_ready = None;
+                self.api_ready = None;
             }
             return;
         }
@@ -138,10 +169,17 @@ impl Service {
             let id = unsafe { skyline::nn::os::GetSystemTick() as u64 };
             // Complete control-file I/O before starting the measured interval.
             let _ = write_status(&format!("capturing {id} {label}; metric=render_callback"));
-            if CAPTURE.begin(id) {
-                self.current = Some((label, Instant::now()));
+            if CAPTURE.begin(id) && super::api_trace::TRACE.begin(id) {
+                self.current = Some((label, Instant::now(), super::renderer::mode().label()));
                 record(Code::TimingStarted, id, 0);
                 STATUS.store(1, Ordering::Release);
+            } else {
+                CAPTURE.finish();
+                super::api_trace::TRACE.finish();
+                let _ = CAPTURE.take_ready();
+                let _ = super::api_trace::TRACE.take_ready();
+                STATUS.store(3, Ordering::Release);
+                let _ = write_status("timing capture could not be armed");
             }
         }
     }

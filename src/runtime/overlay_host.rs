@@ -80,7 +80,8 @@ unsafe fn nvn_bootstrap_hook(name: *const c_char) -> *const c_void {
     // The backend returns either its wrapper or the original pointer; the
     // trampoline is accepted by the header contract ("trampoline functions are
     // also accepted, provided they call the original").
-    imgui_smash_bootstrap_hook(name, original!() as *const c_void)
+    let next = imgui_smash_bootstrap_hook(name, original!() as *const c_void);
+    super::nvn::bootstrap(name, next)
 }
 
 unsafe extern "C" fn on_context_setup() {

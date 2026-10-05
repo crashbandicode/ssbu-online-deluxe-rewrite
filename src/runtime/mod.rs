@@ -1,4 +1,5 @@
 mod acmd;
+mod api_trace;
 mod effect_context;
 mod effects;
 mod hooks;
@@ -6,8 +7,12 @@ mod imgui;
 mod input;
 mod logging;
 mod memory;
+mod nvn;
 mod online;
 mod overlay_host;
+mod presentation;
+mod render_probe;
+mod renderer;
 mod timing;
 mod ui;
 
@@ -20,6 +25,7 @@ use std::sync::atomic::{AtomicI8, AtomicU64, AtomicU8, Ordering};
 pub(super) static RECORDER: Recorder = Recorder::new();
 static FX_MODE: AtomicU8 = AtomicU8::new(0);
 static FX_SCOPE: AtomicU8 = AtomicU8::new(FxScope::Online as u8);
+static RENDER_MODE: AtomicU8 = AtomicU8::new(0);
 static INPUT_BUFFER: AtomicI8 = AtomicI8::new(-1);
 static CONFIG_GENERATION: AtomicU64 = AtomicU64::new(0);
 pub(super) const DATA_DIR: &str = "sd:/ultimate/ssbu_online_deluxe_rewrite";
@@ -37,6 +43,7 @@ pub(super) fn settings() -> Config {
             FxScope::Online
         },
         input_buffer: INPUT_BUFFER.load(Ordering::Acquire),
+        render_mode: crate::config::RenderMode::from_byte(RENDER_MODE.load(Ordering::Acquire)),
     }
 }
 
@@ -44,6 +51,7 @@ pub(super) fn publish(config: &Config) {
     FX_MODE.store(config.effects.effective() as u8, Ordering::Release);
     FX_SCOPE.store(config.effects_scope as u8, Ordering::Release);
     INPUT_BUFFER.store(config.input_buffer, Ordering::Release);
+    RENDER_MODE.store(config.render_mode as u8, Ordering::Release);
     CONFIG_GENERATION.fetch_add(1, Ordering::Release);
 }
 
@@ -100,7 +108,10 @@ pub fn main() {
         skyline::println!("[Deluxe] Existing SsbuSync host detected; rewrite hooks skipped");
         return;
     }
+    render_probe::dump_if_requested();
+    presentation::install();
     for (name, install) in [
+        ("RENDERER", renderer::install as fn()),
         ("MENU", ui::install as fn()),
         ("FX", effects::install as fn()),
         ("BUFFER", hooks::install_latency as fn()),

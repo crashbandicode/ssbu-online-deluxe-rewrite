@@ -205,14 +205,23 @@ pub fn request_label(bytes: &[u8]) -> Result<&str, &'static str> {
     Ok(if label.is_empty() { "manual" } else { label })
 }
 
-pub fn write_csv(mut out: impl Write, data: &Snapshot, build: &str, label: &str) -> io::Result<()> {
-    if [build, label].iter().any(|v| v.contains(['\n', '\r'])) {
+pub fn write_csv(
+    mut out: impl Write,
+    data: &Snapshot,
+    build: &str,
+    label: &str,
+    engine: &str,
+) -> io::Result<()> {
+    if [build, label, engine]
+        .iter()
+        .any(|v| v.contains(['\n', '\r']))
+    {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "multiline timing metadata",
         ));
     }
-    writeln!(out, "# schema=1\n# metric=render_callback\n# engine=Vanilla\n# tick_hz={TICK_HZ}\n# duration_ticks={DURATION_TICKS}")?;
+    writeln!(out, "# schema=1\n# metric=render_callback\n# engine={engine}\n# tick_hz={TICK_HZ}\n# duration_ticks={DURATION_TICKS}")?;
     writeln!(
         out,
         "# id={}\n# build={build}\n# label={label}\n# reason={}\n# skipped={}\n# sample_count={}",
@@ -313,12 +322,12 @@ mod tests {
             samples: vec![s(2, 100), s(3, 100 + DURATION_TICKS)],
         };
         let mut bytes = Vec::new();
-        write_csv(&mut bytes, &snapshot, "build", "test").unwrap();
+        write_csv(&mut bytes, &snapshot, "build", "test", "Vanilla").unwrap();
         let csv = String::from_utf8(bytes).unwrap();
         assert!(csv.contains("# metric=render_callback\n"));
         assert!(csv.contains("0,2,100,0,0,0,0,0\n1,3,192000100,0,0,0,0,0\n"));
         assert!(csv.ends_with("# complete=1\n"));
-        assert!(write_csv(Vec::new(), &snapshot, "bad\nbuild", "test").is_err());
+        assert!(write_csv(Vec::new(), &snapshot, "bad\nbuild", "test", "Vanilla").is_err());
     }
 
     #[test]

@@ -2,7 +2,10 @@ param(
     [ValidateSet('Start', 'Stop', 'Status')]
     [string]$Action = 'Status',
     [string]$EdenPath = '/home/intpa/Downloads/Eden-Linux-v0.2.1-amd64-clang-pgo.AppImage',
-    [string]$GamePath
+    [string]$GamePath,
+    # Optional finite lifetime for unattended test runs. Zero keeps manual sessions open.
+    [ValidateRange(0, 43200)]
+    [int]$MaxRuntimeSeconds = 0
 )
 
 $ErrorActionPreference = 'Stop'
@@ -36,6 +39,9 @@ if ($Action -eq 'Start') {
         '--property=KillMode=control-group', '--property=OOMPolicy=kill',
         '--property=TimeoutStopSec=10s'
     )
+    if ($MaxRuntimeSeconds -gt 0) {
+        $runArgs += "--property=RuntimeMaxSec=$MaxRuntimeSeconds"
+    }
     foreach ($name in @('DISPLAY', 'WAYLAND_DISPLAY', 'XDG_RUNTIME_DIR', 'XAUTHORITY', 'DBUS_SESSION_BUS_ADDRESS')) {
         $value = [Environment]::GetEnvironmentVariable($name)
         if ($value) { $runArgs += "--setenv=$name=$value" }

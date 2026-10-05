@@ -215,7 +215,7 @@ unsafe extern "C" fn draw() {
                     },
                     &buffer,
                 );
-                row("NetProfile", "Vanilla");
+                row("NetProfile", super::renderer::mode().label());
                 row(
                     if ui.controls.menu.selected == 0 {
                         "> FX"
@@ -238,7 +238,7 @@ unsafe extern "C" fn draw() {
                     "Build",
                     &crate::build_info::GIT_COMMIT[..crate::build_info::GIT_COMMIT.len().min(12)],
                 );
-                row("Renderer", "Vanilla");
+                row("Renderer", super::renderer::mode().label());
                 row("FX", config.effects.effective().label());
                 row("FX scope", config.effects_scope.label());
                 row(
@@ -250,7 +250,7 @@ unsafe extern "C" fn draw() {
                     },
                 );
                 row("Reduced FX", "Unavailable");
-                row("LessLag", "Unavailable");
+                row("Engine", super::renderer::status());
                 row("Timing", super::timing::status());
                 row("Capture", "L+R+Up (10 s)");
                 igEndTable();

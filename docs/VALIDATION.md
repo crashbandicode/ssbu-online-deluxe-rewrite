@@ -128,7 +128,7 @@ c1706bbe Eden installation; no rewrite was deployed to Switch.
 
 The preceding no-install checkpoint was superseded by the user's instruction to
 continue autonomously. Expanded bundle1087e7b01f288ef4 was installed and tested:
-Sephiroth Gigaflare and forward-smash suppression, On restoration, global window,
+Sephiroth neutral-B and forward-smash suppression, On restoration, global window,
 SGPO, and Training Modpack save/load/menu all worked in the exercised paths.
 Off with scope=online retained offline Training visuals and emitted no suppression
 events. Actual online transitions and the full move catalog remain untested.
@@ -148,3 +148,30 @@ Skyline release built without warnings and has matching NRO/ELF/source archives.
 Target-only Rust is checked by the Skyline build and live tests, not host Clippy.
 Eden was stopped after evidence collection. Original Training Modpack save states
 were restored and their hash rechecked; no rewrite was installed on Switch.
+
+## Render experiments and corrected charge coverage
+
+Bundle 79790e610f0f24f8 exercised the opt-in LessLag core in Eden with Training
+Modpack and SGPO. Readback confirmed three allocated/two active textures and
+present/acquire indices 0/1. The global window, FX Off, and Training menu remained
+operational. Core hooks executed; full LessLag sequencing and latency reduction
+are not established. Doubles work was stopped at the operator's request.
+
+The operator identified earlier 2.2-second neutral-B holds as too short to confirm
+Gigaflare. Longer 4.2-second holds were visually confirmed, warmed, and used for
+four On/Off/Off/On pilot trials without screenshot readback during the capture.
+All callback/API traces completed with zero skipped records. No On-related dip
+was reproduced. See PERFORMANCE.md for numbers, raw evidence paths and limits.
+
+The bounded VI frame-history probe completed, but supplied no usable presented
+timestamps in the tested Eden startup window. Temporary TAS and history settings
+were restored. Capture files measure CPU observations, not displayed frames.
+
+Final host review found and fixed escaped-newline test fixtures so invalid renderer
+values and duplicate keys actually exercise their intended parser branches.
+All-target Clippy with -D warnings and no-default-features build passed afterward.
+The latest package and any subsequent runtime check are recorded in HANDOFF.md.
+
+The saved original Switch stack was tested separately and restored afterward;
+its Eden pre-match stall is documented in SWITCH_CRASH.md. That test did not load
+the rewrite, TM or SGPO and did not reproduce the console's crash signature.

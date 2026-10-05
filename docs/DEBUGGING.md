@@ -18,6 +18,13 @@ Under sd:/ultimate/ssbu_online_deluxe_rewrite/:
   parks the original in the backup, then promotes temp to the now-absent destination.
 - timing-<tick>.csv: opt-in ten-second render-callback traces; timing-status.txt
   reports capture/export failures. See [measurement procedure](PERFORMANCE.md).
+- api-<tick>.csv: paired CPU spans around render APIs. These are not GPU or display
+  times. Analyze with tools/analyze_render_trace.py.
+- renderer-status.txt: actual active mode, texture counts/index masks and cumulative
+  hook counters. Values are independent observations, not an atomic frame snapshot.
+- presentation-history.txt: bounded VI probe results, only when the boot flag
+  DUMP_PRESENTATION_HISTORY is present. No usable presented timestamps were obtained
+  in the tested stock Eden startup window. Remove the flag for ordinary tests.
 
 128 fixed-size events use a nonblocking try-lock. Game hooks do no file I/O; contention
 increments a dropped counter. Startup install checkpoints are synchronous. The sink reports
@@ -46,11 +53,15 @@ logs too: module list, PC/LR/backtrace, game version, loaded NROs and reproducti
 The script verifies bundle hashes and optional module ID, then uses LLVM/binutils addr2line.
 Use the faulting plugin's base/ELF, not the game's main-module base.
 
-For controlled bisection, create empty DISABLE_MENU, DISABLE_FX or DISABLE_BUFFER files
+For controlled bisection, create empty DISABLE_MENU, DISABLE_FX, DISABLE_BUFFER or
+DISABLE_RENDERER files
 in the data directory and restart. They skip the corresponding hook family.
 DISABLE_BUFFER disables input-buffer writes; the shared setup observer can remain
-installed for FX scope. DISABLE_FX skips FX requests and scene tracking. All three
-flags together produce observer-only behavior. Remove to re-enable.
+installed for FX scope. DISABLE_FX skips FX requests and scene tracking.
+DISABLE_RENDERER skips experimental rendering text patches regardless of the INI
+request; actual mode stays Vanilla. All four flags together, with
+DUMP_PRESENTATION_HISTORY absent, leave diagnostic logging without those hooks.
+Remove the disable flags to re-enable their hook families.
 These differ from FX On, which keeps passthrough hooks installed.
 
 | Code | Meaning |
@@ -86,8 +97,9 @@ initialization. Codes 21/22 prove the draw callback runs; code 23 confirms the h
 changed views. Code 8 followed by 24 confirms a change was saved; inspect config.ini too.
 
 Fixed offsets have source/version, text-bound and common-trampoline checks.
-Original instruction signatures have not been captured from the game: this is not a complete
-validator. Shared EffectModule function hooks deliberately chain. Live load-order validation
+The new rendering sites additionally check seven original instruction words
+verified from the live 13.0.5 code. Other hook families do not yet have that complete
+signature coverage. Shared EffectModule function hooks deliberately chain. Live load-order validation
 is separate from successful compilation.
 
 The ImGui backend is embedded; do not also install a standalone imgui-smash NRO.
@@ -109,6 +121,10 @@ Stop terminates the whole test cgroup, including a process left behind after its
 window closes. Verify no Eden process remains before the next Start. The helper's
 -EdenPath parameter overrides its default local AppImage path. Pass -GamePath with
 the local game file to launch Smash directly using Eden's -g argument.
+For unattended stock-Eden trials, specify -MaxRuntimeSeconds 900 (or another finite
+bound). The default zero is for operator-controlled sessions. The incoming custom
+Eden build will supply its own CLI control instructions; read its handoff before
+adapting the launcher, and retain the same memory and single-instance safeguards.
 
 These limits contain cgroup-accounted memory for this test, not the entire desktop
 or all GPU-driver memory. They are test safeguards, not a memory-leak fix.
