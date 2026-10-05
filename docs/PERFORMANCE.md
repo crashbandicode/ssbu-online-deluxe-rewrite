@@ -4,6 +4,36 @@ The rewrite currently uses Vanilla rendering. LessLag and Reduced FX remain
 unimplemented. A constant 60 FPS does not establish low input latency, and a
 callback interval is not a displayed-frame interval.
 
+## Native latency baseline and the emulator hypothesis
+
+The user identified the commonly documented native baseline of roughly six frames
+(about 100 ms at 60 Hz). The original latency-slider explanation by a feature co-author
+also reports six offline frames on a good monitor and distinguishes that from the
+additional online buffer. Treat this as a reference observation, not a calibrated
+constant to subtract from every result. [Original developer explanation](https://github.com/Naxdy/latency-slider-de/blob/master/README_orig.md#how-many-frames-does-it-actually-save).
+
+Input sampling phase and controller/adapter polling can change the frame in which
+an input is recognized; NaxGCC's author documents repeated controller experiments
+using Training Modpack. [Polling experiment](https://gcc.naxdy.org/input-consistency.html#the-experiment).
+
+Additional Eden latency is an unverified hypothesis for this host. Do not model
+it as six guaranteed native frames plus a fixed emulator penalty. The emulator's
+controller, scheduling and presentation paths differ from the console's, and the
+whole measured result could differ in either direction. Establish four conditions:
+
+| Platform | Baseline | Mod comparison |
+| --- | --- | --- |
+| Switch | Vanilla, FX On, offline | LessLag with other conditions fixed |
+| Eden | Vanilla, FX On, offline | LessLag with other conditions fixed |
+
+Report absolute input-to-visible-response latency and the within-platform change
+in milliseconds and 60 Hz frame equivalents. Cross-platform differences describe
+the complete setups unless controller, display and measurement conditions are
+matched; current synthetic keyboard input is not equivalent to physical Switch
+controller input. Record connection/polling, display refresh/game mode, compositor,
+VSync and presentation settings. Keep online buffer experiments separate.
+The callback traces below do not measure or confirm the six-frame native baseline.
+
 ## Available now: raw callback capture
 
 An opt-in capture records ten guest-clock seconds of the existing ImGui render
