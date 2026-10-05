@@ -123,3 +123,28 @@ Final clean-source bundle: dist/1087e7b01f288ef4, implementation commit
 Verified NRO/ELF executable match and retained .debug_info, .debug_line and .symtab.
 The bundle includes the scope=all test INI. It has NOT replaced the accepted
 c1706bbe Eden installation; no rewrite was deployed to Switch.
+
+## Autonomous Eden continuation, 2026-10-05
+
+The preceding no-install checkpoint was superseded by the user's instruction to
+continue autonomously. Expanded bundle1087e7b01f288ef4 was installed and tested:
+Sephiroth Gigaflare and forward-smash suppression, On restoration, global window,
+SGPO, and Training Modpack save/load/menu all worked in the exercised paths.
+Off with scope=online retained offline Training visuals and emitted no suppression
+events. Actual online transitions and the full move catalog remain untested.
+Raw evidence is in that bundle's runtime-evidence directory.
+
+Callback-capture bundlebf4df24b3b8cc176 is now installed in Eden, with On/all/Auto.
+Five raw traces passed validation: idle, controlled emulator pause, debug shortcut,
+and Training neutral-B with FX On and Off. Zero capture gaps, panic events or ACMD
+stack-rejection events were recorded in the final run. An invalid UTF-16 request
+was consumed without a repeated-error loop. See PERFORMANCE.md for exact clock
+evidence and limits. These tests establish instrumentation operation, not a
+performance benefit or LessLag behavior.
+
+Host validation: 37 Rust tests and 4 Python tests passed; all-target host Clippy
+with -D warnings and the no-default-features build passed. The actual optimized
+Skyline release built without warnings and has matching NRO/ELF/source archives.
+Target-only Rust is checked by the Skyline build and live tests, not host Clippy.
+Eden was stopped after evidence collection. Original Training Modpack save states
+were restored and their hash rechecked; no rewrite was installed on Switch.

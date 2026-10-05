@@ -8,6 +8,7 @@ mod logging;
 mod memory;
 mod online;
 mod overlay_host;
+mod timing;
 mod ui;
 
 use crate::{

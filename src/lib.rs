@@ -17,3 +17,4 @@ pub mod build_info {
 
 #[cfg(target_os = "switch")]
 mod runtime;
+pub mod timing;

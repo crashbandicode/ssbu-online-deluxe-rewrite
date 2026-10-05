@@ -40,6 +40,8 @@ pub enum Code {
     AcmdEffectSuppressed = 28,
     AcmdStackRejected = 29,
     FxOnlineContext = 30,
+    TimingStarted = 31,
+    TimingFinished = 32,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

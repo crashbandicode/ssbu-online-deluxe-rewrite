@@ -16,6 +16,8 @@ Under sd:/ultimate/ssbu_online_deluxe_rewrite/:
   retains the last good version and is recovered if replacement was interrupted.
   Switch RenameFile cannot overwrite an existing destination: save closes the temp file,
   parks the original in the backup, then promotes temp to the now-absent destination.
+- timing-<tick>.csv: opt-in ten-second render-callback traces; timing-status.txt
+  reports capture/export failures. See [measurement procedure](PERFORMANCE.md).
 
 128 fixed-size events use a nonblocking try-lock. Game hooks do no file I/O; contention
 increments a dropped counter. Startup install checkpoints are synchronous. The sink reports
@@ -73,6 +75,7 @@ These differ from FX On, which keeps passthrough hooks installed.
 | 28 | ACMD suppression: original hash / (hook ID shifted 32 bits, suppression count low bits); first 32 and every 128 |
 | 29 | ACMD stack refused: hook ID / argument type; first 8 only |
 | 30 | FX online context changed: online boolean / source scene or latency-setup offset |
+| 31 / 32 | Timing capture started / export finished: capture ID / export success (code 32) |
 
 Codes 12/13 and 18–20 describe historical CSS builds; they are no longer emitted.
 No game-owned pane or font is modified by the global window.

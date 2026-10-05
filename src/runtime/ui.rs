@@ -8,6 +8,7 @@ struct UiState {
     frames: FrameTimes,
     previous_frame: Option<Instant>,
     count: u64,
+    previous_timing_buttons: u64,
 }
 static UI: Mutex<Option<UiState>> = Mutex::new(None);
 
@@ -133,6 +134,8 @@ unsafe fn performance(frames: &FrameTimes, width: f32, height: f32, sx: f32, sy:
 }
 
 unsafe extern "C" fn draw() {
+    let buttons = input::buttons();
+    super::timing::observe(buttons);
     let Ok(mut guard) = UI.try_lock() else {
         return;
     };
@@ -141,6 +144,7 @@ unsafe extern "C" fn draw() {
         frames: FrameTimes::default(),
         previous_frame: None,
         count: 0,
+        previous_timing_buttons: 0,
     });
     let sampled = ui.count.is_multiple_of(300);
     if sampled {
@@ -154,7 +158,7 @@ unsafe extern "C" fn draw() {
     }
     let mut config = settings();
     let previous_view = ui.controls.view;
-    if ui.controls.poll(input::buttons(), &mut config) {
+    if ui.controls.poll(buttons, &mut config) {
         publish(&config);
         record(
             Code::MenuChanged,
@@ -163,6 +167,14 @@ unsafe extern "C" fn draw() {
         );
     }
     let view = ui.controls.view;
+    super::timing::set_view(view as u8);
+    let pressed = buttons & !ui.previous_timing_buttons;
+    ui.previous_timing_buttons = buttons;
+    let shoulders = crate::overlay::L | crate::overlay::R;
+    if view == View::Debug && buttons & shoulders == shoulders && pressed & crate::overlay::UP != 0
+    {
+        super::timing::request();
+    }
     if view != previous_view {
         record(Code::OverlayView, previous_view as u64, view as u64);
     }
@@ -174,7 +186,7 @@ unsafe extern "C" fn draw() {
         let sy = height / 1080.0;
         let window_height = match view {
             View::Performance => 180.0,
-            View::Debug => 300.0,
+            View::Debug => 340.0,
             _ => 280.0,
         };
         igSetNextWindowPos(Vec2::default(), ALWAYS, Vec2::default());
@@ -239,6 +251,8 @@ unsafe extern "C" fn draw() {
                 );
                 row("Reduced FX", "Unavailable");
                 row("LessLag", "Unavailable");
+                row("Timing", super::timing::status());
+                row("Capture", "L+R+Up (10 s)");
                 igEndTable();
             }
             performance(&ui.frames, width, height, sx, sy);

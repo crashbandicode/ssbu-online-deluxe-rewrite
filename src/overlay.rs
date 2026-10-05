@@ -4,13 +4,13 @@ use crate::{
     menu::{Action, Menu},
 };
 
-const L: u64 = 1 << 6;
-const R: u64 = 1 << 7;
+pub(crate) const L: u64 = 1 << 6;
+pub(crate) const R: u64 = 1 << 7;
 const ZL: u64 = 1 << 8;
 const ZR: u64 = 1 << 9;
 const PLUS_MINUS: u64 = (1 << 10) | (1 << 11);
 const LEFT: u64 = 1 << 12;
-const UP: u64 = 1 << 13;
+pub(crate) const UP: u64 = 1 << 13;
 const RIGHT: u64 = 1 << 14;
 const DOWN: u64 = 1 << 15;
 

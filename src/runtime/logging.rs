@@ -201,8 +201,10 @@ pub(super) fn start(version: &str) {
             let mut dropped = 0;
             let mut iteration = 0u64;
             let mut error_reported = false;
+            let mut timing = super::timing::Service::default();
             loop {
                 std::thread::sleep(Duration::from_millis(500));
+                timing.poll();
                 iteration += 1;
                 if iteration % 10 == 0 {
                     record(Code::Heartbeat, settings().effects as u64, iteration);
