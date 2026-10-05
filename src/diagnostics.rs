@@ -29,6 +29,13 @@ pub enum Code {
     HookEntryWord = 17,
     PaneAccepted = 18,
     PaneRejected = 19,
+    PaneField = 20,
+    OverlayEntered = 21,
+    OverlayExited = 22,
+    OverlayView = 23,
+    ConfigSaved = 24,
+    OverlayHealth = 25,
+    OverlayBackendReady = 26,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

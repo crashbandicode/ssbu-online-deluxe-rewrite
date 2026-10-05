@@ -1,151 +1,240 @@
-//! Native CSS callback: never hooks Layout::Draw.
-use super::{hooks, input, publish, record, settings, Code};
-use crate::menu::{Action, Menu};
-use skyline::nn::ui2d::Pane;
-use std::sync::{
-    atomic::{AtomicU64, Ordering},
-    Mutex,
-};
+//! Fork-style global Player Info window. No game-owned pane is modified.
+use super::{imgui::*, input, overlay_host, publish, record, settings, Code};
+use crate::overlay::{FrameTimes, Overlay, View};
+use std::{sync::Mutex, time::Instant};
 
 struct UiState {
-    menu: Menu,
-    previous_buttons: u64,
-    last_owner: u64,
+    controls: Overlay,
+    frames: FrameTimes,
+    previous_frame: Option<Instant>,
+    count: u64,
 }
-static UI: Mutex<UiState> = Mutex::new(UiState {
-    menu: Menu {
-        open: false,
-        selected: 0,
-    },
-    previous_buttons: 0,
-    last_owner: 0,
-});
-static CSS_CALLS: AtomicU64 = AtomicU64::new(0);
-static LAST_PANE: AtomicU64 = AtomicU64::new(0);
+static UI: Mutex<Option<UiState>> = Mutex::new(None);
 
-#[skyline::from_offset(hooks::SET_TEXT)]
-fn set_text(pane: *mut Pane, text: *const u8);
+unsafe fn text(value: &str) {
+    // Explicit end pointer: values need neither NUL termination nor printf escaping.
+    igTextUnformatted(
+        value.as_ptr().cast(),
+        value.as_ptr().add(value.len()).cast(),
+    );
+}
 
-unsafe fn banner(owner: u64) -> Option<*mut Pane> {
-    let address = crate::ui_safety::banner_address(owner as usize, |address| {
-        super::memory::read_pointer(address)
-    })?;
-    if !super::memory::accessible(
-        address,
-        std::mem::size_of::<skyline::nn::ui2d::TextBox>(),
-        true,
+unsafe fn row(label: &str, value: &str) {
+    igTableNextRow(0, 0.0);
+    igTableNextColumn();
+    text(label);
+    igTableNextColumn();
+    text(value);
+}
+
+unsafe fn begin_table(id: &[u8], label_width: f32) -> bool {
+    if !igBeginTable(id.as_ptr().cast(), 2, BORDERS, Vec2::default(), 0.0) {
+        return false;
+    }
+    igTableSetupColumn(c"##label".as_ptr(), WIDTH_FIXED, label_width, 0);
+    igTableSetupColumn(c"##value".as_ptr(), WIDTH_STRETCH, 1.0, 0);
+    true
+}
+
+/// Keep one near-transparent primitive like the fork: the backend requires a
+/// nonempty command list even while the visible window is hidden.
+unsafe fn hidden_window() {
+    igPushStyleVar_Float(WINDOW_BORDER, 0.0);
+    igPushStyleVar_Vec2(WINDOW_PADDING, Vec2::default());
+    igPushStyleVar_Vec2(WINDOW_MIN_SIZE, Vec2::default());
+    igSetNextWindowPos(Vec2::default(), ALWAYS, Vec2::default());
+    igSetNextWindowSize(Vec2 { x: 1.0, y: 1.0 }, ALWAYS);
+    igSetNextWindowBgAlpha(0.0);
+    if igBegin(
+        c"##deluxe_hidden".as_ptr(),
+        std::ptr::null_mut(),
+        HIDDEN_FLAGS,
     ) {
-        return None;
-    }
-    let pane = address as *mut Pane;
-    let name = &(*pane).name;
-    let end = name.iter().position(|v| *v == 0)?;
-    let mut bytes = [0u8; 25];
-    for (out, value) in bytes.iter_mut().zip(name) {
-        *out = *value as u8;
-    }
-    if !crate::ui_safety::is_title_name(&bytes[..end]) {
-        return None;
-    }
-    let textbox = &*(pane as *const skyline::nn::ui2d::TextBox);
-    if textbox.text_buf.is_null()
-        || textbox.text_buf_len < 2
-        || textbox.text_buf_len > 4096
-        || textbox.text_len > textbox.text_buf_len
-        || !textbox.font_size_x.is_finite()
-        || !textbox.font_size_y.is_finite()
-    {
-        return None;
-    }
-    Some(pane)
-}
-
-#[skyline::hook(offset = hooks::CSS_UPDATE)]
-unsafe fn update_css(owner: u64) {
-    let count = CSS_CALLS.fetch_add(1, Ordering::Relaxed);
-    let sampled = count % 60 == 0;
-    if sampled {
-        record(Code::CssEntered, owner, count);
-    }
-    update_banner(owner);
-    call_original!(owner);
-    if sampled {
-        record(Code::CssExited, owner, count);
-    }
-}
-
-unsafe fn update_banner(owner: u64) {
-    let Some(pane) = banner(owner) else {
-        if CSS_CALLS.load(Ordering::Relaxed) % 60 == 1 {
-            record(Code::PaneRejected, owner, 0);
-        }
-        return; // No invisible settings changes when this CSS is unsupported.
-    };
-    if LAST_PANE.swap(pane as u64, Ordering::Relaxed) != pane as u64 {
-        let name = &(*pane).name;
-        let mut value = 0u64;
-        for byte in name {
-            value = value.wrapping_mul(31).wrapping_add(*byte as u64);
-        }
-        record(Code::PaneAccepted, pane as u64, value);
-    }
-    let Ok(mut ui) = UI.try_lock() else {
-        return;
-    };
-    let buttons = input::buttons();
-    if ui.last_owner != owner {
-        ui.menu.open = false;
-        ui.last_owner = owner;
-        ui.previous_buttons = buttons;
-    }
-    let pressed = buttons & !ui.previous_buttons;
-    let chord = (buttons & (input::L | input::R)) == (input::L | input::R)
-        || (buttons & (input::ZL | input::ZR)) == (input::ZL | input::ZR);
-    ui.previous_buttons = buttons;
-    let action = if chord && pressed & input::DOWN != 0 {
-        Some(Action::Toggle)
-    } else if ui.menu.open && chord {
-        if pressed & input::UP != 0 {
-            Some(Action::Up)
-        } else if pressed & input::RIGHT != 0 {
-            Some(Action::Right)
-        } else if pressed & input::LEFT != 0 {
-            Some(Action::Left)
-        } else {
-            None
-        }
-    } else {
-        None
-    };
-    let mut config = settings();
-    if let Some(action) = action {
-        if ui.menu.handle(action, &mut config) {
-            publish(&config);
-            record(
-                Code::MenuChanged,
-                config.effects as u64,
-                config.input_buffer as i64 as u64,
+        let list = igGetWindowDrawList();
+        if !list.is_null() {
+            let p = igGetWindowPos();
+            ImDrawList_AddRectFilled(
+                list,
+                p,
+                Vec2 {
+                    x: p.x + 1.0,
+                    y: p.y + 1.0,
+                },
+                0x01000000,
+                0.0,
+                0,
             );
         }
     }
-    {
-        let mut text = ui.menu.summary(&config);
-        text.push('\0');
-        // These are existing TextBox panes (same chain as the original Deluxe).
-        // Change typography only; avoid raw material/dirty-bit manipulation.
-        let textbox = &mut *(pane as *mut skyline::nn::ui2d::TextBox);
-        textbox.font_size_x = 20.0;
-        textbox.font_size_y = 32.0;
-        textbox.line_space = 0.0;
-        set_text(pane, text.as_ptr());
+    igEnd();
+    igPopStyleVar(3);
+}
+
+unsafe fn performance(frames: &FrameTimes, width: f32, height: f32, sx: f32, sy: f32) {
+    if !begin_table(b"fps_info\0", 100.0 * sx) {
+        return;
+    }
+    row("Resolution", &format!("{width:.0}x{height:.0}"));
+    let mean = frames.average();
+    let color = match mean {
+        Some(ms) if ms > 19.17 => Vec4 {
+            x: 0.95,
+            y: 0.35,
+            z: 0.35,
+            w: 1.0,
+        },
+        Some(ms) if ms > 17.0 => Vec4 {
+            x: 0.95,
+            y: 0.85,
+            z: 0.25,
+            w: 1.0,
+        },
+        _ => Vec4 {
+            x: 0.45,
+            y: 0.90,
+            z: 0.45,
+            w: 1.0,
+        },
+    };
+    igPushStyleColor_Vec4(TEXT, color);
+    row(
+        "FPS",
+        &mean
+            .map(|ms| format!("{:.0}", 1000.0 / ms))
+            .unwrap_or_else(|| "---".into()),
+    );
+    igPopStyleColor(1);
+    igTableNextRow(0, 65.0 * sy);
+    igTableNextColumn();
+    text("FrameTime");
+    igTableNextColumn();
+    let label = mean
+        .map(|ms| format!("{ms:.2} ms\0"))
+        .unwrap_or_else(|| "---\0".into());
+    igPushStyleColor_Vec4(PLOT_LINES, color);
+    igPushStyleColor_Vec4(PLOT_LINES_HOVERED, color);
+    let available = igGetContentRegionAvail();
+    igPlotLines_FloatPtr(
+        c"##frametime".as_ptr(),
+        frames.values.as_ptr(),
+        frames.count as i32,
+        frames.plot_offset() as i32,
+        label.as_ptr().cast(),
+        0.0,
+        35.0,
+        Vec2 {
+            x: available.x,
+            y: 60.0 * sy,
+        },
+        std::mem::size_of::<f32>() as i32,
+    );
+    igPopStyleColor(2);
+    igEndTable();
+}
+
+unsafe extern "C" fn draw() {
+    let Ok(mut guard) = UI.try_lock() else {
+        return;
+    };
+    let ui = guard.get_or_insert_with(|| UiState {
+        controls: Overlay::default(),
+        frames: FrameTimes::default(),
+        previous_frame: None,
+        count: 0,
+    });
+    let sampled = ui.count.is_multiple_of(300);
+    if sampled {
+        record(Code::OverlayEntered, ui.count, ui.controls.view as u64);
+    }
+    ui.count += 1;
+    let now = Instant::now();
+    if let Some(previous) = ui.previous_frame.replace(now) {
+        ui.frames
+            .push(now.duration_since(previous).as_secs_f32() * 1000.0);
+    }
+    let mut config = settings();
+    let previous_view = ui.controls.view;
+    if ui.controls.poll(input::buttons(), &mut config) {
+        publish(&config);
+        record(
+            Code::MenuChanged,
+            config.effects as u64,
+            config.input_buffer as i64 as u64,
+        );
+    }
+    let view = ui.controls.view;
+    if view != previous_view {
+        record(Code::OverlayView, previous_view as u64, view as u64);
+    }
+    if view == View::Hidden {
+        hidden_window();
+    } else {
+        let (width, height) = overlay_host::display_size();
+        let sx = width / 1920.0;
+        let sy = height / 1080.0;
+        let window_height = match view {
+            View::Performance => 180.0,
+            View::Debug => 300.0,
+            _ => 280.0,
+        };
+        igSetNextWindowPos(Vec2::default(), ALWAYS, Vec2::default());
+        igSetNextWindowSize(
+            Vec2 {
+                x: 300.0 * sx,
+                y: window_height * sy,
+            },
+            ALWAYS,
+        );
+        igPushFont(std::ptr::null_mut(), 16.0 * sy);
+        if igBegin(c"Player Info".as_ptr(), std::ptr::null_mut(), WINDOW_FLAGS) {
+            if view == View::Settings && begin_table(b"conn_player_info\0", 100.0 * sx) {
+                row("Name", "You");
+                row("Ping", "---"); // Network telemetry has not been ported yet.
+                let buffer = if config.input_buffer == -1 {
+                    "Auto".into()
+                } else {
+                    config.input_buffer.to_string()
+                };
+                row(
+                    if ui.controls.menu.selected == 1 {
+                        "> NetLatency"
+                    } else {
+                        "NetLatency"
+                    },
+                    &buffer,
+                );
+                row("NetProfile", "Vanilla");
+                row(
+                    if ui.controls.menu.selected == 0 {
+                        "> FX"
+                    } else {
+                        "FX"
+                    },
+                    config.effects.effective().label(),
+                );
+                igEndTable();
+            }
+            if view == View::Debug && begin_table(b"deluxe_debug\0", 100.0 * sx) {
+                row(
+                    "Build",
+                    &crate::build_info::GIT_COMMIT[..crate::build_info::GIT_COMMIT.len().min(12)],
+                );
+                row("Renderer", "Vanilla");
+                row("FX", config.effects.effective().label());
+                row("Reduced FX", "Unavailable");
+                row("LessLag", "Unavailable");
+                igEndTable();
+            }
+            performance(&ui.frames, width, height, sx, sy);
+        }
+        igEnd();
+        igPopFont();
+    }
+    if sampled {
+        record(Code::OverlayExited, ui.count, view as u64);
     }
 }
 
 pub(super) fn install() {
-    unsafe {
-        if hooks::preflight(hooks::CSS_UPDATE) && hooks::preflight(hooks::SET_TEXT) {
-            skyline::install_hook!(update_css);
-            record(Code::HookInstalled, hooks::CSS_UPDATE as u64, 0);
-        }
-    }
+    overlay_host::install(draw);
 }

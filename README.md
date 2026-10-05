@@ -4,23 +4,29 @@ Private Rust/Skyline reconstruction for Smash Ultimate **13.0.5**, delivered as 
 This is an initial development build, not a completed LessLag replacement.
 
 Implemented:
-- Native character-select menu: character FX **On / Off**, default **On**. Reduced is unavailable.
+- Global top-left Player Info window with the fork's table/navigation UX: character FX **On / Off**, default **On**. Reduced is unavailable.
 - Online input buffer **Auto / 0–25**, retaining the fork's Quickplay null-pointer guard.
 - Bounded events, persistent install checkpoints, panic diagnostics, build identity and matching debug symbols.
 - Targeted effects for Byleth, Ike, Roy, Chrom, Falcon and Sephiroth: [exact scope](docs/FX.md).
 
 **Rendering remains Vanilla.** LessLag/Ultra/Doubles reconstruction, automatic profile application,
-arena/local-room UI, overclocking and performance scaling are pending.
+network-player telemetry, overclocking and performance scaling are pending.
 The fork's original source and exact changes are preserved under [reference](reference/README.md).
 See the [parity ledger](docs/STATUS.md).
 
-No ImGui, external SsbuSync backend, PIA manager, smashline, ARCropolis assets or extra FX NRO
+The ImGui/NVN backend is embedded in this NRO; no separate ImGui plugin is needed.
+No external SsbuSync backend, PIA manager, smashline, ARCropolis assets or extra FX NRO
 is required by this build. Skyline itself is required. Training Modpack and SGPO remain their own mods.
 
 ## Build
 
 Host Rust is pinned in rust-toolchain.toml. Switch builds use installed cargo-skyline 3.5.0 /
-skyline-v3; each bundle records the actual compiler. On native Ubuntu:
+skyline-v3; each bundle records the actual compiler. Prepare the pinned native library
+(see [provenance](docs/IMGUI_DEPENDENCY.md)) before building:
+
+    /usr/bin/python3 tools/prepare_imgui.py
+
+On native Ubuntu:
 
     /usr/bin/pwsh -NoLogo -NoProfile -NonInteractive -File ./tools/Build.ps1 -Package
 
@@ -31,7 +37,8 @@ Run host checks as separate commands:
     cargo test
 
 Output: target/aarch64-skyline-switch/release/libssbu_online_deluxe_rewrite.nro.
-dist/<NRO-hash-prefix>/ retains that NRO, its ELF, Cargo.lock and manifest. Keep each tested bundle.
+dist/<NRO-hash-prefix>/ retains that NRO, its ELF, Cargo.lock, full source archive,
+native dependency provenance and manifest. Keep each tested bundle.
 Build references: [Skyline](https://github.com/ultimate-research/skyline-rs),
 [cargo-skyline](https://github.com/jam1garner/cargo-skyline).
 
@@ -42,15 +49,24 @@ Replace the old Deluxe/SsbuSync stack and overlapping standalone FX/latency plug
 The rewrite skips hooks when a loaded SsbuSync export is detected; that is a best-effort check,
 not a load-order guarantee.
 
-At character select, hold **L+R** or **ZL+ZR**:
+The menu draws independently of the game UI. Hold **L+R** or **ZL+ZR**, then tap
+**Down** to cycle **settings → performance → hidden**. In the settings window:
 
-- **Down** opens/closes the menu.
-- **Up** selects the other row.
-- **Left/Right** changes the selected value.
+- **Up/Down** selects FX or NetLatency.
+- **Left/Right** changes the value; shoulders are no longer required.
+- Holding **Plus/Minus** with the toggle chord opens debug view from settings.
 
-This edits an existing CSS banner. It does not capture or suppress ordinary game input.
-The first controller (or handheld fallback) operates it. Layout/hotkeys need live verification.
-Settings save to sd:/ultimate/ssbu_online_deluxe_rewrite/config.ini.
+Current Eden keyboard mapping: **Q/E = L/R**, arrow keys = D-pad.
+The window retains the fork's Name/Ping/NetLatency/NetProfile table and frame graph,
+with an added FX row. Ping telemetry is pending (---); NetProfile stays Vanilla
+until the render engine is implemented. Frame statistics measure intervals between
+overlay render callbacks. Main-menu appearance is confirmed in Eden; other scene
+transitions and console behavior still need validation.
+
+The first controller (or handheld fallback) operates it. Ordinary game input is not
+suppressed. No game-owned text pane or Layout::Draw hook is used.
+Settings save to sd:/ultimate/ssbu_online_deluxe_rewrite/config.ini; config.previous.ini
+retains the last good version for recovery across interrupted replacement.
 On/Off changes future requests; existing effects expire normally.
 
 Build/tests do not establish runtime compatibility or lag reduction.

@@ -5,6 +5,14 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+/// Pinned imgui-smash static archive (see docs/IMGUI_DEPENDENCY.md). The
+/// preparation script verifies this digest when it places the file; build.rs
+/// only re-checks the sidecar and size so no hashing code is needed here.
+const IMGUI_SMASH_SHA256: &str = "0042ff0592313228b0746ee9214091249f7c70a1797e1826d990c27ca2fe0e45";
+const IMGUI_SMASH_SIZE: u64 = 16_798_872;
+const IMGUI_SMASH_DIR: &str = "target/native/imgui";
+const IMGUI_SMASH_LIB: &str = "libimgui_smash.a";
+
 fn main() {
     println!("cargo:rerun-if-changed=src");
     println!("cargo:rerun-if-changed=Cargo.toml");
@@ -51,4 +59,61 @@ pub const BUILD_EPOCH: u64 = {epoch};
         data,
     )
     .expect("write build metadata");
+
+    link_imgui_smash();
+}
+
+/// Links the pinned imgui-smash archive for the Switch target only. Host
+/// builds and tests never see it. Nothing is downloaded here; the archive is
+/// placed by `tools/prepare_imgui.py`, which verifies the SHA-256 and writes a
+/// sidecar digest next to it.
+fn link_imgui_smash() {
+    if env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("switch") {
+        return;
+    }
+    let root = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").expect("Cargo manifest dir"));
+    let dir = root.join(IMGUI_SMASH_DIR);
+    let lib = dir.join(IMGUI_SMASH_LIB);
+    let sidecar = dir.join(format!("{IMGUI_SMASH_LIB}.sha256"));
+    println!("cargo:rerun-if-changed={}", lib.display());
+    println!("cargo:rerun-if-changed={}", sidecar.display());
+
+    let help = format!(
+        "imgui-smash static archive is required for the Switch build.\n\
+         expected: {}\n\
+         prepare it with:\n  /usr/bin/python3 tools/prepare_imgui.py --source <path-to-libimgui_smash.a>\n\
+         or let the script fetch the pinned upstream copy over HTTPS (see docs/IMGUI_DEPENDENCY.md).",
+        lib.display()
+    );
+    let metadata = match fs::metadata(&lib) {
+        Ok(metadata) if metadata.is_file() => metadata,
+        _ => panic!("{help}"),
+    };
+    if metadata.len() != IMGUI_SMASH_SIZE {
+        panic!(
+            "{} has size {} but the pinned archive is {} bytes; re-run the preparation script",
+            lib.display(),
+            metadata.len(),
+            IMGUI_SMASH_SIZE
+        );
+    }
+    let recorded = fs::read_to_string(&sidecar)
+        .map(|text| {
+            text.split_whitespace()
+                .next()
+                .unwrap_or_default()
+                .to_ascii_lowercase()
+        })
+        .unwrap_or_default();
+    if recorded != IMGUI_SMASH_SHA256 {
+        panic!(
+            "{} is missing or does not record the pinned digest {}; re-run the preparation script so the archive is verified",
+            sidecar.display(),
+            IMGUI_SMASH_SHA256
+        );
+    }
+    println!("cargo:rustc-link-search=native={}", dir.display());
+    // -bundle keeps the 16 MB archive out of the rlib; the cdylib link pulls
+    // only the objects that are referenced (backend, cimgui, ImGui core).
+    println!("cargo:rustc-link-lib=static:-bundle=imgui_smash");
 }

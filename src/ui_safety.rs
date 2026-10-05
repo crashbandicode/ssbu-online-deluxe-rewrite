@@ -8,12 +8,17 @@ pub fn banner_address(owner: usize, mut read: impl FnMut(usize) -> Option<usize>
     plausible(read(first.checked_add(0x10)?)?)
 }
 
-/// txt1 identities in the user's local chara_select.layout.arc.
+/// txt1 identities in local chara_select and chara_select_base assets.
+/// set_txt_title_00 also matches the live offline CSS owner chain in Eden.
 /// No game asset data is shipped. Restrict this to known title TextBoxes.
 pub fn is_title_name(name: &[u8]) -> bool {
     matches!(
         name,
-        b"txt_all_title_00" | b"txt_all_title_01" | b"txt_vip_title_00" | b"txt_vip_title_01"
+        b"set_txt_title_00"
+            | b"txt_all_title_00"
+            | b"txt_all_title_01"
+            | b"txt_vip_title_00"
+            | b"txt_vip_title_01"
     )
 }
 
@@ -40,6 +45,7 @@ mod tests {
     #[test]
     fn only_title_textboxes_can_be_written() {
         for name in [
+            "set_txt_title_00",
             "txt_all_title_00",
             "txt_all_title_01",
             "txt_vip_title_00",
@@ -47,7 +53,13 @@ mod tests {
         ] {
             assert!(is_title_name(name.as_bytes()));
         }
-        for name in ["RootPane", "set_txt_name_l", "txt_all_title_00_extra", ""] {
+        for name in [
+            "RootPane",
+            "set_txt_name_l",
+            "set_txt_title_00_extra",
+            "txt_all_title_00_extra",
+            "",
+        ] {
             assert!(!is_title_name(name.as_bytes()));
         }
     }

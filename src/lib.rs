@@ -1,8 +1,10 @@
 //! Portable settings, policy and diagnostics; Switch hooks are isolated.
 pub mod config;
+pub mod config_store;
 pub mod diagnostics;
 pub mod effects;
 pub mod menu;
+pub mod overlay;
 pub mod policy;
 pub mod ui_safety;
 

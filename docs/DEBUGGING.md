@@ -2,21 +2,37 @@
 
 Keep the exact dist/<NRO-hash-prefix>/ bundle for every installed build.
 Packaging checks matching NRO/ELF executable bytes, saves both SHA-256 hashes,
-the NRO module ID and compiler identity. The optimized ELF retains DWARF and symbols.
+the NRO module ID, compiler identity, complete source and native dependency provenance.
+The optimized ELF retains DWARF and symbols.
 
 Under sd:/ultimate/ssbu_online_deluxe_rewrite/:
 
-- install.log: identity/base addresses and synchronous before/after install checkpoints.
+- install.log: earliest startup phases, identity/base addresses, and synchronous before/after hook checkpoints.
   Previous boot: install.previous.log.
 - events.log: background snapshots flushed every 500 ms. One previous log is retained;
   each is capped at 4 MiB.
 - panic.log: best-effort Rust panic message/location and recent events. Retained until another panic.
-- config.ini: saved settings; invalid input is reported and preserved.
+- config.ini: saved settings; invalid input is reported and preserved. config.previous.ini
+  retains the last good version and is recovered if replacement was interrupted.
+  Switch RenameFile cannot overwrite an existing destination: save closes the temp file,
+  parks the original in the backup, then promotes temp to the now-absent destination.
 
 128 fixed-size events use a nonblocking try-lock. Game hooks do no file I/O; contention
 increments a dropped counter. Startup install checkpoints are synchronous. The sink reports
 overwritten sequences/drops. File/thread failures are reported to Skyline.
 Up to the latest 500 ms may be absent after an abrupt crash; this is not a crash dump.
+
+Startup phases begin before version/configuration queries and the event recorder.
+Module addresses come from this NRO's hidden linker symbols (__text_start and
+__bss_end), with a mapped-memory check before reading its header. Do not replace
+this with skyline::info::containing_plugin: in the installed Skyline versions,
+that helper enters a different C++ singleton from the loader's manager and caused
+an nn::os::LockMutex abort during our first Eden test. The phase log isolated the
+call; replacing it allowed the same mod stack to boot.
+
+Keep backup NROs outside the entire skyline/plugins tree. Skyline recursively
+tries every file as an NRO, including .nro.bak files. Its asynchronous console
+output can lag the fault: the last printed plugin name is not proof of its cause.
 
 The panic hook chains the previous mod's hook. panic=abort cannot recover through catch_unwind.
 Hardware exceptions, GPU faults and hangs do not invoke it. Collect Atmosphere/emulator crash
@@ -45,15 +61,48 @@ These differ from FX On, which keeps passthrough hooks installed.
 | 14 / 15 / 16 | Panic / heartbeat / compatibility or diagnostic flag |
 | 17 | Shared function hook entry instruction before chaining |
 | 18 / 19 | Accepted title pane / unsupported CSS pane or mapping |
+| 20 | Sampled pane field: 1/2 chain pointers, 3–5 name bytes, 6 text buffer, 7 capacity/length, 8 font sizes |
+| 21 / 22 | Global overlay entry / exit, sampled every 300 frames |
+| 23 | View change: 0 hidden, 1 settings, 2 performance, 3 debug |
+| 24 | Config saved: generation / effective FX mode |
+| 25 | Overlay health: backend ready / bootstrap-call count |
+| 26 | Embedded backend initialization complete |
+
+Codes 12/13 and 18–20 describe historical CSS builds; they are no longer emitted.
+No game-owned pane or font is modified by the global window.
+
+If the menu does not appear, inspect overlay_host_* install phases and code 25.
+Zero bootstrap calls suggests the interposer never ran; ready=0 indicates incomplete
+initialization. Codes 21/22 prove the draw callback runs; code 23 confirms the hotkey
+changed views. Code 8 followed by 24 confirms a change was saved; inspect config.ini too.
 
 Fixed offsets have source/version, text-bound and common-trampoline checks.
 Original instruction signatures have not been captured from the game: this is not a complete
 validator. Shared EffectModule function hooks deliberately chain. Live load-order validation
 is separate from successful compilation.
 
-CSS pointers now use Horizon QueryMemory permission/range checks before each read,
-and writes require a title TextBox name verified from the user's local CSS asset.
-The chain stops at its second value (the pane), not a third dereference (the vtable).
-This does not prove object lifetime; access stays inside the owning CSS callback before
-calling its original, with no pane pointer retained for later dereference.
-QueryMemory ABI reference: https://github.com/switchbrew/libnx/blob/master/nx/source/kernel/svc.s
+The ImGui backend is embedded; do not also install a standalone imgui-smash NRO.
+The rewrite detects its exports and declines to install a second host. NVN bootstrap
+interposition chains other wrappers and records the entry word. See
+[dependency details](IMGUI_DEPENDENCY.md); future LessLag/acquire changes need new tests.
+
+## Eden test lifecycle on this Ubuntu host
+
+Use the test launcher instead of repeatedly opening the desktop shortcut:
+
+    /usr/bin/pwsh -NoLogo -NoProfile -NonInteractive -File ./tools/EdenTest.ps1 -Action Start
+    /usr/bin/pwsh -NoLogo -NoProfile -NonInteractive -File ./tools/EdenTest.ps1 -Action Status
+    /usr/bin/pwsh -NoLogo -NoProfile -NonInteractive -File ./tools/EdenTest.ps1 -Action Stop
+
+Run each command separately. Start refuses an existing Eden process and creates
+ssbu-deluxe-eden-test.service with MemoryHigh=8G, MemoryMax=12G and MemorySwapMax=1G.
+Stop terminates the whole test cgroup, including a process left behind after its
+window closes. Verify no Eden process remains before the next Start. The helper's
+-EdenPath parameter overrides its default local AppImage path. Pass -GamePath with
+the local game file to launch Smash directly using Eden's -g argument.
+
+These limits contain cgroup-accounted memory for this test, not the entire desktop
+or all GPU-driver memory. They are test safeguards, not a memory-leak fix.
+On 2026-10-05, the kernel OOM table showed eight simultaneous Eden processes and
+zero free swap; repeated launches had accumulated old instances. Preserve logs
+before restarting, since multiple instances can also write the same log files.

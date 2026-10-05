@@ -1,8 +1,10 @@
 mod effects;
 mod hooks;
+mod imgui;
 mod input;
 mod logging;
 mod memory;
+mod overlay_host;
 mod ui;
 
 use crate::{
@@ -66,7 +68,10 @@ fn display_version() -> String {
 
 #[skyline::main(name = "ssbu-online-deluxe-rewrite")]
 pub fn main() {
+    logging::prepare();
+    logging::startup_phase("version_query_begin");
     let version = display_version();
+    logging::startup_phase("version_query_complete");
     logging::start(&version);
     if version != "13.0.5" {
         record(Code::UnsupportedVersion, 0, 0);

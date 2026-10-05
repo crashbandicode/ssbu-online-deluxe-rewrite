@@ -3,8 +3,6 @@ use super::{record, Code, INPUT_BUFFER};
 use skyline::hooks::{getRegionAddress, InlineCtx, Region};
 use std::sync::atomic::Ordering;
 
-pub(super) const CSS_UPDATE: usize = 0x1a12f60;
-pub(super) const SET_TEXT: usize = 0x37a28a0;
 const ONLINE_LATENCY: usize = 0x16ccab8;
 
 // This detects common trampolines, NOT an original-instruction signature.

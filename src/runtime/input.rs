@@ -1,12 +1,4 @@
 use skyline::nn::hid;
-pub(super) const L: u64 = 1 << 6;
-pub(super) const R: u64 = 1 << 7;
-pub(super) const ZL: u64 = 1 << 8;
-pub(super) const ZR: u64 = 1 << 9;
-pub(super) const LEFT: u64 = 1 << 12;
-pub(super) const UP: u64 = 1 << 13;
-pub(super) const RIGHT: u64 = 1 << 14;
-pub(super) const DOWN: u64 = 1 << 15;
 
 /// Same HID families as the gamepad overlay; no game input is modified.
 pub(super) unsafe fn buttons() -> u64 {

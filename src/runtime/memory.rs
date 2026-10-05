@@ -1,5 +1,5 @@
 //! Horizon QueryMemory ABI from switchbrew/libnx nx/{include/switch/kernel/svc.h,
-//! source/kernel/svc.s}. Queries mapping/permissions before CSS pointer reads.
+//! source/kernel/svc.s}. Queries mapping/permissions before native pointer reads.
 #[repr(C)]
 #[derive(Default)]
 struct MemoryInfo {
@@ -40,11 +40,4 @@ pub(super) unsafe fn accessible(address: usize, size: usize, write: bool) -> boo
             .address
             .checked_add(info.size)
             .is_some_and(|mapped_end| end as u64 <= mapped_end)
-}
-
-pub(super) unsafe fn read_pointer(address: usize) -> Option<usize> {
-    if !address.is_multiple_of(8) || !accessible(address, 8, false) {
-        return None;
-    }
-    Some(*(address as *const usize))
 }

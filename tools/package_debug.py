@@ -7,6 +7,7 @@ import re
 import shutil
 import struct
 import subprocess
+import tarfile
 from pathlib import Path
 
 def sha(path):
@@ -50,6 +51,17 @@ def package(root):
     shutil.copy2(nro, dest / nro.name)
     shutil.copy2(elf, dest / "libssbu_online_deluxe_rewrite.elf")
     shutil.copy2(root / "Cargo.lock", dest / "Cargo.lock")
+    # Include new/uncommitted source files too: git diff alone omits untracked
+    # Rust modules and is insufficient to reconstruct a development build.
+    source_archive = dest / "source.tar.gz"
+    with tarfile.open(source_archive, "w:gz") as archive:
+        for name in ("src", "Cargo.toml", "Cargo.lock", "build.rs", "tools/prepare_imgui.py"):
+            archive.add(root / name, arcname=name)
+    dependency = root / "target/native/imgui/provenance.json"
+    native = []
+    if dependency.exists():
+        native.append(json.loads(dependency.read_text()))
+        shutil.copy2(dependency, dest / "imgui-provenance.json")
     rustup = Path.home() / ".cargo/bin/rustup"
     compiler = subprocess.check_output(
         [str(rustup), "run", "skyline-v3", "rustc", "--version", "--verbose"], text=True)
@@ -59,6 +71,9 @@ def package(root):
         "module_id": binary[0x40:0x60].hex(),
         "elf": "libssbu_online_deluxe_rewrite.elf", "elf_sha256": sha(elf),
         "cargo_lock_sha256": sha(root / "Cargo.lock"),
+        "source_archive": source_archive.name,
+        "source_archive_sha256": sha(source_archive),
+        "native_dependencies": native,
         "compiler": compiler, "game_version": "13.0.5",
         "text_verified": True, "runtime_tested": False,
     }

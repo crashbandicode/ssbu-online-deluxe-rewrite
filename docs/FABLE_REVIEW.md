@@ -37,3 +37,13 @@ matching the inspected fork and avoiding post-transition pointer use.
 Finding 4: shared effect entries record the first instruction without rejecting chaining.
 Finding 5: Auto actual-value and second-pane gaps are in STATUS.md.
 New pointer-walk regression tests cover the exact extra-dereference failure.
+
+## Global window update
+
+Live CSS evidence later found set_txt_title_00 and confirmed interaction, but the
+user required the fork's global window. CSS ownership/font changes are now removed.
+Fable's subsequent source review established that imgui-smash uses NVN bootstrap
+and submit interposition, without Layout::Draw; it implemented the embedded host
+glue. The primary implemented the table, controller state and config recovery.
+See VALIDATION.md for runtime evidence and remaining limits. Banner findings above
+describe the earlier milestone, not the current runtime.

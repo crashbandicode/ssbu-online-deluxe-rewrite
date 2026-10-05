@@ -9,3 +9,5 @@
 *.dmp
 /data.arc
 /local-assets/
+*.a
+__pycache__/
