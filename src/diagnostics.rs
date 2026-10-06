@@ -45,6 +45,11 @@ pub enum Code {
     RenderOwner = 33,
     RenderCaller = 34,
     RenderFlushTarget = 35,
+    PiaRtt = 36,
+    PeerObserve = 37,
+    PeerObserveName = 38,
+    PeerObserveDrop = 39,
+    PeerObserveMap = 40,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

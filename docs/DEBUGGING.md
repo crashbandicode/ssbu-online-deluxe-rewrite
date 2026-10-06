@@ -53,14 +53,15 @@ logs too: module list, PC/LR/backtrace, game version, loaded NROs and reproducti
 The script verifies bundle hashes and optional module ID, then uses LLVM/binutils addr2line.
 Use the faulting plugin's base/ELF, not the game's main-module base.
 
-For controlled bisection, create empty DISABLE_MENU, DISABLE_FX, DISABLE_BUFFER or
-DISABLE_RENDERER files
+For controlled bisection, create empty DISABLE_MENU, DISABLE_FX, DISABLE_BUFFER,
+DISABLE_RENDERER or DISABLE_PIA files
 in the data directory and restart. They skip the corresponding hook family.
 DISABLE_BUFFER disables input-buffer writes; the shared setup observer can remain
 installed for FX scope. DISABLE_FX skips FX requests and scene tracking.
 DISABLE_RENDERER skips experimental rendering text patches regardless of the INI
-request; actual mode stays Vanilla. All four flags together, with
-DUMP_PRESENTATION_HISTORY absent, leave diagnostic logging without those hooks.
+request; actual mode stays Vanilla. DISABLE_PIA skips RTT and prevents the
+optional peer observer from installing. All five flags together, with
+DUMP_PRESENTATION_HISTORY absent, skip those hook families while retaining logging.
 Remove the disable flags to re-enable their hook families.
 These differ from FX On, which keeps passthrough hooks installed.
 
@@ -87,6 +88,10 @@ These differ from FX On, which keeps passthrough hooks installed.
 | 29 | ACMD stack refused: hook ID / argument type; first 8 only |
 | 30 | FX online context changed: online boolean / source scene or latency-setup offset |
 | 31 / 32 | Timing capture started / export finished: capture ID / export success (code 32) |
+| 33 / 34 / 35 | Renderer owner / caller / flush target diagnostics |
+| 36 | Pia RTT sample/cleanup and foreign/drop counters |
+| 37 / 38 | Opt-in parsed peer observation / bounded escaped name sample |
+| 39 / 40 | Peer observer drops / station identity mapping changes |
 
 Codes 12/13 and 18–20 describe historical CSS builds; they are no longer emitted.
 No game-owned pane or font is modified by the global window.
@@ -102,10 +107,26 @@ verified from the live 13.0.5 code. Other hook families do not yet have that com
 signature coverage. Shared EffectModule function hooks deliberately chain. Live load-order validation
 is separate from successful compilation.
 
-The ImGui backend is embedded; do not also install a standalone imgui-smash NRO.
-The rewrite detects its exports and declines to install a second host. NVN bootstrap
-interposition chains other wrappers and records the entry word. See
+The ImGui backend is embedded as a fallback. A compatible standalone imgui-smash
+NRO is reused when present; unknown external ABIs are refused. Hook exports use
+unique names to prevent dynamic symbol collisions. NVN bootstrap interposition
+chains other wrappers and records the entry word. See
 [dependency details](IMGUI_DEPENDENCY.md); future LessLag/acquire changes need new tests.
+
+## Optional peer observer
+
+`peer_observer=false` is the default. Set it to true before process startup
+only for a controlled diagnostic run. Both parsed-message and station-index
+instruction guards must match, and the Pia lifecycle hooks must be installed.
+This does not enable peer metadata in the UI and never writes network packets.
+
+The observer validates body bounds against the accepted packet length before
+copying. A nonblocking gate protects its bounded queue and station generations;
+file output occurs on the diagnostic thread after releasing the gate. Missed
+observations are counted, and missed lifecycle notifications conservatively
+clear mappings. Names are escaped, truncated diagnostic samples. Mixed IDs are
+correlation values, not an anonymization guarantee. Observer events remain
+subject to the ordinary log size and crash-flush limits above.
 
 ## Eden test lifecycle on this Ubuntu host
 

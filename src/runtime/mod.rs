@@ -10,6 +10,8 @@ mod memory;
 mod nvn;
 mod online;
 mod overlay_host;
+mod peer_observer;
+mod pia_rtt;
 mod presentation;
 mod render_probe;
 mod render_sequence;
@@ -30,6 +32,7 @@ static FX_MODE: AtomicU8 = AtomicU8::new(0);
 static FX_SCOPE: AtomicU8 = AtomicU8::new(FxScope::Online as u8);
 static RENDER_MODE: AtomicU8 = AtomicU8::new(0);
 static INPUT_BUFFER: AtomicI8 = AtomicI8::new(-1);
+static PEER_OBSERVER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static CONFIG_GENERATION: AtomicU64 = AtomicU64::new(0);
 pub(super) const DATA_DIR: &str = "sd:/ultimate/ssbu_online_deluxe_rewrite";
 
@@ -47,6 +50,7 @@ pub(super) fn settings() -> Config {
         },
         input_buffer: INPUT_BUFFER.load(Ordering::Acquire),
         render_mode: crate::config::RenderMode::from_byte(RENDER_MODE.load(Ordering::Acquire)),
+        peer_observer: PEER_OBSERVER.load(Ordering::Acquire),
     }
 }
 
@@ -55,6 +59,7 @@ pub(super) fn publish(config: &Config) {
     FX_SCOPE.store(config.effects_scope as u8, Ordering::Release);
     INPUT_BUFFER.store(config.input_buffer, Ordering::Release);
     RENDER_MODE.store(config.render_mode as u8, Ordering::Release);
+    PEER_OBSERVER.store(config.peer_observer, Ordering::Release);
     CONFIG_GENERATION.fetch_add(1, Ordering::Release);
 }
 
@@ -118,6 +123,7 @@ pub fn main() {
         ("MENU", ui::install as fn()),
         ("FX", effects::install as fn()),
         ("BUFFER", hooks::install_latency as fn()),
+        ("PIA", pia_rtt::install as fn()),
     ] {
         if std::path::Path::new(DATA_DIR)
             .join(format!("DISABLE_{name}"))
@@ -129,6 +135,7 @@ pub fn main() {
             install();
         }
     }
+    peer_observer::install();
 }
 
 fn legacy_host_present() -> bool {

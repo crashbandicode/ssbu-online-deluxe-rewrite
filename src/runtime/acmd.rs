@@ -47,7 +47,7 @@ unsafe fn filter(lua_state: u64, path: u64, calls: &AtomicU64, hash_count: usize
             return;
         }
     }
-    if count == 1 || count % 256 == 0 {
+    if count == 1 || count.is_multiple_of(256) {
         record(Code::AcmdEffectSeen, path, args[0].raw);
     }
     let context = if args[..hash_count].iter().any(|v| {
@@ -91,7 +91,7 @@ unsafe fn filter(lua_state: u64, path: u64, calls: &AtomicU64, hash_count: usize
     for index in 0..hash_count {
         if replacements[index].is_some() {
             let count = SUPPRESSED.fetch_add(1, Ordering::Relaxed) + 1;
-            if count <= 32 || count % 128 == 0 {
+            if count <= 32 || count.is_multiple_of(128) {
                 record(Code::AcmdEffectSuppressed, old[index], (path << 32) | count);
             }
         }
@@ -120,64 +120,64 @@ macro_rules! effect_hook {
 // and EFFECT_FOLLOW. Alpha/no-stop/position variants cover the existing policy.
 effect_hook!(
     effect,
-    filter_effect,
+    deluxe_rewrite_filter_effect,
     "\u{1}_ZN3app10sv_animcmd6EFFECTEP9lua_State",
     0x110
 );
 effect_hook!(
     follow,
-    filter_follow,
+    deluxe_rewrite_filter_follow,
     "\u{1}_ZN3app10sv_animcmd13EFFECT_FOLLOWEP9lua_State",
     0x111
 );
 effect_hook!(
     alpha,
-    filter_alpha,
+    deluxe_rewrite_filter_alpha,
     "\u{1}_ZN3app10sv_animcmd19EFFECT_FOLLOW_ALPHAEP9lua_State",
     0x112
 );
 effect_hook!(
     no_stop,
-    filter_no_stop,
+    deluxe_rewrite_filter_no_stop,
     "\u{1}_ZN3app10sv_animcmd21EFFECT_FOLLOW_NO_STOPEP9lua_State",
     0x113
 );
 effect_hook!(
     pos,
-    filter_pos,
+    deluxe_rewrite_filter_pos,
     "\u{1}_ZN3app10sv_animcmd14EFFECT_FLW_POSEP9lua_State",
     0x114
 );
 effect_hook!(
     pos_no_stop,
-    filter_pos_no_stop,
+    deluxe_rewrite_filter_pos_no_stop,
     "\u{1}_ZN3app10sv_animcmd22EFFECT_FLW_POS_NO_STOPEP9lua_State",
     0x115
 );
 
 effect_hook!(
     landing,
-    filter_landing,
+    deluxe_rewrite_filter_landing,
     "\u{1}_ZN3app10sv_animcmd14LANDING_EFFECTEP9lua_State",
     0x116
 );
 effect_hook!(
     flip,
-    filter_flip,
+    deluxe_rewrite_filter_flip,
     "\u{1}_ZN3app10sv_animcmd18EFFECT_FOLLOW_FLIPEP9lua_State",
     0x117,
     2
 );
 effect_hook!(
     flip_alpha,
-    filter_flip_alpha,
+    deluxe_rewrite_filter_flip_alpha,
     "\u{1}_ZN3app10sv_animcmd24EFFECT_FOLLOW_FLIP_ALPHAEP9lua_State",
     0x118,
     2
 );
 effect_hook!(
     flip_no_stop,
-    filter_flip_no_stop,
+    deluxe_rewrite_filter_flip_no_stop,
     "\u{1}_ZN3app10sv_animcmd26EFFECT_FOLLOW_NO_STOP_FLIPEP9lua_State",
     0x119,
     2
@@ -199,14 +199,14 @@ pub(super) fn install() {
             }
         };
     }
-    install!(effect, filter_effect, 0x110);
-    install!(follow, filter_follow, 0x111);
-    install!(alpha, filter_alpha, 0x112);
-    install!(no_stop, filter_no_stop, 0x113);
-    install!(pos, filter_pos, 0x114);
-    install!(pos_no_stop, filter_pos_no_stop, 0x115);
-    install!(landing, filter_landing, 0x116);
-    install!(flip, filter_flip, 0x117);
-    install!(flip_alpha, filter_flip_alpha, 0x118);
-    install!(flip_no_stop, filter_flip_no_stop, 0x119);
+    install!(effect, deluxe_rewrite_filter_effect, 0x110);
+    install!(follow, deluxe_rewrite_filter_follow, 0x111);
+    install!(alpha, deluxe_rewrite_filter_alpha, 0x112);
+    install!(no_stop, deluxe_rewrite_filter_no_stop, 0x113);
+    install!(pos, deluxe_rewrite_filter_pos, 0x114);
+    install!(pos_no_stop, deluxe_rewrite_filter_pos_no_stop, 0x115);
+    install!(landing, deluxe_rewrite_filter_landing, 0x116);
+    install!(flip, deluxe_rewrite_filter_flip, 0x117);
+    install!(flip_alpha, deluxe_rewrite_filter_flip_alpha, 0x118);
+    install!(flip_no_stop, deluxe_rewrite_filter_flip_no_stop, 0x119);
 }

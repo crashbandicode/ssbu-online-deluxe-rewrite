@@ -175,3 +175,148 @@ The latest package and any subsequent runtime check are recorded in HANDOFF.md.
 The saved original Switch stack was tested separately and restored afterward;
 its Eden pre-match stall is documented in SWITCH_CRASH.md. That test did not load
 the rewrite, TM or SGPO and did not reproduce the console's crash signature.
+
+## Asymmetric local-wireless smoke test, 2026-10-06
+
+Custom Eden commit10bcd2d849843b146a79c61a21df615e1bdcfcde ran two isolated
+13.0.5 instances on one machine. Each had an8GiB memory limit and no swap.
+A loaded rewrite d5b4464b508a98244056fa9b09b7a0b5c51f374313afee45177a6a307b70427c,
+the corrected gamepad overlay20e9e062..., Training Modpack7.1.1 and ARCropolis4.1.1.
+B had its entire title override directory and ultimate directory moved outside
+the profile, so it ran without Skyline plugins or modded title assets.
+
+A7-minute Palutena-versus-Sephiroth match on Small Battlefield completed through
+sudden death and results. Both clients reported Sephiroth winning and the same
+damage-given totals: Palutena6%, Sephiroth30%. Earlier paired screenshots showed
+Palutena at30.2% after Shadow Flare on both clients. A returned to character
+select; B returned to stage select.
+
+FX changed from On to Off during the match on A only, then back On at results.
+Paired screenshots at match clock5:13.86/5:13.85 show Gigaflare's large explosion
+on cleanB and suppression on A. Palutena sideB also hit during Off; damage and
+stock results remained consistent. Numeric RTT appeared15–27ms. This artifact
+displayed the latest sample without the later mean/stability-color work.
+
+No divergence or disconnection was observed during the match. This is a bounded
+visual/state smoke test, not a simulation-checksum comparison, Nintendo-online
+test, Switch test, or proof about every move. Render mode wasVanilla and input
+bufferAuto; it does not validate LessLag/LLUltra multiplayer transitions.
+
+Evidence and exact plugin hashes are outside Git:
+~/.local/share/ssbu-mod-backups/desync-pia-20261006/
+(result.json, a-plugins.json, run-a, run-b, runtime-final, screenshots).
+Memory peaks were7,132,610,560bytes(A) and6,433,144,832bytes(B), with no OOM events.
+B exited normally. A's40-minute watchdog expired after the results transition;
+the planned stale-RTT screenshot following B's departure was not captured.
+The staging journal is restored, including verified original A file hashes.
+## ImGui host coexistence, 2026-10-06
+
+NRO defda6fdf99e01e08906f4ae7e8f7df7cfab0d4fa1eb42b478e9ad6499146135
+passed three bounded Eden runs: embedded host alone, standalone host loaded
+before the rewrite, and standalone loaded after it. Both external runs displayed
+Deluxe and Elite Legal Stages together. The reversed-order and embedded runs also
+persisted an FX On-to-Off change. NVN present/acquire observations advanced in
+all three runs.
+
+The two external runs installed distinct bootstrap replacement addresses,
+confirming that the shared hook-name collision was removed. Before the fix, both
+plugins resolved the same exported callback; one plugin's implementation never
+ran. Every rewrite hook now has a unique prefix, internal function references
+bind locally, and bootstrap installation checks the replacement's module.
+
+These checks cover boot, menus, toggling and NVN observation in Eden. They do not
+establish native Switch compatibility or actual Elite stage filtering. The
+standalone build was ImGui 1.92.7 WIP (19263), SHA-256
+61e19e1b593826b1216228c6536cf2603b512154a8fecc548203e245bb86ed3e.
+Unknown host ABIs are refused with diagnostics.
+
+All three emulators exited normally and the isolated profile was restored.
+Evidence: ~/.local/share/ssbu-mod-backups/imgui-unique-20261006/runtime/result.json,
+with screenshots and complete run logs in each case directory.
+## LLUltra and asymmetric G&W rendering, 2026-10-06
+
+Two further pairs used the same custom Eden build and 13.0.5 game. A loaded
+rewrite 9a0e76de16a7fe7af12da7fd47f6d6e38c3b971d242c0e561b60f0b31d805347,
+corrected SGPO, Training Modpack and ARCropolis, with LLUltra/Auto buffer/FX On.
+B had no title overrides or plugins. Both used private localhost rooms, 8 GiB
+per process, no swap, and finite watchdogs.
+
+The control pair (A 20261006-164547-429778, B 20261006-164547-836af6) had
+no G&W plugin on either peer. A seven-minute Mr. Game & Watch versus Sephiroth
+match on Small Battlefield completed with Sephiroth winning on both clients.
+Settled Sephiroth damage was 16.6% on both; result damage-given totals were
+G&W 16%, Sephiroth 15%. Green averaged RTT of 18–20 ms was visible. After B
+disconnected, A displayed an uncolored "---". Both exited normally. Return to
+character select was not visually confirmed in this control.
+
+The asymmetric pair (A 20261006-172218-3d4587, B 20261006-172218-1b98c6)
+added only A's libgnw_render_probe.nro, SHA-256
+0883e69785e90b0e6324a803821e82a8cf4df529e6200c25c1e9658069620ade,
+from source 4a4f63ad32efdc6e2c5395563bcbc0361296f75c. Demand-readback was
+explicitly disabled. Logs confirmed the expected shader fingerprint,
+verified=true, and RANGE slot=2 reductions with restored=true. LLUltra counters
+advanced with zero bad callers and zero alias mismatches.
+
+The same seven-minute matchup completed with Sephiroth winning on both clients.
+Paired screenshots showed 14.6% Sephiroth damage mid-match and matching final
+damage-given totals of G&W 29%, Sephiroth 0%. Both returned to stage selection
+and then character select. No divergence or crash was observed in this match.
+The scripted inputs exercised several moves, but not every requested animation
+was captured. Regular-match KO/respawn, all costumes, role reversal, both peers
+modded, and simulation checksums remain unverified. This is bounded coexistence
+evidence, not an online-safe certification or a G&W performance measurement.
+
+## Controlled latency relay, 2026-10-06
+
+After the asymmetric match, B reconnected through a temporary localhost UDP
+relay. It delayed each direction by 50 ms without editing packets. An independent
+echo check measured 100.43–100.75 ms round trip with unchanged payloads.
+
+Joining Smash with that delay already present failed before the host's
+confirmation appeared. Joining through the same relay with zero delay succeeded.
+Adding 50 ms per direction after the join produced about 123 ms in-game RTT,
+with yellow and red stability indications captured during CSS/warm-up. No
+deliberate jitter or packet loss was injected. Changing delay and host scheduling
+can both affect variance; these screenshots are not a controlled test of each
+color threshold.
+
+The relay's 1000-second deadline expired during warm-up, producing a room-lost
+dialog. No high-latency match completed. This was not a VPN route and does not
+establish high-latency desync compatibility. Both Eden processes subsequently
+exited normally, with no OOM events; memory peaks were 7,547,342,848 bytes (A)
+and 6,820,466,688 bytes (B).
+
+All test plugins/config files were restored from the staging journals, and B's
+direct-connect port was restored to 24872. Main user profiles and Switch files
+were not changed. Evidence:
+~/.local/share/ssbu-mod-backups/desync-rtt-colors-20261006/
+(gnw-control and gnw-asymmetric, including localhost-phase, full run logs,
+screenshots, renderer counters, relay timing/configuration, and result receipts).
+
+## Reviewed integration artifact, 2026-10-06
+
+NRO `c924d9d1b2ed5b56bb7ec14b847b1b9d1ed627ecc2394be77144723fd0b101e0`
+(2,203,648 bytes), ELF
+`6cb922b0ec394ebbed1f2968ade1c61a9b82bf308ceca604d4f127d87d7ecbf6`.
+Bundle `dist/c924d9d1b2ed5b56` retains matching executable bytes, optimized
+debug symbols, full source, native provenance and raw check logs. Host Clippy
+with denied warnings, no-default-features build, 89 tests, Skyline Clippy and
+Skyline release build passed. All 38 Skyline hook exports have the unique
+Deluxe prefix, with no preemptible callback relocations; required NN/NVN/Skyline
+imports remain dynamic.
+
+This adds the default-off peer diagnostic observer. Review tightened packet
+bounds, coherent queue/map publication and lifecycle invalidation. It refuses
+installation without the Pia lifecycle hooks. Missed lifecycle callbacks or
+adoption of a new protocol conservatively clear diagnostic identities. It does
+not send packets or populate the missing peer metadata UI. Its enabled runtime
+path has not been tested yet.
+
+Exact-artifact smoke run `20261006-184006-bd1296` used isolated Eden, LLUltra,
+corrected SGPO, Training Modpack and the embedded host, with `peer_observer=false`.
+It reached the main menu and displayed Player Info, with no opponent shown.
+LLUltra present/preflush counters advanced, three allocated/two active textures,
+zero bad callers and zero alias mismatches. It exited normally after 131 seconds,
+peak memory 5,969,846,272 bytes, no OOM. This is startup/menu evidence, not a new
+match or network test. Evidence and restored-profile hash receipt:
+`~/.local/share/ssbu-mod-backups/observer-final-smoke-20261006/`.

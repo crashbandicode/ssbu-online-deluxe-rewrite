@@ -29,7 +29,7 @@ pub(super) fn requested() -> bool {
 type FlushFn = unsafe extern "C" fn(*mut u8, u8);
 
 #[skyline::hook(offset = ENTRY, inline)]
-unsafe fn pre_present(ctx: &InlineCtx) {
+unsafe fn deluxe_rewrite_pre_present(ctx: &InlineCtx) {
     let n = ENTRIES.fetch_add(1, Ordering::Relaxed);
     // Skyline armutils saves LR before calling the inline callback. Unlike an
     // ordinary Rust function's live LR, this is the game caller's return address.
@@ -98,7 +98,7 @@ unsafe fn pre_present(ctx: &InlineCtx) {
 }
 
 #[skyline::hook(offset = LATE_FLUSH, inline)]
-unsafe fn later_flush(ctx: &InlineCtx) {
+unsafe fn deluxe_rewrite_later_flush(ctx: &InlineCtx) {
     if renderer::mode().immediate() {
         LATE_SKIPS.fetch_add(1, Ordering::Relaxed);
     } else {
@@ -135,7 +135,7 @@ pub(super) unsafe fn install() {
         skyline::patching::Patch::in_text(LATE_FLUSH + 4)
             .nop()
             .expect("late flush clear patch failed");
-        skyline::install_hook!(later_flush);
+        skyline::install_hook!(deluxe_rewrite_later_flush);
         let installed = *((base() + LATE_FLUSH) as *const u32);
         logging::install_checkpoint(Code::HookInstalled, LATE_FLUSH as u64, installed as u64);
         assert!(
@@ -148,7 +148,7 @@ pub(super) unsafe fn install() {
             "late flush clear was not suppressed"
         );
     }
-    skyline::install_hook!(pre_present);
+    skyline::install_hook!(deluxe_rewrite_pre_present);
     let word = *((base() + ENTRY) as *const u32);
     record(Code::HookInstalled, ENTRY as u64, word as u64);
     logging::install_checkpoint(Code::HookInstalled, ENTRY as u64, word as u64);

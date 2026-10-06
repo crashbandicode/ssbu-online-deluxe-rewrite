@@ -37,6 +37,28 @@ unsafe fn begin_table(id: &[u8], label_width: f32) -> bool {
     true
 }
 
+/// Label, local "You", and one opponent column. The opponent name stays empty
+/// until a name source exists. Fork columns are not titled.
+unsafe fn begin_player_table(id: &[u8], label_width: f32) -> bool {
+    if !igBeginTable(id.as_ptr().cast(), 3, BORDERS, Vec2::default(), 0.0) {
+        return false;
+    }
+    igTableSetupColumn(c"##label".as_ptr(), WIDTH_FIXED, label_width, 0);
+    igTableSetupColumn(c"##you".as_ptr(), WIDTH_STRETCH, 1.0, 0);
+    igTableSetupColumn(c"##peer".as_ptr(), WIDTH_STRETCH, 1.0, 0);
+    true
+}
+
+unsafe fn row3(label: &str, you: &str, peer: &str) {
+    igTableNextRow(0, 0.0);
+    igTableNextColumn();
+    text(label);
+    igTableNextColumn();
+    text(you);
+    igTableNextColumn();
+    text(peer);
+}
+
 /// Keep one near-transparent primitive like the fork: the backend requires a
 /// nonempty command list even while the visible window is hidden.
 unsafe fn hidden_window() {
@@ -71,9 +93,37 @@ unsafe fn hidden_window() {
     igPopStyleVar(3);
 }
 
-unsafe fn performance(frames: &FrameTimes, width: f32, height: f32, sx: f32, sy: f32) {
+unsafe fn performance(
+    frames: &FrameTimes,
+    width: f32,
+    height: f32,
+    sx: f32,
+    sy: f32,
+    ping: &crate::pia_rtt::PresentedPing,
+) {
     if !begin_table(b"fps_info\0", 100.0 * sx) {
         return;
+    }
+    if let Some(label) = &ping.performance {
+        igTableNextRow(0, 0.0);
+        igTableNextColumn();
+        text("Ping");
+        igTableNextColumn();
+        if let Some(color) = ping.color {
+            igPushStyleColor_Vec4(
+                TEXT,
+                Vec4 {
+                    x: color.r,
+                    y: color.g,
+                    z: color.b,
+                    w: color.a,
+                },
+            );
+        }
+        text(label);
+        if ping.color.is_some() {
+            igPopStyleColor(1);
+        }
     }
     row("Resolution", &format!("{width:.0}x{height:.0}"));
     let mean = frames.average();
@@ -169,6 +219,7 @@ unsafe extern "C" fn draw() {
         );
     }
     let view = ui.controls.view;
+    let ping = super::pia_rtt::draw_state();
     super::timing::set_view(view as u8);
     let pressed = buttons & !ui.previous_timing_buttons;
     ui.previous_timing_buttons = buttons;
@@ -188,7 +239,7 @@ unsafe extern "C" fn draw() {
         let sy = height / 1080.0;
         let window_height = match view {
             View::Performance => 180.0,
-            View::Debug => 340.0,
+            View::Debug => 370.0,
             _ => 280.0,
         };
         igSetNextWindowPos(Vec2::default(), ALWAYS, Vec2::default());
@@ -201,24 +252,45 @@ unsafe extern "C" fn draw() {
         );
         igPushFont(std::ptr::null_mut(), 16.0 * sy);
         if igBegin(c"Player Info".as_ptr(), std::ptr::null_mut(), WINDOW_FLAGS) {
-            if view == View::Settings && begin_table(b"conn_player_info\0", 100.0 * sx) {
-                row("Name", "You");
-                row("Ping", "---"); // Network telemetry has not been ported yet.
+            if view == View::Settings && begin_player_table(b"conn_player_info\0", 100.0 * sx) {
+                row3("Name", "You", "");
+                igTableNextRow(0, 0.0);
+                igTableNextColumn();
+                text("Ping");
+                igTableNextColumn();
+                text("---");
+                igTableNextColumn();
+                if let Some(color) = ping.color {
+                    igPushStyleColor_Vec4(
+                        TEXT,
+                        Vec4 {
+                            x: color.r,
+                            y: color.g,
+                            z: color.b,
+                            w: color.a,
+                        },
+                    );
+                }
+                text(&ping.opponent);
+                if ping.color.is_some() {
+                    igPopStyleColor(1);
+                }
                 let buffer = if config.input_buffer == -1 {
                     "Auto".into()
                 } else {
                     config.input_buffer.to_string()
                 };
-                row(
+                row3(
                     if ui.controls.menu.selected == 1 {
                         "> NetLatency"
                     } else {
                         "NetLatency"
                     },
                     &buffer,
+                    "---",
                 );
-                row("NetProfile", super::renderer::mode().label());
-                row(
+                row3("NetProfile", super::renderer::mode().label(), "---");
+                row3(
                     if ui.controls.menu.selected == 0 {
                         "> FX"
                     } else {
@@ -232,6 +304,7 @@ unsafe extern "C" fn draw() {
                     } else {
                         config.effects.effective().label()
                     },
+                    "---",
                 );
                 igEndTable();
             }
@@ -254,10 +327,11 @@ unsafe extern "C" fn draw() {
                 row("Reduced FX", "Unavailable");
                 row("Engine", super::renderer::status());
                 row("Timing", super::timing::status());
+                row("Ping detail", ping.detail);
                 row("Capture", "L+R+Up (10 s)");
                 igEndTable();
             }
-            performance(&ui.frames, width, height, sx, sy);
+            performance(&ui.frames, width, height, sx, sy, &ping);
         }
         igEnd();
         igPopFont();

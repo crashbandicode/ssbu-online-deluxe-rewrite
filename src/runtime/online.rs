@@ -38,27 +38,27 @@ fn set(online: bool, source: u64) {
 }
 
 #[skyline::hook(offset = 0x235aaa0, inline)]
-unsafe fn main_menu(_: &InlineCtx) {
+unsafe fn deluxe_rewrite_main_menu(_: &InlineCtx) {
     set(false, 0x235aaa0);
 }
 
 #[skyline::hook(offset = 0x22da160, inline)]
-unsafe fn quickplay(_: &InlineCtx) {
+unsafe fn deluxe_rewrite_quickplay(_: &InlineCtx) {
     set(true, 0x22da160);
 }
 
 #[skyline::hook(offset = 0x22da090, inline)]
-unsafe fn background_matchmaking(_: &InlineCtx) {
+unsafe fn deluxe_rewrite_background_matchmaking(_: &InlineCtx) {
     set(true, 0x22da090);
 }
 
 #[skyline::hook(offset = 0x22d9fa0, inline)]
-unsafe fn arena(_: &InlineCtx) {
+unsafe fn deluxe_rewrite_arena(_: &InlineCtx) {
     set(true, 0x22d9fa0);
 }
 
 #[skyline::hook(offset = 0x1bd45e0, inline)]
-unsafe fn local_wireless(_: &InlineCtx) {
+unsafe fn deluxe_rewrite_local_wireless(_: &InlineCtx) {
     set(true, 0x1bd45e0);
 }
 
@@ -75,11 +75,11 @@ pub(super) fn install() {
         return;
     }
     skyline::install_hooks!(
-        main_menu,
-        quickplay,
-        background_matchmaking,
-        arena,
-        local_wireless
+        deluxe_rewrite_main_menu,
+        deluxe_rewrite_quickplay,
+        deluxe_rewrite_background_matchmaking,
+        deluxe_rewrite_arena,
+        deluxe_rewrite_local_wireless
     );
     for offset in offsets {
         record(Code::HookInstalled, offset as u64, 0);

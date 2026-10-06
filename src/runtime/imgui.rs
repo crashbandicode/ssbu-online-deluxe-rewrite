@@ -33,6 +33,14 @@ pub(super) const WINDOW_BORDER: i32 = 4;
 pub(super) const WINDOW_MIN_SIZE: i32 = 5;
 
 extern "C" {
+    /// Direct links into this NRO's compiled cimgui. These symbols are not
+    /// dynamic exports of this NRO. Do not resolve them with `LookupSymbol`:
+    /// the standalone NRO can export the same names, and the first hit may be
+    /// that other copy. `igSetCurrentContext` points this compiled copy's
+    /// global at the standalone context. That borrow is valid only when both
+    /// compiled copies are the pinned 19263 layout.
+    pub(super) fn igSetCurrentContext(ctx: *mut c_void);
+    pub(super) fn igGetCurrentContext() -> *mut c_void;
     pub(super) fn igBegin(name: *const c_char, open: *mut bool, flags: i32) -> bool;
     pub(super) fn igEnd();
     pub(super) fn igSetNextWindowPos(pos: Vec2, cond: i32, pivot: Vec2);

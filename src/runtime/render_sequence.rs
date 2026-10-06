@@ -48,7 +48,7 @@ unsafe fn update_models(manager: *mut u8) {
 }
 
 #[skyline::hook(offset = RECORD_FIGHTERS, inline)]
-unsafe fn record_fighters(ctx: &InlineCtx) {
+unsafe fn deluxe_rewrite_record_fighters(ctx: &InlineCtx) {
     let active = super::renderer::mode().render_opts();
     FRAME_ACTIVE.store(active, Ordering::Release);
     if !active {
@@ -63,7 +63,7 @@ unsafe fn record_fighters(ctx: &InlineCtx) {
 }
 
 #[skyline::hook(offset = DISPATCH, inline)]
-unsafe fn defer_dispatch(ctx: &mut InlineCtx) {
+unsafe fn deluxe_rewrite_defer_dispatch(ctx: &mut InlineCtx) {
     if FRAME_ACTIVE.load(Ordering::Acquire) {
         // The displaced CMP and following BEQ remain intact.
         ctx.registers[8].set_x(1);
@@ -112,7 +112,7 @@ unsafe fn submit_queue() {
 }
 
 #[skyline::hook(offset = POST_SCENE, inline)]
-unsafe fn post_scene(_: &InlineCtx) {
+unsafe fn deluxe_rewrite_post_scene(_: &InlineCtx) {
     if !FRAME_ACTIVE.load(Ordering::Acquire) {
         return;
     }
@@ -185,7 +185,11 @@ pub(super) unsafe fn install() {
         "model update hook returned no trampoline"
     );
     MODEL_ORIGINAL.store(original as usize, Ordering::Release);
-    skyline::install_hooks!(record_fighters, defer_dispatch, post_scene);
+    skyline::install_hooks!(
+        deluxe_rewrite_record_fighters,
+        deluxe_rewrite_defer_dispatch,
+        deluxe_rewrite_post_scene
+    );
     for offset in [MODELS, RECORD_FIGHTERS, DISPATCH, POST_SCENE] {
         let word = *((base() + offset) as *const u32);
         record(Code::HookInstalled, offset as u64, word as u64);

@@ -52,7 +52,7 @@ pub(super) fn requested_textures() -> Option<i32> {
 }
 
 #[skyline::hook(offset = INDEX, inline)]
-unsafe fn select_index(ctx: &mut InlineCtx) {
+unsafe fn deluxe_rewrite_select_index(ctx: &mut InlineCtx) {
     let input = ctx.registers[9].w();
     let current = mode();
     let output = if current == RenderMode::Vanilla {
@@ -68,7 +68,7 @@ unsafe fn select_index(ctx: &mut InlineCtx) {
 }
 
 #[skyline::hook(offset = WAIT, inline)]
-unsafe fn render_wait(ctx: &mut InlineCtx) {
+unsafe fn deluxe_rewrite_render_wait(ctx: &mut InlineCtx) {
     let value = if mode() == RenderMode::Vanilla {
         let f: unsafe extern "C" fn(u64, u64) -> u64 =
             std::mem::transmute(ctx.registers[8].x() as usize);
@@ -81,7 +81,7 @@ unsafe fn render_wait(ctx: &mut InlineCtx) {
 }
 
 #[skyline::hook(offset = FLUSH)]
-unsafe fn flush_dispatches(object: *mut u8, flag: u32) {
+unsafe fn deluxe_rewrite_flush_dispatches(object: *mut u8, flag: u32) {
     let current = mode();
     if current != RenderMode::Vanilla && !current.immediate() && !object.is_null() {
         // Sizes independently checked against host ASM: u8, u32, u64, u8.
@@ -160,7 +160,11 @@ pub(super) fn install() {
             logging::startup_phase("renderer_wait_patch_failed");
             return;
         }
-        skyline::install_hooks!(select_index, render_wait, flush_dispatches);
+        skyline::install_hooks!(
+            deluxe_rewrite_select_index,
+            deluxe_rewrite_render_wait,
+            deluxe_rewrite_flush_dispatches
+        );
     }
     for offset in [INDEX, WAIT, FLUSH] {
         let word = unsafe { *((getRegionAddress(Region::Text) as usize + offset) as *const u32) };

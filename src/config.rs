@@ -116,6 +116,8 @@ pub struct Config {
     pub input_buffer: i8,
     /// Read once at startup; changing this requires a full restart.
     pub render_mode: RenderMode,
+    /// Diagnostic-only inbound observer. Omitted keys stay false.
+    pub peer_observer: bool,
 }
 
 impl Default for Config {
@@ -125,13 +127,14 @@ impl Default for Config {
             effects_scope: FxScope::Online,
             input_buffer: -1,
             render_mode: RenderMode::Vanilla,
+            peer_observer: false,
         }
     }
 }
 
 pub fn parse(text: &str) -> Result<Config, String> {
     let mut config = Config::default();
-    let mut seen = [false; 5];
+    let mut seen = [false; 6];
     for (index, raw) in text.lines().enumerate() {
         let line = raw.split('#').next().unwrap_or_default().trim();
         if line.is_empty() {
@@ -149,6 +152,7 @@ pub fn parse(text: &str) -> Result<Config, String> {
             "input_buffer" => 2,
             "effects_scope" => 3,
             "render_mode" => 4,
+            "peer_observer" => 5,
             _ => return Err(error(&format!("unknown key '{key}'"))),
         };
         if seen[slot] {
@@ -187,6 +191,13 @@ pub fn parse(text: &str) -> Result<Config, String> {
                             "render_mode must be vanilla, lesslag, llultra, lesslag_core or doubles_core",
                         )),
                     };
+            }
+            "peer_observer" => {
+                config.peer_observer = match value {
+                    "true" => true,
+                    "false" => false,
+                    _ => return Err(error("peer_observer must be true or false")),
+                };
             }
             "input_buffer" => {
                 config.input_buffer = if value == "auto" {
@@ -231,7 +242,8 @@ pub fn serialize(config: &Config) -> String {
     } else {
         config.input_buffer.to_string()
     };
-    format!("# Online Deluxe settings\nversion=1\neffects={effects}\neffects_scope={effects_scope}\ninput_buffer={input_buffer}\nrender_mode={}\n", config.render_mode.key())
+    let peer_observer = if config.peer_observer { "true" } else { "false" };
+    format!("# Online Deluxe settings\nversion=1\neffects={effects}\neffects_scope={effects_scope}\ninput_buffer={input_buffer}\nrender_mode={}\npeer_observer={peer_observer}\n", config.render_mode.key())
 }
 
 impl Config {
@@ -263,6 +275,7 @@ mod tests {
                     effects_scope: FxScope::Online,
                     input_buffer,
                     render_mode: RenderMode::Vanilla,
+                    peer_observer: false,
                 };
                 assert_eq!(parse(&config.serialize()).unwrap(), config);
             }
@@ -334,6 +347,21 @@ mod tests {
             "version=1\neffects_scope=all\neffects_scope=online",
         ] {
             assert!(parse(text).is_err());
+        }
+        assert!(!parse("version=1").unwrap().peer_observer);
+        assert!(parse("version=1\npeer_observer=true").unwrap().peer_observer);
+        assert!(!parse("version=1\npeer_observer=false").unwrap().peer_observer);
+        let enabled = Config {
+            peer_observer: true,
+            ..Config::default()
+        };
+        assert!(parse(&enabled.serialize()).unwrap().peer_observer);
+        for text in [
+            "version=1\npeer_observer=yes",
+            "version=1\npeer_observer=TRUE",
+            "version=1\npeer_observer=true\npeer_observer=false",
+        ] {
+            assert!(parse(text).is_err(), "accepted {text:?}");
         }
         assert!(!FxScope::Online.allows(false));
         assert!(FxScope::Online.allows(true));

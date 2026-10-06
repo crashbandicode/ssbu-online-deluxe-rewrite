@@ -109,6 +109,9 @@ impl Service {
                         .write(true)
                         // skyline-v3 checks `create_new` for existing paths,
                         // but creates missing paths only when `create` is set.
+                        // Truncate stays off: an existing CSV is an error, not
+                        // an overwrite. A newly created file is already empty.
+                        .truncate(false)
                         .create(true)
                         .create_new(true)
                         .open(&path)?;
@@ -123,6 +126,7 @@ impl Service {
                     let api_path = Path::new(DATA_DIR).join(format!("api-{}.csv", api.id));
                     let mut api_file = OpenOptions::new()
                         .write(true)
+                        .truncate(false)
                         .create(true)
                         .create_new(true)
                         .open(api_path)?;

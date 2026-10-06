@@ -1,4 +1,7 @@
-//! Chained NVN observations. The embedded ImGui backend remains in the call path.
+//! Chained NVN observations. The active ImGui backend remains in the call path:
+//! this NRO's copy when it is the host, or the standalone plugin's copy when
+//! that host was selected. This module only wraps the pointer the bootstrap
+//! hook returns.
 //! Counts and timestamps describe API calls, never scanout or input latency.
 use super::DATA_DIR;
 use skyline::libc::{c_char, c_void};
@@ -164,7 +167,7 @@ unsafe extern "C" fn queue_present(queue: Ptr, window: Ptr, index: i32) {
     f(queue, window, index);
     super::api_trace::end(begin, 1, index, -1);
     // Read objects on their owning render thread, never the logger.
-    if n % 60 == 0 && WINDOW.load(Ordering::Acquire) == window as usize {
+    if n.is_multiple_of(60) && WINDOW.load(Ordering::Acquire) == window as usize {
         readback(window);
     }
 }

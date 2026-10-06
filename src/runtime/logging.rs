@@ -206,8 +206,10 @@ pub(super) fn start(version: &str) {
                 std::thread::sleep(Duration::from_millis(500));
                 timing.poll();
                 super::presentation::poll();
+                super::pia_rtt::poll();
+                super::peer_observer::poll();
                 iteration += 1;
-                if iteration % 10 == 0 {
+                if iteration.is_multiple_of(10) {
                     super::nvn::write_status();
                     record(Code::Heartbeat, settings().effects as u64, iteration);
                     record(
@@ -215,6 +217,7 @@ pub(super) fn start(version: &str) {
                         super::overlay_host::ready() as u64,
                         super::overlay_host::bootstrap_calls(),
                     );
+                    super::pia_rtt::log_counters();
                 }
                 if let Some(file) = log.as_mut() {
                     if let Some(snapshot) = RECORDER.snapshot() {

@@ -32,7 +32,7 @@ pub(super) unsafe fn preflight(offset: usize) -> bool {
 }
 
 #[skyline::hook(offset = ONLINE_LATENCY, inline)]
-unsafe fn set_online_latency(ctx: &InlineCtx) {
+unsafe fn deluxe_rewrite_set_online_latency(ctx: &InlineCtx) {
     super::online::mark_match();
     if !BUFFER_ENABLED.load(Ordering::Relaxed) {
         return;
@@ -61,7 +61,7 @@ pub(super) fn install_match_setup() -> bool {
         if !preflight(ONLINE_LATENCY) {
             return false;
         }
-        skyline::install_hook!(set_online_latency);
+        skyline::install_hook!(deluxe_rewrite_set_online_latency);
     }
     LATENCY_INSTALLED.store(true, Ordering::Relaxed);
     record(Code::HookInstalled, ONLINE_LATENCY as u64, 0);

@@ -71,6 +71,11 @@ fn link_imgui_smash() {
     if env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("switch") {
         return;
     }
+    // aarch64-skyline-switch links with ld.lld. Bind this NRO's references to
+    // its own global functions. Undefined NN/skyline imports stay dynamic.
+    // This does not stop a later plugin from resolving an export that still
+    // uses that plugin's name; hook callbacks keep the deluxe_rewrite_ prefix.
+    println!("cargo:rustc-cdylib-link-arg=-Bsymbolic-functions");
     let root = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").expect("Cargo manifest dir"));
     let dir = root.join(IMGUI_SMASH_DIR);
     let lib = dir.join(IMGUI_SMASH_LIB);

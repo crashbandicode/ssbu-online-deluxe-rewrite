@@ -7,6 +7,8 @@ runtime profile system, and no Switch compatibility is claimed.
 Implemented:
 - Global top-left Player Info window with the fork's table/navigation UX: character FX **On / Off**, default **On**. Reduced is unavailable.
 - Online input buffer **Auto / 0–25**, retaining the fork's Quickplay null-pointer guard.
+- Opponent RTT with the fork's stability colors, from the game's existing Pia measurements. Names, interface suffixes and peer settings remain pending.
+- Compatible standalone ImGui host reuse, with the embedded backend as a fallback.
 - Bounded events, persistent install checkpoints, panic diagnostics, build identity and matching debug symbols.
 - Expanded named character effects from the supplied peer mod: [exact scope](docs/FX.md).
 
@@ -26,12 +28,14 @@ In custom Eden, captured-image evidence at the normal injection phase shows the 
 three frames earlier with `lesslag` and four with `llultra` than with `vanilla`;
 delayed-input trials vary by one frame while preserving the ordering.
 See [performance](docs/PERFORMANCE.md) for the method and limits. That is not a
-console, display or end-to-end latency result. Network-player telemetry and full
-Doubles validation remain pending.
+console, display or end-to-end latency result. Full peer metadata and Doubles
+validation remain pending.
 The fork's original source and exact changes are preserved under [reference](reference/README.md).
-See the [parity ledger](docs/STATUS.md).
+See the [fork parity ledger](docs/FORK_PARITY.md) and [validation evidence](docs/VALIDATION.md).
 
-The ImGui/NVN backend is embedded in this NRO; no separate ImGui plugin is needed.
+The ImGui/NVN backend is embedded in this NRO; no separate ImGui plugin is needed
+for Deluxe. If another mod requires the compatible standalone host, Deluxe reuses
+it. Unknown host ABIs are refused; see [dependency details](docs/IMGUI_DEPENDENCY.md).
 No external SsbuSync backend, PIA manager, smashline, ARCropolis assets or extra FX NRO
 is required by this build. Skyline itself is required. Training Modpack and SGPO remain their own mods.
 
@@ -75,8 +79,9 @@ The menu draws independently of the game UI. Hold **L+R** or **ZL+ZR**, then tap
 
 Current Eden keyboard mapping: **Q/E = L/R**, arrow keys = D-pad.
 The window retains the fork's Name/Ping/NetLatency/NetProfile table and frame graph,
-with an added FX row. Ping telemetry is pending (---); NetProfile reports the active
-render mode. Frame statistics measure intervals between
+with an added FX row. One fresh opponent's averaged RTT appears with stability
+color; absent, stale or ambiguous peers show uncolored `---`. NetProfile reports
+the active startup render mode. Frame statistics measure intervals between
 overlay render callbacks. Main-menu/CSS/match appearance, SGPO and Training Modpack
 menu/save-load coexistence are confirmed on the prior Eden candidate. Expanded
 effect coverage, online scope transitions and console behavior await validation.

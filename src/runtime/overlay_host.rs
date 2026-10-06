@@ -1,33 +1,51 @@
-//! Embedded imgui-smash host: this NRO owns the NVN bootstrap interposition and
-//! the single ImGui context, so a global overlay works in every scene without a
-//! `Layout::Draw` hook or any game-text patch.
+//! ImGui host. This NRO still embeds imgui-smash and uses it when no standalone
+//! `libimgui_smash.nro` is loaded. When that plugin is loaded, Skyline has
+//! already `LoadModule`'d every plugin before any `main` (`PluginManager.cpp`),
+//! and the backend creates its context on the first NVN init, after every
+//! `main`. Registering with the standalone during our `main` is therefore
+//! before `InitImGui` regardless of which `main` runs first.
 //!
-//! Mirrors the upstream host glue (`Coolsonickirby/imgui-smash` `src/lib.rs`
-//! at commit `bb47b205ed0be2fb864269ee2d37fc886b81221e`) with three changes:
-//! an external host is detected and refused instead of racing it, startup is
-//! checkpointed to the SD card in a bounded number of steps, and the logger is
-//! lossy and rate-limited instead of `to_str().unwrap()`.
+//! The standalone path does not call this NRO's `imgui_smash_init` and does
+//! not install this NRO's NVN renderer. Draw callbacks and `igGetMainViewport`
+//! run only after `igSetCurrentContext` on this NRO's cimgui, using the
+//! context pointer the standalone passes in. `ig*` are direct links into this
+//! NRO's compiled cimgui. They are not dynamic exports of this NRO.
+//! `LookupSymbol` is not used for them: a standalone copy can export the same
+//! names, and the first hit would be that other module.
 //!
-//! C ABI is transcribed from `include/imgui_smash.h` and `include/smash_types.h`
-//! at that commit; the viewport head matches `src/cimgui.h` (`ImGuiViewport`).
-//! Drawing bindings (`ig*`) belong to the UI module; the archive is already on
-//! the link line via `build.rs`, so plain `extern "C"` declarations resolve.
+//! An export counts only when its text mapping begins with that NRO's own
+//! header and the address falls in the header's text segment. The version tag
+//! is read only from that same header's ro segment. Setup, draw, and get must
+//! share that image base. A symbol that cannot be tied to one header is a
+//! refusal, not a nearby-memory search. An unknown combination installs no
+//! ImGui backend and does not call `ig*`. NVN observations still chain so the
+//! rewrite's window setup keeps running.
 //!
-//! Important: in this backend build `IM_ASSERT` is `SMASH_ASSERT`, which aborts
-//! the game. Any ImGui misuse inside the draw callback (Begin/End mismatch,
-//! unbalanced Push/Pop, calling `ig*` outside a frame) is fatal, not a log line.
+//! The bootstrap callback is exported as `deluxe_rewrite_nvn_bootstrap_hook`.
+//! Its address is installed only when `loaded_nro` ties it to this NRO.
+//! A different module is rejected before `install_hook`. `-Bsymbolic-functions`
+//! binds this NRO's own function references locally; a later plugin can still
+//! resolve an export that keeps the old shared name, so the prefix stays.
+//!
+//! C ABI is transcribed from `include/imgui_smash.h` and the standalone
+//! `src/lib.rs` (`imgui_setup_context_export`, `imgui_smash_add_on_draw_frame_wrapper`).
+//! `imgui_get_context_export` is absent from the Elite Legal Stages NRO and is
+//! optional. `IM_ASSERT` in this backend build is `SMASH_ASSERT` and aborts.
 use super::{logging, memory, record, Code};
+use crate::imgui_host::{
+    owns_replacement, parse_nro_header, ro_contains_tag, select_imgui_host, text_contains,
+    ImguiHostChoice, NroSegments,
+};
 use skyline::libc::{c_char, c_void};
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, AtomicUsize, Ordering};
 
-// smash_types.h
 type InitFunc = unsafe extern "C" fn();
 type ProcDrawFunc = unsafe extern "C" fn();
 type LoggerFunc = unsafe extern "C" fn(*const c_char, usize);
+type SetupExport = unsafe extern "C" fn(unsafe extern "C" fn(*mut u64));
+type DrawWrapper = unsafe extern "C" fn(*const c_void);
+type GetContextExport = unsafe extern "C" fn() -> *mut u64;
 
-/// First fields of `ImGuiViewport` (cimgui.h at the pinned commit):
-/// `ImGuiID ID; ImGuiViewportFlags Flags; ImVec2 Pos; ImVec2 Size; ...`.
-/// Only this prefix is read; later fields are version-sensitive.
 #[repr(C)]
 struct ViewportHead {
     _id: u32,
@@ -37,51 +55,47 @@ struct ViewportHead {
 }
 
 extern "C" {
-    // libimgui_smash.a (imgui_smash.cpp / cimgui.cpp)
     fn imgui_smash_init(post_init: Option<InitFunc>, render: Option<ProcDrawFunc>);
     fn imgui_smash_bootstrap_hook(name: *const c_char, original: *const c_void) -> *const c_void;
     fn imgui_smash_add_on_draw_frame(render: ProcDrawFunc);
     fn imgui_smash_context_setup(callback: InitFunc);
     fn imgui_smash_set_logger(callback: LoggerFunc);
     fn igGetMainViewport() -> *const ViewportHead;
-
-    // Game import: the NVN loader entry the backend interposes.
     fn nvnBootstrapLoader(name: *const c_char) -> *const c_void;
 }
 
-/// Exports that only the standalone `libimgui_smash.nro` host defines. If any
-/// resolves, a second bootstrap interposer would double-initialise ImGui.
-const EXTERNAL_HOST_SYMBOLS: [&[u8]; 3] = [
-    b"imgui_setup_context_export\0",
-    b"imgui_get_context_export\0",
-    b"imgui_smash_add_on_draw_frame_wrapper\0",
-];
+const SETUP_EXPORT: &[u8] = b"imgui_setup_context_export\0";
+const GET_CONTEXT_EXPORT: &[u8] = b"imgui_get_context_export\0";
+const DRAW_WRAPPER: &[u8] = b"imgui_smash_add_on_draw_frame_wrapper\0";
 
-/// Backend viewport configured in `user_config/imgui_backend_config.h`.
 const FALLBACK_DISPLAY: (f32, f32) = (1280.0, 720.0);
-
-/// Diagnostic site id used in the `a` field of host records (hooks use text
-/// offsets, effects use 0x100..; 0x200 is this host).
 const SITE_BOOTSTRAP: u64 = 0x200;
-
+const NRO_HEADER_SIZE: usize = 0x80;
+const CHAIN_EMBEDDED: u8 = 0;
+const CHAIN_EXTERNAL: u8 = 1;
 const STATE_IDLE: u8 = 0;
 const STATE_REFUSED: u8 = 1;
-const STATE_INSTALLED: u8 = 2;
-
+const STATE_EMBEDDED: u8 = 2;
+const STATE_EXTERNAL: u8 = 3;
 static STATE: AtomicU8 = AtomicU8::new(STATE_IDLE);
+static CHAIN: AtomicU8 = AtomicU8::new(CHAIN_EMBEDDED);
 static CONTEXT_READY: AtomicBool = AtomicBool::new(false);
 static BACKEND_READY: AtomicBool = AtomicBool::new(false);
 static BOOTSTRAP_CALLS: AtomicU64 = AtomicU64::new(0);
 static LOG_COUNT: AtomicU64 = AtomicU64::new(0);
+static DRAW: AtomicUsize = AtomicUsize::new(0);
+static EXTERNAL_CONTEXT: AtomicUsize = AtomicUsize::new(0);
+static GET_CONTEXT: AtomicUsize = AtomicUsize::new(0);
 
 #[skyline::hook(replace = nvnBootstrapLoader)]
-unsafe fn nvn_bootstrap_hook(name: *const c_char) -> *const c_void {
+unsafe fn deluxe_rewrite_nvn_bootstrap_hook(name: *const c_char) -> *const c_void {
     BOOTSTRAP_CALLS.fetch_add(1, Ordering::Relaxed);
-    // The backend returns either its wrapper or the original pointer; the
-    // trampoline is accepted by the header contract ("trampoline functions are
-    // also accepted, provided they call the original").
-    let next = imgui_smash_bootstrap_hook(name, original!() as *const c_void);
-    super::nvn::bootstrap(name, next)
+    let chained = if CHAIN.load(Ordering::Acquire) == CHAIN_EXTERNAL {
+        original!()(name)
+    } else {
+        imgui_smash_bootstrap_hook(name, original!() as *const c_void)
+    };
+    super::nvn::bootstrap(name, chained)
 }
 
 unsafe extern "C" fn on_context_setup() {
@@ -98,80 +112,187 @@ unsafe extern "C" fn on_backend_ready() {
     }
 }
 
-/// Lossy, bounded forwarder: first eight backend messages, then one in 256.
-/// Never trusts the buffer to be valid UTF-8 or nul-terminated.
+unsafe extern "C" fn accept_external_context(ctx: *mut u64) {
+    if ctx.is_null() || (ctx as usize) & 7 != 0 {
+        record(Code::HookRejected, SITE_BOOTSTRAP, 5);
+        return;
+    }
+    EXTERNAL_CONTEXT.store(ctx as usize, Ordering::Release);
+    CONTEXT_READY.store(true, Ordering::Release);
+}
+
+unsafe extern "C" fn external_draw() {
+    let mut ctx = EXTERNAL_CONTEXT.load(Ordering::Acquire);
+    if ctx == 0 {
+        let getter = GET_CONTEXT.load(Ordering::Acquire);
+        if getter != 0 {
+            let get: GetContextExport = std::mem::transmute(getter);
+            let ptr = get();
+            if !ptr.is_null() && (ptr as usize) & 7 == 0 {
+                ctx = ptr as usize;
+                EXTERNAL_CONTEXT.store(ctx, Ordering::Release);
+                CONTEXT_READY.store(true, Ordering::Release);
+            }
+        }
+    }
+    if ctx == 0 {
+        return;
+    }
+    super::imgui::igSetCurrentContext(ctx as *mut c_void);
+    if super::imgui::igGetCurrentContext() != ctx as *mut c_void {
+        record(Code::HookRejected, SITE_BOOTSTRAP, 6);
+        return;
+    }
+    if !BACKEND_READY.swap(true, Ordering::AcqRel) {
+        record(
+            Code::OverlayBackendReady,
+            SITE_BOOTSTRAP + 2,
+            BOOTSTRAP_CALLS.load(Ordering::Relaxed),
+        );
+    }
+    let draw = DRAW.load(Ordering::Acquire);
+    if draw != 0 {
+        let draw: ProcDrawFunc = std::mem::transmute(draw);
+        draw();
+    }
+}
+
 unsafe extern "C" fn backend_logger(message: *const c_char, len: usize) {
     let n = LOG_COUNT.fetch_add(1, Ordering::Relaxed) + 1;
-    if !(n <= 8 || n % 256 == 0) {
+    if !(n <= 8 || n.is_multiple_of(256)) {
         return;
     }
     if message.is_null() || len == 0 {
         return;
     }
     let len = len.min(512);
-    let bytes = std::slice::from_raw_parts(message as *const u8, len);
+    let bytes = std::slice::from_raw_parts(message, len);
     let end = bytes.iter().position(|b| *b == 0).unwrap_or(bytes.len());
     let text = String::from_utf8_lossy(&bytes[..end]);
     skyline::println!("[Deluxe/imgui #{}] {}", n, text.trim_end());
 }
 
-fn external_host_symbol() -> Option<&'static [u8]> {
-    for symbol in EXTERNAL_HOST_SYMBOLS {
-        let mut address = 0usize;
-        unsafe {
-            skyline::nn::ro::LookupSymbol(&mut address, symbol.as_ptr());
-        }
-        if address != 0 {
-            return Some(symbol);
-        }
+struct LoadedNro {
+    base: usize,
+    segments: NroSegments,
+}
+
+/// Skyline maps an NRO at its file base. The Elite header has `text_offset == 0`,
+/// so the text mapping starts at that header. A symbol whose mapping does not
+/// begin with `NRO0`, or whose text offset is not zero, is not given a module.
+fn loaded_nro(symbol: usize) -> Option<LoadedNro> {
+    let (map_base, map_size) = unsafe { memory::region(symbol) }?;
+    if map_size < NRO_HEADER_SIZE || !unsafe { memory::accessible(map_base, NRO_HEADER_SIZE, false) }
+    {
+        return None;
     }
-    None
+    let mut header = [0u8; NRO_HEADER_SIZE];
+    unsafe {
+        header.copy_from_slice(std::slice::from_raw_parts(
+            map_base as *const u8,
+            NRO_HEADER_SIZE,
+        ));
+    }
+    let segments = parse_nro_header(&header)?;
+    if segments.text_offset != 0 || segments.text_size as usize > map_size {
+        return None;
+    }
+    let offset = symbol.checked_sub(map_base)?;
+    if !text_contains(&segments, offset) {
+        return None;
+    }
+    Some(LoadedNro {
+        base: map_base,
+        segments,
+    })
+}
+
+fn ro_tag_present(image: &LoadedNro) -> bool {
+    let Some(start) = image.base.checked_add(image.segments.ro_offset as usize) else {
+        return false;
+    };
+    let size = image.segments.ro_size as usize;
+    if !unsafe { memory::accessible(start, size, false) } {
+        return false;
+    }
+    let ro = unsafe { std::slice::from_raw_parts(start as *const u8, size) };
+    ro_contains_tag(ro)
+}
+
+enum Export {
+    Absent,
+    Bound(usize, LoadedNro),
+    Unbound,
+}
+
+fn locate_export(name: &[u8]) -> Export {
+    let mut address = 0usize;
+    unsafe {
+        skyline::nn::ro::LookupSymbol(&mut address, name.as_ptr());
+    }
+    if address == 0 {
+        return Export::Absent;
+    }
+    let Some(image) = loaded_nro(address) else {
+        return Export::Unbound;
+    };
+    if loaded_nro(locate_export as *const () as usize).is_some_and(|own| own.base == image.base) {
+        return Export::Absent;
+    }
+    Export::Bound(address, image)
 }
 
 fn refuse(phase: &str, detail: u64) -> bool {
     STATE.store(STATE_REFUSED, Ordering::Release);
     record(Code::HookRejected, SITE_BOOTSTRAP, detail);
     logging::startup_phase(phase);
+    skyline::println!(
+        "[Deluxe] imgui host refused ({phase}); menu callbacks not installed"
+    );
     false
 }
 
-/// Installs the embedded ImGui host and registers `draw` as the per-frame
-/// callback. Call once from plugin `main`, before the game initialises NVN
-/// (plugin `main` runs inside `nn::ro::Initialize`, which is early enough; the
-/// fork's bundle relied on the same timing).
-///
-/// `draw` runs on the thread that submits NVN commands, every frame, in every
-/// scene, between `ImGui::NewFrame` and `ImGui::Render`. Keep it to UI state
-/// and atomics; it is not a place for engine transitions.
-///
-/// Returns `false` without installing anything when an external ImGui host is
-/// present, when the loader entry is not readable, or on a repeated call.
-pub(super) fn install(draw: unsafe extern "C" fn()) -> bool {
-    if STATE
-        .compare_exchange(
-            STATE_IDLE,
-            STATE_INSTALLED,
-            Ordering::AcqRel,
-            Ordering::Acquire,
-        )
-        .is_err()
-    {
-        return STATE.load(Ordering::Acquire) == STATE_INSTALLED;
-    }
-    logging::startup_phase("overlay_host_begin");
+enum BootstrapFailure {
+    EntryUnreadable,
+    ForeignReplacement,
+}
 
-    if let Some(symbol) = external_host_symbol() {
-        record(Code::Compatibility, 3, symbol[0] as u64);
-        skyline::println!(
-            "[Deluxe] external imgui-smash host detected ({}); embedded overlay host not installed",
-            String::from_utf8_lossy(&symbol[..symbol.len() - 1])
-        );
-        return refuse("overlay_host_refused_external_host", 1);
-    }
+fn log_bootstrap_binding(
+    replacement: usize,
+    own_module: Option<usize>,
+    replacement_module: Option<usize>,
+) {
+    let chain = if CHAIN.load(Ordering::Acquire) == CHAIN_EXTERNAL {
+        "external"
+    } else {
+        "embedded"
+    };
+    let own_base = own_module.unwrap_or(0);
+    let replacement_base = replacement_module.unwrap_or(0);
+    logging::startup_phase(&format!(
+        "nvn_bootstrap chain={chain} own_module={own_base:#x} replacement={replacement:#x} replacement_module={replacement_base:#x}"
+    ));
+    skyline::println!(
+        "[Deluxe] nvn bootstrap chain={chain} own_module={own_base:#x} replacement={replacement:#x} replacement_module={replacement_base:#x}"
+    );
+}
 
+/// Installs this NRO's bootstrap callback only when its address is inside this NRO.
+/// A preempted export is recorded and left uninstalled.
+fn hook_bootstrap() -> Result<(), BootstrapFailure> {
+    let replacement = deluxe_rewrite_nvn_bootstrap_hook as *const () as usize;
+    let own_module = loaded_nro(hook_bootstrap as *const () as usize).map(|image| image.base);
+    let replacement_module = loaded_nro(replacement).map(|image| image.base);
+    log_bootstrap_binding(replacement, own_module, replacement_module);
+    if !owns_replacement(own_module, replacement_module) {
+        record(Code::HookRejected, SITE_BOOTSTRAP, 9);
+        logging::startup_phase("overlay_host_foreign_bootstrap");
+        skyline::println!("[Deluxe] nvn bootstrap replacement is not this NRO; hook not installed");
+        return Err(BootstrapFailure::ForeignReplacement);
+    }
     let entry = nvnBootstrapLoader as *const () as usize;
     if entry == 0 || !unsafe { memory::accessible(entry, 4, false) } {
-        return refuse("overlay_host_entry_unreadable", 2);
+        return Err(BootstrapFailure::EntryUnreadable);
     }
     let word = unsafe { *(entry as *const u32) };
     record(Code::HookEntryWord, SITE_BOOTSTRAP, word as u64);
@@ -179,43 +300,136 @@ pub(super) fn install(draw: unsafe extern "C" fn()) -> bool {
     let already_far_hooked = word == 0x5800_0051;
     let already_branch = word & 0xfc00_0000 == 0x1400_0000;
     if already_far_hooked || already_branch {
-        // Another interposer owns this entry (not an ImGui host, those were
-        // excluded above). Chaining through it is the normal Skyline behaviour;
-        // record it so a double-overlay symptom can be attributed.
         record(Code::Compatibility, 4, word as u64);
     }
-
     record(Code::HookInstalling, SITE_BOOTSTRAP, entry as u64);
-    skyline::install_hook!(nvn_bootstrap_hook);
+    skyline::install_hook!(deluxe_rewrite_nvn_bootstrap_hook);
     record(Code::HookInstalled, SITE_BOOTSTRAP, entry as u64);
-    logging::startup_phase("overlay_host_bootstrap_hooked");
-
-    unsafe {
-        imgui_smash_set_logger(backend_logger);
-        imgui_smash_context_setup(on_context_setup);
-        imgui_smash_init(Some(on_backend_ready), None);
-        imgui_smash_add_on_draw_frame(draw);
-    }
-    logging::startup_phase("overlay_host_ready");
-    true
+    Ok(())
 }
 
-/// True once the backend reported full initialisation (first eligible command
-/// buffer). Before that the draw callback is never invoked.
+fn fail_bootstrap(error: BootstrapFailure) -> bool {
+    match error {
+        BootstrapFailure::EntryUnreadable => refuse("overlay_host_entry_unreadable", 2),
+        BootstrapFailure::ForeignReplacement => {
+            STATE.store(STATE_REFUSED, Ordering::Release);
+            skyline::println!(
+                "[Deluxe] imgui host refused (overlay_host_foreign_bootstrap); menu callbacks not installed"
+            );
+            false
+        }
+    }
+}
+
+pub(super) fn install(draw: unsafe extern "C" fn()) -> bool {
+    if STATE
+        .compare_exchange(
+            STATE_IDLE,
+            STATE_EMBEDDED,
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        )
+        .is_err()
+    {
+        let state = STATE.load(Ordering::Acquire);
+        return state == STATE_EMBEDDED || state == STATE_EXTERNAL;
+    }
+    logging::startup_phase("overlay_host_begin");
+
+    let setup = locate_export(SETUP_EXPORT);
+    let draw_wrapper = locate_export(DRAW_WRAPPER);
+    let get_context = locate_export(GET_CONTEXT_EXPORT);
+    let (setup_addr, draw_addr, get_addr, choice) = match (&setup, &draw_wrapper, &get_context) {
+        (Export::Absent, Export::Absent, Export::Absent) => {
+            (None, None, None, select_imgui_host(false, false, false, false))
+        }
+        (
+            Export::Bound(setup_addr, setup_image),
+            Export::Bound(draw_addr, draw_image),
+            get_context,
+        ) if setup_image.base == draw_image.base
+            && match get_context {
+                Export::Absent => true,
+                Export::Bound(_, get_image) => get_image.base == setup_image.base,
+                Export::Unbound => false,
+            } =>
+        {
+            let get_addr = match get_context {
+                Export::Bound(addr, _) => Some(*addr),
+                _ => None,
+            };
+            (
+                Some(*setup_addr),
+                Some(*draw_addr),
+                get_addr,
+                select_imgui_host(true, true, get_addr.is_some(), ro_tag_present(setup_image)),
+            )
+        }
+        _ => (None, None, None, select_imgui_host(true, false, false, false)),
+    };
+
+    match choice {
+        ImguiHostChoice::External => {
+            CHAIN.store(CHAIN_EXTERNAL, Ordering::Release);
+            if let Err(error) = hook_bootstrap() {
+                return fail_bootstrap(error);
+            }
+            logging::startup_phase("overlay_host_external_chain");
+            let (Some(setup_addr), Some(draw_addr)) = (setup_addr, draw_addr) else {
+                return refuse("overlay_host_refused_unknown_abi", 8);
+            };
+            DRAW.store(draw as usize, Ordering::Release);
+            if let Some(getter) = get_addr {
+                GET_CONTEXT.store(getter, Ordering::Release);
+            }
+            unsafe {
+                let setup: SetupExport = std::mem::transmute(setup_addr);
+                setup(accept_external_context);
+                let add_draw: DrawWrapper = std::mem::transmute(draw_addr);
+                add_draw(external_draw as *const c_void);
+            }
+            STATE.store(STATE_EXTERNAL, Ordering::Release);
+            record(Code::Compatibility, 5, 19263);
+            logging::startup_phase("overlay_host_external_ready");
+            skyline::println!(
+                "[Deluxe] standalone imgui-smash 1.92.7 WIP (19263); embedded init skipped"
+            );
+            true
+        }
+        ImguiHostChoice::Refuse => {
+            CHAIN.store(CHAIN_EXTERNAL, Ordering::Release);
+            let _ = hook_bootstrap();
+            skyline::println!(
+                "[Deluxe] standalone imgui-smash ABI is not 1.92.7 WIP (19263); embedded init skipped"
+            );
+            refuse("overlay_host_refused_unknown_abi", 8)
+        }
+        ImguiHostChoice::Embedded => {
+            CHAIN.store(CHAIN_EMBEDDED, Ordering::Release);
+            if let Err(error) = hook_bootstrap() {
+                return fail_bootstrap(error);
+            }
+            logging::startup_phase("overlay_host_bootstrap_hooked");
+            unsafe {
+                imgui_smash_set_logger(backend_logger);
+                imgui_smash_context_setup(on_context_setup);
+                imgui_smash_init(Some(on_backend_ready), None);
+                imgui_smash_add_on_draw_frame(draw);
+            }
+            logging::startup_phase("overlay_host_ready");
+            true
+        }
+    }
+}
+
 pub(super) fn ready() -> bool {
     BACKEND_READY.load(Ordering::Acquire)
 }
 
-/// Number of `nvnBootstrapLoader` calls seen through the hook; zero after
-/// install means the hook never fired (installed too late or wrong symbol).
 pub(super) fn bootstrap_calls() -> u64 {
     BOOTSTRAP_CALLS.load(Ordering::Relaxed)
 }
 
-/// Main-viewport size from ImGui. Valid only inside the draw callback (a frame
-/// must be active and the context created); otherwise, or if the value is
-/// implausible, returns the backend's configured 1280x720 so layout math never
-/// sees NaN or zero.
 pub(super) unsafe fn display_size() -> (f32, f32) {
     if !CONTEXT_READY.load(Ordering::Acquire) || !BACKEND_READY.load(Ordering::Acquire) {
         return FALLBACK_DISPLAY;

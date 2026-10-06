@@ -25,7 +25,7 @@ struct Vector3f {
 static SUPPRESSED: AtomicU64 = AtomicU64::new(0);
 fn note(hash: u64) {
     let count = SUPPRESSED.fetch_add(1, Ordering::Relaxed) + 1;
-    if count == 1 || count % 128 == 0 {
+    if count == 1 || count.is_multiple_of(128) {
         record(Code::FxSuppressed, hash, count);
     }
 }
@@ -134,7 +134,7 @@ mod abi {
 }
 
 #[skyline::hook(replace = abi::req)]
-unsafe fn filter_req(
+unsafe fn deluxe_rewrite_filter_req(
     module_accessor: *mut OpaqueAccessor,
     effect: Hash40,
     pos: *const Vector3f,
@@ -168,7 +168,7 @@ unsafe fn filter_req(
 }
 
 #[skyline::hook(replace = abi::req_2d)]
-unsafe fn filter_req_2d(
+unsafe fn deluxe_rewrite_filter_req_2d(
     module_accessor: *mut OpaqueAccessor,
     effect: Hash40,
     pos: *const Vector3f,
@@ -189,7 +189,7 @@ unsafe fn filter_req_2d(
 }
 
 #[skyline::hook(replace = abi::req_on_joint)]
-unsafe fn filter_req_on_joint(
+unsafe fn deluxe_rewrite_filter_req_on_joint(
     module_accessor: *mut OpaqueAccessor,
     effect: Hash40,
     bone: Hash40,
@@ -229,7 +229,7 @@ unsafe fn filter_req_on_joint(
 }
 
 #[skyline::hook(replace = abi::req_follow)]
-unsafe fn filter_req_follow(
+unsafe fn deluxe_rewrite_filter_req_follow(
     module_accessor: *mut OpaqueAccessor,
     effect: Hash40,
     bone: Hash40,
@@ -273,7 +273,7 @@ unsafe fn filter_req_follow(
 }
 
 #[skyline::hook(replace = abi::req_continual)]
-unsafe fn filter_req_continual(
+unsafe fn deluxe_rewrite_filter_req_continual(
     module_accessor: *mut OpaqueAccessor,
     effect: Hash40,
     arg3: Hash40,
@@ -294,7 +294,7 @@ unsafe fn filter_req_continual(
 }
 
 #[skyline::hook(replace = abi::req_common)]
-unsafe fn filter_req_common(module_accessor: *mut OpaqueAccessor, arg2: Hash40, arg3: f32) -> u64 {
+unsafe fn deluxe_rewrite_filter_req_common(module_accessor: *mut OpaqueAccessor, arg2: Hash40, arg3: f32) -> u64 {
     let arg2 = if effects_off() {
         let hash = rewrite(module_accessor, arg2.hash);
         if hash != arg2.hash {
@@ -308,7 +308,7 @@ unsafe fn filter_req_common(module_accessor: *mut OpaqueAccessor, arg2: Hash40, 
 }
 
 #[skyline::hook(replace = abi::req_screen)]
-unsafe fn filter_req_screen(
+unsafe fn deluxe_rewrite_filter_req_screen(
     module_accessor: *mut OpaqueAccessor,
     arg2: Hash40,
     arg3: bool,
@@ -323,7 +323,7 @@ unsafe fn filter_req_screen(
 }
 
 #[skyline::hook(replace = abi::req_screen_system)]
-unsafe fn filter_req_screen_system(
+unsafe fn deluxe_rewrite_filter_req_screen_system(
     module_accessor: *mut OpaqueAccessor,
     arg2: Hash40,
     arg3: bool,
@@ -347,14 +347,14 @@ pub(super) fn install() {
             }
         };
     }
-    install!(256, abi::req, filter_req);
-    install!(257, abi::req_2d, filter_req_2d);
-    install!(258, abi::req_on_joint, filter_req_on_joint);
-    install!(259, abi::req_follow, filter_req_follow);
-    install!(260, abi::req_continual, filter_req_continual);
-    install!(261, abi::req_common, filter_req_common);
-    install!(262, abi::req_screen, filter_req_screen);
-    install!(263, abi::req_screen_system, filter_req_screen_system);
+    install!(256, abi::req, deluxe_rewrite_filter_req);
+    install!(257, abi::req_2d, deluxe_rewrite_filter_req_2d);
+    install!(258, abi::req_on_joint, deluxe_rewrite_filter_req_on_joint);
+    install!(259, abi::req_follow, deluxe_rewrite_filter_req_follow);
+    install!(260, abi::req_continual, deluxe_rewrite_filter_req_continual);
+    install!(261, abi::req_common, deluxe_rewrite_filter_req_common);
+    install!(262, abi::req_screen, deluxe_rewrite_filter_req_screen);
+    install!(263, abi::req_screen_system, deluxe_rewrite_filter_req_screen_system);
 }
 
 fn log_entry(id: u64, address: *const ()) -> bool {

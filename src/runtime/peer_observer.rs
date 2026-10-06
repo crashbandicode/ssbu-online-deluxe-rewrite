@@ -1,0 +1,418 @@
+//! Opt-in inbound observer. Hooks publish atomics. The diagnostic thread logs.
+//!
+//! One compare-exchange gate covers map updates, the ring, and the poll copy.
+//! A failed exchange returns immediately. The poll copies under the gate and
+//! calls `record` only after releasing it.
+use super::{record, Code};
+use crate::peer_observer::{
+    classify_index, diagnose, find_source, message_body_range, present_observation, Diagnostic,
+    IndexChange, MessageBody, PARSED_MESSAGE_GUARD, PARSED_MESSAGE_OFFSET, STATION_INDEX_GUARD,
+    STATION_INDEX_OFFSET, STATION_SLOTS,
+};
+use skyline::hooks::{getRegionAddress, InlineCtx, Region};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+
+const RING: usize = 4;
+
+struct Slot {
+    hash: AtomicU64,
+    packed: AtomicU64,
+    generation: AtomicU64,
+    name0: AtomicU64,
+    name1: AtomicU64,
+}
+
+impl Slot {
+    const fn empty() -> Self {
+        Self {
+            hash: AtomicU64::new(0),
+            packed: AtomicU64::new(0),
+            generation: AtomicU64::new(0),
+            name0: AtomicU64::new(0),
+            name1: AtomicU64::new(0),
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct Copied {
+    hash: u64,
+    shown: u64,
+    map: bool,
+    name0: u64,
+    name1: u64,
+    name_len: usize,
+}
+
+static INSTALLED: AtomicBool = AtomicBool::new(false);
+static BUSY: AtomicBool = AtomicBool::new(false);
+static HEAD: AtomicU64 = AtomicU64::new(0);
+static LAST: AtomicU64 = AtomicU64::new(0);
+static DROPPED: AtomicU64 = AtomicU64::new(0);
+static LOGGED_DROPS: AtomicU64 = AtomicU64::new(0);
+static CLEAR_ALL: AtomicBool = AtomicBool::new(false);
+static PENDING: [AtomicU64; 4] = [const { AtomicU64::new(0) }; 4];
+static IDS: [AtomicU64; STATION_SLOTS] = [const { AtomicU64::new(0) }; STATION_SLOTS];
+static GENS: [AtomicU64; STATION_SLOTS] = [const { AtomicU64::new(0) }; STATION_SLOTS];
+static SLOTS: [Slot; RING] = [const { Slot::empty() }; RING];
+
+pub(super) fn install() {
+    if !super::settings().peer_observer {
+        return;
+    }
+    if !super::pia_rtt::ready() {
+        record(Code::HookRejected, 0, 11);
+        skyline::println!(
+            "[Deluxe] peer observer not installed; Pia leave and cleanup hooks are not active"
+        );
+        return;
+    }
+    let guards = [
+        (PARSED_MESSAGE_OFFSET, PARSED_MESSAGE_GUARD.as_slice()),
+        (STATION_INDEX_OFFSET, STATION_INDEX_GUARD.as_slice()),
+    ];
+    for (offset, expected) in guards {
+        if !unsafe { guard_matches(offset, expected) } {
+            record(Code::HookRejected, offset as u64, 0x153844);
+            skyline::println!(
+                "[Deluxe] peer observer guard mismatch at {offset:#x}; not installed"
+            );
+            return;
+        }
+    }
+    skyline::install_hooks!(
+        deluxe_rewrite_observe_parsed_message,
+        deluxe_rewrite_observe_station_index
+    );
+    INSTALLED.store(true, Ordering::Release);
+    record(Code::HookInstalled, PARSED_MESSAGE_OFFSET as u64, STATION_INDEX_OFFSET as u64);
+    skyline::println!("[Deluxe] peer observer installed");
+}
+
+/// Confirmed RTT station leave. A disabled observer returns before the gate.
+pub(super) fn invalidate_index(index: u32) {
+    if !INSTALLED.load(Ordering::Acquire) {
+        return;
+    }
+    let Ok(index) = u8::try_from(index) else {
+        return;
+    };
+    if usize::from(index) >= STATION_SLOTS {
+        return;
+    }
+    if enter() {
+        retire_index(index);
+        exit();
+        return;
+    }
+    let word = usize::from(index) / 64;
+    PENDING[word].fetch_or(1u64 << (index % 64), Ordering::Release);
+}
+
+/// Confirmed RTT session end for the active protocol. Disabled returns immediately.
+pub(super) fn invalidate_session() {
+    if !INSTALLED.load(Ordering::Acquire) {
+        return;
+    }
+    if enter() {
+        retire_all();
+        exit();
+        return;
+    }
+    CLEAR_ALL.store(true, Ordering::Release);
+}
+
+pub(super) fn poll() {
+    if !INSTALLED.load(Ordering::Acquire) {
+        return;
+    }
+    if !enter() {
+        return;
+    }
+    let dropped = DROPPED.load(Ordering::Relaxed);
+    let logged = LOGGED_DROPS.load(Ordering::Relaxed);
+    if dropped != logged {
+        LOGGED_DROPS.store(dropped, Ordering::Relaxed);
+    }
+    let mut batch = [Copied {
+        hash: 0,
+        shown: 0,
+        map: false,
+        name0: 0,
+        name1: 0,
+        name_len: 0,
+    }; RING];
+    let mut count = 0usize;
+    let head = HEAD.load(Ordering::Relaxed);
+    let mut next = LAST.load(Ordering::Relaxed);
+    while next != head && count < RING {
+        let slot = &SLOTS[next as usize % RING];
+        let packed = slot.packed.load(Ordering::Relaxed);
+        let generation = slot.generation.load(Ordering::Relaxed);
+        let index = (packed & 0xff) as usize;
+        let live = if index < STATION_SLOTS {
+            Some(GENS[index].load(Ordering::Relaxed))
+        } else {
+            None
+        };
+        let (shown, map) = present_observation(packed, generation, live);
+        batch[count] = Copied {
+            hash: slot.hash.load(Ordering::Relaxed),
+            shown,
+            map,
+            name0: slot.name0.load(Ordering::Relaxed),
+            name1: slot.name1.load(Ordering::Relaxed),
+            name_len: ((packed >> 32) & 0xff) as usize,
+        };
+        count += 1;
+        next = next.wrapping_add(1);
+    }
+    LAST.store(next, Ordering::Relaxed);
+    exit();
+    if dropped != logged {
+        record(Code::PeerObserveDrop, dropped, 0);
+    }
+    for item in &batch[..count] {
+        let code = if item.map {
+            Code::PeerObserveMap
+        } else {
+            Code::PeerObserve
+        };
+        record(code, item.hash, item.shown);
+        if item.name_len > 0 {
+            record(Code::PeerObserveName, item.name0, item.name1);
+        }
+    }
+}
+
+fn note_index(index: u8, source_id: u64) {
+    if usize::from(index) >= STATION_SLOTS {
+        return;
+    }
+    if !enter() {
+        DROPPED.fetch_add(1, Ordering::Relaxed);
+        return;
+    }
+    let slot = usize::from(index);
+    let previous = IDS[slot].load(Ordering::Relaxed);
+    if classify_index(previous, index, source_id) != IndexChange::Updated {
+        exit();
+        return;
+    }
+    IDS[slot].store(source_id, Ordering::Relaxed);
+    let generation = GENS[slot].fetch_add(1, Ordering::Relaxed).wrapping_add(1);
+    let mut sample = diagnose(source_id, 0, &[], Some((index, generation)));
+    sample.map_update = true;
+    if !enqueue(sample) {
+        DROPPED.fetch_add(1, Ordering::Relaxed);
+    }
+    exit();
+}
+
+fn enter() -> bool {
+    if BUSY
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
+        return false;
+    }
+    apply_pending();
+    true
+}
+
+fn exit() {
+    BUSY.store(false, Ordering::Release);
+}
+
+fn apply_pending() {
+    if CLEAR_ALL.swap(false, Ordering::AcqRel) {
+        retire_all();
+    }
+    for (word, pending) in PENDING.iter().enumerate() {
+        let mut bits = pending.swap(0, Ordering::AcqRel);
+        while bits != 0 {
+            let bit = bits.trailing_zeros() as usize;
+            let index = word * 64 + bit;
+            if index < STATION_SLOTS {
+                retire_index(index as u8);
+            }
+            bits &= bits - 1;
+        }
+    }
+}
+
+fn retire_index(index: u8) {
+    let Some((id, generation)) = zero_slot(index) else {
+        return;
+    };
+    let mut sample = diagnose(id, 0, &[], Some((index, generation)));
+    sample.map_update = true;
+    if !enqueue(sample) {
+        DROPPED.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+fn retire_all() {
+    let mut any = false;
+    for index in 0..STATION_SLOTS {
+        if zero_slot(index as u8).is_some() {
+            any = true;
+        }
+    }
+    if !any {
+        return;
+    }
+    let mut sample = diagnose(0, 0, &[], None);
+    sample.map_update = true;
+    if !enqueue(sample) {
+        DROPPED.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+fn zero_slot(index: u8) -> Option<(u64, u64)> {
+    let slot = usize::from(index);
+    let previous = IDS[slot].load(Ordering::Relaxed);
+    if previous == 0 {
+        return None;
+    }
+    IDS[slot].store(0, Ordering::Relaxed);
+    let generation = GENS[slot].fetch_add(1, Ordering::Relaxed).wrapping_add(1);
+    Some((previous, generation))
+}
+
+fn enqueue(sample: Diagnostic) -> bool {
+    let head = HEAD.load(Ordering::Relaxed);
+    let last = LAST.load(Ordering::Relaxed);
+    if head.wrapping_sub(last) >= RING as u64 {
+        return false;
+    }
+    let slot = &SLOTS[head as usize % RING];
+    slot.hash.store(sample.source_hash, Ordering::Relaxed);
+    slot.packed.store(pack(&sample), Ordering::Relaxed);
+    slot.generation.store(sample.generation, Ordering::Relaxed);
+    let (name0, name1) = name_words(&sample.name);
+    slot.name0.store(name0, Ordering::Relaxed);
+    slot.name1.store(name1, Ordering::Relaxed);
+    HEAD.store(head.wrapping_add(1), Ordering::Relaxed);
+    true
+}
+
+fn pack(sample: &Diagnostic) -> u64 {
+    u64::from(sample.index)
+        | (u64::from(sample.kind) << 8)
+        | (u64::from(sample.subtype) << 16)
+        | (u64::from(sample.interface) << 24)
+        | (u64::from(sample.name_len) << 32)
+        | (u64::from(sample.truncated) << 40)
+        | (u64::from(sample.interface_known) << 41)
+        | (u64::from(sample.disconnect) << 42)
+        | (u64::from(sample.map_update) << 56)
+}
+
+fn name_words(name: &[u8; 16]) -> (u64, u64) {
+    let mut first = [0u8; 8];
+    let mut second = [0u8; 8];
+    first.copy_from_slice(&name[..8]);
+    second.copy_from_slice(&name[8..]);
+    (u64::from_le_bytes(first), u64::from_le_bytes(second))
+}
+
+fn lookup(source_id: u64) -> Option<(u8, u64)> {
+    let mut stored = [0u64; STATION_SLOTS];
+    for (slot, id) in stored.iter_mut().zip(IDS.iter()) {
+        *slot = id.load(Ordering::Relaxed);
+    }
+    let index = find_source(&stored, source_id)?;
+    let generation = GENS[usize::from(index)].load(Ordering::Relaxed);
+    Some((index, generation))
+}
+
+unsafe fn guard_matches(offset: usize, expected: &[u8]) -> bool {
+    let base = getRegionAddress(Region::Text) as usize;
+    let end = getRegionAddress(Region::Rodata) as usize;
+    let Some(address) = base.checked_add(offset) else {
+        return false;
+    };
+    let Some(stop) = address.checked_add(expected.len()) else {
+        return false;
+    };
+    if address % 4 != 0 || stop > end {
+        return false;
+    }
+    let bytes = std::slice::from_raw_parts(address as *const u8, expected.len());
+    bytes == expected
+}
+
+fn read_at<T: Copy>(base: u64, offset: usize) -> Option<T> {
+    let address = (base as usize).checked_add(offset)?;
+    if address < 0x10000 {
+        return None;
+    }
+    Some(unsafe { (address as *const T).read_unaligned() })
+}
+
+#[skyline::hook(offset = STATION_INDEX_OFFSET, inline)]
+unsafe fn deluxe_rewrite_observe_station_index(ctx: &InlineCtx) {
+    let station = ctx.registers[0].x();
+    let Some(index) = read_at::<u8>(station, 0x38) else {
+        return;
+    };
+    let Some(source_id) = read_at::<u64>(station, 0x40) else {
+        return;
+    };
+    note_index(index, source_id);
+}
+
+#[skyline::hook(offset = PARSED_MESSAGE_OFFSET, inline)]
+unsafe fn deluxe_rewrite_observe_parsed_message(ctx: &InlineCtx) {
+    let packet = ctx.registers[22].x();
+    let message = ctx.registers[21].x();
+    let Some(wire_len) = read_at::<u32>(packet, 0x5e8) else {
+        return;
+    };
+    let Some(message_at) = read_at::<u64>(message, 0) else {
+        return;
+    };
+    let Some(flags) = read_at::<u8>(message, 0x30) else {
+        return;
+    };
+    let Some(body_len) = read_at::<u16>(message, 0x32) else {
+        return;
+    };
+    let Some(kind_word) = read_at::<u32>(message, 0x34) else {
+        return;
+    };
+    let Some(source_id) = read_at::<u64>(message, 0x40) else {
+        return;
+    };
+    if crate::peer_observer::kind_of(kind_word) != 0x14 {
+        return;
+    }
+    let Some(range) = message_body_range(packet, wire_len, message_at, flags, body_len) else {
+        DROPPED.fetch_add(1, Ordering::Relaxed);
+        return;
+    };
+    let mut inline_body = [0u8; 0x5a0];
+    let body = match range {
+        MessageBody::Empty => &[][..],
+        MessageBody::Bytes { at, len } => {
+            if at < 0x10000 {
+                DROPPED.fetch_add(1, Ordering::Relaxed);
+                return;
+            }
+            unsafe {
+                core::ptr::copy_nonoverlapping(at as *const u8, inline_body.as_mut_ptr(), len);
+            }
+            &inline_body[..len]
+        }
+    };
+    if !enter() {
+        DROPPED.fetch_add(1, Ordering::Relaxed);
+        return;
+    }
+    let sample = diagnose(source_id, kind_word, body, lookup(source_id));
+    if !enqueue(sample) {
+        DROPPED.fetch_add(1, Ordering::Relaxed);
+    }
+    exit();
+}

@@ -41,3 +41,24 @@ pub(super) unsafe fn accessible(address: usize, size: usize, write: bool) -> boo
             .checked_add(info.size)
             .is_some_and(|mapped_end| end as u64 <= mapped_end)
 }
+
+/// Readable mapping that contains `address`, as `(base, size)`.
+pub(super) unsafe fn region(address: usize) -> Option<(usize, usize)> {
+    if address < 0x10000 {
+        return None;
+    }
+    let mut info = MemoryInfo::default();
+    let result: u64;
+    core::arch::asm!(
+        "svc 0x6",
+        inout("x0") &mut info as *mut MemoryInfo as u64 => result,
+        lateout("x1") _,
+        in("x2") address as u64,
+        clobber_abi("C"),
+        options(nostack),
+    );
+    if result as u32 != 0 || info.size == 0 || info.permission & 1 == 0 {
+        return None;
+    }
+    Some((info.address as usize, info.size as usize))
+}
