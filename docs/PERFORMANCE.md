@@ -253,3 +253,90 @@ This small pilot did not show an On-related dip and cannot establish savings.
 It is not the planned ten-repetition-per-condition experiment, a GPU benchmark,
 or an input-latency comparison. Earlier 2.2-second tests, including filenames
 containing gigaflare, are only short neutral-B instrumentation checks.
+
+## Custom CLI Eden acceptance, 2026-10-05/06
+
+The delivery at /home/intpa/eden-cli-handoff was accepted after READY and all
+4644 SHA256SUMS entries verified. AppImage SHA-256:
+fd4b91536e3d60f9c7dacddaaa01a536d6999a16c4a985a411a6e7c8ed71598b.
+Its source base is 10bcd2d849843b146a79c61a21df615e1bdcfcde plus the supplied
+CLI patch; it is not the stock 0.2.1 binary. Do not pool their measurements.
+All runs used NRO 5d47c70452ce73ba from source 42a60afbe814.
+
+The CLI skipped the intro, navigated to Training, injected controller input,
+read runtime state and captured native X11 screenshots. The Vanilla run checked
+the Deluxe global window, SGPO, and opening/closing the Training Modpack menu.
+LessLag core reached the same Training-stage Sephiroth/Ganondorf pairing with
+SGPO and the global window. Both modes accepted live FX changes. Rendering
+status showed three active textures in Vanilla and two in LessLag core, with
+the latter's index/poll/flush counters advancing. These are functional checks;
+the full LessLag profile remains incomplete.
+
+Vulkan, docked, 1x, speed 100%, Bilinear, asynchronous shader compilation and
+presentation off. Custom source reports GPU accuracy High (UI label Accurate).
+The custom build changed some defaults: the per-title scaling default loaded
+Nearest even though the old INI stored Bilinear. It was explicitly restored to
+Bilinear and persisted with `scaling_filter\default=false`. Changing the active
+custom setting through settings.set and calling settings.save did not persist
+that per-title override across restart; verify effective settings after loading
+the game. No claim that the graphics configuration equals stock is made.
+
+| Mode | FX / scope | Capture | Callback p95 ms | Max ms | Samples / API records |
+| --- | --- | --- | --- | --- | --- |
+| Vanilla | On / all | 914928122785 | 16.882 | 18.583 | 602 / 2403 |
+| Vanilla | Off / all | 915986659695 | 16.927 | 18.598 | 602 / 2403 |
+| LessLag core | On / all | 929403436991 | 16.946 | 17.959 | 602 / 2402 |
+| LessLag core | Off / all | 930702295620 | 16.907 | 17.788 | 602 / 2402 |
+| Renderer bypass | Off / online, offline Training | 940587468188 | 16.939 | 79.244 | 597 / 2385 |
+
+Each capture completed with zero skipped/missing records and no analyzer warnings.
+No screenshots ran during capture windows. The first four contain 252 or 253
+successive callbacks with HID button mask 0x2 (B) set, spanning 4183–4200 ms between
+first and last observations for a requested 4200 ms CLI lease. This corroborates
+guest-visible input; the acknowledgment alone only proves frontend acceptance.
+The two Off/all captures contain actual ACMD suppression events for hashes
+0x10df40d690 and 0x11ea056d9f. This is stronger than observing the configured flag.
+
+The bypass test left render_mode=lesslag_core in the INI and added
+DISABLE_RENDERER before boot. Startup logged the bypass, actual mode remained
+Vanilla, active textures were three, and render-patch counters stayed zero.
+It also tested effects=off with effects_scope=online in Training against Dark Pit:
+filtering stayed inactive, no suppression events occurred during capture, and
+the visual effect remained visible in a separate screenshot. The 79 ms callback
+gap is retained; this first-shot scope test is not a warmed performance trial,
+and its cause was not isolated. The recovery flag was removed afterward.
+
+These single smoke pairs do not establish an FX performance benefit or input
+latency. CLI leases use a host timer, not frame scheduling; no latency estimate
+is derived from them. Full traces, screenshots, input observations, effective
+settings snapshots and custom-acceptance.json are retained under
+dist/5d47c70452ce73ba/runtime-evidence/custom-* outside Git. The three supervisors
+used 8 GiB RAM limits, zero swap and finite 900/600/600-second lifetimes; all ended
+by their runtime limit with zero recorded OOM kills. Observed peak RAM stayed
+below 7.3 GiB. An expected runtime_limit exit is not a game crash.
+
+### Objective latency work after the CLI migration
+
+Fable 5.1 xhigh reviewed the custom source; the primary checked and corrected the
+measurement boundaries. The revised report is in the debug bundle's
+review-evidence/custom-eden-measurement-review.md. Key acceptance requirements:
+
+- Eden's OnFrameDisplayed is a composite callback. It runs even on a hidden-window
+  early return and can precede asynchronous host presentation. TAS advances there,
+  so a TAS index is not automatically a game-frame or display-frame index.
+- Carry unique queue/layer/frame identity through the compositor, renderer and
+  actual host present call. Matching repeated texture slots or nearby timestamps
+  alone cannot establish causal correspondence. Guest parcel timestamps need
+  runtime validation before treating them as a bridge between clocks.
+- Identify the first frame whose content reacts to the input. An FX request marks
+  simulation work, not the first visible reaction; inferring that frame from the
+  very render delay being tested would be circular. Bounded frame-content capture
+  or an independently synchronized capture is still required.
+- Predeclare warm-up and independently evidenced interruptions. Retain genuine
+  stalls, report distributions and paired differences, and keep runs independent
+  when estimating uncertainty. Do not discard every FPS dip.
+
+No emulator instrumentation patch or TAS playback validation is claimed here.
+The next measurement should distinguish input availability, simulation response,
+render/composite submission and physical display. The documented native six-frame
+reference remains a reference, not a correction subtracted from these traces.

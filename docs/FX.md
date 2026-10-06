@@ -95,7 +95,14 @@ At most 32 primitive arguments are retained; unknown/oversized commands pass thr
 On installed c1706bbe9589de97, the user confirmed Palutena/Sephiroth Off/On, the
 global window, SGPO, Training Modpack menu and save/load coexistence. Logs corroborate
 Palutena bomb and Sephiroth Shadow Flare charge/beam and Gigaflare interceptions.
-The expanded candidate and online-only gating are built but await tomorrow's tests.
+On final bundle 5d47c70452ce73ba, the custom CLI Eden build also verified live
+Sephiroth neutral-B suppression with scope all in Vanilla and LessLag core.
+The same named ACMD interceptions appear in both Off traces. With effects=off
+and effects_scope=online, offline Training retained its visuals; capture
+940587468188 reported effective filtering false throughout, and no suppression
+events occurred within that capture. The online tracker installed successfully.
+Ordinary offline Smash, live online transitions and the rest of the expanded
+move catalog still need runtime tests.
 There is no console/performance acceptance yet.
 
 ## Reduced next

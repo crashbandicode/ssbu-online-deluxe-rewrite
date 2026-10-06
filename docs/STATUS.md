@@ -25,7 +25,7 @@ LessLag core experiment now reconstructs part of the render engine.
 | FPS / frame graph | Implemented from overlay callback intervals; not network timing |
 | Streamer mode / peer diagnostics | Pending |
 | FX On / Off | Palutena/Sephiroth live toggles, persistence, TM save/load and SGPO accepted; expanded catalog awaits tests |
-| FX online-only scope | INI defaults to online; all is the offline+online test override; live transitions untested |
+| FX online-only scope | INI defaults to online; all is the offline+online test override; offline Training preservation verified, live online transitions untested |
 | FX Reduced | Reserved and unavailable; config rejects it; defensive policy preserves visuals |
 
 ## Next work
@@ -33,6 +33,12 @@ LessLag core experiment now reconstructs part of the render engine.
 The user chose [measured Reduced FX development](NEXT_SESSION.md) next: identify a
 Switch dip, reproduce in Eden, fix one effect, test that candidate on Switch, repeat.
 The expanded Off catalog must first pass tomorrow's move and scope smoke tests.
+
+The custom CLI Eden delivery passed Vanilla and LessLag-core Training smoke tests
+with the same final NRO (5d47c70452ce73ba, source 42a60af). Five paired callback/API
+captures completed without dropped trace records. DISABLE_RENDERER correctly
+kept Vanilla behavior despite an INI LessLag request, and online-only FX scope
+left offline Training effects intact. See PERFORMANCE.md for evidence and limits.
 
 LessLag still needs full render sequencing, texture-wait relocation, pacing and
 profile transitions. The core experiment is deliberately named separately from
