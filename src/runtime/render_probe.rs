@@ -12,6 +12,10 @@ use std::{
 const RANGES: &[(&str, usize, usize)] = &[
     // Oct 5 console crash PC and first three callers; read-only comparison.
     ("switch_crash_pc", 0x3ce000, 0x1200),
+    // Nearby owner code and relocated vtable candidates; no new hooks.
+    ("switch_crash_owner", 0x3cc000, 0x5000),
+    ("switch_crash_vtables", 0x4f69000, 0x2000),
+    ("switch_crash_caller2_entry", 0x15b1500, 0x300),
     ("switch_crash_caller1", 0x15f6600, 0x1200),
     ("switch_crash_caller2", 0x15b2600, 0x800),
     ("switch_crash_caller3", 0x15dbc00, 0x800),
