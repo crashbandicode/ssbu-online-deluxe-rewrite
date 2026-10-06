@@ -1,5 +1,5 @@
-//! Startup-only pipeline experiments. These deliberately omit render_opts,
-//! dynamic resolution, pacer patches and runtime profile switching.
+//! Startup-only rendering policies. Full LessLag also moves fighter recording.
+//! Dynamic resolution and runtime profile transitions remain separate work.
 use super::{logging, memory, record, settings, Code};
 use crate::config::RenderMode;
 use skyline::hooks::{getRegionAddress, InlineCtx, Region};
@@ -26,6 +26,7 @@ pub(super) fn mode() -> RenderMode {
 pub(super) fn status() -> &'static str {
     match STATE.load(Ordering::Acquire) {
         1 => "Awaiting window",
+        2 if mode().render_opts() => "Active; restart to change",
         2 => "Core only; restart",
         3 => "Refused; see log",
         _ => "Vanilla",
@@ -59,7 +60,7 @@ unsafe fn select_index(ctx: &mut InlineCtx) {
         // wrap and zero-extension exactly in the inactive path.
         input.wrapping_add(2)
     } else {
-        input.wrapping_add(1) % current.textures() as u32
+        input.wrapping_add(u32::from(!current.immediate())) % current.textures() as u32
     };
     ctx.registers[9].set_x(output as u64);
     INDEX_CALLS.fetch_add(1, Ordering::Relaxed);
@@ -81,7 +82,8 @@ unsafe fn render_wait(ctx: &mut InlineCtx) {
 
 #[skyline::hook(offset = FLUSH)]
 unsafe fn flush_dispatches(object: *mut u8, flag: u32) {
-    if mode() != RenderMode::Vanilla && !object.is_null() {
+    let current = mode();
+    if current != RenderMode::Vanilla && !current.immediate() && !object.is_null() {
         // Sizes independently checked against host ASM: u8, u32, u64, u8.
         // This is the engine-owned object argument, never a guessed global.
         if *object.add(0x1d18) != 0 {
@@ -89,14 +91,18 @@ unsafe fn flush_dispatches(object: *mut u8, flag: u32) {
             *object.add(0x1d30).cast::<u64>() = u64::from((!previous) & 1);
             *object.add(0x1d28) = 1;
         }
-        FLUSH_CALLS.fetch_add(1, Ordering::Relaxed);
     }
+    FLUSH_CALLS.fetch_add(1, Ordering::Relaxed);
     let begin = super::api_trace::start();
-    original!()(object, flag);
+    let calls = if current.immediate() { 3 } else { 1 };
+    for _ in 0..calls {
+        original!()(object, flag);
+    }
+    super::render_ultra::ORIGINAL_FLUSHES.fetch_add(calls, Ordering::Relaxed);
     super::api_trace::end(begin, 5, -1, -1);
 }
 
-unsafe fn expect(offset: usize, expected: u32) -> bool {
+pub(super) unsafe fn expect(offset: usize, expected: u32) -> bool {
     let address = getRegionAddress(Region::Text) as usize + offset;
     if !memory::accessible(address, 4, false) {
         record(Code::HookRejected, offset as u64, 0);
@@ -117,6 +123,8 @@ pub(super) fn install() {
         return; // Vanilla has no rendering text patches.
     }
     REQUEST.store(settings().render_mode as u8, Ordering::Release);
+    let sequence = settings().render_mode.render_opts();
+    let ultra = super::render_ultra::requested();
     logging::startup_phase("renderer_preflight");
     let signatures = [
         (INDEX, INDEX_WORD),
@@ -131,7 +139,9 @@ pub(super) fn install() {
         signatures
             .iter()
             .all(|&(offset, word)| expect(offset, word))
-    } {
+    } || (sequence && !super::render_sequence::preflight())
+        || (ultra && !super::render_ultra::preflight())
+    {
         STATE.store(3, Ordering::Release);
         return;
     }
@@ -161,6 +171,12 @@ pub(super) fn install() {
             branch || far_entry,
             "renderer hook did not install at {offset:x}"
         );
+    }
+    if sequence {
+        unsafe { super::render_sequence::install() };
+    }
+    if ultra {
+        unsafe { super::render_ultra::install() };
     }
     ARMED.store(true, Ordering::Release);
     STATE.store(1, Ordering::Release);

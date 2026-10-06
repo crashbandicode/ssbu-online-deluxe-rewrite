@@ -55,7 +55,7 @@ impl FxScope {
     }
 }
 
-/// Experimental startup-only pipeline subsets; not full fork preset parity.
+/// Startup-only render policies. Core variants retain the old sequencing.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 #[repr(u8)]
 pub enum RenderMode {
@@ -63,12 +63,16 @@ pub enum RenderMode {
     Vanilla = 0,
     LessLagCore = 1,
     DoublesCore = 2,
+    LessLag = 3,
+    LessLagUltra = 4,
 }
 impl RenderMode {
     pub const fn from_byte(value: u8) -> Self {
         match value {
             1 => Self::LessLagCore,
             2 => Self::DoublesCore,
+            3 => Self::LessLag,
+            4 => Self::LessLagUltra,
             _ => Self::Vanilla,
         }
     }
@@ -77,6 +81,8 @@ impl RenderMode {
             Self::Vanilla => "vanilla",
             Self::LessLagCore => "lesslag_core",
             Self::DoublesCore => "doubles_core",
+            Self::LessLag => "lesslag",
+            Self::LessLagUltra => "llultra",
         }
     }
     pub const fn label(self) -> &'static str {
@@ -84,11 +90,19 @@ impl RenderMode {
             Self::Vanilla => "Vanilla",
             Self::LessLagCore => "LessLag core",
             Self::DoublesCore => "Doubles core",
+            Self::LessLag => "LessLag",
+            Self::LessLagUltra => "LLUltra",
         }
+    }
+    pub const fn immediate(self) -> bool {
+        matches!(self, Self::LessLagUltra)
+    }
+    pub const fn render_opts(self) -> bool {
+        matches!(self, Self::LessLag | Self::LessLagUltra)
     }
     pub const fn textures(self) -> i32 {
         match self {
-            Self::LessLagCore => 2,
+            Self::LessLagCore | Self::LessLag | Self::LessLagUltra => 2,
             _ => 3,
         }
     }
@@ -162,16 +176,17 @@ pub fn parse(text: &str) -> Result<Config, String> {
                 };
             }
             "render_mode" => {
-                config.render_mode = match value {
-                    "vanilla" => RenderMode::Vanilla,
-                    "lesslag_core" => RenderMode::LessLagCore,
-                    "doubles_core" => RenderMode::DoublesCore,
-                    _ => {
-                        return Err(error(
-                            "render_mode must be vanilla, lesslag_core or doubles_core",
-                        ))
-                    }
-                };
+                config.render_mode =
+                    match value {
+                        "vanilla" => RenderMode::Vanilla,
+                        "lesslag_core" => RenderMode::LessLagCore,
+                        "lesslag" => RenderMode::LessLag,
+                    "llultra" => RenderMode::LessLagUltra,
+                        "doubles_core" => RenderMode::DoublesCore,
+                        _ => return Err(error(
+                            "render_mode must be vanilla, lesslag, llultra, lesslag_core or doubles_core",
+                        )),
+                    };
             }
             "input_buffer" => {
                 config.input_buffer = if value == "auto" {
@@ -260,6 +275,8 @@ mod tests {
             RenderMode::Vanilla,
             RenderMode::LessLagCore,
             RenderMode::DoublesCore,
+            RenderMode::LessLag,
+            RenderMode::LessLagUltra,
         ] {
             let config = Config {
                 render_mode,
@@ -267,7 +284,7 @@ mod tests {
             };
             assert_eq!(parse(&config.serialize()).unwrap(), config);
         }
-        assert!(parse("version=1\nrender_mode=lesslag").is_err());
+        assert!(parse("version=1\nrender_mode=unrecognized").is_err());
         assert!(parse("version=1\nrender_mode=vanilla\nrender_mode=vanilla").is_err());
         assert_eq!(RenderMode::from_byte(255), RenderMode::Vanilla);
     }

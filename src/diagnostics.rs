@@ -42,6 +42,9 @@ pub enum Code {
     FxOnlineContext = 30,
     TimingStarted = 31,
     TimingFinished = 32,
+    RenderOwner = 33,
+    RenderCaller = 34,
+    RenderFlushTarget = 35,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

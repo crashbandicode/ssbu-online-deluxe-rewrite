@@ -7,12 +7,14 @@ use std::{
         Mutex,
     },
 };
-pub const CAPACITY: usize = 4096;
+pub const CAPACITY: usize = 8192;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Event {
     pub begin: u64,
     pub end: u64,
     /// 1=present, 2=acquire, 3=texture CPU wait, 4=render poll, 5=dispatch flush.
+    /// 6=HID poll/marker (index=24-bit serial, result=left Y),
+    /// 7=same poll sampling counter (index=serial, result=counter low32).
     pub kind: u8,
     /// Texture index for present/acquire; -1 for events without an index.
     pub index: i32,

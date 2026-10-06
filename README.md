@@ -1,7 +1,8 @@
 # Online Deluxe rewrite
 
 Private Rust/Skyline reconstruction for Smash Ultimate **13.0.5**, delivered as **one NRO**.
-This is an initial development build, not a completed LessLag replacement.
+This is a development build. It is not yet a complete replacement for the fork's
+runtime profile system, and no Switch compatibility is claimed.
 
 Implemented:
 - Global top-left Player Info window with the fork's table/navigation UX: character FX **On / Off**, default **On**. Reduced is unavailable.
@@ -9,11 +10,24 @@ Implemented:
 - Bounded events, persistent install checkpoints, panic diagnostics, build identity and matching debug symbols.
 - Expanded named character effects from the supplied peer mod: [exact scope](docs/FX.md).
 
-**Rendering defaults to Vanilla.** An opt-in, restart-only `lesslag_core` experiment
-reconstructs the two-texture ring and OneBehind flush/index behavior, with runtime
-readback and bounded API traces. It is a partial engine, not full LessLag parity
-or proven input-lag reduction. Ultra, automatic profiles, network-player telemetry,
-overclocking and performance scaling remain pending. Doubles work is deferred.
+**Rendering defaults to Vanilla.** `render_mode` selects one startup-only policy:
+
+| `render_mode` | Behavior |
+| --- | --- |
+| `vanilla` (default) | No rendering text patches; the game's three-texture TwoBehind path |
+| `lesslag` | Full modern LessLag rendering: two active textures, OneBehind index/flush, render-finished poll bypass and render_opts fighter model/recording/dispatch sequencing |
+| `llultra` | LessLag sequencing plus Immediate index, a guarded pre-present flush, triple original flush and suppression of the later flush |
+| `lesslag_core` | Component experiment: LessLag without render_opts sequencing |
+| `doubles_core` | Component experiment: three textures with OneBehind; not full LLDoubles |
+
+Changing the mode requires a full game restart. There is no in-menu preset
+selection, automatic online profile, dynamic resolution or clock change yet.
+In custom Eden, captured-image evidence at the normal injection phase shows the crouch response
+three frames earlier with `lesslag` and four with `llultra` than with `vanilla`;
+delayed-input trials vary by one frame while preserving the ordering.
+See [performance](docs/PERFORMANCE.md) for the method and limits. That is not a
+console, display or end-to-end latency result. Network-player telemetry and full
+Doubles validation remain pending.
 The fork's original source and exact changes are preserved under [reference](reference/README.md).
 See the [parity ledger](docs/STATUS.md).
 
@@ -68,12 +82,13 @@ menu/save-load coexistence are confirmed on the prior Eden candidate. Expanded
 effect coverage, online scope transitions and console behavior await validation.
 
 The first controller (or handheld fallback) operates it. Ordinary game input is not
-suppressed. No game-owned text pane or Layout::Draw hook is used.
+suppressed. No game-owned text pane or Layout::Draw hook is used, and no mode patches
+SGPO's 0x374812c neighborhood.
 Settings save to sd:/ultimate/ssbu_online_deluxe_rewrite/config.ini; config.previous.ini
 retains the last good version for recovery across interrupted replacement.
 On/Off changes future requests; existing effects expire normally.
 effects_scope=online is the default. Use effects_scope=all for offline + online testing;
-INI changes, including `render_mode=vanilla|lesslag_core`, require restarting the game.
+INI changes, including `render_mode`, require restarting the game.
 See [performance measurements](docs/PERFORMANCE.md), [default config](config/default.ini) and
 [Eden test override](config/eden-test.ini). Install the test config with the matching
 new NRO; older builds may reject configuration keys they do not recognize.

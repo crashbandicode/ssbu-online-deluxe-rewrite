@@ -1,9 +1,40 @@
 # Measuring performance and LessLag
 
-The rewrite defaults to Vanilla rendering. The opt-in, restart-only `lesslag_core`
-experiment has a two-texture ring and OneBehind flush/index behavior. Full LessLag
-parity and Reduced FX remain unfinished. A constant 60 FPS does not establish low input latency, and a
-callback interval is not a displayed-frame interval.
+The rewrite defaults to Vanilla rendering. Opt-in, startup-only modes reconstruct
+the fork's modern LessLag and LLUltra rendering; Reduced FX remains unfinished. A
+constant 60 FPS does not establish low input latency, and a callback interval is
+not a displayed-frame interval.
+
+## Startup render modes
+
+Set `render_mode` in config.ini while the game is closed. The renderer preflights
+each 13.0.5 instruction it touches, requests the texture count immediately after
+window initialization and enables the mode only after reading that count back.
+Any failed prerequisite leaves Vanilla behavior.
+
+| `render_mode` | Active textures | Index | Dispatch flush | Render-finished poll | render_opts | Pre-present flush |
+| --- | --- | --- | --- | --- | --- | --- |
+| `vanilla` | 3 | TwoBehind (original) | Original once | Original | No | No |
+| `lesslag_core` | 2 | OneBehind | OneBehind adjustment, original once | Bypassed | No | No |
+| `doubles_core` | 3 | OneBehind | OneBehind adjustment, original once | Bypassed | No | No |
+| `lesslag` | 2 | OneBehind | OneBehind adjustment, original once | Bypassed | Yes | No |
+| `llultra` | 2 | Immediate | Original three times | Bypassed | Yes | Yes; later flush suppressed |
+
+render_opts moves fighter model updates and fighter command recording after the
+scene update and dispatches the render queue there, using one per-frame decision
+shared by all four hooks. The queue lock and its +0x20 header byte follow the
+game's own dispatcher rather than the archive's offset bug. LLUltra's pre-present
+flush runs from an entry hook on 0x38701e0, guarded by the saved caller address,
+owner alias and virtual flush target; SGPO's 0x374812c neighborhood is not patched.
+With any other non-Vanilla mode, an empty DUMP_ULTRA_ROUTE file installs that
+entry hook as an observer only; it never flushes or changes the mode.
+
+Texture-wait relocation, the VSync-event wait and the counter-thread patches are
+deliberately absent: v1.4.1 and v1.4.2 install them only when the profiling bit is
+set, and the shipped presets leave it off. The frame pacer stays enabled, as in
+those presets. Dynamic resolution, console clocks, runtime profile transitions
+and full LLDoubles are not implemented, so these modes target the fork's emulator
+preset conditions (1080p, no DRS) rather than its complete console presets.
 
 ## Native latency baseline and the emulator hypothesis
 
@@ -84,6 +115,7 @@ input-to-photon latency from it. Tick conversion is 19.2 MHz, matching the archi
 | --- | --- | --- |
 | Callback / present API invocation timing | Existing callback and chained NVN wrappers | CPU scheduling and time inside a call |
 | Presentation history | Validated `nn::vi::ListFrameHistory` data | Compositor bookkeeping; platform semantics must be verified before making display claims |
+| Captured composites carrying the INPUT_RECEIPT marker | Emulator screenshots decoded with tools/response_marker.py | Captured-image response frames in that emulator setup |
 | Input to visible response | High-speed camera with controller and display in shot, or calibrated hardware | End-to-end input latency |
 
 Fable 5.1/xhigh reviewed the design. We rejected its initial interpretation of
@@ -191,13 +223,15 @@ and enables its mode only after readback succeeds. Failed prerequisites keep
 Vanilla behavior; an unsuccessful texture-count rollback stops with diagnostics.
 
 This is a partial reconstruction: it omits the original render-task sequencing,
-texture-wait relocation, pacing, dynamic resolution, clock changes and automatic
-profile transitions. It does not touch SGPO's 0x374812c neighborhood. The remaining
-CPU texture wait is intentional for this first experiment. Doubles work is parked.
+dynamic resolution, clock changes and automatic profile transitions. It does not
+touch SGPO's 0x374812c neighborhood. The retained CPU texture wait matches the
+shipped modern presets; its relocation is profiling-only in the modern hosts.
+The later `lesslag` and `llultra` modes add the sequencing (see above).
 
-Each CAPTURE_TIMING request now also writes api-<tick>.csv, a bounded 4096-event
-capture using try_lock. It records CPU spans for present, acquire, the acquired
-texture's CPU wait, zero-timeout waits and (core mode only) dispatch flush. Analyze
+Each CAPTURE_TIMING request also writes api-<tick>.csv, a bounded capture using
+try_lock (4096 events in this build; 8192 in the current source). It records CPU
+spans for present, acquire, the acquired texture's CPU wait, zero-timeout waits
+and (non-Vanilla modes only) dispatch flush. Analyze
 with python3 tools/analyze_render_trace.py /path/to/api-123.csv. The analyzer
 rejects incomplete captures and reports skipped events. Spans can overlap; do not
 sum them. Acquire's result is unavailable through the pinned backend's void ABI,
@@ -340,3 +374,108 @@ No emulator instrumentation patch or TAS playback validation is claimed here.
 The next measurement should distinguish input availability, simulation response,
 render/composite submission and physical display. The documented native six-frame
 reference remains a reference, not a correction subtracted from these traces.
+
+## Captured-image response measurement
+
+Create an empty INPUT_RECEIPT file in the mod's data directory before boot. The
+existing ImGui callback then draws a 28-cell strip at the bottom right: magenta
+and cyan anchors, the low 24 bits of the NVN present serial (least significant
+bit first), one Down bit (left stick Y below -16000) and parity over those 25
+bits. It uses the existing HID read and adds no gameplay hook. Down therefore
+marks the first poll by this callback that saw the input, not when HID received
+it. Without the file nothing is drawn; normal users never see the strip.
+
+While an API capture is running, each marker poll also records kind 6 (serial,
+raw left Y) and kind 7 (serial, low 32 bits of the HID sampling counter) at the
+same guest tick. The counter is not a clock bridge. Recording does no allocation
+or file I/O in the callback or hooks; CAPTURE_TIMING exports raw 19.2 MHz ticks
+afterward from the background thread.
+
+`python3 tools/response_marker.py <directory>` decodes images named 000.png and
+so on, and rejects missing anchors, ambiguous cells, parity failures and any
+step other than one present per image. The current Eden trials took native
+640×360 PNG screenshots at full rate with a 1 ms file poll, injected the stick
+input right after image 5, and found the first image whose fighter region
+changed to the crouch pose. The capture, ROI and batch helpers are machine-local
+experiments, not a supported interface.
+
+Three counts come from each valid trial: images from injection to the first
+crouch image (R), images to the first Down marker, and presents between the
+marker and the pose (D). R equals the marker count plus D.
+
+## Full LessLag/LLUltra response trials, 2026-10-06
+
+Accepted for the captured-image response in this setup after Fable 5.1/xhigh
+review of the raw images, serials and API records. NRO 123d47db700f5d19 (SHA-256
+123d47db700f5d196161b9fd1af673d15214657d2364862c5dc4ea095be120f0, build
+0.1.0-5f556ad717f5-dirty-1791249872, source bundle retained); custom Eden
+10bcd2d849 with its CLI patch, Vulkan, docked, 1x, 100% speed; game 13.0.5,
+Sephiroth against Kazuya in Training; Training Modpack and SGPO installed;
+FX On/all; input buffer Auto. Input was synthetic CLI stick-down. The baseline
+is Vanilla rendering with the same mods, not unmodified Smash.
+
+R is the first crouch image index minus image 5, the last image before injection.
+D is the first crouch serial minus the first image carrying the plugin's Down
+marker. Every accepted trial has consecutive identities through this window.
+
+| Mode | Valid normal-phase trials | First Down image | First crouch image | R | D |
+| --- | --- | --- | --- | --- | --- |
+| vanilla | 4 of 5 | 8 | 11 | 6 | 3 |
+| lesslag | 7 (2 earlier, 5 fresh) | 7 | 8 | 3 | 1 |
+| llultra | 5 of 5 | 7 | 7 | 2 | 0 |
+
+All valid normal-phase trials in a mode gave the same counts. The excluded
+Vanilla trial has a present-identity gap (22180 to 22182) and is retained.
+The first fresh LessLag trial had a 47 ms capture interval with continuous
+identities: its frame count stands, but it is excluded from steady-cadence
+wall-time summaries. The other measured intervals were about 16.7 ms.
+
+The control phase injected about 8.24 ms after image 5, with the next screenshot
+already queued so the deliberate delay did not itself skip an image:
+
+| Mode | Trials | R, each trial | D, each trial |
+| --- | --- | --- | --- |
+| vanilla | 3 | 7, 6, 6 | 3, 2, 2 |
+| lesslag | 3 | 3, 3, 3 | 0, 0, 0 |
+| llultra | 3 | 3, 2, 2 | 1, 0, 0 |
+
+All nine control trials have continuous critical-window identities. The first
+LessLag control has a 48 ms capture interval. The first Ultra control has a 53.6 ms
+capture interval and a 45.9 ms present interval in its API trace. These trials
+remain in the counts and are excluded only from steady-cadence wall-time
+summaries. The earlier control helper waited before queuing the next screenshot,
+missed image identities, and produced invalid trials; those are retained too.
+
+For normal-phase, steady-cadence trials, host acknowledgment to completed crouch
+PNG was 98.7–101.3 ms Vanilla, 49.0–50.7 ms LessLag and 32.5–33.9 ms Ultra.
+At the delayed phase it was 89.2–107.2, 40.7–41.1 and 25.6–26.1 ms respectively.
+These are measurements on one host monotonic clock, including screenshot
+completion; they are not physical display times. Conversion into milliseconds
+from a nominal 60 Hz frame count is a separate, derived quantity.
+
+The result supports three fewer captured response frames with LessLag and four
+with Ultra at the normal phase. Delayed-input trials preserve the ordering with
+up to one frame of variation; exact counts on every input are not guaranteed.
+This neither confirms nor relies on the native six-frame reference.
+
+The marker is the first existing plugin callback poll that observed Down. That
+poll can occur after the game's own input read, so D is phase-dependent and is
+not an independent pipeline-depth measurement. D=0 means the marker and pose
+first appear in the same captured image, not zero latency. In the user's proposed
+timeline, t0 is host input request/acknowledgment, t1 is this identified plugin
+observation, and t2 is the first captured crouch image. Host and guest records
+are joined by serial identity; their clocks are never subtracted.
+
+The fresh LessLag trace 1076023080635 matches Down serials 11586, 11699, 11814,
+11931, 12052. Ultra phase trace 1135661248312 matches 15767, 15878, 15992.
+Vanilla/Ultra normal traces were also cross-checked. Slowed 2% LessLag/Ultra
+trials corroborate their counts; the fresh slowed Vanilla run reached its
+runtime limit before injection and is invalid. Release-side and other moves
+would broaden coverage; console confirmation still requires console tests.
+
+Raw PNGs, host records, API CSVs, configurations, logs, scripts and peer reviews
+are retained outside Git under dist/123d47db700f5d19/runtime-evidence.
+response-summary.json lists individual measurements; evidence-sha256.json
+identifies retained files. Externally terminating the AppImage sometimes produced
+SIGBUS exactly at shutdown; later CLI-stop runs exited cleanly. That is separate
+from the reported Switch in-match crash.

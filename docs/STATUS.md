@@ -1,7 +1,8 @@
 # Implementation and fork parity
 
-The default remains the global-menu/FX/diagnostics foundation. A separate opt-in
-LessLag core experiment now reconstructs part of the render engine.
+The default remains the global-menu/FX/diagnostics foundation with Vanilla rendering.
+Opt-in, startup-only LessLag and LLUltra modes now reconstruct the fork's modern
+rendering presets; console behavior remains untested.
 
 | Behavior / fork change | Status |
 |---|---|
@@ -13,9 +14,14 @@ LessLag core experiment now reconstructs part of the render engine.
 | Reapply / repeated arena marking | External host removed; future engine has one authoritative state owner |
 | 300 ImGui-callback transition grace | Global callback restored; future engine still needs explicit frame-boundary transitions |
 | Stealth mode | No custom PIA telemetry/beacons emitted; ordinary game traffic continues |
-| LessLag | Startup-only lesslag_core: two active textures, OneBehind index/flush and render-poll bypass tested in Eden; full profile and latency benefit unproven |
-| Ultra / Doubles | Ultra pending; Doubles experiment parked at the operator's request |
-| v1.4.2 emulator crash fix | Static design reference only; not claimed implemented or reproduced |
+| LessLag rendering | Startup-only `lesslag`: two textures, OneBehind, poll bypass and render_opts sequencing; Eden match and accepted captured-image response evidence; console untested |
+| LLUltra rendering | Startup-only `llultra`: adds Immediate index, guarded pre-present flush via entry hook 0x38701e0, triple original flush, later-flush suppression; Eden route guards and accepted captured-image response evidence; console untested |
+| Component modes | `lesslag_core` (no render_opts) and `doubles_core` (three textures, OneBehind) retained for isolation tests |
+| LLDoubles | Not implemented beyond `doubles_core`; DRS and multiplayer checks pending; scheduled after the Switch crash work |
+| Texture-wait relocation / VSync-event pacing | Profiling-only in v1.4.1 and v1.4.2, off in shipped presets; intentionally not implemented |
+| Frame pacer | Left enabled, as in the modern LessLag and LLUltra presets |
+| Runtime profile transitions / selection menu | Pending; modes are fixed at boot |
+| v1.4.2 emulator crash fix | Backend persistent-hook design studied; crash mechanism not reproduced or established |
 | Singles clocks for Ultra/Doubles | Recorded requirement; no automatic clock changes in M0 |
 | catch_unwind around overclock | Not copied: panic=abort cannot recover through it |
 | Dynamic resolution / performance scaling | Pending; these were upstream features |
@@ -23,6 +29,7 @@ LessLag core experiment now reconstructs part of the render engine.
 | Native CSS menu | Removed after live font/clipping problems; no game-pane writes remain |
 | Global Player Info window | Embedded imgui-smash, settings/performance/hidden views; main-menu/CSS/match behavior confirmed in Eden |
 | FPS / frame graph | Implemented from overlay callback intervals; not network timing |
+| Response marker | Opt-in INPUT_RECEIPT pixel marker and API-trace HID records; diagnostics only, off by default |
 | Streamer mode / peer diagnostics | Pending |
 | FX On / Off | Palutena/Sephiroth live toggles, persistence, TM save/load and SGPO accepted; expanded catalog awaits tests |
 | FX online-only scope | INI defaults to online; all is the offline+online test override; offline Training preservation verified, live online transitions untested |
@@ -30,21 +37,20 @@ LessLag core experiment now reconstructs part of the render engine.
 
 ## Next work
 
-The user chose [measured Reduced FX development](NEXT_SESSION.md) next: identify a
-Switch dip, reproduce in Eden, fix one effect, test that candidate on Switch, repeat.
-The expanded Off catalog must first pass tomorrow's move and scope smoke tests.
+The user's current order is in [NEXT_SESSION.md](NEXT_SESSION.md): the LessLag and LLUltra response proof in custom Eden is accepted; next reproduce and fix the
+Switch in-match crash, then Doubles. Reduced FX still follows an actual Switch
+performance reproduction, and the expanded Off catalog still needs move tests.
 
 The custom CLI Eden delivery passed Vanilla and LessLag-core Training smoke tests
-with the same final NRO (5d47c70452ce73ba, source 42a60af). Five paired callback/API
-captures completed without dropped trace records. DISABLE_RENDERER correctly
-kept Vanilla behavior despite an INI LessLag request, and online-only FX scope
-left offline Training effects intact. See PERFORMANCE.md for evidence and limits.
+with NRO 5d47c70452ce73ba (source 42a60af). The later uncommitted candidate
+123d47db700f5d19 booted `lesslag` and `llultra` into the same Sephiroth/Kazuya
+Training match with Training Modpack and SGPO. Its observation-only and active
+Ultra route guards recorded no bad callers or alias mismatches. Accepted
+captured-image results and their limits are in PERFORMANCE.md.
 
-LessLag still needs full render sequencing, texture-wait relocation, pacing and
-profile transitions. The core experiment is deliberately named separately from
-the fork's complete LessLag profile. Vanilla installs no rendering text patches.
-Ultra remains pending and Doubles work is deferred.
-Network telemetry, performance scaling and clocks are still pending.
+Remaining rendering work is runtime profile selection and present-boundary
+transitions, dynamic resolution and performance scaling, console clocks, full
+LLDoubles, and any console validation. Network telemetry is also pending.
 
 Original snapshots and quickplay-changes.patch preserve exact fork changes.
 Their presence is not feature completion.
@@ -52,8 +58,10 @@ Their presence is not feature completion.
 ## Compatibility
 
 The default installs no Layout::Draw, HUD scene-tick, input-mapping, article,
-camera or swapchain-mode hook. Opting into lesslag_core adds checked render-index,
-render-poll and flush hooks. FX scope observes scene entry and online delay setup;
+camera or swapchain-mode hook. Every non-Vanilla mode adds checked render-index,
+render-poll and flush hooks. `lesslag` and `llultra` also add preflighted fighter
+recording (0x374bb04), early-dispatch (0x374c600), post-scene (0x374cd64) and model
+update (0x3ab590) hooks. FX scope observes scene entry and online delay setup;
 it does not mutate scene or network state. Its embedded ImGui backend interposes NVN bootstrap,
 submit and acquisition for drawing the window. The user's overlay files are untouched.
 Training Modpack input delay remains separate from the online network buffer.
@@ -63,9 +71,15 @@ These function hooks chain through originals. The target list excludes its gener
 effects and wing background. User confirmed the current load order, menus, FX and Training save/load coexist on
 the installed candidate. Reversed load order and the expanded candidate remain untested.
 
-The legacy engine site 0x3748128 is adjacent to SGPO's 0x374812c. The current core
-experiment touches neither. Any future immediate-mode implementation must use a
-separately verified site and preserve the overlay's return path.
+The legacy pre-present site 0x3748128 is adjacent to SGPO's 0x374812c; no mode
+patches either. `llultra` instead hooks the called function's entry at 0x38701e0.
+That hook keeps the original three arguments, checks the saved return address
+against the known caller, the owner alias and the virtual flush target, and
+returns through SGPO's original path. It also replaces the later flush call and
+reset at 0x3749b78/0x3749b7c. Preflight requires the expected BL at 0x3748128,
+and installation verifies that it and SGPO's word at 0x374812c stay unchanged.
+The guards have recorded zero anomalies in Eden; that is not proof for other
+scenes, Switch or other overlays.
 
 No claim of universal online safety, emulator compatibility, reduced input lag or improved
 frame rate is made from compilation.

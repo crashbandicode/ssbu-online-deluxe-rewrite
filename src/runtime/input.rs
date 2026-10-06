@@ -1,7 +1,14 @@
 use skyline::nn::hid;
 
+#[derive(Clone, Copy, Default)]
+pub(super) struct Sample {
+    pub buttons: u64,
+    pub left_y: i32,
+    pub update_count: i64,
+}
+
 /// Same HID families as the gamepad overlay; no game input is modified.
-pub(super) unsafe fn buttons() -> u64 {
+pub(super) unsafe fn read() -> Sample {
     for id in [0u32, 0x20] {
         let styles = hid::GetNpadStyleSet(&id).flags;
         if styles == 0 {
@@ -10,7 +17,11 @@ pub(super) unsafe fn buttons() -> u64 {
         if styles & (1 << 5) != 0 {
             let mut state = hid::NpadGcState::default();
             hid::GetNpadGcState(&mut state, &id);
-            return state.Buttons;
+            return Sample {
+                buttons: state.Buttons,
+                left_y: state.LStickY,
+                update_count: state.updateCount,
+            };
         }
         let mut state = hid::NpadHandheldState::default();
         if styles & (1 << 1) != 0 {
@@ -24,7 +35,11 @@ pub(super) unsafe fn buttons() -> u64 {
         } else {
             hid::GetNpadFullKeyState(&mut state, &id);
         }
-        return state.Buttons;
+        return Sample {
+            buttons: state.Buttons,
+            left_y: state.LStickY,
+            update_count: state.updateCount,
+        };
     }
-    0
+    Sample::default()
 }

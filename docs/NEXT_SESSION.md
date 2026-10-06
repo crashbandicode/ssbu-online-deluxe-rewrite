@@ -1,64 +1,81 @@
-# Next session: effects measurement and Reduced
+# Next session: LessLag/LLUltra proof, Switch crash, then Doubles
 
-The user accepted the global menu, FX On/Off/On, Training Modpack menu/save-load
-and gamepad overlay in Eden. Later work added the expanded FX catalog, bounded
-timing capture and an experimental LessLag core. Use HANDOFF.md for the exact
-bundle, completed tests and live state. Reduced is still unavailable. Doubles is
-deferred at the operator's request.
+The user's current order is: demonstrate objective response-frame savings for
+full LessLag and LLUltra in custom Eden; then reproduce and fix the Switch
+in-match crash in one or two Eden instances (LDN where needed); then Doubles.
+Reduced FX follows an actual Switch performance reproduction. Earlier text that
+deferred Doubles at the operator's request is superseded by this order.
+Use HANDOFF.md for the exact bundle, installed files, live state and receipts.
 
-1. Use the verified custom Eden delivery at /home/intpa/eden-cli-handoff; READY
-   and all 4644 delivery checksums were verified. Read AGENT_HANDOFF.md and
-   source/docs/user/CLIControl.md there. The AppImage SHA starts fd4b91536e3d60f9;
-   source base is 10bcd2d849 with its supplied CLI patch. Launch with
-   launch-eden.ps1 -MemoryGiB 8 -Runtime 600, then attach edenctl.py to the exact
-   socket printed by that run. The older tools/EdenTest.ps1 is for stock-baseline
-   reproduction only. Retain that baseline. Use the custom build's CLI
-   controls/screenshots for subsequent tests, with one bounded instance and a
-   finite lifetime. Check the installed rewrite NRO hash and startup identity
-   against HANDOFF.md. Keep effects_scope=all for offline tests; rendering defaults
-   to Vanilla. Back up files before replacing a build or config.
-2. Smoke-test the remaining table in FX.md, one character/move at a time:
-   On, Off, On again; repeat in air/on ground when applicable. Check unrelated
-   moves, general hit/shield/KO feedback, menus and Training save/load afterward.
-   Online-only scope was verified to preserve offline Training visuals; ordinary
-   offline Smash and online-to-offline transitions still need coverage.
-3. Establish which exact effect causes a dip on Switch. Record console/model,
-   game/plugin hashes, docked/handheld, resolution, CPU/GPU/memory clocks, renderer
-   profile, stage, fighters/costumes, damage, camera, move/charge and repetition.
-   Record a baseline frame-time trace/video with FX On and comparable Off results.
-   Do not assume every peer target is expensive.
-4. Reproduce that same scene in Eden. Record Eden version, host CPU/GPU/drivers,
-   power profile, graphics backend, docked/handheld, resolution scale, speed cap,
-   CPU accuracy/multicore, shader/cache state and installed plugins. Begin from the
-   current baseline; vary one setting at a time and separate cold shader stutter
-   from a repeatable effect cost. An arbitrary FPS cap is not a reproduction.
-5. Implement Reduced for ONE confirmed offender, retaining its recognizable charge,
-   trajectory/hit/size cues. Compare repeatable On/Off/Reduced runs, then test the
-   same candidate on Switch with the recorded setup and exact debug bundle.
-6. Accept only after improved frame pacing and correct feedback/coexistence on
-   Switch; then iterate through the remaining confirmed offenders.
+## Environment
 
-The rewrite defaults to Vanilla. The opt-in lesslag_core is only a partial match
-for the original LessLag engine; establish parity before claiming reproduction of
-a LessLag-specific console dip. Full Gigaflare charge was visually confirmed by
-the operator with the longer 4.2-second hold; earlier 2.2-second captures are not
-accepted as full-charge trials.
-Do not compare different render profiles as if only the effect changed.
-The new online scope itself needs arena/Quickplay/local-wireless entry/exit tests,
-including online -> main menu -> offline match. All is only the test override;
-the distributed default remains Online.
+Use the verified custom Eden delivery at /home/intpa/eden-cli-handoff (READY,
+4644 checksums verified, AppImage SHA starting fd4b91536e3d60f9, source base
+10bcd2d849 plus its CLI patch). Read AGENT_HANDOFF.md and
+source/docs/user/CLIControl.md there. Launch with
+`launch-eden.ps1 -MemoryGiB 8 -Runtime 600`, then attach edenctl.py to the exact
+socket printed by that run. Keep one bounded instance with a finite lifetime.
+The older tools/EdenTest.ps1 is only for stock-baseline reproduction.
 
-Custom Eden acceptance is recorded in PERFORMANCE.md. Vanilla and LessLag core
-both reached Training with complete paired callback/API captures and live FX
-changes. DISABLE_RENDERER recovery was checked with a LessLag request still in
-the INI. These are functional checks, not latency or performance acceptance.
-For objective latency work, carry unique frame identity through the emulator's
-queue/compositor/present path and identify the first changed content. The existing
-OnFrameDisplayed callback also runs on a hidden-window early return; its name
-does not make it display evidence. Do not count CLI milliseconds or TAS callbacks
-as game frames without validating their relationship.
+Check the installed NRO hash and startup identity against HANDOFF.md, and back
+up the NRO and config before replacing either. `render_mode` and the INPUT_RECEIPT
+and DUMP_ULTRA_ROUTE flags are read at boot; change them only with the game closed.
+Restore `render_mode=vanilla` and remove both flags when a campaign ends.
 
-Do not copy generic effect deletion, article scaling, global victim timers or
-color-reset suppression from the peer. These are separate behavior changes.
-No performance improvement, LessLag completion or console compatibility is
-established merely by a successful build.
+## 1. LessLag/LLUltra response proof — accepted for this Eden setup
+
+PERFORMANCE.md records 25 valid count trials across normal and approximately
+8 ms delayed injection phases. Normal-phase responses were Vanilla 6, LessLag 3,
+Ultra 2 captured frames. Delayed-phase responses were Vanilla 6–7, LessLag 3,
+Ultra 2–3; the exceptional Ultra trial had a capture/present stall and is retained.
+API records match the in-image input-marker serials in all three modes.
+
+Fable 5.1/xhigh reviewed the raw data and accepted this limited emulator claim.
+The marker observes the plugin's existing input poll, not earliest HID receipt;
+its separation from the pose is phase-dependent. No display, photon, native
+console, or universal every-input frame-count claim follows. Extra release-side
+trials would broaden coverage but are not a prerequisite to the next investigation.
+
+## 2. Switch in-match crash
+
+Reproduce it in Eden before changing code. Record the mode, scene, fighters,
+online/LDN topology, the exact NRO hash and the crash evidence. The v1.4.2
+release moved to persistent hooks and a per-frame render_opts snapshot, which
+this rewrite also uses; that design difference is not proof of the crash
+mechanism. A crash on externally stopping the emulator is a shutdown failure,
+not this crash.
+
+## 3. Doubles
+
+`doubles_core` gives three textures with OneBehind but no render_opts. Full
+LLDoubles also needs render_opts and its dynamic-resolution behavior, followed by
+multiplayer performance and crash checks.
+
+## Later: measured Reduced FX
+
+1. Smoke-test the remaining FX.md table one character/move at a time: On, Off,
+   On again, in the air and on the ground where applicable. Check unrelated
+   moves, hit/shield/KO feedback, menus and Training save/load afterward.
+   Ordinary offline Smash and online-to-offline scope transitions need coverage,
+   including arena/Quickplay/local-wireless entry and exit. Online is the
+   distributed default; all is only the test override.
+2. Identify the exact effect that causes a Switch dip. Record console/model,
+   game and plugin hashes, docked/handheld, resolution, clocks, render mode,
+   stage, fighters/costumes, damage, camera, move/charge and repetition, with
+   comparable FX On and Off traces or video.
+3. Reproduce that scene in Eden, recording emulator version, host hardware and
+   drivers, power profile, backend, resolution, speed, accuracy and shader cache.
+   Vary one setting at a time and separate first-use shader stutter from
+   repeatable cost. An arbitrary FPS cap is not a reproduction.
+4. Implement Reduced for one confirmed offender, preserving its charge,
+   trajectory, hit and size cues. Compare repeatable On/Off/Reduced runs, then
+   test the same candidate on Switch. Accept only after improved pacing and
+   correct feedback/coexistence there.
+
+Full Gigaflare charge needs the longer 4.2-second hold; earlier 2.2-second
+captures are not full-charge trials. Do not compare different render modes as if
+only the effect changed. Do not copy the peer's generic effect deletion, article
+scaling, global victim timers or color-reset suppression.
+
+No performance improvement, console compatibility or crash fix follows from a
+successful build.

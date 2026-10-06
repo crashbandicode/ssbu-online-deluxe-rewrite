@@ -34,6 +34,10 @@ static ACQUIRE_MASK: AtomicU64 = AtomicU64::new(0);
 static PRESENT_TICK: AtomicU64 = AtomicU64::new(0);
 static ACQUIRE_TICK: AtomicU64 = AtomicU64::new(0);
 
+pub(super) fn present_serial() -> u64 {
+    PRESENTS.load(Ordering::Relaxed)
+}
+
 pub(super) unsafe fn bootstrap(name: *const c_char, next: *const c_void) -> *const c_void {
     if !next.is_null() && CStr::from_ptr(name).to_bytes() == b"nvnDeviceGetProcAddress" {
         GETTER.store(next as usize, Ordering::Release);
@@ -184,10 +188,12 @@ unsafe extern "C" fn window_acquire(window: Ptr, sync: Ptr, index: *mut i32) {
 pub(super) fn write_status() {
     if let Ok(mut file) = File::create(Path::new(DATA_DIR).join("renderer-status.txt")) {
         let _ = writeln!(file,
-            "build={}\nmetric=nvn_api_observation\nmode={}\nengine_status={}\nindex_hook_calls={}\nindex_pair=0x{:x}\nskipped_render_waits={}\nflush_calls={}\nwindow=0x{:x}\nget_active_resolved={}\nset_active_resolved={}\nallocated_textures={}\nactive_textures={}\npresent_interval={}\npresent_calls={}\nacquire_calls={}\npresent_index_mask=0x{:x}\nacquire_index_mask=0x{:x}\nlast_present_call_tick={}\nlast_acquire_return_tick={}\nnot_measured=displayed_frames,input_to_photon",
+            "build={}\nmetric=nvn_api_observation\nmode={}\nengine_status={}\nindex_hook_calls={}\nindex_pair=0x{:x}\nskipped_render_waits={}\nflush_calls={}\nsequence_frames={}\nmodels_moved={}\nsequence_dispatches={}\nultra_entries={}\nultra_preflushes={}\nultra_late_skips={}\noriginal_flushes={}\nultra_bad_callers={}\nultra_alias_mismatches={}\nultra_last_target=0x{:x}\nwindow=0x{:x}\nget_active_resolved={}\nset_active_resolved={}\nallocated_textures={}\nactive_textures={}\npresent_interval={}\npresent_calls={}\nacquire_calls={}\npresent_index_mask=0x{:x}\nacquire_index_mask=0x{:x}\nlast_present_call_tick={}\nlast_acquire_return_tick={}\nnot_measured=displayed_frames,input_to_photon",
             crate::build_info::BUILD_ID, super::renderer::mode().key(), super::renderer::status(),
             super::renderer::INDEX_CALLS.load(Ordering::Relaxed), super::renderer::INDEX_PAIR.load(Ordering::Relaxed),
             super::renderer::SKIPPED_WAITS.load(Ordering::Relaxed), super::renderer::FLUSH_CALLS.load(Ordering::Relaxed),
+            super::render_sequence::FRAMES.load(Ordering::Relaxed), super::render_sequence::MODELS_MOVED.load(Ordering::Relaxed), super::render_sequence::DISPATCHES.load(Ordering::Relaxed),
+            super::render_ultra::ENTRIES.load(Ordering::Relaxed), super::render_ultra::PREFLUSHES.load(Ordering::Relaxed), super::render_ultra::LATE_SKIPS.load(Ordering::Relaxed), super::render_ultra::ORIGINAL_FLUSHES.load(Ordering::Relaxed), super::render_ultra::BAD_CALLERS.load(Ordering::Relaxed), super::render_ultra::ALIAS_MISMATCHES.load(Ordering::Relaxed), super::render_ultra::LAST_TARGET.load(Ordering::Relaxed),
             WINDOW.load(Ordering::Acquire),
             GET_ACTIVE.load(Ordering::Acquire) != 0, SET_ACTIVE.load(Ordering::Acquire) != 0,
             TOTAL.load(Ordering::Relaxed), ACTIVE.load(Ordering::Relaxed), INTERVAL.load(Ordering::Relaxed),

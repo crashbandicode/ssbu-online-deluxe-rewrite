@@ -12,7 +12,10 @@ mod online;
 mod overlay_host;
 mod presentation;
 mod render_probe;
+mod render_sequence;
+mod render_ultra;
 mod renderer;
+mod response_probe;
 mod timing;
 mod ui;
 

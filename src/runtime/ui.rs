@@ -134,7 +134,8 @@ unsafe fn performance(frames: &FrameTimes, width: f32, height: f32, sx: f32, sy:
 }
 
 unsafe extern "C" fn draw() {
-    let buttons = input::buttons();
+    let sample = input::read();
+    let buttons = sample.buttons;
     super::timing::observe(buttons);
     let Ok(mut guard) = UI.try_lock() else {
         return;
@@ -151,6 +152,7 @@ unsafe extern "C" fn draw() {
         record(Code::OverlayEntered, ui.count, ui.controls.view as u64);
     }
     ui.count += 1;
+    super::response_probe::draw(sample);
     let now = Instant::now();
     if let Some(previous) = ui.previous_frame.replace(now) {
         ui.frames
@@ -266,5 +268,6 @@ unsafe extern "C" fn draw() {
 }
 
 pub(super) fn install() {
+    super::response_probe::init();
     overlay_host::install(draw);
 }

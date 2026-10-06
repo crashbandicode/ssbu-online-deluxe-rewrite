@@ -7,7 +7,7 @@ from pathlib import Path
 from analyze_timing import percentile
 
 KINDS = {1: "present_call", 2: "acquire_call", 3: "texture_cpu_wait",
-         4: "sync_zero_timeout_poll", 5: "dispatch_flush"}
+         4: "sync_zero_timeout_poll", 5: "dispatch_flush", 6: "hid_poll_marker", 7: "hid_sampling_counter"}
 COLUMNS = ["event", "kind", "begin_tick", "end_tick", "index", "result"]
 
 
