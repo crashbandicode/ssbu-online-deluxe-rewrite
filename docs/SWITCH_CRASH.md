@@ -291,3 +291,183 @@ all requested ranges, then Eden exited normally through the CLI. The diagnostic
 marker was removed afterwards. This package only extends opt-in read ranges;
 the response measurements remain attached to their tested 123d47db700f5d19 NRO.
 Local raw evidence is under null-buffer-vtable-probe. No console fix is claimed.
+## 2026-10-06: two new native-console crashes after rewrite deployment
+
+Evidence: /home/intpa/.local/share/ssbu-mod-backups/switch-crash-20261006-121423.
+These are distinct from the original Oct5 MainThread main+3cedb4 crash.
+User reports regular Smash, probably Kirby, before the 3/2/1 countdown.
+Latest Atmosphere screenshot shows Kirby/Wario silhouettes loading and the
+rewrite window reporting Vanilla / FX On. Console clock differs from host;
+use report filenames and installed build evidence, not FAT timestamps alone.
+
+- Report 01791288254_01006a800016e000.log: MainThread DataAbort2168-0002,
+  PC smash-gamepad-overlay+0xbb00, LR+0x9668; memory access is pane+0xb0.
+  Deployed NRO SHAa64d4c... executable bytes match the local SGPO ELF
+  (switch-crash-verified-symbols.json). GNU addr2line resolves PC to
+  pane_utils::pane_name_matches, LR to the pane-validation iterator,
+  stack+0x94cc to ResolvedHudSkin::is_valid, and +0x8f18 to update_runtime.
+  Source validates cached raw pane pointers by dereferencing their names;
+  it checks nullness but does not establish that the pane is still alive.
+  Invalid cached-pane access is established. Its precise lifecycle cause
+  (stale allocation versus another source of pointer corruption) is not.
+- Report 01791288486_01006a800016e000.log: TaskWorker2 DataAbort2168-0002,
+  PC main+0x37fe4, LR+0x37fdc, X0=0x40000000000, readaddress0x40000000010.
+  Exact matching main build21450C647B8C5940ED5B68218EA128FD3C5D597D was dumped
+  via isolated Eden's built-in dump_nso, then disassembled read-only.
+  ldr x9,[x0,#0x10] follows38100(x23,1), which returns *(x23+16)
+  using a six-entry offset table [8,16,24,32,40,48].
+  Caller chain main+9a74c/+99a90/+a4e60 reaches VFX resource setup.
+  Nearby same-path diagnostic string is
+  "vfx system deleted the registered binary. resource id : %d."
+  This identifies the resource subsystem, not the origin of corruption.
+  The raw dump is a preserved NSO header plus UNCOMPRESSED mapped segments;
+  header compression flags/file offsets are not rewritten by Eden.
+  Disassembly is in main-load-crash.asm; private full dump remains under
+  eden-cli-handoff/profile/data/eden/dump/01006A800016E000/nso/.
+
+Both rewrite install logs confirm Vanilla, effectsOn/scopeAll/bufferAuto.
+renderer-status reports no render patch calls, three active textures and
+engine_statusVanilla. This rules out active LessLag/LLUltra text patches for
+these boots; it does not exclude the rewrite's menu or FX passthrough hooks.
+All seven SD plugin SHA256 values still matched the deployment receipt.
+
+Evidence-preserving next test: only SGPO's NRO moved outside Skyline scanning,
+to sd:/backup-deluxe-rewrite-20261006-114001/isolation-sgpo/.
+Its HUD asset, other six plugins, cosmetics, and configuration remain unchanged.
+Journal isolation-sgpo.json, verified/SDflushed. User asked to repeat the same
+regular match. This is temporary isolation, not a shipped fix or proof of cause.
+No Rust changes and no remote push.
+
+FTP configuration checked without exposing credentials: port5000,
+anonymous enabled, sysmodule420000000000000E boot2.flag present.
+The initial known-neighbor probe found no responding FTP endpoint;
+USB collection was used. IP address remains unknown.
+
+
+## Post-results UI crash with SGPO NRO absent
+The user clarified report 01791290269: the first match finished and results were shown;
+the crash occurred on the black screen returning to character select. The NRO-only
+isolation did not eliminate crashes. PC main+5986c reads a halfword at pane.ext_user_data_list+8;
+the value loaded from pane+0xa8 is0x2000000, producing address0x2000008.
+Exact main disassembly is preserved in ui-crash-verified-window.asm.
+Recursive pane draws return through main+58908, Layout::Draw+4b674, and TM handle_draw.
+This establishes a bad UI pane resource pointer, not the writer, lifetime or culprit.
+The matching install.log still shows Vanilla, FXOn and no render backend installed.
+Later collected events/status/config likewise show Vanilla, zero sequence/index/ultra calls,
+and three active textures. Collection times and SHA256 are in remaining-log-collection.json.
+
+One further isolation was applied over FTP: exact SHA82a674e7... HUD layout.arc (4,795,344 bytes)
+was downloaded and verified, then moved to
+sd:/backup-deluxe-rewrite-20261006-114001/isolation-sgpo/layout.arc.
+The source is absent and the destination size matches; journal isolation-sgpo-layout.json.
+SGPO NRO remains disabled, all other six plugins/settings unchanged.
+User asked to fully restart Smash, finish one regular match Vanilla/FXOn, and return to CSS.
+That test is pending. This reversible isolation is not a fix.
+FTP sys-ftpd at192.168.0.226 port5000 supports anonymous; no credentials copied.
+Fable follow-up still running in the resumed exact session; the MCP300s timeout is
+front-door noise, not evidence the engine stopped. Send deadline approximately12:59UTC.
+
+Fable follow-up completed; raw review and root qualifications are in the FTP evidence folder.
+Root rejected its required-special-flag/missing-usd1 attribution: earlier draw path reaches the fault
+without Pane+0x60 bits0/1. See picture-draw-full.asm and review-acceptance.txt. No patch based
+on that unproven hypothesis. Worker wrapper stopped. Layout-only console test pending.
+
+## Candidate lifetime testing, 2026-10-06
+
+The first instrumented SGPO candidate (NRO SHA256
+34b5525a5fae9ebf4a36f00f62dc26c21eac926179bbf161625c6fd80598a0a0) was rejected
+during root-controlled Eden testing. Both 13.0.5 Finalize guards matched. The
+non-draw HUD captured and updated on thread 0x1181034910, then scene update ran
+on 0x892f2088. Its conservative owner-thread gate disabled further updates,
+leaving a frozen overlay. A non-crashing run with a disabled overlay is not a pass.
+
+One regular Kirby/Wario match on Town & City completed and returned through
+results and stage select to CSS. At the next match start, the address-only
+coverage watch reported stored=22, retired=22, live=0, overflow=false. This
+supports the chosen Finalize boundary for that observed HUD teardown, not for
+every native lifetime path. Match reset can clear cache entries before their
+Finalize calls, so zero cache evictions alone does not disprove watch coverage.
+
+Fable reviewed the multithread correction. Root retains the design: cached
+pointer use and eviction share each cache's lock; Finalize takes it before the
+engine cleanup and clears matching entries before releasing. Thread changes
+are observations, not fatal errors. Positive bounded sleep replaces indefinite
+busy spinning, and logging moves outside cache critical sections.
+
+The fresh-capture helper at main+0x3776910 calls allocator main+0x392e290 and a
+virtual lookup; root did not accept a lock-free assumption. Revised capture
+resolves in the current engine callback before acquiring the HUD cache lock,
+then publishes only if a retire epoch has not changed. The existing helper's
+allocated-handle ownership also needs a separate audit; no deallocator is guessed.
+
+Evidence and archived debug ELF:
+~/.local/share/ssbu-mod-backups/switch-ftp-after-isolation-20261006/sgpo-lifetime-candidate/
+
+Eden's host process received SIGBUS about 350ms after root requested systemd
+stop. The service journal establishes that order. It is not counted as
+reproduction of the Switch's guest UI exception. Peak host memory was about
+6.98 GiB, with no OOM. The isolated profile was restored, and the Switch's
+successful six-plugin configuration was not altered.
+
+The asset-only post-results Switch crash remains unresolved. Static asset
+checks and an Eden cycle do not establish native safety.
+
+
+## Candidate2 emulator evidence, 2026-10-06
+
+The revised SGPO candidate passed five regular Kirby/Wario Small Battlefield
+match/results/stage-select/CSS cycles in isolated Eden. The exact full HUD
+archive and seven-plugin stack were enabled, with rewrite Vanilla/FX On.
+The overlay responded to A press and B press/release after reload. Starting
+a sixth match recorded stored=110 / retired=110 / live=0 / overflow=false
+for the five completed HUD lifetimes. No guest crash was observed.
+
+NRO SHA256: 3a746514f3895da32374d1a7d1c5b9b7300c30b6ed08686cea480434180f251d.
+Logs, screenshot series, command stream, debug ELF, manifest, and test limits:
+~/.local/share/ssbu-mod-backups/switch-ftp-after-isolation-20261006/sgpo-lifetime-candidate2/root-test-results.json.
+
+This addresses the cached-pane failure candidate; it does not resolve the
+separate native crash with the SGPO NRO absent. The same updated Skyline and
+ARCropolis were used in Eden and on Switch. Why that asset-related fault has
+not appeared in these emulator runs is still unproven; neither a version
+mismatch nor Training's caller frame establishes the cause.
+
+The 20-minute service deadline ended the run while a stop-confirmation modal
+was pending; subsequent SIGKILL was supervisor cleanup, not a guest crash.
+Peak memory reached the 8 GiB cap with zero OOM. The isolated profile was
+restored and the successful six-plugin Switch configuration left unchanged.
+Native acceptance, Training-specific paths, standalone draw, skin switching
+and all free-path coverage remain pending. Required full host Cargo gates
+remain blocked by nnsdk's nightly requirement; no all-green claim.
+
+
+## 2026-10-06T17:29Z initial corrected-overlay Switch validation passed
+User completed TWO matches (Kirby, then Palutena), confirmed live overlay input
+updates and both returns to CSS, then closed Smash. User declined further repeated
+matches; two is accepted for this checkpoint. Do not ask for three/five more.
+native-userdata-probe/test-result.json records exact scope/limits. Final evidence:
+native-userdata-probe/final-overlay-two-matches/{smash-gamepad-overlay.log,
+smash-gamepad-overlay-probe.log,targeted-collection.json}. New creports relative
+to pre-install baseline: NONE. Probe sample normal, no suspect line. First match:
+all22 watched addresses retired before second match start, live0, no overflow.
+Second match last summary happens at match-end BEFORE teardown; no later summary
+exists, so do not claim its final retirement count was observed. User saw CSS.
+FTP collector encountered451 after historical report downloads; four relevant
+current logs were recovered successfully using fresh sessions, manifest has0errors.
+
+CORRECTION to previous Eden header-only notes: the completed archived eden2 probe
+log DOES contain a normal base-pane sample, same LR5f540/vtable5240748/ext0/flags
+as native. Earlier live reads were before that record appeared (no per-record
+timestamp to locate it more precisely). No demonstrated native/Eden branch divergence.
+Fable report fable-native-emu-probe-path.md archived under native-userdata-probe.
+Root agrees with direct evidence and branch predicate; does NOT adopt claims that
+post-NUL name bytes prove emulator-specific initialization (second native run also
+zeros) or that an alpha predicate excludes an injected pane under possible memory
+corruption. Both are at most conditional hypotheses. No parent-pointer dereference
+or expanded logger is warranted absent a suspect record; preserve current tested NRO.
+Fable exact6a30 wrapper stopped, own watcher reaped. Grok stopped. No code changes,
+commits, or pushes since diagnostic acceptance. Native corrected overlay + probe
+remain installed; PROBE_ONLY preserved in SD backup. All other plugins unchanged.
+Switch HOME, Smash closed; all owned Eden stopped; both probe-run profiles restored.
+Separate asset-only root cause still unproven/unreproduced. Initial two-match native
+success supports lifecycle fix; do not call every historical crash resolved.
