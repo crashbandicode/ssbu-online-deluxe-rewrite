@@ -7,7 +7,9 @@ from pathlib import Path
 from analyze_timing import percentile
 
 KINDS = {1: "present_call", 2: "acquire_call", 3: "texture_cpu_wait",
-         4: "sync_zero_timeout_poll", 5: "dispatch_flush", 6: "hid_poll_marker", 7: "hid_sampling_counter"}
+         4: "sync_zero_timeout_poll", 5: "dispatch_flush", 6: "hid_poll_marker", 7: "hid_sampling_counter",
+         12: "index_selection", 13: "present_entry", 14: "late_flush",
+         15: "record_fighters", 16: "post_scene", 17: "outstanding_after_present"}
 COLUMNS = ["event", "kind", "begin_tick", "end_tick", "index", "result"]
 
 
@@ -84,7 +86,9 @@ def analyze(text):
         "warnings": warnings,
         "notes": ["Spans may overlap; do not sum their durations.",
                   "Acquire result -1 means unavailable through the embedded backend.",
-                  "Vanilla does not hook dispatch flush, so that span is unavailable there."],
+                  "Kinds 12-17 are phase markers. Their result is a hashed thread label, not an API result.",
+                  "Kind 17 index is tracked-window acquires minus presents after that present returns. Zero is a real count.",
+                  "Kind 5 is the flush wrapper and is installed for every startup mode, including Vanilla."],
         "not_measured": ["GPU execution", "displayed frames", "input-to-photon latency"],
     }
 

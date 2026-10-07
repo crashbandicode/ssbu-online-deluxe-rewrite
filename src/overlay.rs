@@ -114,7 +114,19 @@ mod tests {
         ui.poll(RIGHT, &mut config);
         assert_eq!(config.effects, FxMode::On);
         ui.poll(L | R | DOWN, &mut config);
-        assert_eq!((ui.view, ui.menu.selected), (View::Settings, 0));
+        assert_eq!(
+            (ui.view, ui.menu.selected),
+            (View::Settings, crate::menu::ROW_NET_LATENCY)
+        );
+        assert!(ui.poll(RIGHT, &mut config));
+        assert_eq!(config.input_buffer, 0);
+        assert!(!ui.poll(RIGHT, &mut config));
+        ui.poll(0, &mut config);
+        ui.poll(DOWN, &mut config);
+        ui.poll(0, &mut config);
+        ui.poll(DOWN, &mut config);
+        ui.poll(0, &mut config);
+        assert_eq!(ui.menu.selected, crate::menu::ROW_FX);
         assert!(ui.poll(RIGHT, &mut config));
         assert_eq!(config.effects, FxMode::Off);
         assert!(!ui.poll(RIGHT, &mut config));

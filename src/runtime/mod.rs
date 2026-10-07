@@ -33,8 +33,13 @@ static FX_SCOPE: AtomicU8 = AtomicU8::new(FxScope::Online as u8);
 static RENDER_MODE: AtomicU8 = AtomicU8::new(0);
 static INPUT_BUFFER: AtomicI8 = AtomicI8::new(-1);
 static PEER_OBSERVER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static STEALTH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static CONFIG_GENERATION: AtomicU64 = AtomicU64::new(0);
 pub(super) const DATA_DIR: &str = "sd:/ultimate/ssbu_online_deluxe_rewrite";
+
+pub(super) fn saved_render_mode() -> crate::config::RenderMode {
+    crate::config::RenderMode::from_byte(RENDER_MODE.load(Ordering::Acquire))
+}
 
 pub(super) fn settings() -> Config {
     Config {
@@ -49,9 +54,15 @@ pub(super) fn settings() -> Config {
             FxScope::Online
         },
         input_buffer: INPUT_BUFFER.load(Ordering::Acquire),
-        render_mode: crate::config::RenderMode::from_byte(RENDER_MODE.load(Ordering::Acquire)),
+        render_mode: saved_render_mode(),
         peer_observer: PEER_OBSERVER.load(Ordering::Acquire),
+        stealth: STEALTH.load(Ordering::Acquire),
     }
+}
+
+/// Saved Stealth flag for a future transmit path. This does not send anything.
+pub(super) fn stealth() -> bool {
+    STEALTH.load(Ordering::Acquire)
 }
 
 pub(super) fn publish(config: &Config) {
@@ -60,6 +71,7 @@ pub(super) fn publish(config: &Config) {
     INPUT_BUFFER.store(config.input_buffer, Ordering::Release);
     RENDER_MODE.store(config.render_mode as u8, Ordering::Release);
     PEER_OBSERVER.store(config.peer_observer, Ordering::Release);
+    STEALTH.store(config.stealth, Ordering::Release);
     CONFIG_GENERATION.fetch_add(1, Ordering::Release);
 }
 

@@ -8,6 +8,19 @@ use std::{
     },
 };
 pub const CAPACITY: usize = 8192;
+pub const KIND_INDEX: u8 = 12;
+pub const KIND_PRESENT_ENTRY: u8 = 13;
+pub const KIND_LATE_FLUSH: u8 = 14;
+pub const KIND_RECORD_FIGHTERS: u8 = 15;
+pub const KIND_POST_SCENE: u8 = 16;
+pub const KIND_OUTSTANDING: u8 = 17;
+
+/// Count still held after one tracked present returns.
+/// A real zero stays zero. An unmatched present becomes negative.
+#[cfg_attr(not(any(test, target_os = "switch")), allow(dead_code))]
+pub const fn outstanding_after_present(before: i64) -> i64 {
+    before.wrapping_sub(1)
+}
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Event {
     pub begin: u64,
@@ -15,10 +28,16 @@ pub struct Event {
     /// 1=present, 2=acquire, 3=texture CPU wait, 4=render poll, 5=dispatch flush.
     /// 6=HID poll/marker (index=24-bit serial, result=left Y),
     /// 7=same poll sampling counter (index=serial, result=counter low32).
+    /// 12=index selection, 13=present entry, 14=late flush, 15=record fighters,
+    /// 16=post-scene, 17=tracked-window outstanding after present return.
+    /// Kinds 12–17 reuse these columns: `index` is the phase value and `result`
+    /// is the hashed thread label. Kinds 6 and 7 stay the HID records.
     pub kind: u8,
-    /// Texture index for present/acquire; -1 for events without an index.
+    /// Texture index for present/acquire; phase value for kinds 12–17;
+    /// -1 for events without an index.
     pub index: i32,
-    /// Native wait result; -1 when no trustworthy result exists.
+    /// Native wait result, or the hashed thread label for kinds 12–17.
+    /// -1 when no trustworthy result exists.
     pub result: i32,
 }
 struct State {
@@ -237,5 +256,11 @@ mod tests {
         trace.begin(3);
         trace.finish();
         assert_eq!(trace.take_ready().unwrap().reason, Finish::Aborted);
+    }
+    #[test]
+    fn present_return_keeps_a_real_zero_and_an_unmatched_present() {
+        assert_eq!(outstanding_after_present(1), 0);
+        assert_eq!(outstanding_after_present(0), -1);
+        assert_eq!(outstanding_after_present(2), 1);
     }
 }

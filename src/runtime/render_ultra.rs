@@ -1,11 +1,10 @@
-//! Immediate mode flushes at the present function entry, leaving SGPO's caller
-//! site untouched. The inline context preserves all three incoming arguments.
-use super::{logging, memory, record, renderer, settings, Code, DATA_DIR};
+//! Present-entry and late-flush hooks. Installed for every startup mode.
+//! Steady Immediate runs the audited early flush and skips the late flush.
+//! An index swap clears that skip, so early and late may both run until commit.
+//! The caller site at 0x374812c is never patched.
+use super::{logging, memory, record, renderer, Code};
 use skyline::hooks::{getRegionAddress, InlineCtx, Region};
-use std::{
-    path::Path,
-    sync::atomic::{AtomicBool, AtomicU64, Ordering},
-};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 const ENTRY: usize = 0x38701e0;
 const LATE_FLUSH: usize = 0x3749b78;
@@ -23,13 +22,27 @@ pub(super) static LAST_TARGET: AtomicU64 = AtomicU64::new(0);
 unsafe fn base() -> usize {
     getRegionAddress(Region::Text) as usize
 }
-pub(super) fn requested() -> bool {
-    settings().render_mode.immediate() || Path::new(DATA_DIR).join("DUMP_ULTRA_ROUTE").exists()
-}
 type FlushFn = unsafe extern "C" fn(*mut u8, u8);
 
 #[skyline::hook(offset = ENTRY, inline)]
 unsafe fn deluxe_rewrite_pre_present(ctx: &InlineCtx) {
+    let decision = crate::render_policy::load_decision();
+    let immediate = crate::render_policy::run_early(
+        decision,
+        if decision.live {
+            crate::config::RenderMode::Vanilla
+        } else {
+            renderer::mode()
+        },
+    );
+    super::api_trace::mark_thread(
+        crate::render_trace::KIND_PRESENT_ENTRY,
+        i32::from(immediate),
+    );
+    if !immediate {
+        ENTRIES.fetch_add(1, Ordering::Relaxed);
+        return;
+    }
     let n = ENTRIES.fetch_add(1, Ordering::Relaxed);
     // Skyline armutils saves LR before calling the inline callback. Unlike an
     // ordinary Rust function's live LR, this is the game caller's return address.
@@ -72,9 +85,6 @@ unsafe fn deluxe_rewrite_pre_present(ctx: &InlineCtx) {
             *owner.add(0xec) as u64,
         );
     }
-    if !renderer::mode().immediate() {
-        return;
-    }
     assert!(
         known_caller && matches,
         "Immediate present route invariant failed"
@@ -99,7 +109,17 @@ unsafe fn deluxe_rewrite_pre_present(ctx: &InlineCtx) {
 
 #[skyline::hook(offset = LATE_FLUSH, inline)]
 unsafe fn deluxe_rewrite_later_flush(ctx: &InlineCtx) {
-    if renderer::mode().immediate() {
+    let decision = crate::render_policy::load_decision();
+    let skip = crate::render_policy::skip_late(
+        decision,
+        if decision.live {
+            crate::config::RenderMode::Vanilla
+        } else {
+            renderer::mode()
+        },
+    );
+    super::api_trace::mark_thread(crate::render_trace::KIND_LATE_FLUSH, i32::from(skip));
+    if skip {
         LATE_SKIPS.fetch_add(1, Ordering::Relaxed);
     } else {
         let flush: FlushFn = std::mem::transmute(ctx.registers[8].x() as usize);
@@ -128,26 +148,24 @@ pub(super) unsafe fn install() {
     logging::startup_phase("renderer_ultra_install");
     let caller_word = *((base() + CALLER - 4) as *const u32);
     let overlay_word = *((base() + CALLER) as *const u32);
-    if settings().render_mode.immediate() {
-        skyline::patching::Patch::in_text(LATE_FLUSH)
-            .nop()
-            .expect("late flush patch failed");
-        skyline::patching::Patch::in_text(LATE_FLUSH + 4)
-            .nop()
-            .expect("late flush clear patch failed");
-        skyline::install_hook!(deluxe_rewrite_later_flush);
-        let installed = *((base() + LATE_FLUSH) as *const u32);
-        logging::install_checkpoint(Code::HookInstalled, LATE_FLUSH as u64, installed as u64);
-        assert!(
-            installed & 0xfc00_0000 == 0x1400_0000,
-            "late flush inline hook failed"
-        );
-        assert_eq!(
-            *((base() + LATE_FLUSH + 4) as *const u32),
-            0xd503201f,
-            "late flush clear was not suppressed"
-        );
-    }
+    skyline::patching::Patch::in_text(LATE_FLUSH)
+        .nop()
+        .expect("late flush patch failed");
+    skyline::patching::Patch::in_text(LATE_FLUSH + 4)
+        .nop()
+        .expect("late flush clear patch failed");
+    skyline::install_hook!(deluxe_rewrite_later_flush);
+    let installed = *((base() + LATE_FLUSH) as *const u32);
+    logging::install_checkpoint(Code::HookInstalled, LATE_FLUSH as u64, installed as u64);
+    assert!(
+        installed & 0xfc00_0000 == 0x1400_0000,
+        "late flush inline hook failed"
+    );
+    assert_eq!(
+        *((base() + LATE_FLUSH + 4) as *const u32),
+        0xd503201f,
+        "late flush clear was not suppressed"
+    );
     skyline::install_hook!(deluxe_rewrite_pre_present);
     let word = *((base() + ENTRY) as *const u32);
     record(Code::HookInstalled, ENTRY as u64, word as u64);

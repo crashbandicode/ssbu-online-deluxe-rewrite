@@ -10,7 +10,7 @@ use std::{
     fs::File,
     io::Write,
     path::Path,
-    sync::atomic::{AtomicI32, AtomicU64, AtomicUsize, Ordering},
+    sync::atomic::{AtomicI32, AtomicI64, AtomicU64, AtomicUsize, Ordering},
 };
 type Ptr = *mut c_void;
 type Getter = unsafe extern "C" fn(Ptr, *const c_char) -> *const c_void;
@@ -28,6 +28,10 @@ static GET_INTERVAL: AtomicUsize = AtomicUsize::new(0);
 static SET_ACTIVE: AtomicUsize = AtomicUsize::new(0);
 static WINDOW: AtomicUsize = AtomicUsize::new(0);
 static ACTIVE: AtomicI32 = AtomicI32::new(-1);
+
+pub(super) fn active_count() -> i32 {
+    ACTIVE.load(Ordering::Relaxed)
+}
 static TOTAL: AtomicI32 = AtomicI32::new(-1);
 static INTERVAL: AtomicI32 = AtomicI32::new(-1);
 static PRESENTS: AtomicU64 = AtomicU64::new(0);
@@ -36,6 +40,9 @@ static PRESENT_MASK: AtomicU64 = AtomicU64::new(0);
 static ACQUIRE_MASK: AtomicU64 = AtomicU64::new(0);
 static PRESENT_TICK: AtomicU64 = AtomicU64::new(0);
 static ACQUIRE_TICK: AtomicU64 = AtomicU64::new(0);
+static TRACKED_ACQUIRES: AtomicU64 = AtomicU64::new(0);
+static TRACKED_PRESENTS: AtomicU64 = AtomicU64::new(0);
+static OUTSTANDING: AtomicI64 = AtomicI64::new(0);
 
 pub(super) fn present_serial() -> u64 {
     PRESENTS.load(Ordering::Relaxed)
@@ -136,6 +143,8 @@ unsafe extern "C" fn window_initialize(window: Ptr, builder: *const c_void) -> u
             } else {
                 super::renderer::arm_mode(-1);
             }
+        } else if TOTAL.load(Ordering::Relaxed) == 3 && ACTIVE.load(Ordering::Relaxed) == 3 {
+            super::renderer::arm_mode(3);
         }
     }
     result
@@ -152,6 +161,63 @@ unsafe extern "C" fn window_finalize(window: Ptr) {
     let f: unsafe extern "C" fn(Ptr) = std::mem::transmute(FINALIZE.load(Ordering::Acquire));
     f(window);
 }
+fn tracked_window(window: Ptr) -> bool {
+    !window.is_null() && WINDOW.load(Ordering::Acquire) == window as usize
+}
+unsafe fn fresh_counts(window: Ptr) -> (i32, i32, bool) {
+    let mut active = -1;
+    let mut total = TOTAL.load(Ordering::Relaxed);
+    let active_fn = GET_ACTIVE.load(Ordering::Acquire);
+    if active_fn != 0 {
+        let read: unsafe extern "C" fn(Ptr) -> i32 = std::mem::transmute(active_fn);
+        active = read(window);
+        ACTIVE.store(active, Ordering::Relaxed);
+    }
+    let total_fn = GET_TOTAL.load(Ordering::Acquire);
+    if total_fn != 0 {
+        let read: unsafe extern "C" fn(Ptr) -> i32 = std::mem::transmute(total_fn);
+        total = read(window);
+        TOTAL.store(total, Ordering::Relaxed);
+    }
+    (active, total, true)
+}
+fn apply_count(window: Ptr, event: crate::render_policy::StepEvent) {
+    if let crate::render_policy::StepEvent::SetTextures { count, generation } = event {
+        let setter = SET_ACTIVE.load(Ordering::Acquire);
+        if setter == 0 {
+            let _ = crate::render_policy::release_unclaimed(generation);
+            super::record(
+                super::Code::ProfileRefused,
+                crate::render_policy::RefuseReason::Unresolved as u64,
+                count as u64,
+            );
+            return;
+        }
+        note_policy(event);
+        unsafe {
+            let set: unsafe extern "C" fn(Ptr, i32) = std::mem::transmute(setter);
+            set(window, count);
+            if !crate::render_policy::setter_returned(generation) {
+                panic!("NVN active-texture setter lost its ring generation");
+            }
+        }
+        return;
+    }
+    note_policy(event);
+    if let crate::render_policy::StepEvent::CountStop { seen, expected } = event {
+        panic!("NVN active-texture count {seen} after setter, expected {expected}");
+    }
+}
+fn note_policy(event: crate::render_policy::StepEvent) {
+    if let Some((raw, a, b)) = crate::render_policy::diagnostic(&event) {
+        let code = if raw == crate::render_policy::TRACE_REFUSED {
+            super::Code::ProfileRefused
+        } else {
+            super::Code::ProfileTransition
+        };
+        super::record(code, a, b);
+    }
+}
 fn mark_index(mask: &AtomicU64, index: i32) {
     if (0..64).contains(&index) {
         mask.fetch_or(1 << index, Ordering::Relaxed);
@@ -166,6 +232,45 @@ unsafe extern "C" fn queue_present(queue: Ptr, window: Ptr, index: i32) {
     let begin = super::api_trace::start();
     f(queue, window, index);
     super::api_trace::end(begin, 1, index, -1);
+    if tracked_window(window) {
+        TRACKED_PRESENTS.fetch_add(1, Ordering::Relaxed);
+        let before = OUTSTANDING.fetch_sub(1, Ordering::AcqRel);
+        let after = crate::render_trace::outstanding_after_present(before);
+        let shown = if after > i64::from(i32::MAX) {
+            i32::MAX
+        } else if after < i64::from(i32::MIN) {
+            i32::MIN
+        } else {
+            after as i32
+        };
+        super::api_trace::mark_thread(crate::render_trace::KIND_OUTSTANDING, shown);
+        let saved = super::saved_render_mode();
+        let snap = crate::render_policy::snapshot();
+        let (active, allocated, fresh) = if snap.needs_fresh(saved, index, after) {
+            fresh_counts(window)
+        } else {
+            (
+                ACTIVE.load(Ordering::Relaxed),
+                TOTAL.load(Ordering::Relaxed),
+                false,
+            )
+        };
+        apply_count(
+            window,
+            crate::render_policy::apply(
+                snap,
+                crate::render_policy::PresentInput {
+                    saved,
+                    presented_index: index,
+                    outstanding: after,
+                    active,
+                    allocated,
+                    fresh,
+                    setter_ready: SET_ACTIVE.load(Ordering::Acquire) != 0,
+                },
+            ),
+        );
+    }
     // Read objects on their owning render thread, never the logger.
     if n.is_multiple_of(60) && WINDOW.load(Ordering::Acquire) == window as usize {
         readback(window);
@@ -182,6 +287,10 @@ unsafe extern "C" fn window_acquire(window: Ptr, sync: Ptr, index: *mut i32) {
     super::api_trace::end(begin, 2, if index.is_null() { -1 } else { *index }, -1);
     ACQUIRE_TICK.store(skyline::nn::os::GetSystemTick() as u64, Ordering::Relaxed);
     ACQUIRES.fetch_add(1, Ordering::Relaxed);
+    if tracked_window(window) {
+        TRACKED_ACQUIRES.fetch_add(1, Ordering::Relaxed);
+        OUTSTANDING.fetch_add(1, Ordering::AcqRel);
+    }
     if !index.is_null() {
         mark_index(&ACQUIRE_MASK, *index);
     }
@@ -190,9 +299,11 @@ unsafe extern "C" fn window_acquire(window: Ptr, sync: Ptr, index: *mut i32) {
 /// asserting that every value was sampled at the same GPU boundary.
 pub(super) fn write_status() {
     if let Ok(mut file) = File::create(Path::new(DATA_DIR).join("renderer-status.txt")) {
+        let policy = crate::render_policy::labels(crate::render_policy::load_machine());
         let _ = writeln!(file,
-            "build={}\nmetric=nvn_api_observation\nmode={}\nengine_status={}\nindex_hook_calls={}\nindex_pair=0x{:x}\nskipped_render_waits={}\nflush_calls={}\nsequence_frames={}\nmodels_moved={}\nsequence_dispatches={}\nultra_entries={}\nultra_preflushes={}\nultra_late_skips={}\noriginal_flushes={}\nultra_bad_callers={}\nultra_alias_mismatches={}\nultra_last_target=0x{:x}\nwindow=0x{:x}\nget_active_resolved={}\nset_active_resolved={}\nallocated_textures={}\nactive_textures={}\npresent_interval={}\npresent_calls={}\nacquire_calls={}\npresent_index_mask=0x{:x}\nacquire_index_mask=0x{:x}\nlast_present_call_tick={}\nlast_acquire_return_tick={}\nnot_measured=displayed_frames,input_to_photon",
+            "build={}\nmetric=nvn_api_observation\nmode={}\nengine_status={}\npolicy_committed={}\npolicy_effective={}\npolicy_requested={}\npolicy_known_active={}\npolicy_count_target={}\npolicy_buffer={}\npolicy_index={}\npolicy_swapping={}\npolicy_failed={}\npolicy_force_wait={}\nindex_hook_calls={}\nindex_pair=0x{:x}\nskipped_render_waits={}\nflush_calls={}\nsequence_frames={}\nmodels_moved={}\nsequence_dispatches={}\nultra_entries={}\nultra_preflushes={}\nultra_late_skips={}\noriginal_flushes={}\nultra_bad_callers={}\nultra_alias_mismatches={}\nultra_last_target=0x{:x}\nwindow=0x{:x}\nget_active_resolved={}\nset_active_resolved={}\nallocated_textures={}\nactive_textures={}\npresent_interval={}\npresent_calls={}\nacquire_calls={}\ntracked_acquires={}\ntracked_presents={}\ntracked_outstanding={}\npresent_index_mask=0x{:x}\nacquire_index_mask=0x{:x}\nlast_present_call_tick={}\nlast_acquire_return_tick={}\nnot_measured=displayed_frames,input_to_photon",
             crate::build_info::BUILD_ID, super::renderer::mode().key(), super::renderer::status(),
+            policy.committed, policy.effective, policy.requested, policy.known_active, policy.count_target, policy.buffer, policy.index, policy.swapping, policy.failed, policy.force_wait,
             super::renderer::INDEX_CALLS.load(Ordering::Relaxed), super::renderer::INDEX_PAIR.load(Ordering::Relaxed),
             super::renderer::SKIPPED_WAITS.load(Ordering::Relaxed), super::renderer::FLUSH_CALLS.load(Ordering::Relaxed),
             super::render_sequence::FRAMES.load(Ordering::Relaxed), super::render_sequence::MODELS_MOVED.load(Ordering::Relaxed), super::render_sequence::DISPATCHES.load(Ordering::Relaxed),
@@ -201,6 +312,8 @@ pub(super) fn write_status() {
             GET_ACTIVE.load(Ordering::Acquire) != 0, SET_ACTIVE.load(Ordering::Acquire) != 0,
             TOTAL.load(Ordering::Relaxed), ACTIVE.load(Ordering::Relaxed), INTERVAL.load(Ordering::Relaxed),
             PRESENTS.load(Ordering::Relaxed), ACQUIRES.load(Ordering::Relaxed),
+            TRACKED_ACQUIRES.load(Ordering::Relaxed), TRACKED_PRESENTS.load(Ordering::Relaxed),
+            OUTSTANDING.load(Ordering::Relaxed),
             PRESENT_MASK.load(Ordering::Relaxed), ACQUIRE_MASK.load(Ordering::Relaxed),
             PRESENT_TICK.load(Ordering::Relaxed), ACQUIRE_TICK.load(Ordering::Relaxed));
         let _ = file.sync_all();

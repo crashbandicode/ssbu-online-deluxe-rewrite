@@ -50,6 +50,22 @@ pub enum Code {
     PeerObserveName = 38,
     PeerObserveDrop = 39,
     PeerObserveMap = 40,
+    /// Outgoing plaintext packet header at the encrypt site.
+    SendPacket = 41,
+    /// Mixed source id plus the flag, kind, length, and inheritance mask.
+    SendIdentity = 42,
+    /// Mixed destination id and the receive-map index, when the id is known.
+    SendDestination = 43,
+    /// Kind 0x14 subtype-2 spare slot, or kind 0x58 type and Data baseline.
+    SendDetail = 44,
+    /// Send-site ring or unreadable packet drops.
+    SendDrop = 45,
+    ProfileTransition = 46,
+    ProfileRefused = 47,
+    /// Station-index hook reachability. `a` is hits since install; `b` is flags.
+    StationProbe = 64,
+    /// Mixed source id from that sample. `a` is `mix_id` after a successful read.
+    StationProbeId = 65,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

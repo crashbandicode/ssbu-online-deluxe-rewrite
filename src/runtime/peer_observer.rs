@@ -5,10 +5,14 @@
 //! calls `record` only after releasing it.
 use super::{record, Code};
 use crate::peer_observer::{
-    classify_index, diagnose, find_source, message_body_range, present_observation, Diagnostic,
-    IndexChange, MessageBody, PARSED_MESSAGE_GUARD, PARSED_MESSAGE_OFFSET, STATION_INDEX_GUARD,
-    STATION_INDEX_OFFSET, STATION_SLOTS,
+    classify_index, diagnose, diagnose_send, find_source, message_body_range, present_observation,
+    stamp_send_seq, station_probe_flags, Diagnostic, IndexChange, MessageBody, SendPrefix,
+    MESSAGE_SOURCE_OFFSET, PARSED_MESSAGE_GUARD, PARSED_MESSAGE_OFFSET, SEND_CODE_DESTINATION,
+    SEND_CODE_DETAIL, SEND_CODE_DROP, SEND_CODE_IDENTITY, SEND_CODE_PACKET, SEND_PLAINTEXT_GUARD,
+    SEND_PLAINTEXT_OFFSET, STATION_INDEX_FIELD, STATION_INDEX_GUARD, STATION_INDEX_OFFSET,
+    STATION_SLOTS, WIRE_LEN_MAX, WIRE_LEN_MIN,
 };
+use crate::peer_passive::{MESSAGE_AREA_MAX, PIA_MAGIC};
 use skyline::hooks::{getRegionAddress, InlineCtx, Region};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
@@ -56,6 +60,44 @@ static IDS: [AtomicU64; STATION_SLOTS] = [const { AtomicU64::new(0) }; STATION_S
 static GENS: [AtomicU64; STATION_SLOTS] = [const { AtomicU64::new(0) }; STATION_SLOTS];
 static SLOTS: [Slot; RING] = [const { Slot::empty() }; RING];
 
+const SEND_RING: usize = 64;
+
+struct SendSlot {
+    code: AtomicU64,
+    a: AtomicU64,
+    b: AtomicU64,
+}
+
+impl SendSlot {
+    const fn empty() -> Self {
+        Self {
+            code: AtomicU64::new(0),
+            a: AtomicU64::new(0),
+            b: AtomicU64::new(0),
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct CopiedSend {
+    code: u16,
+    a: u64,
+    b: u64,
+}
+
+static SEND_INSTALLED: AtomicBool = AtomicBool::new(false);
+static SEND_BUSY: AtomicBool = AtomicBool::new(false);
+static SEND_HEAD: AtomicU64 = AtomicU64::new(0);
+static SEND_LAST: AtomicU64 = AtomicU64::new(0);
+static SEND_DROPPED: AtomicU64 = AtomicU64::new(0);
+static SEND_LOGGED_DROPS: AtomicU64 = AtomicU64::new(0);
+static SEND_SEQ: AtomicU64 = AtomicU64::new(0);
+static SEND_SLOTS: [SendSlot; SEND_RING] = [const { SendSlot::empty() }; SEND_RING];
+static MAP_HITS: AtomicU64 = AtomicU64::new(0);
+static MAP_FLAGS: AtomicU64 = AtomicU64::new(0);
+static MAP_MIX: AtomicU64 = AtomicU64::new(0);
+static MAP_PUBLISHED: AtomicU64 = AtomicU64::new(u64::MAX);
+
 pub(super) fn install() {
     if !super::settings().peer_observer {
         return;
@@ -80,13 +122,28 @@ pub(super) fn install() {
             return;
         }
     }
+    let send_guard =
+        unsafe { guard_matches(SEND_PLAINTEXT_OFFSET, SEND_PLAINTEXT_GUARD.as_slice()) };
     skyline::install_hooks!(
         deluxe_rewrite_observe_parsed_message,
         deluxe_rewrite_observe_station_index
     );
     INSTALLED.store(true, Ordering::Release);
-    record(Code::HookInstalled, PARSED_MESSAGE_OFFSET as u64, STATION_INDEX_OFFSET as u64);
+    record(
+        Code::HookInstalled,
+        PARSED_MESSAGE_OFFSET as u64,
+        STATION_INDEX_OFFSET as u64,
+    );
     skyline::println!("[Deluxe] peer observer installed");
+    if send_guard {
+        skyline::install_hook!(deluxe_rewrite_observe_send_plaintext);
+        SEND_INSTALLED.store(true, Ordering::Release);
+        record(Code::HookInstalled, SEND_PLAINTEXT_OFFSET as u64, 0);
+        skyline::println!("[Deluxe] peer send diagnostic installed");
+    } else {
+        record(Code::HookRejected, SEND_PLAINTEXT_OFFSET as u64, 0x155878);
+        skyline::println!("[Deluxe] peer send diagnostic guard mismatch at 155878; not installed");
+    }
 }
 
 /// Confirmed RTT station leave. A disabled observer returns before the gate.
@@ -123,6 +180,8 @@ pub(super) fn invalidate_session() {
 }
 
 pub(super) fn poll() {
+    drain_send();
+    drain_station_probe();
     if !INSTALLED.load(Ordering::Acquire) {
         return;
     }
@@ -351,13 +410,43 @@ fn read_at<T: Copy>(base: u64, offset: usize) -> Option<T> {
     Some(unsafe { (address as *const T).read_unaligned() })
 }
 
+fn drain_station_probe() {
+    if !INSTALLED.load(Ordering::Acquire) {
+        return;
+    }
+    let hits = MAP_HITS.load(Ordering::Relaxed);
+    let previous = MAP_PUBLISHED.swap(hits, Ordering::Relaxed);
+    if previous == hits {
+        return;
+    }
+    let flags = MAP_FLAGS.load(Ordering::Relaxed);
+    let mix = MAP_MIX.load(Ordering::Relaxed);
+    record(Code::StationProbe, hits, flags);
+    record(Code::StationProbeId, mix, flags);
+}
+
 #[skyline::hook(offset = STATION_INDEX_OFFSET, inline)]
 unsafe fn deluxe_rewrite_observe_station_index(ctx: &InlineCtx) {
+    // The displaced instruction is `ldrb w20, [x0, #0x38]` and has not run.
+    // `x20` is still the message whose `+0x40` was the GetStationById argument.
+    let message = ctx.registers[20].x();
     let station = ctx.registers[0].x();
-    let Some(index) = read_at::<u8>(station, 0x38) else {
+    let source = read_at::<u64>(message, MESSAGE_SOURCE_OFFSET);
+    let index = read_at::<u8>(station, STATION_INDEX_FIELD);
+    let previous = match index {
+        Some(value) if usize::from(value) < STATION_SLOTS => {
+            IDS[usize::from(value)].load(Ordering::Relaxed)
+        }
+        _ => 0,
+    };
+    let (flags, mix) = station_probe_flags(message, station, source, index, previous);
+    MAP_MIX.store(mix, Ordering::Relaxed);
+    MAP_FLAGS.store(flags, Ordering::Relaxed);
+    MAP_HITS.fetch_add(1, Ordering::Relaxed);
+    let Some(source_id) = source else {
         return;
     };
-    let Some(source_id) = read_at::<u64>(station, 0x40) else {
+    let Some(index) = index else {
         return;
     };
     note_index(index, source_id);
@@ -415,4 +504,190 @@ unsafe fn deluxe_rewrite_observe_parsed_message(ctx: &InlineCtx) {
         DROPPED.fetch_add(1, Ordering::Relaxed);
     }
     exit();
+}
+
+fn drain_send() {
+    if !SEND_INSTALLED.load(Ordering::Acquire) {
+        return;
+    }
+    if !send_enter() {
+        return;
+    }
+    let dropped = SEND_DROPPED.load(Ordering::Relaxed);
+    let logged = SEND_LOGGED_DROPS.load(Ordering::Relaxed);
+    if dropped != logged {
+        SEND_LOGGED_DROPS.store(dropped, Ordering::Relaxed);
+    }
+    let seq = SEND_SEQ.load(Ordering::Relaxed);
+    let head = SEND_HEAD.load(Ordering::Relaxed);
+    let mut next = SEND_LAST.load(Ordering::Relaxed);
+    let mut batch = [CopiedSend {
+        code: 0,
+        a: 0,
+        b: 0,
+    }; SEND_RING];
+    let mut count = 0usize;
+    while next != head && count < SEND_RING {
+        let slot = &SEND_SLOTS[next as usize % SEND_RING];
+        batch[count] = CopiedSend {
+            code: slot.code.load(Ordering::Relaxed) as u16,
+            a: slot.a.load(Ordering::Relaxed),
+            b: slot.b.load(Ordering::Relaxed),
+        };
+        count += 1;
+        next = next.wrapping_add(1);
+    }
+    SEND_LAST.store(next, Ordering::Relaxed);
+    send_exit();
+    if dropped != logged {
+        record(Code::SendDrop, dropped, seq);
+    }
+    for event in &batch[..count] {
+        if let Some(code) = send_code(event.code) {
+            record(code, event.a, event.b);
+        }
+    }
+}
+
+fn send_code(code: u16) -> Option<Code> {
+    Some(match code {
+        SEND_CODE_PACKET => Code::SendPacket,
+        SEND_CODE_IDENTITY => Code::SendIdentity,
+        SEND_CODE_DESTINATION => Code::SendDestination,
+        SEND_CODE_DETAIL => Code::SendDetail,
+        SEND_CODE_DROP => Code::SendDrop,
+        _ => return None,
+    })
+}
+
+fn send_enter() -> bool {
+    SEND_BUSY
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_ok()
+}
+
+fn send_exit() {
+    SEND_BUSY.store(false, Ordering::Release);
+}
+
+fn note_send_drop(count: u64) {
+    SEND_DROPPED.fetch_add(count, Ordering::Relaxed);
+}
+
+fn publish_send(report: &crate::peer_observer::SendReport) {
+    if report.len == 0 {
+        return;
+    }
+    if !send_enter() {
+        note_send_drop(report.len as u64);
+        return;
+    }
+    let seq = SEND_SEQ.fetch_add(1, Ordering::Relaxed) as u16;
+    let mut events = report.events;
+    stamp_send_seq(&mut events[..report.len], seq);
+    let head = SEND_HEAD.load(Ordering::Relaxed);
+    let last = SEND_LAST.load(Ordering::Relaxed);
+    let used = head.wrapping_sub(last) as usize;
+    let room = SEND_RING.saturating_sub(used.min(SEND_RING));
+    let written = room.min(report.len);
+    for (offset, event) in events[..written].iter().enumerate() {
+        let slot = &SEND_SLOTS[(head as usize).wrapping_add(offset) % SEND_RING];
+        slot.code.store(u64::from(event.code), Ordering::Relaxed);
+        slot.a.store(event.a, Ordering::Relaxed);
+        slot.b.store(event.b, Ordering::Relaxed);
+    }
+    SEND_HEAD.store(head.wrapping_add(written as u64), Ordering::Relaxed);
+    if written < report.len {
+        note_send_drop((report.len - written) as u64);
+    }
+    send_exit();
+}
+
+fn copy_bytes(base: u64, offset: usize, dest: &mut [u8]) -> bool {
+    let Some(start) = (base as usize).checked_add(offset) else {
+        return false;
+    };
+    if start < 0x10000 || dest.len() > MESSAGE_AREA_MAX || start.checked_add(dest.len()).is_none() {
+        return false;
+    }
+    unsafe {
+        core::ptr::copy_nonoverlapping(start as *const u8, dest.as_mut_ptr(), dest.len());
+    }
+    true
+}
+
+fn read_magic(base: u64) -> Option<bool> {
+    let mut bytes = [0u8; 4];
+    if !copy_bytes(base, 8, &mut bytes) {
+        return None;
+    }
+    let magic_be = u32::from_be_bytes(bytes);
+    let magic_le = u32::from_le_bytes(bytes);
+    Some(magic_be == PIA_MAGIC || magic_le == PIA_MAGIC)
+}
+
+fn observe_send_packet(packet: u64) {
+    let Some(version_flags) = read_at::<u8>(packet, 0xc) else {
+        note_send_drop(1);
+        return;
+    };
+    let Some(connection_id) = read_at::<u8>(packet, 0xd) else {
+        note_send_drop(1);
+        return;
+    };
+    let Some(wire_byte) = read_at::<u8>(packet, 0x2d) else {
+        note_send_drop(1);
+        return;
+    };
+    let Some(wire_len) = read_at::<u32>(packet, 0x5e8) else {
+        note_send_drop(1);
+        return;
+    };
+    let Some(magic_ok) = read_magic(packet) else {
+        note_send_drop(1);
+        return;
+    };
+    let report = {
+        let mut area = [0u8; MESSAGE_AREA_MAX];
+        let readable = if (WIRE_LEN_MIN..=WIRE_LEN_MAX).contains(&wire_len) {
+            let len = (wire_len - WIRE_LEN_MIN) as usize;
+            copy_bytes(packet, 0x48, &mut area[..len])
+        } else {
+            true
+        };
+        if !readable {
+            note_send_drop(1);
+            return;
+        }
+        let area_len = if (WIRE_LEN_MIN..=WIRE_LEN_MAX).contains(&wire_len) {
+            (wire_len - WIRE_LEN_MIN) as usize
+        } else {
+            0
+        };
+        // Diagnostic correlation only. These relaxed loads are not one generation
+        // of the receive map and do not take its gate, so the copy can tear.
+        // Transmit identity selection must not use this snapshot.
+        let mut stations = [0u64; STATION_SLOTS];
+        for (slot, id) in stations.iter_mut().zip(IDS.iter()) {
+            *slot = id.load(Ordering::Relaxed);
+        }
+        diagnose_send(
+            SendPrefix {
+                version_flags,
+                connection_id,
+                wire_byte,
+                wire_len,
+                magic_ok,
+            },
+            &area[..area_len],
+            0,
+            &stations,
+        )
+    };
+    publish_send(&report);
+}
+
+#[skyline::hook(offset = SEND_PLAINTEXT_OFFSET, inline)]
+unsafe fn deluxe_rewrite_observe_send_plaintext(ctx: &InlineCtx) {
+    observe_send_packet(ctx.registers[0].x());
 }

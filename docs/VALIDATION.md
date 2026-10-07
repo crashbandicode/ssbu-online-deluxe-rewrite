@@ -320,3 +320,76 @@ zero bad callers and zero alias mismatches. It exited normally after 131 seconds
 peak memory 5,969,846,272 bytes, no OOM. This is startup/menu evidence, not a new
 match or network test. Evidence and restored-profile hash receipt:
 `~/.local/share/ssbu-mod-backups/observer-final-smoke-20261006/`.
+
+## Live profiles and both asymmetric G&W modes, 2026-10-07
+
+Tested NRO `ed5d12f84772149fcf86ea43ffa18efd657f6d27edefde3034eba8e647312c6e`,
+ELF `5da2c5cd5ce801959faba5f9c04dbc9dabcf8dbc65e5c49e15eab1d6db32530d`.
+The same candidate ran both tests below. Host Clippy with denied warnings,
+no-default-features build, 110 host tests, Skyline Clippy and release build passed.
+
+A `20261006-210611-b11161` had the rewrite, G&W fix `0883e69785e90b0e…`,
+corrected SGPO `20e9e062c9ace623…`, Training Modpack and ARCropolis. B
+`20261006-210611-b70a45` had no title overrides/plugins. Custom Eden was
+`10bcd2d849843b146a79c61a21df615e1bdcfcde`, Smash 13.0.5, private localhost
+room, Auto input buffer, FX On/all. Neither peer used VPN. A's diagnostic peer
+observer was enabled and only observed packets. Demand-readback was disabled.
+
+Both were three-stock, seven-minute Mr. Game & Watch versus Sephiroth matches.
+The scripts exercised attacks, projectiles, jumps and KO/respawn; B then walked
+off to finish the matches. They are not seven minutes of uninterrupted combat.
+
+| Mode on A | Stage | Matching live damage, A/B | Matching result damage given, A/B | Outcome |
+|---|---|---|---|---|
+| LessLag | Kongo Jungle 64, Battlefield form | 5.6% / 26.4% | 26% / 5% | G&W wins on both; both return to CSS |
+| LLUltra | Battlefield | 5.6% / 20.1% | 20% / 5% | G&W wins on both; both return to CSS |
+
+G&W shader fingerprint `3869d88ad69eee6a` was verified, with RANGE slot 2
+reductions and restoration logged. Rewrite Ultra guards recorded no bad callers
+or alias mismatches. No desync was observed in either match. This establishes
+bounded one-sided coexistence, not simulation-checksum equality, every move or
+costume, Switch behavior, VPN/high-latency compatibility, or a performance gain.
+
+The same session also switched Vanilla/LessLag/LLUltra in the main menu, at CSS
+(nine successive changes), and during a third linked match (two complete cycles).
+All selections reached Active. The match trace `2711481731398` captured 592
+presents using indices 0/1/2, all with zero outstanding acquisitions after present,
+and no skipped trace events. The CSS trace `2698991455799` recorded another 568
+presents with zero outstanding acquisitions, but did not span all CSS changes.
+Across the session, ten buffer changes committed; no code-47 refusal, code-14
+panic or stalled-drain warning occurred. The third match was stopped after the
+transition checks; it is not another complete-match acceptance.
+
+The legacy trace `engine` and status `mode` fields describe the startup mode.
+For live changes use `policy_committed`, `policy_effective`, the fresh active
+texture count and transition events. Raw index-selection markers are before
+the game's modulo-three instruction and can exceed two in Vanilla.
+
+Both frontends exited normally, code 0, with no OOM events. Peak memory was
+7,083,679,744 bytes for A and 6,448,177,152 for B, under 8/7 GiB limits and a
+45-minute deadline. All staged files were restored with hash verification.
+Switch and main user Eden files were untouched. Evidence, screenshots, mode
+snapshots, trace summaries and restoration journal:
+`~/.local/share/ssbu-mod-backups/peer-menu-gnw-e2-final-20261007/`.
+
+INI persistence was separately exercised on preceding E1 candidate `bcb8…`:
+LLUltra and the Stealth preference survived a full restart. Current host tests
+cover the same save/recovery path. Stealth still displays Unavailable because
+the transmit implementation is incomplete; saved preference is not proof of
+network behavior.
+
+## Stealth identity blocker and separate emulator crash
+
+The read-only observer populated peer slot 1, but its one-shot map event was
+dropped from the four-entry diagnostic queue. Subsequent sampled probes proved
+the slot remained populated. Its received source ID still differs from the
+transmit destination ID. Grok excluded a byte-order explanation; Fable's second
+opinion found no proven conversion and recommends station-field and explicit
+header-presence probes, or the fork manager's connection-ID method. No guessed
+mapping or packet writes were added. Full Stealth and peer metadata remain open.
+
+A prior diagnostic run `20261006-201956-a94e26` crashed in Eden's host GPU code
+before fighter selection. Symbolization located `Tegra::DmaPusher::CallMethod`
+accessing an unbound subchannel. The cause of that missing engine binding is
+unresolved; it is not established as a G&W or rewrite fault. The current two
+accepted matches did not reproduce it. No emulator workaround was shipped.

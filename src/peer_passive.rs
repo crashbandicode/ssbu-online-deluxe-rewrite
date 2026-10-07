@@ -34,8 +34,11 @@ const RTT_REPLY: [u8; 4] = [0x00, 0x00, 0x00, 0x01];
 const FORK_PAYLOAD_LEN: usize = 4;
 const RTT_BODY_MIN: usize = 0x10;
 
-/// One framed message. Absent flag bits are `None`; the manager would leave
-/// the previous message's register in those bytes, and this parser does not.
+/// One framed message. Absent flag bits stay `None`.
+///
+/// The body length used to frame the message is a separate register. It starts
+/// at 0 for each walk, a present length replaces it, and a clear length bit
+/// reuses it. `body_len` records only the present field.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PiaMessage<'a> {
     pub flags: u8,
@@ -75,17 +78,38 @@ pub fn parse_message_area<'a>(
     area: &'a [u8],
     out: &mut [PiaMessage<'a>],
 ) -> Result<usize, ParseError> {
+    let mut count = 0usize;
+    walk_messages(area, out.len(), |message| {
+        out[count] = message;
+        count += 1;
+    })
+}
+
+/// Same byte walk as [`parse_message_area`]. `limit` is checked before a
+/// message is parsed, so a full output does not turn a later truncated frame
+/// into [`ParseError::Truncated`]. The callback must not keep the body borrow.
+///
+/// Body framing follows the manager parser at `0x41a8`: the length register is
+/// local to this call, starts at 0, and is replaced only when flag bit 1 is
+/// set. A later message with that bit clear still consumes the previous
+/// length, then 4-aligns. The next call starts at 0 again.
+pub fn walk_messages<'a>(
+    area: &'a [u8],
+    limit: usize,
+    mut on_message: impl FnMut(PiaMessage<'a>),
+) -> Result<usize, ParseError> {
     if area.len() > MESSAGE_AREA_MAX {
         return Err(ParseError::Oversize);
     }
     let mut rest = area;
     let mut count = 0usize;
+    let mut framed_len = 0u16;
     while !rest.is_empty() {
         let flags = rest[0];
         if flags == TERMINATOR {
             break;
         }
-        if count == out.len() {
+        if count == limit {
             return Err(ParseError::Capacity);
         }
         let (extra, mut cursor) = if flags & 1 == 0 {
@@ -104,6 +128,7 @@ pub fn parse_message_area<'a>(
             }
             let value = u16::from_be_bytes([rest[cursor], rest[cursor + 1]]);
             cursor = end;
+            framed_len = value;
             Some(value)
         };
         let (kind, kind_arg) = if flags & KIND_PRESENT == 0 {
@@ -124,7 +149,7 @@ pub fn parse_message_area<'a>(
         };
         let first_u64 = read_be_u64(rest, flags, FIRST_U64_PRESENT, &mut cursor)?;
         let second_u64 = read_be_u64(rest, flags, SECOND_U64_PRESENT, &mut cursor)?;
-        let body_bytes = usize::from(body_len.unwrap_or(0));
+        let body_bytes = usize::from(framed_len);
         let Some(body_end) = cursor.checked_add(body_bytes) else {
             return Err(ParseError::Truncated);
         };
@@ -135,7 +160,7 @@ pub fn parse_message_area<'a>(
         if aligned > rest.len() {
             return Err(ParseError::Truncated);
         }
-        out[count] = PiaMessage {
+        on_message(PiaMessage {
             flags,
             extra,
             body_len,
@@ -144,7 +169,7 @@ pub fn parse_message_area<'a>(
             first_u64,
             second_u64,
             body: &rest[cursor..body_end],
-        };
+        });
         count += 1;
         rest = &rest[aligned..];
     }
@@ -427,7 +452,10 @@ mod tests {
                 profile_bits: 0x3fff,
             }
         );
-        assert_eq!(decode_fork_payload(&[4, 0, 0, 0]), ForkPayload::VersionMismatch);
+        assert_eq!(
+            decode_fork_payload(&[4, 0, 0, 0]),
+            ForkPayload::VersionMismatch
+        );
         assert_eq!(decode_fork_payload(&[3, 0, 0]), ForkPayload::Invalid);
         assert_eq!(decode_fork_payload(&[3, 0, 0, 0, 0]), ForkPayload::Invalid);
 
@@ -505,5 +533,68 @@ mod tests {
                 (span as u128) / (LOCATION_STRIDE as u128)
             );
         }
+    }
+
+    #[test]
+    fn inherited_length_frames_the_body_and_resets_each_walk() {
+        let mut first = vec![0x02, 0x00, 0x04, 0x11, 0x22, 0x33, 0x44];
+        while !first.len().is_multiple_of(4) {
+            first.push(0);
+        }
+        let split = first.len();
+        first.push(0x00);
+        first.extend_from_slice(&[0xaa, 0xbb, 0xcc, 0xdd]);
+        while !(first.len() - split).is_multiple_of(4) {
+            first.push(0);
+        }
+        first.push(0xff);
+        let parsed = parse(&first).unwrap();
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[0].body_len, Some(4));
+        assert_eq!(parsed[0].body, &[0x11, 0x22, 0x33, 0x44]);
+        assert_eq!(parsed[1].body_len, None);
+        assert_eq!(parsed[1].flags, 0x00);
+        assert_eq!(parsed[1].body, &[0xaa, 0xbb, 0xcc, 0xdd]);
+
+        let mut aligned = vec![0x02, 0x00, 0x01, 0x7e];
+        let second = aligned.len();
+        aligned.push(0x00);
+        aligned.push(0x5a);
+        while !(aligned.len() - second).is_multiple_of(4) {
+            aligned.push(0);
+        }
+        let bodies = parse(&aligned).unwrap();
+        assert_eq!(bodies.len(), 2);
+        assert_eq!(bodies[1].body_len, None);
+        assert_eq!(bodies[1].body, &[0x5a]);
+
+        let mut short = vec![0x02, 0x00, 0x04, 1, 2, 3, 4, 0];
+        short.push(0x00);
+        short.extend_from_slice(&[9, 9]);
+        assert_eq!(parse(&short), Err(ParseError::Truncated));
+
+        let pad = vec![0x02, 0x00, 0x01, 0x7e, 0x00, 0x5a];
+        assert_eq!(parse(&pad), Err(ParseError::Truncated));
+
+        let mut held = [PiaMessage {
+            flags: 0,
+            extra: None,
+            body_len: None,
+            kind: None,
+            kind_arg: None,
+            first_u64: None,
+            second_u64: None,
+            body: &[],
+        }; 1];
+        assert_eq!(
+            parse_message_area(&first, &mut held),
+            Err(ParseError::Capacity)
+        );
+        assert_eq!(held[0].body, &[0x11, 0x22, 0x33, 0x44]);
+
+        let reset = parse(&[0x00, 0, 0, 0]).unwrap();
+        assert_eq!(reset.len(), 1);
+        assert_eq!(reset[0].body_len, None);
+        assert!(reset[0].body.is_empty());
     }
 }

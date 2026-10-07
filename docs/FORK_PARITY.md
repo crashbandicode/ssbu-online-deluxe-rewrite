@@ -1,7 +1,7 @@
 # Fork feature parity
 
 Source of record: `reference/quickplay` at `35fdf7cf` (see `reference/README.md`).
-Working-tree changes based on `6e003597fb2a`, reviewed 2026-10-06.
+Live-profile candidate based on `082a40076979`, reviewed 2026-10-07.
 A feature is listed only when an `install()`
 path or an exported function actually registers it. `docs/STATUS.md` is a
 progress note, not this inventory.
@@ -140,7 +140,7 @@ Performance scaler (`perf_scaler/mod.rs:53-55`), called from match init (`:40-46
 config and reloads the overclocker. It does not itself apply a profile; the
 next auto-select reads the stored config.
 
-## Rewrite working tree, 2026-10-06
+## Rewrite working tree, 2026-10-07
 
 Startup (`src/runtime/mod.rs`) installs renderer, menu, FX, buffer, and Pia RTT, each skippable
 with `sd:/ultimate/ssbu_online_deluxe_rewrite/DISABLE_<NAME>`: renderer, menu,
@@ -150,13 +150,13 @@ symbol skips every hook (`:109-112`, `:134-147`). Display version must be
 
 | Fork behavior | Rewrite | Evidence |
 |---|---|---|
-| Vanilla render | Completed. Non-vanilla patches are not installed | `runtime/renderer.rs:121-124` |
-| LessLag / LLUltra startup modes | Completed as in-tree text patches, not `sync_guest`. Startup only. Status text says restart to change (`renderer.rs:29`) | `config.rs:116-118`; install stores `REQUEST` once (`renderer.rs:125-126`); `lesslag` adds render-opts sequencing; `llultra` adds immediate flush at `0x38701e0` and nops `0x3749b78` |
+| Vanilla render | Original three-texture TwoBehind behavior through the always-installed rendering hooks | render_policy.rs, runtime/renderer.rs; menu/CSS/match traces |
+| LessLag / LLUltra | In-tree render policies; live selection and INI persistence. No external sync_guest | render_policy.rs, runtime/nvn.rs, runtime/render_sequence.rs, runtime/render_ultra.rs |
 | `lesslag_core`, `doubles_core` | Partial isolation modes. Core skips render opts. `doubles_core` is 3 textures and is not LLDoubles | `config.rs:100-108` |
-| Selectable NetProfile, Auto, match/menu apply, drift reapply | Missing. Menu edits FX and input buffer only (`menu.rs:43-56`). UI prints the boot mode (`runtime/ui.rs:220`) | `policy.rs:1-2` |
+| Selectable NetProfile, Auto, match/menu apply, drift reapply | Manual Vanilla/LessLag/LLUltra implemented, including mid-match changes. Auto and match/menu policy remain missing | menu.rs, runtime/ui.rs, render_policy.rs |
 | Online singles/doubles defaults | Missing at runtime. The unused policy specifies console LessLag / emulator LLUltra / online doubles LLDoubles. Its Local case stays Vanilla, unlike the fork's OnlineLocal path; correct that specification before runtime integration (`policy.rs:26-37`) | Not called from `src/runtime` |
 | Opponent ping | One fresh non-local station. The cell is the integer mean of that station's 100-sample ring, coloured Stable / Inconsistent / Unstable. You stays `---`. A second fresh station, another live protocol, or a stale sample stays uncolored `---`. No interface suffix, account name, or peer NetLatency / NetProfile | `pia_rtt.rs`, `runtime/ui.rs` |
-| Stealth | Missing. No PIA send path exists to suppress. Full profile selection is still pending | no `pia` module |
+| Stealth | Saved menu/INI preference only; UI says Unavailable. TX backend remains blocked on peer identity reconciliation | config.rs, menu.rs; no custom packet writes |
 | Input buffer Auto/0–25 | Completed and live. Same offset and null guard. Auto keeps the game byte | `runtime/hooks.rs:34-52`, `policy.rs:42-47` |
 | Peer latency broadcast and active-vs-selected display | Missing | no station packet |
 | Quickplay/Arena/Local class for profiles | Partial. The same five scene offsets only set an FX-online flag. Main menu always clears it, including during Quickplay | `runtime/online.rs:1-4`, `:40-63` |
@@ -170,54 +170,42 @@ symbol skips every hook (`:109-112`, `:134-147`). Display version must be
 | FX On/Off, online scope | Rewrite-owned, not a fork feature. Live, and FX install also installs the scene flag | `runtime/effects.rs:339-340` |
 | FX Reduced | Rejected by the parser. `FxMode::Reduced` exists and `effective()` turns it back into On. Not a registered mode | `config.rs:162-168`, `:24-28` |
 
-`render_mode` in the INI is read at startup. Publishing a new config from the
-menu (`runtime/ui.rs:163-164`) updates the atomic, but the renderer does not
-reinstall patches. Changing the INI between matches does nothing until the
-game process starts again.
+External INI edits are read at startup. Menu changes publish a saved request and
+persist it with the existing recovery file. Manual Vanilla/LessLag/LLUltra
+requests commit at controlled present/flush boundaries; the renderer confirms
+the buffer count and completes the index transition before reporting Active.
+Core experiments remain startup-only.
 
-Operator correction, not retested here: the rewrite's LessLag path has no known
-menu stall. The stall belonged to original 1.4.1 menu-profile application.
-Booting the rewrite with `render_mode=lesslag` still installs the match patches
-before the menu, because install runs from `main`.
+All rendering hooks are installed once, including in Vanilla. Transitions never
+reinstall hooks. The requested target is frozen during each drain; a later menu
+request is considered after that transition finishes. A failed pre-mutation
+check refuses the change. Missing post-setter drain markers retain a safe wait
+and modulus; invalid post-drain count readback stops with diagnostics rather
+than guessing the window state. See DEBUGGING.md for status fields.
 
-## Implementation order
+## Remaining implementation order
 
-Stay in this NRO. Do not add a second Deluxe plugin. Leave TM's effect hooks
-chained and leave `0x374812c` unpatched.
+1. Reconcile the transmit-side peer key before adding fork-compatible beacon
+   and peer-setting transmission. Grok and Fable's second opinion both rejected
+   keying TX by the current RX-source map. Byte order is ruled out. Follow-up
+   evidence must distinguish a second Station identity from an inherited-header
+   probe issue, or use the fork manager's proven connection-ID path.
+2. Implement live Stealth suppression of both owned announcements and custom
+   metadata, keeping receive enabled. The stored bool alone is not Stealth.
+   Previously recognized peers may retain that recognition until reconnect.
+3. Add Auto selection and match/menu policy, including connected local wireless.
+   The unused portable policy's Local classification still needs correction
+   before runtime use. Manual profile requests already work during play.
+4. Add validated peer names, interface suffixes and peer NetLatency/NetProfile.
+   Preserve the fork's RTT stability colors and do not select an arbitrary peer
+   when several fresh stations exist.
+5. Continue console validation, dynamic resolution and performance scaling.
+   Doubles remains deferred by the operator. Reduced FX follows a reproducible
+   console performance dip.
 
-1. Singles NetProfiles at a match boundary: manual Vanilla, LessLag, and
-   LLUltra, plus Auto. Auto for a singles online match is LessLag on console
-   and LLUltra on emulator, including connected local wireless (the fork's
-   `is_valid_online_mode` includes `OnlineLocal`). Menu, training and offline
-   stay Vanilla. The unused policy's Local case currently differs.
-   Apply when the match becomes real, and return to Vanilla when it ends.
-   Do not hot-edit the INI and do not reinstall hooks mid-frame. The current
-   patches are process-lifetime text edits, so the transition design has to
-   define a safe point (Fable is drafting that separately in
-   `audittemp/fable-netprofiles-ping-design.md`). Until that boundary exists,
-   a profile chosen in the CSS is not a feature.
-2. Show the selected and the active profile in the existing Player Info row.
-   Wire Left/Right only outside a connected match, matching `allow_interact`.
-3. Opponent ping is the read-only Pia observer in the existing row. It is not
-   `ssbu_pia_interface`. The fork-style stability colors are implemented;
-   Wifi/Ethernet/Emu suffixes still need validated peer metadata.
-   Several fresh peers, or a second live protocol, stay `unavailable` rather
-   than picking a spectator. Stealth is still not a menu toggle.
-4. Stealth as a startup bool, default false. It is meaningful only after a
-   custom send hook exists. The original fork patches the separate manager's
-   beacon. This one-NRO rewrite must instead own beacon generation and suppress
-   its own beacon/custom sends when Stealth is enabled. Receive stays on.
-   Do not describe "we send no PIA packet today" as implemented Stealth.
-5. Input-buffer peer display and the CSS/local pane text. The local overwrite
-   path already works.
-6. After singles are selectable and tested: full LLDoubles (triple, one-behind,
-   render opts, dynamic res, doubles detection from fighter count). `doubles_core`
-   is not that preset. Reduced FX stays after singles and is independent of the fork.
-
-Console overclock, FPS boost, cut-in/Sephiroth dynamic res, native banner
-writes, and the Quickplay-guess fallback wait until the singles boundary is
-real. Native pane writes should be reviewed against SGPO and Training Modpack
-before they return.
+Console clocks, FPS boost, native banners, streamer mode and station cycling
+remain absent. Keep one NRO, chained TM effect hooks and SGPO's unpatched
+0x374812c neighborhood.
 
 ## 2026-10-06 ImGui NVN chain
 
@@ -241,13 +229,13 @@ so a steady value is Stable from the first sample. That is a deliberate
 correction, not a claim that the closed NRO does the same.
 
 Still missing, so the cells stay empty or `---`: account name, interface
-suffix, peer NetLatency, and peer NetProfile. Full Stealth and selectable
-NetProfiles are still pending. Several fresh stations stay unavailable rather
+suffix, peer NetLatency, and peer NetProfile. Full Stealth remains pending; manual NetProfiles are now selectable. Several fresh stations stay unavailable rather
 than an invented aggregate. Native CSS and arena banners are not reinstated.
 
 ## Experimental peer metadata diagnostics
 
-`peer_observer=true` opts into two guarded, read-only hooks after startup.
+`peer_observer=true` opts into guarded receive, station-map and pre-encryption
+send observers at startup.
 The default is false. This is diagnostic logging only: it does not populate
 names or interface cells, send packets, or implement Stealth. The optional
 observer depends on the installed Pia lifecycle observers. Its exact artifact
@@ -260,24 +248,15 @@ parser inherits omitted header fields, so a raw parser with absent fields
 cannot substitute for the game's parsed object. Whether both LDN peers receive
 usable subtype-2 responses still needs a captured trace.
 
-## Tests to add
+## Validation coverage and remaining tests
 
-Existing host tests cover INI parse, the unused `select_profile` table, menu
-FX/buffer edits, and `apply_input_buffer`. They do not prove a running mode.
+The 110 host tests cover settings/recovery, menu cycles, render-policy
+transitions and refusal paths, buffer limits, RTT formatting, and read-only
+packet parsing. E2 Eden tests cover live profile changes in menus, CSS and a
+linked match, plus one-sided G&W-fix matches in both LessLag and LLUltra.
+The observations and limits are recorded in VALIDATION.md.
 
-- A profile published after `renderer::install` does not change `renderer::mode()`
-  or the installed patch set.
-- A defined match-start boundary applies Vanilla, LessLag, or LLUltra and the
-  match-end boundary returns to Vanilla. Training stays Vanilla; connected
-  local wireless uses the online recommendation, matching the fork.
-- Emulator Auto singles resolve to LLUltra; console Auto singles resolve to
-  LessLag. Doubles assertions stay pending until step 6.
-- Buffer `auto` leaves a non-zero game byte; `0` and `25` replace it; a null
-  pointer does not write.
-- Ping formatting: a fresh mean is `{mean}ms` in the opponent cell and
-  `{mean} ms` on the performance row. Empty and stale are `---` with no colour.
-  Wifi/Ethernet/Emu suffixes stay absent until interface metadata exists.
-- Stealth predicate: send registration is off, receive registration is on.
-  Do not patch a manager binary in the test.
-- Coexistence: ultra install does not write `0x374812c`; FX filters call
-  through; no `Layout::Draw` install is added.
+Still required: Auto match/menu application; console profile transitions; full
+high-latency/VPN matches; validated transmit identity and Stealth suppression;
+peer metadata interoperability. Doubles remains deferred. Visual agreement and
+matching results are not simulation-checksum evidence.

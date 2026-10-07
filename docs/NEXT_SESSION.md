@@ -1,10 +1,16 @@
-# Next session: LessLag/LLUltra proof, Switch crash, then Doubles
+# Next session: Stealth identity, profile parity and console validation
 
-The user's current order is: demonstrate objective response-frame savings for
-full LessLag and LLUltra in custom Eden; then reproduce and fix the Switch
-in-match crash in one or two Eden instances (LDN where needed); then Doubles.
-Reduced FX follows an actual Switch performance reproduction. Earlier text that
-deferred Doubles at the operator's request is superseded by this order.
+LessLag/LLUltra captured-response evidence is accepted for the tested Eden setup.
+The corrected overlay passed two user-run Switch matches. Manual profile
+selection now works live and persists. One-sided G&W-fix matches passed in both
+LessLag and LLUltra with matching results and return to CSS. See VALIDATION.md.
+Stealth remains Unavailable: its preference persists, but its transmit backend
+is blocked on peer identity reconciliation. Grok and Fable's second opinion did
+not establish a safe mapping; preserve both reports and collect the read-only
+evidence they identify before implementing packet writes. Do not take another
+opinion hop on the same unresolved design. Auto, full peer metadata and console
+profile-transition validation remain pending. Doubles is deferred by the latest
+operator instruction. Reduced FX follows a reproducible Switch performance dip.
 Use HANDOFF.md for the exact bundle, installed files, live state and receipts.
 
 ## Environment
@@ -15,12 +21,15 @@ Use the verified custom Eden delivery at /home/intpa/eden-cli-handoff (READY,
 source/docs/user/CLIControl.md there. Launch with
 `launch-eden.ps1 -MemoryGiB 8 -Runtime 600`, then attach edenctl.py to the exact
 socket printed by that run. Keep one bounded instance with a finite lifetime.
+Two isolated profiles are permitted for linked tests; use separate data trees,
+memory limits and finite deadlines. The accepted pair used 8 GiB and 7 GiB.
 The older tools/EdenTest.ps1 is only for stock-baseline reproduction.
 
 Check the installed NRO hash and startup identity against HANDOFF.md, and back
 up the NRO and config before replacing either. `render_mode` and the INPUT_RECEIPT
-and DUMP_ULTRA_ROUTE flags are read at boot; change them only with the game closed.
-Restore `render_mode=vanilla` and remove both flags when a campaign ends.
+and DUMP_ULTRA_ROUTE flags are read at boot; external edits require a closed game.
+The NetProfile menu applies supported mode changes live. Restore exact staged
+files from each campaign's journal after collecting logs, with both games closed.
 
 ## 1. LessLag/LLUltra response proof — accepted for this Eden setup
 
@@ -36,16 +45,19 @@ its separation from the pose is phase-dependent. No display, photon, native
 console, or universal every-input frame-count claim follows. Extra release-side
 trials would broaden coverage but are not a prerequisite to the next investigation.
 
-## 2. Switch in-match crash
+## 2. Remaining crash and console checks
 
-Reproduce it in Eden before changing code. Record the mode, scene, fighters,
+The corrected SGPO build passed the user's Kirby and Palutena matches and
+returns to CSS. Do not call the new render-policy transitions console-tested.
+A separate Eden GPU subchannel crash remains unexplained (VALIDATION.md).
+For a recurrence, record the mode, scene, fighters,
 online/LDN topology, the exact NRO hash and the crash evidence. The v1.4.2
 release moved to persistent hooks and a per-frame render_opts snapshot, which
 this rewrite also uses; that design difference is not proof of the crash
 mechanism. A crash on externally stopping the emulator is a shutdown failure,
 not this crash.
 
-## 3. Doubles
+## 3. Doubles — deferred
 
 `doubles_core` gives three textures with OneBehind but no render_opts. Full
 LLDoubles also needs render_opts and its dynamic-resolution behavior, followed by

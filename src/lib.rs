@@ -20,6 +20,7 @@ pub mod build_info {
     include!(concat!(env!("OUT_DIR"), "/build_info.rs"));
 }
 
+pub mod render_policy;
 pub mod render_trace;
 #[cfg(target_os = "switch")]
 mod runtime;

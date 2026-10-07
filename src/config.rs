@@ -114,10 +114,14 @@ pub struct Config {
     pub effects_scope: FxScope,
     /// -1 means Auto; explicit values must be in 0..=25.
     pub input_buffer: i8,
-    /// Read once at startup; changing this requires a full restart.
+    /// Vanilla, LessLag, and LLUltra may change live after the window count is known.
+    /// Legacy core modes still apply on the next start.
     pub render_mode: RenderMode,
     /// Diagnostic-only inbound observer. Omitted keys stay false.
     pub peer_observer: bool,
+    /// Saved preference only. Transmission is not installed, so the menu shows
+    /// this choice as unavailable.
+    pub stealth: bool,
 }
 
 impl Default for Config {
@@ -128,13 +132,14 @@ impl Default for Config {
             input_buffer: -1,
             render_mode: RenderMode::Vanilla,
             peer_observer: false,
+            stealth: false,
         }
     }
 }
 
 pub fn parse(text: &str) -> Result<Config, String> {
     let mut config = Config::default();
-    let mut seen = [false; 6];
+    let mut seen = [false; 7];
     for (index, raw) in text.lines().enumerate() {
         let line = raw.split('#').next().unwrap_or_default().trim();
         if line.is_empty() {
@@ -153,6 +158,7 @@ pub fn parse(text: &str) -> Result<Config, String> {
             "effects_scope" => 3,
             "render_mode" => 4,
             "peer_observer" => 5,
+            "stealth" => 6,
             _ => return Err(error(&format!("unknown key '{key}'"))),
         };
         if seen[slot] {
@@ -199,6 +205,13 @@ pub fn parse(text: &str) -> Result<Config, String> {
                     _ => return Err(error("peer_observer must be true or false")),
                 };
             }
+            "stealth" => {
+                config.stealth = match value {
+                    "true" => true,
+                    "false" => false,
+                    _ => return Err(error("stealth must be true or false")),
+                };
+            }
             "input_buffer" => {
                 config.input_buffer = if value == "auto" {
                     -1
@@ -243,7 +256,8 @@ pub fn serialize(config: &Config) -> String {
         config.input_buffer.to_string()
     };
     let peer_observer = if config.peer_observer { "true" } else { "false" };
-    format!("# Online Deluxe settings\nversion=1\neffects={effects}\neffects_scope={effects_scope}\ninput_buffer={input_buffer}\nrender_mode={}\npeer_observer={peer_observer}\n", config.render_mode.key())
+    let stealth = if config.stealth { "true" } else { "false" };
+    format!("# Online Deluxe settings\nversion=1\neffects={effects}\neffects_scope={effects_scope}\ninput_buffer={input_buffer}\nrender_mode={}\npeer_observer={peer_observer}\nstealth={stealth}\n", config.render_mode.key())
 }
 
 impl Config {
@@ -276,6 +290,7 @@ mod tests {
                     input_buffer,
                     render_mode: RenderMode::Vanilla,
                     peer_observer: false,
+                    stealth: false,
                 };
                 assert_eq!(parse(&config.serialize()).unwrap(), config);
             }
@@ -367,5 +382,53 @@ mod tests {
         assert!(FxScope::Online.allows(true));
         assert!(FxScope::All.allows(false));
         assert!(FxScope::All.allows(true));
+    }
+
+    #[test]
+    fn profile_and_stealth_survive_save_recovery_and_reload() {
+        let saved = Config {
+            render_mode: RenderMode::LessLagUltra,
+            stealth: true,
+            ..Config::default()
+        };
+        assert_eq!(parse(&saved.serialize()).unwrap(), saved);
+        let old = parse("version=1\neffects=off\ninput_buffer=4").unwrap();
+        assert!(!old.stealth);
+        assert_eq!(old.render_mode, RenderMode::Vanilla);
+        for text in [
+            "version=1\nstealth=yes",
+            "version=1\nstealth=TRUE",
+            "version=1\nstealth=",
+            "version=1\nstealth=true\nstealth=false",
+            "version=1\nrender_mode=auto",
+        ] {
+            assert!(parse(text).is_err(), "accepted {text:?}");
+        }
+        let dir = std::env::temp_dir().join(format!(
+            "deluxe-profile-menu-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.ini");
+        let original = Config::default();
+        crate::config_store::save(&path, &original.serialize()).unwrap();
+        crate::config_store::save(&path, &saved.serialize()).unwrap();
+        assert_eq!(
+            parse(&std::fs::read_to_string(&path).unwrap()).unwrap(),
+            saved
+        );
+        std::fs::remove_file(&path).unwrap();
+        crate::config_store::recover(&path).unwrap();
+        assert_eq!(
+            parse(&std::fs::read_to_string(&path).unwrap()).unwrap(),
+            original
+        );
+        crate::config_store::save(&path, &saved.serialize()).unwrap();
+        crate::config_store::recover(&path).unwrap();
+        assert_eq!(
+            parse(&std::fs::read_to_string(&path).unwrap()).unwrap(),
+            saved
+        );
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

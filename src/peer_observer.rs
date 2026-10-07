@@ -7,19 +7,77 @@
 //! bits that are present. [`inherit_header`] is that second rule. The hook
 //! reads the game's header, so it does not apply [`inherit_header`] again.
 //!
-//! Nothing here sends a packet. Source ids are mixed before they are logged.
-//! A name is a bounded escaped sample from a subtype-2 entry, or it is absent.
+//! The send-site diagnostic is different: it sees plaintext bytes, so it walks
+//! them with [`crate::peer_passive::walk_messages`] and then applies
+//! [`inherit_header`] from a zero header at the start of that packet. The walk
+//! keeps its own length register for frame size: unset is 0, a present length
+//! replaces it, and a clear length bit still consumes that many body bytes.
+//! `body_len` stays `None` when the bit is clear, so the logical mask can tell
+//! a present length from an inherited one. Each packet starts the register at 0.
+//!
+//! Nothing here sends a packet. Source and destination ids are mixed before
+//! they are logged. A name is a bounded escaped sample from a subtype-2 entry,
+//! or it is absent. Spare-slot logs keep eight name-window bytes.
 
-use crate::peer_passive::{read_response_beacon, Beacon};
+use crate::peer_passive::{
+    read_response_beacon, walk_messages, Beacon, ParseError, PiaMessage, MESSAGE_AREA_MAX,
+    PIA_VERSION,
+};
 
 pub const STATION_SLOTS: usize = 253;
 pub const PARSED_MESSAGE_OFFSET: usize = 0x153844;
 pub const STATION_INDEX_OFFSET: usize = 0x15f0b8;
+/// Index byte on the station in `x0` at [`STATION_INDEX_OFFSET`].
+pub const STATION_INDEX_FIELD: usize = 0x38;
+/// Source id on the message object. That pointer is still `x20` when the
+/// inline hook runs, before `ldrb w20, [x0, #0x38]` replaces `w20`.
+pub const MESSAGE_SOURCE_OFFSET: usize = 0x40;
 pub const ENTRY_STRIDE: usize = 0xc3;
 pub const ENTRY_NAME: usize = 0x51;
 pub const ENTRY_NAME_LEN: usize = 0x28;
 pub const ENTRY_TAG: usize = 0x79;
 pub const NAME_CAP: usize = 16;
+/// Plaintext encrypt call. `x0` is the packet. The hooked word is `add x1, sp, #0x28`.
+pub const SEND_PLAINTEXT_OFFSET: usize = 0x155878;
+pub const SEND_CODE_PACKET: u16 = 41;
+pub const SEND_CODE_IDENTITY: u16 = 42;
+pub const SEND_CODE_DESTINATION: u16 = 43;
+pub const SEND_CODE_DETAIL: u16 = 44;
+pub const SEND_CODE_DROP: u16 = 45;
+pub const SEND_STATUS_OK: u8 = 0;
+pub const SEND_STATUS_TRUNCATED: u8 = 1;
+pub const SEND_STATUS_OVERSIZE: u8 = 2;
+pub const SEND_STATUS_LENGTH: u8 = 3;
+pub const SEND_STATUS_BOUNDS: u8 = 4;
+pub const SEND_STATUS_CAPACITY: u8 = 5;
+pub const SEND_DETAIL_SPARE: u8 = 1;
+pub const SEND_DETAIL_RTT: u8 = 2;
+pub const SEND_SPARE_SHORT: u8 = 1;
+pub const SEND_SPARE_NONE: u8 = 2;
+pub const SEND_SPARE_PRESENT: u8 = 3;
+pub const SEND_SPARE_OTHER: u8 = 4;
+const SEND_IDENTITY_EARLY: usize = 4;
+const SEND_DETAIL_EACH: usize = 2;
+pub const SEND_EVENT_CAP: usize = 17;
+const MASK_SOURCE_KNOWN: u8 = 1 << 0;
+const MASK_SOURCE_INHERITED: u8 = 1 << 1;
+const MASK_DEST_KNOWN: u8 = 1 << 2;
+const MASK_DEST_INHERITED: u8 = 1 << 3;
+const MASK_KIND_KNOWN: u8 = 1 << 4;
+const MASK_KIND_INHERITED: u8 = 1 << 5;
+const MASK_LENGTH_KNOWN: u8 = 1 << 6;
+const MASK_LENGTH_INHERITED: u8 = 1 << 7;
+const DETAIL_SEQ_SHIFT: u32 = 50;
+const SPARE_HEADER: usize = 0x39;
+
+/// Raw bytes at main text+`0x155878` in the 13.0.5 NSO. Each instruction is stored
+/// little-endian, so `add x1, sp, #0x28` is `e1 a3 00 91` and decodes as `0x9100a3e1`.
+pub static SEND_PLAINTEXT_GUARD: [u8; 64] = [
+    0xe1, 0xa3, 0x00, 0x91, 0xf5, 0xa6, 0xfd, 0x97, 0x60, 0x1a, 0x40, 0xf9, 0xe1, 0x03, 0x14, 0x2a,
+    0xb2, 0xfd, 0xff, 0x97, 0x94, 0x06, 0x00, 0x11, 0x60, 0xf9, 0xff, 0xb5, 0x60, 0x1a, 0x40, 0xf9,
+    0xbe, 0xfd, 0xff, 0x97, 0x7f, 0x72, 0x0c, 0x79, 0x7f, 0xe2, 0x00, 0x39, 0x7f, 0x22, 0x00, 0xf9,
+    0x7f, 0xa2, 0x01, 0x39, 0x7f, 0x3a, 0x00, 0xf9, 0x7f, 0x62, 0x02, 0x39, 0x7f, 0x52, 0x00, 0xf9,
+];
 
 /// Bytes at main text+`0x153844` in the 13.0.5 NSO (file offset = text + `0x100`).
 pub static PARSED_MESSAGE_GUARD: [u8; 64] = [
@@ -54,6 +112,70 @@ pub fn classify_index(previous: u64, index: u8, source_id: u64) -> IndexChange {
     } else {
         IndexChange::Updated
     }
+}
+
+pub const STATION_PROBE_MESSAGE_PTR: u64 = 1;
+pub const STATION_PROBE_STATION_PTR: u64 = 1 << 1;
+pub const STATION_PROBE_SOURCE_READ: u64 = 1 << 2;
+pub const STATION_PROBE_INDEX_READ: u64 = 1 << 3;
+pub const STATION_PROBE_SOURCE_ZERO: u64 = 1 << 4;
+pub const STATION_PROBE_INDEX_HIGH: u64 = 1 << 5;
+pub const STATION_PROBE_UPDATED: u64 = 1 << 6;
+pub const STATION_PROBE_UNCHANGED: u64 = 1 << 7;
+pub const STATION_PROBE_IGNORED: u64 = 1 << 8;
+pub const STATION_PROBE_INDEX_SHIFT: u32 = 16;
+
+/// Pack one station-hook sample without reading memory.
+///
+/// Pointer bits are the raw registers. Read bits come from the caller, which
+/// has already applied the `0x10000` check. `mix` is 0 only when the source
+/// read failed; `mix_id(0)` marks a successful read of a zero id. The index
+/// byte sits at bits 16..24 and is `0xff` when that read failed.
+pub fn station_probe_flags(
+    message: u64,
+    station: u64,
+    source: Option<u64>,
+    index: Option<u8>,
+    previous: u64,
+) -> (u64, u64) {
+    let mut flags = 0u64;
+    if message >= 0x10000 {
+        flags |= STATION_PROBE_MESSAGE_PTR;
+    }
+    if station >= 0x10000 {
+        flags |= STATION_PROBE_STATION_PTR;
+    }
+    let mix = match source {
+        Some(id) => {
+            flags |= STATION_PROBE_SOURCE_READ;
+            if id == 0 {
+                flags |= STATION_PROBE_SOURCE_ZERO;
+            }
+            mix_id(id)
+        }
+        None => 0,
+    };
+    let index_byte = match index {
+        Some(value) => {
+            flags |= STATION_PROBE_INDEX_READ;
+            if usize::from(value) >= STATION_SLOTS {
+                flags |= STATION_PROBE_INDEX_HIGH;
+            }
+            value
+        }
+        None => 0xff,
+    };
+    flags |= u64::from(index_byte) << STATION_PROBE_INDEX_SHIFT;
+    let change = match (source, index) {
+        (Some(id), Some(value)) => classify_index(previous, value, id),
+        _ => IndexChange::Ignored,
+    };
+    flags |= match change {
+        IndexChange::Updated => STATION_PROBE_UPDATED,
+        IndexChange::Unchanged => STATION_PROBE_UNCHANGED,
+        IndexChange::Ignored => STATION_PROBE_IGNORED,
+    };
+    (flags, mix)
 }
 
 pub fn find_source(stored: &[u64], source_id: u64) -> Option<u8> {
@@ -160,7 +282,10 @@ pub const WIRE_LEN_MAX: u32 = 0x5c0;
 pub enum MessageBody {
     /// The header fits and the body length is zero. Nothing is copied.
     Empty,
-    Bytes { at: u64, len: usize },
+    Bytes {
+        at: u64,
+        len: usize,
+    },
 }
 
 /// Body bytes inside `[packet+0x48, packet+0x28+wire_len)`.
@@ -216,8 +341,7 @@ pub fn present_observation(
 ) -> (u64, bool) {
     let index = (packed & 0xff) as usize;
     let map = packed & (1 << 56) != 0;
-    let stale = if index < STATION_SLOTS && live_generation.is_some_and(|live| live != generation)
-    {
+    let stale = if index < STATION_SLOTS && live_generation.is_some_and(|live| live != generation) {
         1u64 << 43
     } else {
         0
@@ -249,7 +373,11 @@ pub fn diagnose(
     index: Option<(u8, u64)>,
 ) -> Diagnostic {
     let kind = kind_of(kind_word);
-    let subtype = if kind == 0x14 { body.first().copied() } else { None };
+    let subtype = if kind == 0x14 {
+        body.first().copied()
+    } else {
+        None
+    };
     let (name, name_len, truncated, interface, interface_known) = if subtype == Some(2) {
         let decoded = decode_primary_name(body);
         let (interface, interface_known) = match read_response_beacon(body) {
@@ -330,7 +458,10 @@ fn decode_entry_name(entry: &[u8]) -> Option<NameSample> {
 }
 
 fn copy_until_nul(window: &[u8], out: &mut [u8]) -> usize {
-    let end = window.iter().position(|byte| *byte == 0).unwrap_or(window.len());
+    let end = window
+        .iter()
+        .position(|byte| *byte == 0)
+        .unwrap_or(window.len());
     let len = end.min(out.len());
     out[..len].copy_from_slice(&window[..len]);
     len
@@ -420,19 +551,606 @@ fn hex_digit(nibble: u8) -> u8 {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SendEvent {
+    pub code: u16,
+    pub a: u64,
+    pub b: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SendPrefix {
+    pub version_flags: u8,
+    pub connection_id: u8,
+    pub wire_byte: u8,
+    pub wire_len: u32,
+    pub magic_ok: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SendReport {
+    pub events: [SendEvent; SEND_EVENT_CAP],
+    pub len: usize,
+}
+
+impl SendReport {
+    const fn empty() -> Self {
+        Self {
+            events: [SendEvent {
+                code: 0,
+                a: 0,
+                b: 0,
+            }; SEND_EVENT_CAP],
+            len: 0,
+        }
+    }
+}
+
+/// Read-only send-site summary. `station_ids` is a diagnostic copy of the receive
+/// map, indexed like the station hook. A destination that is not in that copy is
+/// logged as `0xff`. An unknown id is logged as `0`. [`mix_id`] of zero is not
+/// zero, so `0` means the field was not present in this packet. The mask bit
+/// says which.
+///
+/// The map index is diagnostic correlation only. The copy can tear: each slot is
+/// loaded independently, with no generation and no receive-path gate. A later
+/// transmit identity selection must not treat this index as the peer to mark.
+pub fn diagnose_send(prefix: SendPrefix, area: &[u8], seq: u16, station_ids: &[u64]) -> SendReport {
+    if !(WIRE_LEN_MIN..=WIRE_LEN_MAX).contains(&prefix.wire_len) {
+        return single_packet(&prefix, SEND_STATUS_LENGTH, seq);
+    }
+    if area.len() > MESSAGE_AREA_MAX {
+        return single_packet(&prefix, SEND_STATUS_OVERSIZE, seq);
+    }
+    let expected = (prefix.wire_len - WIRE_LEN_MIN) as usize;
+    if area.len() != expected {
+        return single_packet(&prefix, SEND_STATUS_BOUNDS, seq);
+    }
+    let mut build = SendBuild::new(prefix, seq, station_ids);
+    let walked = walk_messages(area, usize::MAX, |message| build.observe(&message));
+    let status = match walked {
+        Ok(_) => SEND_STATUS_OK,
+        Err(ParseError::Truncated) => SEND_STATUS_TRUNCATED,
+        Err(ParseError::Oversize) => SEND_STATUS_OVERSIZE,
+        Err(ParseError::Capacity) => SEND_STATUS_CAPACITY,
+    };
+    build.finish(status)
+}
+
+/// Rewrite the sequence fields after the packet is accepted into the ring.
+pub fn stamp_send_seq(events: &mut [SendEvent], seq: u16) {
+    let low = u64::from(seq as u8);
+    for event in events {
+        match event.code {
+            SEND_CODE_PACKET => event.b = (event.b & !0xffff) | u64::from(seq),
+            SEND_CODE_IDENTITY => event.b = (event.b & !(0xff << 56)) | (low << 56),
+            SEND_CODE_DESTINATION => event.b = (event.b & !(0xff << 24)) | (low << 24),
+            SEND_CODE_DETAIL => {
+                event.a = (event.a & !(0xff << DETAIL_SEQ_SHIFT)) | (low << DETAIL_SEQ_SHIFT);
+            }
+            _ => {}
+        }
+    }
+}
+
+fn single_packet(prefix: &SendPrefix, status: u8, seq: u16) -> SendReport {
+    let mut report = SendReport::empty();
+    push_event(
+        &mut report,
+        packet_event(prefix, status, &PacketCounts::default(), seq),
+    );
+    report
+}
+
+#[derive(Default)]
+struct PacketCounts {
+    seen: u16,
+    identity_n: u16,
+    detail_n: u16,
+    kind14: u16,
+    kind58: u16,
+    inherited_source: u16,
+    inherited_dest: u16,
+    truncated: bool,
+}
+
+fn version_accepted(flags: u8) -> bool {
+    flags & 0x80 == 0 && flags & 0x7f == PIA_VERSION
+}
+
+fn sat_u8(value: u16) -> u8 {
+    u8::try_from(value).unwrap_or(u8::MAX)
+}
+
+fn packet_event(prefix: &SendPrefix, status: u8, counts: &PacketCounts, seq: u16) -> SendEvent {
+    let logged_len = u64::from(u16::try_from(prefix.wire_len).unwrap_or(u16::MAX));
+    let mut high = u64::from(status) << 48;
+    if counts.truncated {
+        high |= 1 << 56;
+    }
+    if prefix.magic_ok {
+        high |= 1 << 57;
+    }
+    if version_accepted(prefix.version_flags) {
+        high |= 1 << 58;
+    }
+    let a = u64::from(prefix.version_flags)
+        | (u64::from(prefix.connection_id) << 8)
+        | (u64::from(prefix.wire_byte) << 16)
+        | (logged_len << 24)
+        | (u64::from(sat_u8(counts.seen)) << 40)
+        | high;
+    let b = u64::from(seq)
+        | (u64::from(sat_u8(counts.identity_n)) << 16)
+        | (u64::from(sat_u8(counts.detail_n)) << 24)
+        | (u64::from(sat_u8(counts.kind14)) << 32)
+        | (u64::from(sat_u8(counts.kind58)) << 40)
+        | (u64::from(sat_u8(counts.inherited_source)) << 48)
+        | (u64::from(sat_u8(counts.inherited_dest)) << 56);
+    SendEvent {
+        code: SEND_CODE_PACKET,
+        a,
+        b,
+    }
+}
+
+fn meta_word(
+    flags: u8,
+    kind: u8,
+    logical_len: u16,
+    msg_index: u8,
+    connection: u8,
+    mask: u8,
+    seq: u16,
+) -> u64 {
+    u64::from(flags)
+        | (u64::from(kind) << 8)
+        | (u64::from(logical_len) << 16)
+        | (u64::from(msg_index) << 32)
+        | (u64::from(connection) << 40)
+        | (u64::from(mask) << 48)
+        | (u64::from(seq as u8) << 56)
+}
+
+fn dest_word(map_index: u8, msg_index: u8, connection: u8, seq: u16, mask: u8) -> u64 {
+    u64::from(map_index)
+        | (u64::from(msg_index) << 8)
+        | (u64::from(connection) << 16)
+        | (u64::from(seq as u8) << 24)
+        | (u64::from(mask) << 32)
+}
+
+#[derive(Clone, Copy)]
+struct HeaderRegs {
+    length: u16,
+    length_known: bool,
+    kind: u8,
+    kind_known: bool,
+    destination: u64,
+    destination_known: bool,
+    source: u64,
+    source_known: bool,
+}
+
+impl HeaderRegs {
+    const fn unknown() -> Self {
+        Self {
+            length: 0,
+            length_known: false,
+            kind: 0,
+            kind_known: false,
+            destination: 0,
+            destination_known: false,
+            source: 0,
+            source_known: false,
+        }
+    }
+}
+
+fn apply_header(regs: &mut HeaderRegs, message: &PiaMessage) -> u8 {
+    let mut mask = 0u8;
+    if message.flags & 2 == 0 {
+        if regs.length_known {
+            mask |= MASK_LENGTH_KNOWN | MASK_LENGTH_INHERITED;
+        }
+    } else {
+        regs.length = message.body_len.unwrap_or(0);
+        regs.length_known = true;
+        mask |= MASK_LENGTH_KNOWN;
+    }
+    if message.flags & 4 == 0 {
+        if regs.kind_known {
+            mask |= MASK_KIND_KNOWN | MASK_KIND_INHERITED;
+        }
+    } else if let Some(kind) = message.kind {
+        regs.kind = kind;
+        regs.kind_known = true;
+        mask |= MASK_KIND_KNOWN;
+    }
+    if message.flags & 8 == 0 {
+        if regs.destination_known {
+            mask |= MASK_DEST_KNOWN | MASK_DEST_INHERITED;
+        }
+    } else if let Some(destination) = message.first_u64 {
+        regs.destination = destination;
+        regs.destination_known = true;
+        mask |= MASK_DEST_KNOWN;
+    }
+    if message.flags & 16 == 0 {
+        if regs.source_known {
+            mask |= MASK_SOURCE_KNOWN | MASK_SOURCE_INHERITED;
+        }
+    } else if let Some(source) = message.second_u64 {
+        regs.source = source;
+        regs.source_known = true;
+        mask |= MASK_SOURCE_KNOWN;
+    }
+    mask
+}
+
+struct SpareSample {
+    count: u8,
+    nslots: u8,
+    status: u8,
+    all_zero: bool,
+    name_zero: bool,
+    sample: [u8; 8],
+}
+
+fn inspect_spare(body: &[u8]) -> SpareSample {
+    let mut sample = SpareSample {
+        count: body.get(0x38).copied().unwrap_or(0),
+        nslots: 0,
+        status: SEND_SPARE_SHORT,
+        all_zero: false,
+        name_zero: false,
+        sample: [0; 8],
+    };
+    if body.len() >= 2 && body[1] != 0 {
+        sample.status = SEND_SPARE_OTHER;
+        return sample;
+    }
+    if body.len() < SPARE_HEADER + ENTRY_STRIDE {
+        return sample;
+    }
+    let nslots = (body.len() - SPARE_HEADER) / ENTRY_STRIDE;
+    sample.nslots = u8::try_from(nslots).unwrap_or(u8::MAX);
+    if nslots < usize::from(sample.count) {
+        return sample;
+    }
+    if nslots == usize::from(sample.count) {
+        sample.status = SEND_SPARE_NONE;
+        return sample;
+    }
+    let end = SPARE_HEADER + nslots * ENTRY_STRIDE;
+    let Some(entry) = body.get(end - ENTRY_STRIDE..end) else {
+        return sample;
+    };
+    sample.status = SEND_SPARE_PRESENT;
+    sample.all_zero = entry.iter().all(|byte| *byte == 0);
+    if let Some(name) = entry.get(ENTRY_NAME..ENTRY_NAME + ENTRY_NAME_LEN) {
+        sample.name_zero = name.iter().all(|byte| *byte == 0);
+        sample.sample[..4].copy_from_slice(&name[..4]);
+        sample.sample[4..].copy_from_slice(&name[0x1c..0x20]);
+    }
+    sample
+}
+
+fn spare_event(body: &[u8], msg_index: u8, connection: u8, seq: u16) -> SendEvent {
+    let sample = inspect_spare(body);
+    let mut a = u64::from(SEND_DETAIL_SPARE)
+        | (u64::from(sample.count) << 8)
+        | (u64::from(sample.nslots) << 16)
+        | (u64::from(sample.status) << 24)
+        | (u64::from(msg_index) << 34)
+        | (u64::from(connection) << 42)
+        | (u64::from(seq as u8) << DETAIL_SEQ_SHIFT);
+    if sample.all_zero {
+        a |= 1 << 32;
+    }
+    if sample.name_zero {
+        a |= 1 << 33;
+    }
+    SendEvent {
+        code: SEND_CODE_DETAIL,
+        a,
+        b: u64::from_le_bytes(sample.sample),
+    }
+}
+
+fn rtt_event(body: &[u8], msg_index: u8, connection: u8, seq: u16) -> SendEvent {
+    let present = u8::try_from(body.len().min(8)).unwrap_or(8);
+    let type_valid = body.len() >= 4;
+    let data_valid = body.len() >= 8;
+    let type_word = if type_valid {
+        u32::from_be_bytes([body[0], body[1], body[2], body[3]])
+    } else {
+        0
+    };
+    let data_word = if data_valid {
+        u32::from_be_bytes([body[4], body[5], body[6], body[7]])
+    } else {
+        0
+    };
+    let mut a = u64::from(SEND_DETAIL_RTT)
+        | (u64::from(present) << 8)
+        | (u64::from(msg_index) << 18)
+        | (u64::from(connection) << 26)
+        | (u64::from(seq as u8) << DETAIL_SEQ_SHIFT);
+    if type_valid {
+        a |= 1 << 16;
+    }
+    if data_valid {
+        a |= 1 << 17;
+    }
+    SendEvent {
+        code: SEND_CODE_DETAIL,
+        a,
+        b: u64::from(data_word) | (u64::from(type_word) << 32),
+    }
+}
+
+#[derive(Clone, Copy)]
+struct Logged {
+    identity: SendEvent,
+    destination: Option<SendEvent>,
+}
+
+struct SendBuild<'a> {
+    prefix: SendPrefix,
+    seq: u16,
+    station_ids: &'a [u64],
+    regs: HeaderRegs,
+    seen: u16,
+    inherited_source: u16,
+    inherited_dest: u16,
+    kind58: u16,
+    kind14_sub2: u16,
+    early: [Option<Logged>; SEND_IDENTITY_EARLY],
+    early_n: usize,
+    late_spare: Option<Logged>,
+    late_rtt: Option<Logged>,
+    spare_details: [SendEvent; SEND_DETAIL_EACH],
+    spare_n: usize,
+    rtt_details: [SendEvent; SEND_DETAIL_EACH],
+    rtt_n: usize,
+}
+
+impl<'a> SendBuild<'a> {
+    fn new(prefix: SendPrefix, seq: u16, station_ids: &'a [u64]) -> Self {
+        Self {
+            prefix,
+            seq,
+            station_ids,
+            regs: HeaderRegs::unknown(),
+            seen: 0,
+            inherited_source: 0,
+            inherited_dest: 0,
+            kind58: 0,
+            kind14_sub2: 0,
+            early: [None; SEND_IDENTITY_EARLY],
+            early_n: 0,
+            late_spare: None,
+            late_rtt: None,
+            spare_details: [SendEvent {
+                code: 0,
+                a: 0,
+                b: 0,
+            }; SEND_DETAIL_EACH],
+            spare_n: 0,
+            rtt_details: [SendEvent {
+                code: 0,
+                a: 0,
+                b: 0,
+            }; SEND_DETAIL_EACH],
+            rtt_n: 0,
+        }
+    }
+
+    fn observe(&mut self, message: &PiaMessage) {
+        let msg_index = u8::try_from(self.seen).unwrap_or(u8::MAX);
+        self.seen = self.seen.saturating_add(1);
+        let mask = apply_header(&mut self.regs, message);
+        if mask & MASK_SOURCE_INHERITED != 0 {
+            self.inherited_source = self.inherited_source.saturating_add(1);
+        }
+        if mask & MASK_DEST_INHERITED != 0 {
+            self.inherited_dest = self.inherited_dest.saturating_add(1);
+        }
+        let kind = if self.regs.kind_known {
+            self.regs.kind
+        } else {
+            0xff
+        };
+        let logical_len = if self.regs.length_known {
+            self.regs.length
+        } else {
+            0
+        };
+        let identity = SendEvent {
+            code: SEND_CODE_IDENTITY,
+            a: if self.regs.source_known {
+                mix_id(self.regs.source)
+            } else {
+                0
+            },
+            b: meta_word(
+                message.flags,
+                kind,
+                logical_len,
+                msg_index,
+                self.prefix.connection_id,
+                mask,
+                self.seq,
+            ),
+        };
+        let destination = if self.regs.destination_known {
+            Some(SendEvent {
+                code: SEND_CODE_DESTINATION,
+                a: mix_id(self.regs.destination),
+                b: dest_word(
+                    find_source(self.station_ids, self.regs.destination).unwrap_or(0xff),
+                    msg_index,
+                    self.prefix.connection_id,
+                    self.seq,
+                    mask,
+                ),
+            })
+        } else {
+            None
+        };
+        let logged = Logged {
+            identity,
+            destination,
+        };
+        let subtype_two = message.body.first() == Some(&2);
+        let is_rtt = self.regs.kind_known && self.regs.kind == 0x58;
+        let is_spare = self.regs.kind_known && self.regs.kind == 0x14 && subtype_two;
+        if is_rtt {
+            self.kind58 = self.kind58.saturating_add(1);
+            if self.rtt_n < SEND_DETAIL_EACH {
+                self.rtt_details[self.rtt_n] =
+                    rtt_event(message.body, msg_index, self.prefix.connection_id, self.seq);
+                self.rtt_n += 1;
+            }
+        }
+        if is_spare {
+            self.kind14_sub2 = self.kind14_sub2.saturating_add(1);
+            if self.spare_n < SEND_DETAIL_EACH {
+                self.spare_details[self.spare_n] =
+                    spare_event(message.body, msg_index, self.prefix.connection_id, self.seq);
+                self.spare_n += 1;
+            }
+        }
+        if self.early_n < SEND_IDENTITY_EARLY {
+            self.early[self.early_n] = Some(logged);
+            self.early_n += 1;
+        } else if is_spare && self.late_spare.is_none() {
+            self.late_spare = Some(logged);
+        } else if is_rtt && self.late_rtt.is_none() {
+            self.late_rtt = Some(logged);
+        }
+    }
+
+    fn finish(self, status: u8) -> SendReport {
+        let mut identity_n = u16::try_from(self.early_n).unwrap_or(u16::MAX);
+        if self.late_spare.is_some() {
+            identity_n = identity_n.saturating_add(1);
+        }
+        if self.late_rtt.is_some() {
+            identity_n = identity_n.saturating_add(1);
+        }
+        let detail_n = u16::try_from(self.spare_n + self.rtt_n).unwrap_or(u16::MAX);
+        let counts = PacketCounts {
+            seen: self.seen,
+            identity_n,
+            detail_n,
+            kind14: self.kind14_sub2,
+            kind58: self.kind58,
+            inherited_source: self.inherited_source,
+            inherited_dest: self.inherited_dest,
+            truncated: self.seen > identity_n,
+        };
+        let mut report = SendReport::empty();
+        push_event(
+            &mut report,
+            packet_event(&self.prefix, status, &counts, self.seq),
+        );
+        for slot in self.early.into_iter().take(self.early_n).flatten() {
+            push_logged(&mut report, slot);
+        }
+        if let Some(slot) = self.late_spare {
+            push_logged(&mut report, slot);
+        }
+        if let Some(slot) = self.late_rtt {
+            push_logged(&mut report, slot);
+        }
+        for event in self.spare_details.into_iter().take(self.spare_n) {
+            push_event(&mut report, event);
+        }
+        for event in self.rtt_details.into_iter().take(self.rtt_n) {
+            push_event(&mut report, event);
+        }
+        report
+    }
+}
+
+fn push_event(report: &mut SendReport, event: SendEvent) {
+    if report.len < SEND_EVENT_CAP {
+        report.events[report.len] = event;
+        report.len += 1;
+    }
+}
+
+fn push_logged(report: &mut SendReport, logged: Logged) {
+    push_event(report, logged.identity);
+    if let Some(destination) = logged.destination {
+        push_event(report, destination);
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::peer_passive::{parse_message_area, ObservedInterface};
+    use super::{MASK_KIND_INHERITED, MASK_LENGTH_INHERITED, *};
+    use crate::peer_passive::{
+        parse_message_area, ObservedInterface, ParseError, PiaMessage, MESSAGE_AREA_MAX,
+    };
 
     #[test]
     fn guards_are_the_nso_bytes_at_the_two_sites() {
         assert_eq!(PARSED_MESSAGE_OFFSET, 0x153844);
         assert_eq!(STATION_INDEX_OFFSET, 0x15f0b8);
+        assert_eq!(STATION_INDEX_FIELD, 0x38);
+        assert_eq!(MESSAGE_SOURCE_OFFSET, 0x40);
         assert_eq!(PARSED_MESSAGE_GUARD.len(), 64);
         assert_eq!(STATION_INDEX_GUARD.len(), 64);
         assert_eq!(&PARSED_MESSAGE_GUARD[..4], &[0xa8, 0x02, 0x40, 0xf9]);
-        assert_eq!(&STATION_INDEX_GUARD[..8], &[0x14, 0xe0, 0x40, 0x39, 0x9f, 0xf6, 0x03, 0x71]);
+        assert_eq!(
+            &STATION_INDEX_GUARD[..8],
+            &[0x14, 0xe0, 0x40, 0x39, 0x9f, 0xf6, 0x03, 0x71]
+        );
+    }
+
+    #[test]
+    fn station_probe_flags_separate_a_missed_read_from_a_zero_id() {
+        assert_eq!(crate::diagnostics::Code::StationProbe as u16, 64);
+        assert_eq!(crate::diagnostics::Code::StationProbeId as u16, 65);
+        assert_ne!(46, crate::diagnostics::Code::StationProbe as u16);
+        assert_ne!(47, crate::diagnostics::Code::StationProbe as u16);
+        let (missed, missed_mix) = station_probe_flags(0, 0, None, None, 0);
+        assert_eq!(missed_mix, 0);
+        assert_eq!(
+            missed,
+            STATION_PROBE_IGNORED | (0xff << STATION_PROBE_INDEX_SHIFT)
+        );
+        let (zero, zero_mix) = station_probe_flags(0x10000, 0x20000, Some(0), Some(1), 0);
+        assert_eq!(zero_mix, mix_id(0));
+        assert_ne!(zero_mix, 0);
+        assert_eq!(
+            zero,
+            STATION_PROBE_MESSAGE_PTR
+                | STATION_PROBE_STATION_PTR
+                | STATION_PROBE_SOURCE_READ
+                | STATION_PROBE_INDEX_READ
+                | STATION_PROBE_SOURCE_ZERO
+                | STATION_PROBE_UNCHANGED
+                | (1 << STATION_PROBE_INDEX_SHIFT)
+        );
+        let (updated, updated_mix) = station_probe_flags(0x10000, 0x20000, Some(9), Some(4), 0);
+        assert_eq!(updated_mix, mix_id(9));
+        assert_eq!(updated & STATION_PROBE_UPDATED, STATION_PROBE_UPDATED);
+        assert_eq!(updated & STATION_PROBE_UNCHANGED, 0);
+        assert_eq!(updated & STATION_PROBE_SOURCE_ZERO, 0);
+        assert_eq!((updated >> STATION_PROBE_INDEX_SHIFT) & 0xff, 4);
+        let (high, _) = station_probe_flags(0x10000, 0x20000, Some(9), Some(253), 0);
+        assert_eq!(
+            high & (STATION_PROBE_INDEX_HIGH | STATION_PROBE_IGNORED | STATION_PROBE_UPDATED),
+            STATION_PROBE_INDEX_HIGH | STATION_PROBE_IGNORED
+        );
+        let (same, _) = station_probe_flags(0x10000, 0x20000, Some(9), Some(2), 9);
+        assert_eq!(same & STATION_PROBE_UNCHANGED, STATION_PROBE_UNCHANGED);
+        assert_eq!(same & STATION_PROBE_UPDATED, 0);
+        assert_eq!(same & STATION_PROBE_SOURCE_ZERO, 0);
     }
 
     #[test]
@@ -592,10 +1310,7 @@ mod tests {
 
         entry[ENTRY_NAME] = b'\\';
         entry[ENTRY_NAME + 1] = 0;
-        assert_eq!(
-            &decode_entry_name(&entry).unwrap().bytes[..4],
-            b"\\x5c"
-        );
+        assert_eq!(&decode_entry_name(&entry).unwrap().bytes[..4], b"\\x5c");
 
         entry[ENTRY_NAME] = 0xc3;
         entry[ENTRY_NAME + 1] = 0xa9;
@@ -612,7 +1327,10 @@ mod tests {
         wide[ENTRY_NAME] = 0x00;
         wide[ENTRY_NAME + 1] = 0xd8;
         let surrogate = decode_entry_name(&wide).unwrap();
-        assert_eq!(&surrogate.bytes[..surrogate.len as usize], b"\\xef\\xbf\\xbd");
+        assert_eq!(
+            &surrogate.bytes[..surrogate.len as usize],
+            b"\\xef\\xbf\\xbd"
+        );
     }
 
     #[test]
@@ -649,5 +1367,460 @@ mod tests {
         let wire = 0x30u32;
         let last = packet + 0x28 + u64::from(wire) - 1;
         assert!(message_body_range(packet, wire, last, 0x1f, 0).is_none());
+    }
+
+    fn bits(word: u64, shift: u32, width: u32) -> u64 {
+        (word >> shift) & ((1u64 << width) - 1)
+    }
+
+    fn hosted(bytes: &[u8]) -> (SendPrefix, Vec<u8>) {
+        (
+            SendPrefix {
+                version_flags: 4,
+                connection_id: 0x11,
+                wire_byte: 0x5a,
+                wire_len: 0x20 + u32::try_from(bytes.len()).unwrap(),
+                magic_ok: true,
+            },
+            bytes.to_vec(),
+        )
+    }
+
+    fn append_frame(
+        out: &mut Vec<u8>,
+        flags: u8,
+        kind: Option<u8>,
+        dest: Option<u64>,
+        source: Option<u64>,
+        body: &[u8],
+    ) {
+        let start = out.len();
+        out.push(flags);
+        if flags & 2 != 0 {
+            out.extend(u16::try_from(body.len()).unwrap().to_be_bytes());
+        }
+        if flags & 4 != 0 {
+            out.push(kind.unwrap());
+            out.extend_from_slice(&[0, 0, 0]);
+        }
+        if flags & 8 != 0 {
+            out.extend(dest.unwrap().to_be_bytes());
+        }
+        if flags & 16 != 0 {
+            out.extend(source.unwrap().to_be_bytes());
+        }
+        out.extend_from_slice(body);
+        while !(out.len() - start).is_multiple_of(4) {
+            out.push(0);
+        }
+    }
+
+    fn report_for(bytes: &[u8], stations: &[u64]) -> SendReport {
+        let (prefix, area) = hosted(bytes);
+        diagnose_send(prefix, &area, 0x0107, stations)
+    }
+
+    fn response(count: u8, slots: usize) -> Vec<u8> {
+        let mut body = vec![0u8; SPARE_HEADER + slots * ENTRY_STRIDE];
+        body[0] = 2;
+        body[0x38] = count;
+        body
+    }
+
+    #[test]
+    fn send_codes_and_guard_match_the_encrypt_site() {
+        assert_eq!(SEND_PLAINTEXT_OFFSET, 0x155878);
+        // Raw NSO bytes from the 13.0.5 encrypt site. This fixture is not derived
+        // from `SEND_PLAINTEXT_GUARD`. The first instruction is `add x1, sp, #0x28`.
+        let raw64: [u8; 64] = [
+            0xe1, 0xa3, 0x00, 0x91, 0xf5, 0xa6, 0xfd, 0x97, 0x60, 0x1a, 0x40, 0xf9, 0xe1, 0x03,
+            0x14, 0x2a, 0xb2, 0xfd, 0xff, 0x97, 0x94, 0x06, 0x00, 0x11, 0x60, 0xf9, 0xff, 0xb5,
+            0x60, 0x1a, 0x40, 0xf9, 0xbe, 0xfd, 0xff, 0x97, 0x7f, 0x72, 0x0c, 0x79, 0x7f, 0xe2,
+            0x00, 0x39, 0x7f, 0x22, 0x00, 0xf9, 0x7f, 0xa2, 0x01, 0x39, 0x7f, 0x3a, 0x00, 0xf9,
+            0x7f, 0x62, 0x02, 0x39, 0x7f, 0x52, 0x00, 0xf9,
+        ];
+        assert_eq!(SEND_PLAINTEXT_GUARD, raw64);
+        let mut first = [0u8; 4];
+        first.copy_from_slice(&SEND_PLAINTEXT_GUARD[..4]);
+        assert_eq!(u32::from_le_bytes(first), 0x9100a3e1);
+        assert_eq!(
+            SEND_CODE_PACKET,
+            crate::diagnostics::Code::SendPacket as u16
+        );
+        assert_eq!(
+            SEND_CODE_IDENTITY,
+            crate::diagnostics::Code::SendIdentity as u16
+        );
+        assert_eq!(
+            SEND_CODE_DESTINATION,
+            crate::diagnostics::Code::SendDestination as u16
+        );
+        assert_eq!(
+            SEND_CODE_DETAIL,
+            crate::diagnostics::Code::SendDetail as u16
+        );
+        assert_eq!(SEND_CODE_DROP, crate::diagnostics::Code::SendDrop as u16);
+        assert_ne!(mix_id(0), 0);
+    }
+
+    #[test]
+    fn send_parser_rejects_bad_lengths_before_it_reads_messages() {
+        let early = SendPrefix {
+            version_flags: 4,
+            connection_id: 0x11,
+            wire_byte: 0x5a,
+            wire_len: 0x1f,
+            magic_ok: true,
+        };
+        let rejected = diagnose_send(early, &[0x04, 0x58, 0, 0, 0, 0, 0, 0], 3, &[]);
+        assert_eq!(rejected.len, 1);
+        assert_eq!(
+            bits(rejected.events[0].a, 48, 8),
+            u64::from(SEND_STATUS_LENGTH)
+        );
+        assert_eq!(bits(rejected.events[0].a, 8, 8), 0x11);
+        assert_eq!(bits(rejected.events[0].a, 16, 8), 0x5a);
+
+        let mut huge = vec![0xff; MESSAGE_AREA_MAX + 1];
+        huge[0] = 0x04;
+        let over = diagnose_send(
+            SendPrefix {
+                version_flags: 4,
+                connection_id: 1,
+                wire_byte: 2,
+                wire_len: 0x5c0,
+                magic_ok: false,
+            },
+            &huge,
+            1,
+            &[],
+        );
+        assert_eq!(over.len, 1);
+        assert_eq!(
+            bits(over.events[0].a, 48, 8),
+            u64::from(SEND_STATUS_OVERSIZE)
+        );
+
+        let bounds = diagnose_send(
+            SendPrefix {
+                version_flags: 4,
+                connection_id: 1,
+                wire_byte: 2,
+                wire_len: 0x40,
+                magic_ok: true,
+            },
+            &[0, 0, 0, 0],
+            1,
+            &[],
+        );
+        assert_eq!(
+            bits(bounds.events[0].a, 48, 8),
+            u64::from(SEND_STATUS_BOUNDS)
+        );
+
+        let mut out = [PiaMessage {
+            flags: 0,
+            extra: None,
+            body_len: None,
+            kind: None,
+            kind_arg: None,
+            first_u64: None,
+            second_u64: None,
+            body: &[],
+        }; 1];
+        assert_eq!(
+            parse_message_area(&[0, 0, 0, 0, 0x02], &mut out),
+            Err(ParseError::Capacity)
+        );
+    }
+
+    #[test]
+    fn inherited_ids_are_mixed_and_an_omitted_length_keeps_the_body() {
+        let source = 0x1111_2222_3333_4444u64;
+        let dest = 0x5555_6666_7777_8888u64;
+        let replaced = 0x9999_aaaa_bbbb_ccccu64;
+        let mut area = Vec::new();
+        append_frame(&mut area, 0x18, None, Some(dest), Some(source), &[]);
+        append_frame(
+            &mut area,
+            0x06,
+            Some(0x58),
+            None,
+            None,
+            &[0, 0, 0, 1, 0x10, 0x20, 0x30, 0x40],
+        );
+        append_frame(&mut area, 0x04, Some(0x14), None, None, &[0; 8]);
+        append_frame(&mut area, 0x08, None, Some(replaced), None, &[0; 8]);
+        let mut stations = [0u64; 12];
+        stations[9] = replaced;
+        let report = report_for(&area, &stations);
+        let packet = report.events[0];
+        assert_eq!(packet.code, SEND_CODE_PACKET);
+        assert_eq!(bits(packet.a, 48, 8), u64::from(SEND_STATUS_OK));
+        assert_eq!(bits(packet.a, 56, 1), 0);
+        assert_eq!(bits(packet.a, 57, 1), 1);
+        assert_eq!(bits(packet.a, 58, 1), 1);
+        assert_eq!(bits(packet.b, 0, 16), 0x0107);
+        assert_eq!(bits(packet.b, 48, 8), 3);
+        assert_eq!(bits(packet.b, 56, 8), 2);
+
+        let identities: Vec<_> = report.events[..report.len]
+            .iter()
+            .filter(|event| event.code == SEND_CODE_IDENTITY)
+            .collect();
+        assert_eq!(identities.len(), 4);
+        assert_eq!(identities[0].a, mix_id(source));
+        assert_eq!(bits(identities[0].b, 8, 8), 0xff);
+        assert_eq!(bits(identities[0].b, 48, 8) & 0b1111, 0b0101);
+        assert_eq!(identities[1].a, mix_id(source));
+        assert_eq!(bits(identities[1].b, 8, 8), 0x58);
+        assert_eq!(bits(identities[1].b, 16, 16), 8);
+        assert_eq!(bits(identities[1].b, 48, 8) & 0b1010_1010, 0b0000_1010);
+        assert_eq!(bits(identities[2].b, 8, 8), 0x14);
+        assert_eq!(bits(identities[2].b, 48, 8) & MASK_KIND_INHERITED as u64, 0);
+        assert_eq!(identities[3].a, mix_id(source));
+        assert_eq!(bits(identities[3].b, 8, 8), 0x14);
+        assert_ne!(
+            bits(identities[3].b, 48, 8) & u64::from(MASK_KIND_INHERITED),
+            0
+        );
+
+        let destinations: Vec<_> = report.events[..report.len]
+            .iter()
+            .filter(|event| event.code == SEND_CODE_DESTINATION)
+            .collect();
+        assert_eq!(destinations.len(), 4);
+        assert_eq!(destinations[0].a, mix_id(dest));
+        assert_eq!(bits(destinations[0].b, 0, 8), 0xff);
+        assert_eq!(destinations[3].a, mix_id(replaced));
+        assert_eq!(bits(destinations[3].b, 0, 8), 9);
+        assert_eq!(bits(destinations[3].b, 16, 8), 0x11);
+
+        let rtt = report.events[..report.len]
+            .iter()
+            .find(|event| event.code == SEND_CODE_DETAIL && bits(event.a, 0, 8) == 2)
+            .unwrap();
+        assert_ne!(rtt.a & (1 << 16), 0);
+        assert_ne!(rtt.a & (1 << 17), 0);
+        assert_eq!(rtt.b >> 32, 1);
+        assert_eq!(rtt.b as u32, 0x1020_3040);
+        for event in &report.events[..report.len] {
+            assert_ne!(event.a, source);
+            assert_ne!(event.b, source);
+            assert_ne!(event.a, dest);
+            assert_ne!(event.b, dest);
+            assert_ne!(event.a, replaced);
+            assert_ne!(event.b, replaced);
+        }
+
+        let mut bare = Vec::new();
+        append_frame(
+            &mut bare,
+            0x06,
+            Some(0x58),
+            None,
+            None,
+            &[0, 0, 0, 1, 1, 2, 3, 4],
+        );
+        append_frame(
+            &mut bare,
+            0x04,
+            Some(0x58),
+            None,
+            None,
+            &[0, 0, 0, 2, 5, 6, 7, 8],
+        );
+        let inherited = report_for(&bare, &[]);
+        let details: Vec<_> = inherited.events[..inherited.len]
+            .iter()
+            .filter(|event| event.code == SEND_CODE_DETAIL)
+            .collect();
+        assert_eq!(details.len(), 2);
+        assert_eq!(bits(details[1].a, 8, 8), 8);
+        assert_ne!(details[1].a & (1 << 16), 0);
+        assert_ne!(details[1].a & (1 << 17), 0);
+        assert_eq!(details[1].b >> 32, 2);
+        assert_eq!(details[1].b as u32, 0x0506_0708);
+        let second = inherited.events[..inherited.len]
+            .iter()
+            .filter(|event| event.code == SEND_CODE_IDENTITY)
+            .nth(1)
+            .unwrap();
+        assert_eq!(bits(second.b, 16, 16), 8);
+        assert_ne!(bits(second.b, 48, 8) & u64::from(MASK_LENGTH_INHERITED), 0);
+    }
+
+    #[test]
+    fn spare_capacity_reports_zero_fill_name_window_and_keeps_late_messages() {
+        let mut zero = response(1, 2);
+        let end = zero.len();
+        assert_eq!(zero[end - 0x54], 0);
+        assert_eq!(zero[end - 0x53], 0);
+        let mut framed = Vec::new();
+        append_frame(&mut framed, 0x06, Some(0x14), None, None, &zero);
+        let report = report_for(&framed, &[]);
+        let spare = report.events[..report.len]
+            .iter()
+            .find(|event| event.code == SEND_CODE_DETAIL)
+            .unwrap();
+        assert_eq!(bits(spare.a, 0, 8), u64::from(SEND_DETAIL_SPARE));
+        assert_eq!(bits(spare.a, 8, 8), 1);
+        assert_eq!(bits(spare.a, 16, 8), 2);
+        assert_eq!(bits(spare.a, 24, 8), u64::from(SEND_SPARE_PRESENT));
+        assert_ne!(spare.a & (1 << 32), 0);
+        assert_ne!(spare.a & (1 << 33), 0);
+        assert_eq!(spare.b, 0);
+
+        zero[end - ENTRY_STRIDE] = 0x7e;
+        let mut outside = Vec::new();
+        append_frame(&mut outside, 0x06, Some(0x14), None, None, &zero);
+        let outside_report = report_for(&outside, &[]);
+        let outside_spare = outside_report.events[..outside_report.len]
+            .iter()
+            .find(|event| event.code == SEND_CODE_DETAIL)
+            .unwrap();
+        assert_eq!(outside_spare.a & (1 << 32), 0);
+        assert_ne!(outside_spare.a & (1 << 33), 0);
+
+        let mut named = response(1, 2);
+        let named_end = named.len();
+        let name_at = named_end - ENTRY_STRIDE + ENTRY_NAME;
+        named[name_at] = b'Q';
+        named[named_end - 0x54] = 0x45;
+        named[named_end - 0x53] = 0x02;
+        named.push(0xaa);
+        let mut named_frame = Vec::new();
+        append_frame(&mut named_frame, 0x06, Some(0x14), None, None, &named);
+        let named_report = report_for(&named_frame, &[]);
+        let named_spare = named_report.events[..named_report.len]
+            .iter()
+            .find(|event| event.code == SEND_CODE_DETAIL)
+            .unwrap();
+        assert_eq!(named_spare.a & (1 << 32), 0);
+        assert_eq!(named_spare.a & (1 << 33), 0);
+        let sample = named_spare.b.to_le_bytes();
+        assert_eq!(sample[0], b'Q');
+        assert_eq!(sample[6], 0x45);
+        assert_eq!(sample[7], 0x02);
+
+        let mut none = Vec::new();
+        append_frame(&mut none, 0x06, Some(0x14), None, None, &response(1, 1));
+        let none_report = report_for(&none, &[]);
+        let none_spare = none_report.events[..none_report.len]
+            .iter()
+            .find(|event| event.code == SEND_CODE_DETAIL)
+            .unwrap();
+        assert_eq!(bits(none_spare.a, 24, 8), u64::from(SEND_SPARE_NONE));
+
+        let mut short = Vec::new();
+        append_frame(&mut short, 0x06, Some(0x14), None, None, &response(2, 1));
+        let short_report = report_for(&short, &[]);
+        let short_spare = short_report.events[..short_report.len]
+            .iter()
+            .find(|event| event.code == SEND_CODE_DETAIL)
+            .unwrap();
+        assert_eq!(bits(short_spare.a, 24, 8), u64::from(SEND_SPARE_SHORT));
+        let mut other = Vec::new();
+        append_frame(&mut other, 0x06, Some(0x14), None, None, &[2, 9]);
+        let other_report = report_for(&other, &[]);
+        let other_spare = other_report.events[..other_report.len]
+            .iter()
+            .find(|event| event.code == SEND_CODE_DETAIL)
+            .unwrap();
+        assert_eq!(bits(other_spare.a, 24, 8), u64::from(SEND_SPARE_OTHER));
+
+        let mut crowded = Vec::new();
+        for _ in 0..4 {
+            append_frame(&mut crowded, 0, None, None, None, &[]);
+        }
+        append_frame(&mut crowded, 0, None, None, None, &[]);
+        append_frame(&mut crowded, 0x06, Some(0x14), None, None, &response(1, 2));
+        append_frame(
+            &mut crowded,
+            0x1e,
+            Some(0x58),
+            Some(0x42),
+            Some(0x43),
+            &[0, 0, 0, 9, 0, 0, 0, 0],
+        );
+        let crowded_report = report_for(&crowded, &[]);
+        assert_ne!(crowded_report.events[0].a & (1 << 56), 0);
+        let indexes: Vec<_> = crowded_report.events[..crowded_report.len]
+            .iter()
+            .filter(|event| event.code == SEND_CODE_IDENTITY)
+            .map(|event| bits(event.b, 32, 8))
+            .collect();
+        assert_eq!(indexes, vec![0, 1, 2, 3, 5, 6]);
+        assert!(crowded_report.events[..crowded_report.len]
+            .iter()
+            .any(|event| {
+                event.code == SEND_CODE_DETAIL
+                    && bits(event.a, 0, 8) == u64::from(SEND_DETAIL_SPARE)
+            }));
+        let late_rtt = crowded_report.events[..crowded_report.len]
+            .iter()
+            .find(|event| {
+                event.code == SEND_CODE_DETAIL && bits(event.a, 0, 8) == u64::from(SEND_DETAIL_RTT)
+            })
+            .unwrap();
+        assert_ne!(late_rtt.a & (1 << 17), 0);
+        assert_eq!(late_rtt.b as u32, 0);
+        assert_eq!(late_rtt.b >> 32, 9);
+        assert_eq!(bits(crowded_report.events[0].b, 32, 8), 1);
+        assert_eq!(bits(crowded_report.events[0].b, 40, 8), 1);
+
+        let mut events = crowded_report.events;
+        stamp_send_seq(&mut events[..crowded_report.len], 0x22cd);
+        assert_eq!(bits(events[0].b, 0, 16), 0x22cd);
+        let identity = events[..crowded_report.len]
+            .iter()
+            .find(|event| event.code == SEND_CODE_IDENTITY)
+            .unwrap();
+        assert_eq!(bits(identity.b, 56, 8), 0xcd);
+        assert_eq!(bits(identity.b, 40, 8), 0x11);
+    }
+
+    #[test]
+    fn kind_inherited_from_an_earlier_message_still_selects_the_spare_body() {
+        let mut area = Vec::new();
+        append_frame(&mut area, 0x04, Some(0x14), None, None, &[]);
+        append_frame(&mut area, 0x02, None, None, None, &response(1, 2));
+        let report = report_for(&area, &[]);
+        let spare = report.events[..report.len]
+            .iter()
+            .find(|event| event.code == SEND_CODE_DETAIL)
+            .unwrap();
+        assert_eq!(bits(spare.a, 24, 8), u64::from(SEND_SPARE_PRESENT));
+        assert_eq!(bits(spare.a, 34, 8), 1);
+        let second = report.events[..report.len]
+            .iter()
+            .filter(|event| event.code == SEND_CODE_IDENTITY)
+            .nth(1)
+            .unwrap();
+        assert_eq!(bits(second.b, 8, 8), 0x14);
+        assert_ne!(bits(second.b, 48, 8) & u64::from(MASK_KIND_INHERITED), 0);
+    }
+
+    #[test]
+    fn a_truncated_frame_keeps_the_messages_parsed_before_it() {
+        let source = 0x0102_0304_0506_0708u64;
+        let mut area = Vec::new();
+        append_frame(&mut area, 0x10, None, None, Some(source), &[]);
+        area.push(0x02);
+        let report = report_for(&area, &[]);
+        assert_eq!(
+            bits(report.events[0].a, 48, 8),
+            u64::from(SEND_STATUS_TRUNCATED)
+        );
+        assert_eq!(bits(report.events[0].a, 40, 8), 1);
+        assert_eq!(report.events[1].code, SEND_CODE_IDENTITY);
+        assert_eq!(report.events[1].a, mix_id(source));
+        assert_eq!(
+            report.events[..report.len]
+                .iter()
+                .filter(|event| event.code == SEND_CODE_DESTINATION)
+                .count(),
+            0
+        );
     }
 }

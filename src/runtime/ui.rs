@@ -240,7 +240,7 @@ unsafe extern "C" fn draw() {
         let window_height = match view {
             View::Performance => 180.0,
             View::Debug => 370.0,
-            _ => 280.0,
+            _ => 320.0,
         };
         igSetNextWindowPos(Vec2::default(), ALWAYS, Vec2::default());
         igSetNextWindowSize(
@@ -280,8 +280,9 @@ unsafe extern "C" fn draw() {
                 } else {
                     config.input_buffer.to_string()
                 };
+                let selected = ui.controls.menu.selected;
                 row3(
-                    if ui.controls.menu.selected == 1 {
+                    if selected == crate::menu::ROW_NET_LATENCY {
                         "> NetLatency"
                     } else {
                         "NetLatency"
@@ -289,9 +290,34 @@ unsafe extern "C" fn draw() {
                     &buffer,
                     "---",
                 );
-                row3("NetProfile", super::renderer::mode().label(), "---");
+                let machine = crate::render_policy::load_machine();
+                let textures = super::nvn::active_count();
+                let applied = super::renderer::status() != "Awaiting window";
+                let profile = crate::menu::net_profile_value(
+                    config.render_mode,
+                    super::renderer::mode(),
+                    textures,
+                    machine,
+                    applied,
+                );
+                let profile_state = crate::menu::net_profile_status(
+                    config.render_mode,
+                    super::renderer::mode(),
+                    textures,
+                    machine,
+                    applied,
+                );
                 row3(
-                    if ui.controls.menu.selected == 0 {
+                    if selected == crate::menu::ROW_NET_PROFILE {
+                        "> NetProfile"
+                    } else {
+                        "NetProfile"
+                    },
+                    &profile,
+                    profile_state,
+                );
+                row3(
+                    if selected == crate::menu::ROW_FX {
                         "> FX"
                     } else {
                         "FX"
@@ -304,6 +330,16 @@ unsafe extern "C" fn draw() {
                     } else {
                         config.effects.effective().label()
                     },
+                    "---",
+                );
+                let _persisted_stealth = super::stealth();
+                row3(
+                    if selected == crate::menu::ROW_STEALTH {
+                        "> Stealth"
+                    } else {
+                        "Stealth"
+                    },
+                    crate::menu::stealth_value(),
                     "---",
                 );
                 igEndTable();

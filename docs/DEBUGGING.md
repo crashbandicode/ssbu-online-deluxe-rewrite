@@ -92,6 +92,9 @@ These differ from FX On, which keeps passthrough hooks installed.
 | 36 | Pia RTT sample/cleanup and foreign/drop counters |
 | 37 / 38 | Opt-in parsed peer observation / bounded escaped name sample |
 | 39 / 40 | Peer observer drops / station identity mapping changes |
+| 41–45 | Opt-in read-only outgoing packet/header diagnostics; never packet writes |
+| 46 / 47 | Render-policy transition / refused transition or invalid post-setter count |
+| 64 / 65 | Sampled station-map reachability flags / mixed source ID |
 
 Codes 12/13 and 18–20 describe historical CSS builds; they are no longer emitted.
 No game-owned pane or font is modified by the global window.
@@ -118,7 +121,8 @@ chains other wrappers and records the entry word. See
 `peer_observer=false` is the default. Set it to true before process startup
 only for a controlled diagnostic run. Both parsed-message and station-index
 instruction guards must match, and the Pia lifecycle hooks must be installed.
-This does not enable peer metadata in the UI and never writes network packets.
+The optional pre-encryption send probe has its own instruction checks. This
+does not enable peer metadata in the UI and never writes network packets.
 
 The observer validates body bounds against the accepted packet length before
 copying. A nonblocking gate protects its bounded queue and station generations;
@@ -127,6 +131,34 @@ observations are counted, and missed lifecycle notifications conservatively
 clear mappings. Names are escaped, truncated diagnostic samples. Mixed IDs are
 correlation values, not an anonymization guarantee. Observer events remain
 subject to the ordinary log size and crash-flush limits above.
+
+The map event queue can drop a one-shot update while retaining the in-memory
+mapping. Absence of code 40 alone does not prove the station hook failed. The
+64/65 reachability sample is diagnostic only and is not a coherent authorization
+record for packet writes.
+
+## Live render profiles
+
+NetProfile changes save immediately. A `*` and `Swap` indicate that the request
+has not fully committed. Inspect `policy_committed`, `policy_effective`,
+`policy_requested`, `policy_buffer`, `policy_index`, `policy_known_active`,
+`active_textures`, `policy_failed` and `policy_force_wait` in renderer-status.txt.
+The legacy `mode` and CSV `engine` fields are the startup mode and can differ
+from the active profile after a menu change.
+
+Buffer changes force a wait, call the native setter at a later validated
+boundary, drain original flushes and confirm a fresh count. A missing drain
+marker after the setter keeps waiting with the safe modulus and emits one
+code-46 kind-12 warning. It does not guess a rollback. A bad or persistently
+wrong post-drain count is fatal and produces the normal panic diagnostics.
+Before the setter, an unavailable boundary or dependency can refuse the change
+without mutating the window.
+
+CAPTURE_TIMING also records phase markers 12–17. Their result field is a hashed
+thread label. Kind 17 index is outstanding tracked-window acquisitions after
+present; zero is meaningful. Kind 12 is the selected value before the game's
+modulo-three instruction. These are CPU-side observations, not displayed frames
+or input-to-photon measurements.
 
 ## Eden test lifecycle on this Ubuntu host
 

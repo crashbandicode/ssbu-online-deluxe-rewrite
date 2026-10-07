@@ -1,8 +1,8 @@
 # Implementation and fork parity
 
 The default remains the global-menu/FX/diagnostics foundation with Vanilla rendering.
-Opt-in, startup-only LessLag and LLUltra modes now reconstruct the fork's modern
-rendering presets; console behavior remains untested.
+Vanilla, LessLag and LLUltra are selectable live and persist to INI. The new
+transitions passed linked Eden tests; their console behavior remains untested.
 
 | Behavior / fork change | Status |
 |---|---|
@@ -13,14 +13,14 @@ rendering presets; console behavior remains untested.
 | Offline-to-Quickplay guess | Corrected in policy: offline stays offline; FX-only scene/online-match tracking added, runtime validation pending |
 | Reapply / repeated arena marking | External host removed; future engine has one authoritative state owner |
 | 300 ImGui-callback transition grace | Global callback restored; future engine still needs explicit frame-boundary transitions |
-| Stealth mode | No custom PIA telemetry/beacons emitted; ordinary game traffic continues |
-| LessLag rendering | Startup-only `lesslag`: two textures, OneBehind, poll bypass and render_opts sequencing; Eden match and accepted captured-image response evidence; console untested |
-| LLUltra rendering | Startup-only `llultra`: adds Immediate index, guarded pre-present flush via entry hook 0x38701e0, triple original flush, later-flush suppression; Eden route guards and accepted captured-image response evidence; console untested |
+| Stealth mode | Preference toggles and persists, but UI says Unavailable. Transmit backend is blocked on peer identity reconciliation; no custom packet writes |
+| LessLag rendering | Live `lesslag`: two textures, OneBehind, poll bypass and render_opts sequencing; Eden matches and captured-image response evidence; console untested |
+| LLUltra rendering | Live `llultra`: adds Immediate index, guarded pre-present flush via entry hook 0x38701e0, triple original flush, later-flush suppression; Eden matches and captured-image response evidence; console untested |
 | Component modes | `lesslag_core` (no render_opts) and `doubles_core` (three textures, OneBehind) retained for isolation tests |
 | LLDoubles | Not implemented beyond `doubles_core`; DRS and multiplayer checks pending; scheduled after the Switch crash work |
 | Texture-wait relocation / VSync-event pacing | Profiling-only in v1.4.1 and v1.4.2, off in shipped presets; intentionally not implemented |
 | Frame pacer | Left enabled, as in the modern LessLag and LLUltra presets |
-| Runtime profile transitions / selection menu | Pending; modes are fixed at boot |
+| Runtime profile transitions / selection menu | Implemented for Vanilla/LessLag/LLUltra with buffer and index drains, confirmed count readback, and pending/active UI; Eden menus/CSS/match tested |
 | v1.4.2 emulator crash fix | Backend persistent-hook design studied; crash mechanism not reproduced or established |
 | Singles clocks for Ultra/Doubles | Recorded requirement; no automatic clock changes in M0 |
 | catch_unwind around overclock | Not copied: panic=abort cannot recover through it |
@@ -37,9 +37,12 @@ rendering presets; console behavior remains untested.
 
 ## Next work
 
-The user's current order is in [NEXT_SESSION.md](NEXT_SESSION.md): the LessLag and LLUltra response proof in custom Eden is accepted; next reproduce and fix the
-Switch in-match crash, then Doubles. Reduced FX still follows an actual Switch
-performance reproduction, and the expanded Off catalog still needs move tests.
+Current focus: persisted manual profiles, Stealth parity, and one-sided G&W
+compatibility. Manual profiles and both requested G&W mode tests passed in Eden.
+Stealth requires more read-only identity evidence before packet writes.
+The corrected gamepad overlay previously passed the user's two Switch matches;
+the new profile transitions have not yet been tested on Switch. Doubles is
+deferred. Reduced FX still follows an actual Switch performance reproduction.
 
 The custom CLI Eden delivery passed Vanilla and LessLag-core Training smoke tests
 with NRO 5d47c70452ce73ba (source 42a60af). The later uncommitted candidate
@@ -48,18 +51,21 @@ Training match with Training Modpack and SGPO. Its observation-only and active
 Ultra route guards recorded no bad callers or alias mismatches. Accepted
 captured-image results and their limits are in PERFORMANCE.md.
 
-Remaining rendering work is runtime profile selection and present-boundary
-transitions, dynamic resolution and performance scaling, console clocks, full
-LLDoubles, and any console validation. Network telemetry is also pending.
+Remaining rendering work is Auto selection, dynamic resolution and performance
+scaling, console clocks, full LLDoubles, and console validation of the new modes.
+Peer metadata and Stealth transmission are also pending. One-sided G&W-fix
+matches in both LessLag and LLUltra completed without observed desync; see
+[validation](VALIDATION.md) for exact artifacts, results and limits.
 
 Original snapshots and quickplay-changes.patch preserve exact fork changes.
 Their presence is not feature completion.
 
 ## Compatibility
 
-The default installs no Layout::Draw, HUD scene-tick, input-mapping, article,
-camera or swapchain-mode hook. Every non-Vanilla mode adds checked render-index,
-render-poll and flush hooks. `lesslag` and `llultra` also add preflighted fighter
+The default installs no Layout::Draw, HUD scene-tick, input-mapping, article or
+camera hook. All modes install the preflighted rendering hook set so that
+menu changes do not reinstall hooks. The committed policy controls render-index,
+render-poll and flush behavior. LessLag and LLUltra enable fighter
 recording (0x374bb04), early-dispatch (0x374c600), post-scene (0x374cd64) and model
 update (0x3ab590) hooks. FX scope observes scene entry and online delay setup;
 it does not mutate scene or network state. Its embedded ImGui backend interposes NVN bootstrap,
