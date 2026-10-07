@@ -140,123 +140,128 @@ Performance scaler (`perf_scaler/mod.rs:53-55`), called from match init (`:40-46
 config and reloads the overclocker. It does not itself apply a profile; the
 next auto-select reads the stored config.
 
-## Rewrite working tree, 2026-10-07
+## Rewrite implementation and evidence — 2026-10-07
 
-Startup (`src/runtime/mod.rs`) installs renderer, menu, FX, buffer, and Pia RTT, each skippable
-with `sd:/ultimate/ssbu_online_deluxe_rewrite/DISABLE_<NAME>`: renderer, menu,
-FX, buffer, Pia RTT. An existing `ssbusync_status` or `ssbusync_restrict_mark_arena_mode`
-symbol skips every hook (`:109-112`, `:134-147`). Display version must be
-`13.0.5`.
+The runtime calls `auto_policy` and the scene-driven `auto_driver`; the profile
+matrix is no longer an unused specification. Defaults are Auto, Console, FX On
+with online-only scope, Stealth On and Streamer Off. Explicit saved settings are
+retained. Auto's target and the renderer's committed state are distinct.
 
-| Fork behavior | Rewrite | Evidence |
-|---|---|---|
-| Vanilla render | Original three-texture TwoBehind behavior through the always-installed rendering hooks | render_policy.rs, runtime/renderer.rs; menu/CSS/match traces |
-| LessLag / LLUltra | In-tree render policies; live selection and INI persistence. No external sync_guest | render_policy.rs, runtime/nvn.rs, runtime/render_sequence.rs, runtime/render_ultra.rs |
-| `lesslag_core`, `doubles_core` | Partial isolation modes. Core skips render opts. `doubles_core` is 3 textures and is not LLDoubles | `config.rs:100-108` |
-| Selectable NetProfile, Auto, match/menu apply, drift reapply | Manual Vanilla/LessLag/LLUltra implemented, including mid-match changes. Auto and match/menu policy remain missing | menu.rs, runtime/ui.rs, render_policy.rs |
-| Online singles/doubles defaults | Missing at runtime. The unused policy specifies console LessLag / emulator LLUltra / online doubles LLDoubles. Its Local case stays Vanilla, unlike the fork's OnlineLocal path; correct that specification before runtime integration (`policy.rs:26-37`) | Not called from `src/runtime` |
-| Opponent ping | One fresh non-local station. The cell is the integer mean of that station's 100-sample ring, coloured Stable / Inconsistent / Unstable. You stays `---`. A second fresh station, another live protocol, or a stale sample stays uncolored `---`. No interface suffix, account name, or peer NetLatency / NetProfile | `pia_rtt.rs`, `runtime/ui.rs` |
-| Stealth | Saved menu/INI preference only; UI says Unavailable. TX backend remains blocked on peer identity reconciliation | config.rs, menu.rs; no custom packet writes |
-| Input buffer Auto/0–25 | Completed and live. Same offset and null guard. Auto keeps the game byte | `runtime/hooks.rs:34-52`, `policy.rs:42-47` |
-| Peer latency broadcast and active-vs-selected display | Missing | no station packet |
-| Quickplay/Arena/Local class for profiles | Partial. The same five scene offsets only set an FX-online flag. Main menu always clears it, including during Quickplay | `runtime/online.rs:1-4`, `:40-63` |
-| Offline match guessed as Quickplay | Not copied, on purpose, for FX. Do not revive it for Auto profiles unless that guess is explicitly wanted | `online.rs` comment vs `net/mod.rs:223-231` |
-| LDN CSS pane force, native CSS/arena/room text, streamer mode, station cycle | Missing. Native pane writes were removed after font/clipping failures | `STATUS.md` statement; no calls in `src/runtime` |
-| 300-frame CSS grace | Missing | fork `net/mod.rs:46-66` |
-| Dynamic resolution, cut-in, Sephiroth scaler | Missing | no `perf_scaler` |
-| FPS boost `+`, console clocks | Missing. Fork ultra/doubles still request the Singles docked profile | `profile.rs:524-537` |
-| ssbusync arena mark | Not ported. Rewrite refuses to load beside the host | `runtime/mod.rs:109-112` |
-| ImGui Player Info, FPS/frame graph | Completed. Standalone `libimgui_smash.nro` is used when its host exports match ImGui 19263; otherwise the embedded backend in this NRO. FPS is overlay frame interval, not network RTT | `runtime/overlay_host.rs`, `runtime/ui.rs:156-159` |
-| FX On/Off, online scope | Rewrite-owned, not a fork feature. Live, and FX install also installs the scene flag | `runtime/effects.rs:339-340` |
-| FX Reduced | Rejected by the parser. `FxMode::Reduced` exists and `effective()` turns it back into On. Not a registered mode | `config.rs:162-168`, `:24-28` |
+| Fork behavior | Rewrite | Evidence / remaining boundary |
+| --- | --- | --- |
+| Vanilla, LessLag, LLUltra | One installed hook set, live guarded transitions, confirmed native buffer counts; Less/Ultra include render sequencing | Historical `ed5d12f8` linked matches and transitions; final combined result below |
+| LLDoubles | Three textures, OneBehind, render sequencing and render-finished bypass; no Ultra early flush | b19 four-fighter linked match completed through results/CSS; A-only G&W fix versus clean B |
+| Auto / match / menu policy | Console online singles LessLag, emulator singles LLUltra, online >2 fighters LLDoubles; menus/offline/Training Vanilla | Training/menu Vanilla, b19 linked doubles LLDoubles, d9 linked singles LLUltra and cleanup Vanilla passed |
+| Manual profiles | Saved and menu-selectable, including during play; match cleanup requests Vanilla until the next match or a new explicit choice | Deliberate extension beyond the fork's connected-match edit restriction |
+| Core experiments | INI-only `lesslag_core` / `doubles_core`, startup-only, no render sequencing | Retained diagnostics, not full presets |
+| Input buffer | Auto or 0–25 at the original hook, including the Quickplay null guard; future setup calls apply edits | Preserved game hook; separate from rendering latency |
+| RTT and stability colors | Selected station's game RTT, fork-style mean and colors; freshness/session identity checked before display | Accepted host/identity review; earlier local LDN displayed colored RTT |
+| Names / peer settings | Validated connection-ID handshake and response entries; fork v2/v3 receive, v3 transmit only to confirmed modded peers | Earlier `410ac1f7` and original fork exchanged names, interfaces and Vanilla/Less/Ultra at menus/CSS; original fork aborted loading its fighter, so that was not a completed match |
+| Interface | Local nifm Wi-Fi/Ethernet/Unknown; selected peer's announced type or Unknown | No RTT-based or text-base-based physical-interface inference |
+| Stealth | Default On; suppress owned beacon and custom payload, retain receive; latched per connection, menu changes persist and show reconnect notice | Host-tested; Off interoperability and pending-On behavior observed on `410ac1f7`; fresh-On d9 suppressed its beacon with zero custom writes; saved Off stayed pending until reconnect |
+| Peer cycling | Bounded station selection using one identity snapshot for name/interface/settings/ping | Host-tested; >2 network-station live test requires more than two local players |
+| Streamer | Menu and fork chord; hides all remote rows and ping, persists to INI | d9 exact menu-saved INI reload and menu/chord privacy passed |
+| Connection / match classification | Quickplay, Arena and Local stay distinct; fighter count classifies doubles; Training/result-stage rules retained | Stage/context guards required; does not guess an offline match is Quickplay |
+| Resolution and DRS | Committed profile plus explicit platform table; guarded resolution function/register/crop path | Console-policy Eden full-Gigaflare scaling and restoration passed for Less/Ultra/Doubles; Vanilla stays off; b19 title fullscreen-crop reset fixed |
+| Cut-in and Sephiroth Gigaflare scaler | Bounded visual resolution reports driven by guarded fighter Main and cut-in sites | Two approximate callback-count gates and Gigaflare trigger passed; Luigi Up-B cut-in scaling/restoration passed |
+| Player Info / performance view | Global top-left ImGui table, peer/local columns, frame graph and transition status | Main/CSS/Training window confirmed with combined candidate and standalone host |
+| Standalone ImGui | Reuse compatible host, embedded fallback otherwise | Embedded and both standalone load orders tested previously; Elite coexistence observed |
+| Native CSS / Arena / LDN text | Not reinstated | Global window supplies the controls; game-owned panes caused clipping/font failures and are not modified |
+| 300-frame native-banner grace / LDN two-pane force | Not copied | Those native-pane workarounds are not prerequisites for the independent window; four-fighter testing must use actual controller slots |
+| SsbuSync arena marker | Not needed by the in-tree backend | Legacy host exports trigger a best-effort overlap refusal; do not install both stacks |
+| FX On/Off and scope | Added by this rewrite, not inherited from the fork | Named visual requests only; user-confirmed Palutena/Sephiroth and TM/SGPO coexistence on prior candidates; full expanded catalog not runtime-certified |
+| Reduced FX | Unavailable | Never silently converted to Off |
+| Hardware overclocking | Deliberately excluded by user request | No clock management or nx_over dependency |
+| Software FPS boost `+` | Not implemented | Fable and Grok could not prove the game's field reader or simulation safety; both attempts retained, no guessed write shipped |
 
-External INI edits are read at startup. Menu changes publish a saved request and
-persist it with the existing recovery file. Manual Vanilla/LessLag/LLUltra
-requests commit at controlled present/flush boundaries; the renderer confirms
-the buffer count and completes the index transition before reporting Active.
-Core experiments remain startup-only.
+The renderer drains outstanding work before native buffer-count changes. It
+confirms count/index state before Active. Missing drain markers retain a safe
+wait; invalid post-mutation readback stops with diagnostics. Transitions never
+reinstall hooks and never patch SGPO's `0x374812c` neighborhood.
 
-All rendering hooks are installed once, including in Vanilla. Transitions never
-reinstall hooks. The requested target is frozen during each drain; a later menu
-request is considered after that transition finishes. A failed pre-mutation
-check refuses the change. Missing post-setter drain markers retain a safe wait
-and modulus; invalid post-drain count readback stops with diagnostics rather
-than guessing the window state. See DEBUGGING.md for status fields.
+## Deliberate differences
 
-## Remaining implementation order
+- Manual modes remain usable in Training for measurements. Auto uses Vanilla
+  there. Main-menu entry clears stale connection context, and unknown offline
+  matches are not relabeled Quickplay.
+- Platform is an explicit setting. A nonstandard emulator address layout cannot
+  silently choose console defaults.
+- RTT warmup uses initialized samples, avoiding the original manager's unwritten
+  zero. A full ring retains the fork's mean behavior and stability thresholds.
+- Streamer is persistent display privacy; it does not alter packets or replace
+  remote rows with the LDN network count.
+- The independent window replaces native text-pane writes. It leaves ordinary
+  game input unsuppressed.
+- No hardware overclocking, unproven software FPS boost, or duplicate external
+  backend is introduced.
 
-1. Reconcile the transmit-side peer key before adding fork-compatible beacon
-   and peer-setting transmission. Grok and Fable's second opinion both rejected
-   keying TX by the current RX-source map. Byte order is ruled out. Follow-up
-   evidence must distinguish a second Station identity from an inherited-header
-   probe issue, or use the fork manager's proven connection-ID path.
-2. Implement live Stealth suppression of both owned announcements and custom
-   metadata, keeping receive enabled. The stored bool alone is not Stealth.
-   Previously recognized peers may retain that recognition until reconnect.
-3. Add Auto selection and match/menu policy, including connected local wireless.
-   The unused portable policy's Local classification still needs correction
-   before runtime use. Manual profile requests already work during play.
-4. Add validated peer names, interface suffixes and peer NetLatency/NetProfile.
-   Preserve the fork's RTT stability colors and do not select an arbitrary peer
-   when several fresh stations exist.
-5. Continue console validation, dynamic resolution and performance scaling.
-   Doubles remains deferred by the operator. Reduced FX follows a reproducible
-   console performance dip.
+## Dependency and compatibility boundaries
 
-Console clocks, FPS boost, native banners, streamer mode and station cycling
-remain absent. Keep one NRO, chained TM effect hooks and SGPO's unpatched
-0x374812c neighborhood.
+Skyline is required. The rewrite contains the sync/render logic and ImGui
+fallback; it does not require an external SsbuSync host, PIA manager or Smashline.
+Other mods may still need their own dependencies. Do not remove them blindly.
 
-## 2026-10-06 ImGui NVN chain
+The compatible standalone ImGui host is discovered by exports and ABI, not by
+filename. Namespaced hook callbacks and local function binding prevent the
+two NVN bootstraps from resolving to the same replacement. Embedded, normal
+standalone order and reversed order were tested on `defda6fd`; both menus and
+distinct hook addresses were observed. See [dependency details](IMGUI_DEPENDENCY.md).
 
-The first normal-order run showed menus but did not prove this NRO's NVN
-bootstrap chain: both plugins installed one shared `nvn_bootstrap_hook`
-address. Reversed order showed neither UI. Hook callbacks now use a
-`deluxe_rewrite_` export prefix and local function binding; bootstrap install
-also rejects a replacement address outside this NRO before `install_hook`.
-Candidate `defda6fd` passed embedded, standalone-first, and standalone-last
-Eden checks. Both standalone cases showed distinct hook addresses, nonzero
-rewrite NVN observations, and both menus. See `VALIDATION.md` for artifacts
-and limits. This does not establish Switch or Elite stage-filter behavior.
+Elite Legal Stages plus standalone ImGui, TM, corrected SGPO and the rewrite
+completed two ordinary offline matches on `ed5d12f8`. Both menus and the overlay
+were visible during play; Elite settings persisted. Offline Random remained
+unrestricted as intended. This does not test Elite's **NSO-only** filtering.
 
-## 2026-10-06 RTT colour limits
+The guarded fighter-Main entry must match 13.0.5. A pre-existing branch/hook
+refuses installation, so arbitrary Smashline stacks are not certified. In
+count-only mode no cut-in hook or scaling reports are installed. Two Training
+sessions passed approximate tick/present frequency gates; this is not exact
+per-frame or module-unload proof. Normal mode rejects nonfighter weapon agents
+before reading fighter state. Missing triggers are shown as unavailable.
 
-The opponent ping row is the closed manager's 100-sample integer mean and the
-thresholds ≤25 Stable, ≤100 Inconsistent, otherwise Unstable. Warmup divides
-by the initialized count; a full ring divides by 99. The manager's warmup loop
-also includes one unwritten zero. This rewrite sums only initialized samples,
-so a steady value is Stable from the first sample. That is a deliberate
-correction, not a claim that the closed NRO does the same.
+`peer_observer=true` enables diagnostic observations. The actual handshake and
+station map no longer depend on that diagnostic toggle; disabling logging does
+not disable normal peer functionality. Transport hooks only annotate the
+fork-compatible fields of validated traffic; they do not originate game inputs.
 
-Still missing, so the cells stay empty or `---`: account name, interface
-suffix, peer NetLatency, and peer NetProfile. Full Stealth remains pending; manual NetProfiles are now selectable. Several fresh stations stay unavailable rather
-than an invented aggregate. Native CSS and arena banners are not reinstated.
+## Validation coverage
 
-## Experimental peer metadata diagnostics
+Candidate `b19b7d94ae136e55` passed 175 host tests and all required host/Skyline
+checks. It fixes the observed title crop reset and passed 24 controlled response
+trials plus a real cut-in scaling/recovery test. A four-fighter linked team
+match used Auto/LLDoubles, A-only G&W fix and clean B; observed damage, stocks,
+results and return to CSS agreed.
 
-`peer_observer=true` opts into guarded receive, station-map and pre-encryption
-send observers at startup.
-The default is false. This is diagnostic logging only: it does not populate
-names or interface cells, send packets, or implement Stealth. The optional
-observer depends on the installed Pia lifecycle observers. Its exact artifact
-and validation status belong in `VALIDATION.md`.
+A second b19 pair used the rewrite on both sides, external ImGui/full mod stack
+on A and embedded ImGui on B. Names, green RTT, interfaces, profile changes,
+Streamer menu/chord and Stealth Off-to-pending-On behaved as expected. An actual
+G&W-versus-Sephiroth match (A LLUltra, B LessLag, fix only on A) completed through
+results and stage select. A reached its configured runtime deadline during the
+next CSS load, so that return is not certified. A discovered remote-buffer
+placeholder bug is fixed in final candidate `d9acd03611e1d1d6`.
 
-Source review of the original manager corrected two earlier hypotheses:
-the wire constant ID is `Station+0x40`, not the manager's local sequence ID;
-names are in subtype-2 response entries, not the subtype-1 prefix. The game
-parser inherits omitted header fields, so a raw parser with absent fields
-cannot substitute for the game's parsed object. Whether both LDN peers receive
-usable subtype-2 responses still needs a captured trace.
+The final candidate passed 176 host tests and all required builds/checks. Its
+four changed source files contain display logic and tests only; rendering,
+input and packet-writing algorithms are unchanged from b19. It passed exact
+menu-saved INI reload, Streamer privacy, fresh Stealth On with a suppressed
+beacon and zero custom writes, pending Off, and custom exchange after restart.
+The remote buffer now displays Auto or the announced numeric value correctly.
 
-## Validation coverage and remaining tests
+A final d9 G&W-versus-Sephiroth match used A LessLag plus the G&W fix and B
+Auto/LLUltra without that fix. Observed damage, stocks, winner, results and
+return to CSS agreed. Elite was enabled on A with standalone ImGui, TM and
+corrected SGPO; B used embedded ImGui. Both returned to committed Vanilla
+after cleanup. These tests used two private localhost stations, not a VPN,
+NSO or four network stations. All d9 frontends exited normally without OOM;
+the isolated profiles were restored.
 
-The 110 host tests cover settings/recovery, menu cycles, render-policy
-transitions and refusal paths, buffer limits, RTT formatting, and read-only
-packet parsing. E2 Eden tests cover live profile changes in menus, CSS and a
-linked match, plus one-sided G&W-fix matches in both LessLag and LLUltra.
-The observations and limits are recorded in VALIDATION.md.
+Earlier `ed5d12f8` tests completed asymmetric G&W-fix matches in both LessLag and
+LLUltra against a clean peer, with matching damage/stocks/results and return to
+character select. These are bounded observations, not simulation checksums,
+full move coverage, NSO approval or a four-console/VPN test.
 
-Still required: Auto match/menu application; console profile transitions; full
-high-latency/VPN matches; validated transmit identity and Stealth suppression;
-peer metadata interoperability. Doubles remains deferred. Visual agreement and
-matching results are not simulation-checksum evidence.
+The [frame methodology](LATENCY_METHODOLOGY.md) and [performance record](PERFORMANCE.md)
+keep the historical measured 3/4 captured-frame reduction tied to its exact
+`123d47db` binary. Compatibility tests of later artifacts do not transfer that
+measurement automatically. [VALIDATION.md](VALIDATION.md) records each build and
+the remaining Switch tests.

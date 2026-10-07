@@ -479,3 +479,28 @@ response-summary.json lists individual measurements; evidence-sha256.json
 identifies retained files. Externally terminating the AppImage sometimes produced
 SIGBUS exactly at shutdown; later CLI-stop runs exited cleanly. That is separate
 from the reported Switch in-match crash.
+## Final renderer regression, 2026-10-07
+
+Candidate `b19b7d94ae136e55` repeated the receipt-marker and visible-crouch
+experiment in 24 trials: three per profile at each of two input phases. The
+normal-phase response counts were Vanilla 6, LessLag 3, LLUltra 2 and LLDoubles 4
+captured images, consistently within each group. Delayed-phase counts were 6,
+3, 2-3 and 4 respectively. These observations support a reduction of three
+captured response frames with LessLag, three to four with LLUltra, and two with
+manual LLDoubles in this Training setup.
+
+All critical image windows were consecutive and their receipt serials matched
+the guest HID and sampling-counter records. All eight completed API captures
+had zero skipped events. Root visually reviewed all 24 pose onsets: one
+automated threshold crossing was an idle-animation false positive, corrected
+explicitly in the retained record. A 36.1 ms capture interval remains in the
+data. These are bounded emulator response measurements, not Switch or physical
+display timings, and the manual Training LLDoubles measurement is distinct
+from linked doubles compatibility.
+
+See [the methodology and full per-phase results](LATENCY_METHODOLOGY.md).
+Raw evidence is retained outside Git:
+
+```text
+dist/b19b7d94ae136e55/runtime-evidence/response-and-cutin/
+```

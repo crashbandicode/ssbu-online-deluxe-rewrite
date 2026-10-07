@@ -1,4 +1,5 @@
 mod acmd;
+mod auto_driver;
 mod api_trace;
 mod effect_context;
 mod effects;
@@ -13,10 +14,13 @@ mod overlay_host;
 mod peer_observer;
 mod pia_rtt;
 mod presentation;
+mod fighter_main;
+mod fighter_probe;
 mod render_probe;
 mod render_sequence;
 mod render_ultra;
 mod renderer;
+mod resolution;
 mod response_probe;
 mod timing;
 mod ui;
@@ -25,15 +29,18 @@ use crate::{
     config::{Config, FxMode, FxScope},
     diagnostics::{Code, Recorder},
 };
-use std::sync::atomic::{AtomicI8, AtomicU64, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI8, AtomicU64, AtomicU8, Ordering};
 
 pub(super) static RECORDER: Recorder = Recorder::new();
 static FX_MODE: AtomicU8 = AtomicU8::new(0);
 static FX_SCOPE: AtomicU8 = AtomicU8::new(FxScope::Online as u8);
 static RENDER_MODE: AtomicU8 = AtomicU8::new(0);
+static AUTO_PROFILE: AtomicBool = AtomicBool::new(true);
+static PLATFORM: AtomicU8 = AtomicU8::new(0);
 static INPUT_BUFFER: AtomicI8 = AtomicI8::new(-1);
 static PEER_OBSERVER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-static STEALTH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static STEALTH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+static STREAMER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static CONFIG_GENERATION: AtomicU64 = AtomicU64::new(0);
 pub(super) const DATA_DIR: &str = "sd:/ultimate/ssbu_online_deluxe_rewrite";
 
@@ -55,24 +62,46 @@ pub(super) fn settings() -> Config {
         },
         input_buffer: INPUT_BUFFER.load(Ordering::Acquire),
         render_mode: saved_render_mode(),
+        auto_profile: AUTO_PROFILE.load(Ordering::Acquire),
+        platform: if PLATFORM.load(Ordering::Acquire) == crate::config::Platform::Emulator as u8 {
+            crate::config::Platform::Emulator
+        } else {
+            crate::config::Platform::Console
+        },
         peer_observer: PEER_OBSERVER.load(Ordering::Acquire),
         stealth: STEALTH.load(Ordering::Acquire),
+        streamer: STREAMER.load(Ordering::Acquire),
     }
 }
 
-/// Saved Stealth flag for a future transmit path. This does not send anything.
+/// Saved Stealth flag. It starts on, matching `Config::default`, until load.
 pub(super) fn stealth() -> bool {
     STEALTH.load(Ordering::Acquire)
 }
 
 pub(super) fn publish(config: &Config) {
+    let mode_changed = saved_render_mode() != config.render_mode;
+    let auto_changed = AUTO_PROFILE.load(Ordering::Acquire) != config.auto_profile;
     FX_MODE.store(config.effects.effective() as u8, Ordering::Release);
     FX_SCOPE.store(config.effects_scope as u8, Ordering::Release);
     INPUT_BUFFER.store(config.input_buffer, Ordering::Release);
     RENDER_MODE.store(config.render_mode as u8, Ordering::Release);
+    AUTO_PROFILE.store(config.auto_profile, Ordering::Release);
+    PLATFORM.store(config.platform as u8, Ordering::Release);
     PEER_OBSERVER.store(config.peer_observer, Ordering::Release);
     STEALTH.store(config.stealth, Ordering::Release);
+    STREAMER.store(config.streamer, Ordering::Release);
     CONFIG_GENERATION.fetch_add(1, Ordering::Release);
+    // Same saved mode and Auto flag do not clear a post-match Vanilla hold.
+    auto_driver::note_published(mode_changed, auto_changed);
+}
+
+pub(crate) fn select_user_profile(mode: crate::config::RenderMode) {
+    auto_driver::select_user_profile(mode);
+}
+
+pub(crate) fn set_auto_profile(enabled: bool) {
+    auto_driver::set_auto_profile(enabled);
 }
 
 pub(super) fn effects_off() -> bool {
@@ -147,6 +176,8 @@ pub fn main() {
             install();
         }
     }
+    resolution::install();
+    fighter_probe::install();
     peer_observer::install();
 }
 

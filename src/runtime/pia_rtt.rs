@@ -13,7 +13,7 @@
 //! up or make an old sample look new.
 use super::{record, Code};
 use crate::pia_rtt::{
-    expire_publication, Observation, PresentedPing, Publication, Session, REASON_OFF,
+    expire_publication, Observation, Publication, Session, REASON_OFF,
     RTT_ARITHMETIC_GUARD, RTT_ARITHMETIC_OFFSET, RTT_SAMPLE_GUARD, RTT_SAMPLE_OFFSET,
     SESSION_END_GUARD, SESSION_END_OFFSET, STATION_LEAVE_GUARD, STATION_LEAVE_OFFSET,
 };
@@ -25,6 +25,10 @@ const LOCAL_INDEX_OFFSET: usize = 0x38;
 
 static INSTALLED: AtomicBool = AtomicBool::new(false);
 static EPOCH: AtomicU64 = AtomicU64::new(1);
+/// Bumped around an accepted leave, cleanup, or protocol adoption. Hooks do
+/// not write `PUB_*`. The diagnostic poll is the only publication writer.
+static DRAW_GEN: AtomicU64 = AtomicU64::new(0);
+static PUBLISHED_GEN: AtomicU64 = AtomicU64::new(0);
 static STATE: Mutex<Session> = Mutex::new(Session::new());
 static PUB_SEQ: AtomicU64 = AtomicU64::new(0);
 static PUB_BITS: AtomicU64 = AtomicU64::new((1u64 << 63) | (REASON_OFF as u64));
@@ -37,14 +41,27 @@ static FOREIGN: AtomicU64 = AtomicU64::new(0);
 static CLEANUPS: AtomicU64 = AtomicU64::new(0);
 static DROPPED: AtomicU64 = AtomicU64::new(0);
 
-/// One coherent publication for this draw. Colour is absent when the peer is not fresh.
-pub(super) fn draw_state() -> PresentedPing {
-    match shown_publication() {
-        Some(publication) => PresentedPing::from_publication(publication),
-        None => PresentedPing::from_publication(Publication::unavailable(
-            EPOCH.load(Ordering::Acquire),
-        )),
-    }
+/// Last poll's publication, the session epoch, and the two generations.
+/// A missed read is an unavailable publication. A generation move during the
+/// read is reported as the newer draw generation so the old bytes stay hidden.
+pub(super) fn current_publication() -> (Publication, u64, u64, u64) {
+    let epoch = EPOCH.load(Ordering::Acquire);
+    let published_gen = PUBLISHED_GEN.load(Ordering::Acquire);
+    let publication = match shown_publication() {
+        Some(publication) => publication,
+        None => Publication::unavailable(epoch),
+    };
+    let draw = DRAW_GEN.load(Ordering::Acquire);
+    (publication, epoch, published_gen, draw)
+}
+
+/// Step the draw generation around a station-map change. Pair both calls.
+fn begin_publication_retirement() {
+    DRAW_GEN.fetch_add(1, Ordering::Release);
+}
+
+fn end_publication_retirement() {
+    DRAW_GEN.fetch_add(1, Ordering::Release);
 }
 
 pub(super) fn poll() {
@@ -59,16 +76,21 @@ pub(super) fn poll() {
         return;
     }
     let now = unsafe { skyline::nn::os::GetSystemTick() as u64 };
+    let generation = DRAW_GEN.load(Ordering::Acquire);
+    let station = station_pick();
     let Ok(mut session) = lock_session() else {
         DROPPED.fetch_add(1, Ordering::Relaxed);
         return;
     };
     let epoch = EPOCH.load(Ordering::Acquire);
-    session.accept_poll(now, epoch);
+    session.accept_poll_for(now, epoch, station);
     store_counters(&session);
     let publication = session.publication();
     drop(session);
     write_publication(publication);
+    if DRAW_GEN.load(Ordering::Acquire) == generation {
+        PUBLISHED_GEN.store(generation, Ordering::Release);
+    }
 }
 
 pub(super) fn log_counters() {
@@ -131,6 +153,16 @@ fn store_counters(session: &Session) {
     CLEANUPS.store(session.cleanups(), Ordering::Relaxed);
 }
 
+fn station_pick() -> crate::pia_rtt::StationPick {
+    match crate::peer_transport::selection_snapshot() {
+        crate::peer_transport::Selection::Station(index) => {
+            crate::pia_rtt::StationPick::Index(index)
+        }
+        crate::peer_transport::Selection::None => crate::pia_rtt::StationPick::Absent,
+        crate::peer_transport::Selection::Busy => crate::pia_rtt::StationPick::Busy,
+    }
+}
+
 /// The RTT lock was busy, so this call cannot say which protocol left.
 /// The publication epoch still drops the old ping. An enabled peer observer
 /// clears every mapped id instead of keeping a station that might already be gone.
@@ -138,6 +170,7 @@ fn lifecycle_missed() {
     EPOCH.fetch_add(1, Ordering::Release);
     DROPPED.fetch_add(1, Ordering::Relaxed);
     super::peer_observer::invalidate_session();
+    crate::peer_transport::clear_session();
 }
 
 /// One SeqCst publication snapshot, then epoch and age checks. No retry and no write.
@@ -215,11 +248,18 @@ unsafe fn deluxe_rewrite_observe_rtt_sample(ctx: &InlineCtx) {
         now_tick: ctx.registers[22].x(),
         ticks_per_ms: ctx.registers[8].x(),
     };
-    match with_session(|session, epoch| session.accept_sample(sample, epoch)) {
+    let station = station_pick();
+    match with_session(|session, epoch| session.accept_sample_for(sample, epoch, station)) {
         // Existing path: a stale protocol table was replaced. Drop every
         // mapped id. This does not name the old or new protocol.
-        Some(true) => super::peer_observer::invalidate_session(),
-        Some(false) => {}
+        Some(true) => {
+            begin_publication_retirement();
+            super::peer_observer::invalidate_session();
+            crate::peer_transport::clear_session();
+            crate::peer_transport::note_local(u32::from(local));
+            end_publication_retirement();
+        }
+        Some(false) => crate::peer_transport::note_local(u32::from(local)),
         None => {
             DROPPED.fetch_add(1, Ordering::Relaxed);
         }
@@ -230,8 +270,14 @@ unsafe fn deluxe_rewrite_observe_rtt_sample(ctx: &InlineCtx) {
 unsafe fn deluxe_rewrite_observe_station_left(ctx: &InlineCtx) {
     let protocol = ctx.registers[0].x();
     let remote = ctx.registers[1].w();
-    match with_session(|session, epoch| session.accept_leave(protocol, remote, epoch)) {
-        Some(true) => super::peer_observer::invalidate_index(remote),
+    let station = station_pick();
+    match with_session(|session, epoch| session.accept_leave_for(protocol, remote, epoch, station)) {
+        Some(true) => {
+            begin_publication_retirement();
+            super::peer_observer::invalidate_index(remote);
+            crate::peer_transport::clear_station(remote);
+            end_publication_retirement();
+        }
         Some(false) => {}
         None => lifecycle_missed(),
     }
@@ -240,8 +286,14 @@ unsafe fn deluxe_rewrite_observe_station_left(ctx: &InlineCtx) {
 #[skyline::hook(offset = SESSION_END_OFFSET, inline)]
 unsafe fn deluxe_rewrite_observe_session_end(ctx: &InlineCtx) {
     let protocol = ctx.registers[0].x();
-    match with_session(|session, epoch| session.accept_cleanup(protocol, epoch)) {
-        Some(true) => super::peer_observer::invalidate_session(),
+    let station = station_pick();
+    match with_session(|session, epoch| session.accept_cleanup_for(protocol, epoch, station)) {
+        Some(true) => {
+            begin_publication_retirement();
+            super::peer_observer::invalidate_session();
+            crate::peer_transport::clear_session();
+            end_publication_retirement();
+        }
         Some(false) => {}
         None => lifecycle_missed(),
     }

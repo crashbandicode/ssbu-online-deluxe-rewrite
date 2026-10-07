@@ -2,7 +2,7 @@
 //! including Vanilla. A confirmed window can move among Vanilla, LessLag, and
 //! LLUltra. Until that count is known, Vanilla keeps the original index, wait,
 //! and flush behavior.
-use super::{logging, memory, record, settings, Code};
+use super::{logging, memory, record, Code};
 use crate::config::RenderMode;
 use skyline::hooks::{getRegionAddress, InlineCtx, Region};
 use skyline::patching::Patch;
@@ -25,12 +25,17 @@ pub(super) static FLUSH_CALLS: AtomicU64 = AtomicU64::new(0);
 pub(super) fn mode() -> RenderMode {
     RenderMode::from_byte(MODE.load(Ordering::Acquire))
 }
+
+pub(crate) fn store_request(mode: RenderMode) {
+    REQUEST.store(mode as u8, Ordering::Release);
+}
+
 pub(super) fn status() -> &'static str {
     match STATE.load(Ordering::Acquire) {
         1 => "Awaiting window",
         2 => crate::render_policy::engine_status(
             mode(),
-            super::saved_render_mode(),
+            super::auto_driver::snapshot().request,
             super::nvn::active_count(),
             crate::render_policy::load_machine(),
         ),
@@ -152,7 +157,7 @@ unsafe fn deluxe_rewrite_flush_dispatches(object: *mut u8, flag: u32) {
     super::api_trace::end(begin, 5, -1, -1);
 }
 
-pub(super) unsafe fn expect(offset: usize, expected: u32) -> bool {
+pub(crate) unsafe fn expect(offset: usize, expected: u32) -> bool {
     let address = getRegionAddress(Region::Text) as usize + offset;
     if !memory::accessible(address, 4, false) {
         record(Code::HookRejected, offset as u64, 0);
@@ -169,8 +174,7 @@ pub(super) unsafe fn expect(offset: usize, expected: u32) -> bool {
 }
 
 pub(super) fn install() {
-    let requested = settings().render_mode;
-    REQUEST.store(requested as u8, Ordering::Release);
+    let requested = super::auto_driver::current_request();
     logging::startup_phase("renderer_preflight");
     let signatures = [
         (INDEX, INDEX_WORD),

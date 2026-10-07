@@ -21,7 +21,6 @@
 
 use crate::peer_passive::{
     read_response_beacon, walk_messages, Beacon, ParseError, PiaMessage, MESSAGE_AREA_MAX,
-    PIA_VERSION,
 };
 
 pub const STATION_SLOTS: usize = 253;
@@ -655,7 +654,7 @@ struct PacketCounts {
 }
 
 fn version_accepted(flags: u8) -> bool {
-    flags & 0x80 == 0 && flags & 0x7f == PIA_VERSION
+    crate::peer_passive::custom_write_allowed(flags)
 }
 
 fn sat_u8(value: u16) -> u8 {

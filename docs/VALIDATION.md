@@ -393,3 +393,223 @@ before fighter selection. Symbolization located `Tegra::DmaPusher::CallMethod`
 accessing an unbound subchannel. The cause of that missing engine binding is
 unresolved; it is not established as a G&W or rewrite fault. The current two
 accepted matches did not reproduce it. No emulator workaround was shipped.
+
+## Combined profiles and resolution candidate — 2026-10-07
+
+NRO `6c6a64afca4073c91128d938141e143c8519ead41e530a26ca56f1c46bc02409`,
+optimized ELF `74e484062f276da577b6d3900eba5bf05fa34a3233d84a47e1c16676b45b7c8a`.
+169 host tests, host/Skyline Clippy with warnings denied, no-default-features
+build and optimized Skyline build passed. Raw checks and source are in its
+ignored debug bundle.
+
+The earlier Stealth identity blocker described above is historical. The current
+implementation uses the fork's validated connection-ID path; it does not guess
+a conversion from receive headers. Prior candidate `410ac1f7` exchanged names,
+interfaces and active profile settings with the original fork in a local-wireless
+lobby. Its pending-On display was observed. That original-fork stack aborted
+while loading a fighter, so this was not a complete match or final-candidate
+fresh-Stealth-On acceptance.
+
+### Fighter callback and Training coexistence
+
+Count-only run `20261007-013838-0fd514` used Vanilla/emulator, standalone ImGui,
+Elite, TM and corrected SGPO. Two five-second idle Training samples, separated
+by returning to CSS and loading another Training session, counted 307 Main ticks
+per fighter over 302 presents and 306 over 301. Both passed the predeclared
+0.98–1.02 approximate-frequency band, with no rejected reads or slow ticks.
+This is not exact per-frame uniqueness or module-unload proof. Count mode
+installed no cut-in hook or resolution reports. The TM menu opened/closed and
+SGPO remained visible. A preceding navigation attempt reached no accepted sample
+and is retained separately.
+
+### Manual profiles, Auto and Gigaflare
+
+Run `20261007-014825-27814e` deliberately used `platform=console` in Eden to
+exercise the console resolution table. Sephiroth charged neutral B for 4.5 seconds.
+
+| Selected profile | Applied base | Gigaflare | Recovery |
+| --- | --- | --- | --- |
+| LLUltra | 576p / DRS on | 480p, crop 854×480 | 576p, crop 1024×576 |
+| LessLag | 1080p / DRS on | 720p, crop 1280×720 | 1080p, crop 1920×1080 |
+| Vanilla | 1080p / DRS off | No resolution report | Remained 1080p |
+| LLDoubles | 1080p / DRS on | 720p | 1080p |
+
+All four manual modes reached Active. Auto in offline Training selected Vanilla
+while retaining the saved manual LLDoubles choice. The Doubles transition is
+proven by events 749–756; periodic status publication missed that short interval.
+Reading a status file every 50 ms does not make its roughly five-second
+publication interval a 50 ms timing measurement.
+
+FX Off suppressed the named Gigaflare request (`0x1210319015`, event 1355), and
+the resolution report recovered afterward. The actual cut-in trigger was not
+exercised. Nonfighter-category rejects during weapon articles are expected
+filtering, not evidence of failed fighter reads.
+
+Both Deluxe and Elite menus worked through the standalone ImGui host. Elite's
+enabled setting persisted; offline Training continued. Both menus consume D-pad
+edits when simultaneously open, so edit one at a time. This does not validate
+Elite's NSO-only stage filter.
+
+A manual console-LLUltra boot showed an undersized title image after the rewrite
+had applied its crop. Later CSS/match images filled the window. Fable reviewed
+the timeline; a later external crop reset is suspected, but its caller remains
+unproven. The Auto/Vanilla menu path is unaffected. An observation-only diagnostic
+is being prepared; no crop-behavior fix is claimed.
+
+Both accepted single-console runs exited normally without OOM and their staged
+files were restored. Raw screenshots, events, samples, acceptance records and
+run journals are preserved under:
+
+```text
+dist/6c6a64afca4073c9/runtime-evidence/count-only/
+dist/6c6a64afca4073c9/runtime-evidence/resolution-console/
+```
+
+### Four-player attempt, no match acceptance
+
+A `20261007-020912-95094a` used this candidate, GNW fix `0883e697…`, SGPO
+`20e9e062…`, TM, ARCropolis, Elite and standalone ImGui; B
+`20261007-020912-f7b003` was a clean peer. Both joined a private local room.
+Two local players joined A, but B's second local player did not join. The attempt
+ended at Team Battle character select with three players. No match started;
+this is not a doubles or desync result. Both exited normally without OOM,
+peak 6,550,102,016 / 6,587,686,912 bytes, under 8/7 GiB caps. The staging journal
+was restored exactly. No VPN or artificial network delay was used.
+## Final b19 crop, response and cut-in checks — 2026-10-07
+
+Artifact `b19b7d94ae136e55d2fe59136dd9ff2c40ce9436393a59984660ed3ab8c52cd7`
+has matching optimized ELF `3f5e8407be2ef8f38037df645c69f32759d617ec6f7517fac4432de0fc18e397`.
+All 175 host tests, host/Skyline Clippy with warnings denied, the no-default-features
+build and optimized Skyline build passed. Source/build inputs were compared with
+the packaged source archive before runtime testing.
+
+An observation build proved the game reset a previously applied 1024×576 crop
+to 1920×1080. The final fix forwards the original call unchanged and rearms only
+an exact fullscreen reset on the tracked window with an accepted smaller crop.
+The next tracked present reapplies it. Run `20261007-025442-132e12` showed events
+177/178/179 in that order and a correctly filled title image, then full Gigaflare
+576→480→576. It ended at its 600-second runtime limit, not a spontaneous crash;
+no OOM kill, peak 8 GiB. The profile was restored.
+
+Run `20261007-031616-b75dd6` collected 24 response trials on the same final NRO.
+See [LATENCY_METHODOLOGY.md](LATENCY_METHODOLOGY.md#final-candidate-24-trials-2026-10-07)
+for exact counts, image/trace validation, the retained idle-animation threshold
+false positive and capture-copy race. The earlier preflight was stopped normally
+to configure 360-pixel screenshots before emulation; it supplied no trials.
+
+After the response trials, a second Training session used Luigi against Roy.
+Close-range Up-B produced the visible critical-hit cut-in. Events 1193–1200 show
+source-1 report start, applied 720/crop1280×720, report end and restored
+1080/crop1920×1080 while manual LLDoubles was active. Screenshots preserve both
+the cut-in and subsequent play. This verifies the actual trigger and recovery,
+not a Switch performance improvement or every cut-in variation.
+
+The solo run exited normally after 827.6 seconds, peak 8.55 GB within its 9 GiB
+limit, with zero memory-limit reclaim events and zero OOM events. Its isolated
+profile was restored. Evidence lives outside Git under:
+
+```text
+dist/b19b7d94ae136e55/runtime-evidence/crop-reset/
+dist/b19b7d94ae136e55/runtime-evidence/response-and-cutin/
+```
+
+## Linked doubles and peer regression — 2026-10-07
+
+The b19 pair `20261007-033126-622b58` / `20261007-033126-30b963`
+completed a four-fighter team match on Moray Towers (Battlefield style).
+Three local controllers joined A and one joined B. A carried the rewrite,
+G&W fix `0883e697…`, corrected SGPO `20e9e062…`, TM, ARCropolis, Elite and
+standalone ImGui; B had no Skyline/title mods. G&W and Sephiroth faced Wolf
+and Byleth. Auto committed LLDoubles with three textures and DRS enabled.
+Both sides agreed on observed hits, stocks and winning team, then returned
+through results to character select. Full Gigaflare on B triggered A's
+1080→720→1080 scaler. Both exited normally with no OOM.
+
+The API trace `3123935492968` was captured during **Vanilla warmup**, not the
+actual doubles match. Its 491 presents, three indices, TwoBehind relation and
+zero outstanding acquisitions therefore do not prove the doubles pipeline.
+Doubles acceptance uses the actual match's committed status, events and images.
+
+The b19 pair `20261007-040044-b3b852` / `20261007-040044-1a740a` used
+the rewrite on both peers, external ImGui on A and embedded ImGui on B. Names,
+colored RTT, announced interface/profile, Streamer menu/chord and saved Stealth
+On pending reconnect passed. G&W with the fix on A/LLUltra versus Sephiroth on
+B/LessLag completed through matching winner/results and stage select. A reached
+its 1800-second runtime limit while loading the next CSS; no final CSS acceptance
+is claimed for this run. B exited normally; neither hit OOM. An earlier incidental
+Ice Climbers match in the same session is not a G&W test.
+
+```text
+dist/b19b7d94ae136e55/runtime-evidence/four-fighter/
+dist/b19b7d94ae136e55/runtime-evidence/two-rewrite-peer/
+```
+
+## Final display fix and Stealth/persistence acceptance — 2026-10-07
+
+| Artifact | SHA-256 |
+| --- | --- |
+| NRO | `d9acd03611e1d1d644e5c1d56f0c80748e082cd46cd02f75ca3e62c3bffd838b` |
+| Optimized ELF | `93da4bf258eb6a22f796ad9929fae4dcfef06cd45df7662e117505bf2ce6a25e` |
+| Source archive | `6d7035650b1e285a645bdff6f1e9a88ed0cc690ba3d42eb0d197128b0433db2a` |
+
+Build `0.1.0-03cad922da77-dirty-1791362447` passed 176 host tests, host
+Clippy with warnings denied, the no-default-features build, the Skyline check
+and optimized release packaging. The installed cargo-skyline 3.5.0 wrapper
+requires `cargo skyline clippy -- -- -D warnings`; the single-separator attempt
+rejected `-D` before checking. Raw final host/check logs are retained in the bundle.
+Root compared all 55 packaged Rust/build input files with disk and reviewed
+exactly four changed files versus b19: remote-buffer display/snapshot handling,
+compact ASCII Auto labels and tests. No renderer/input/packet-writing change.
+The 24 response trials remain measurements of b19, not this exact binary.
+
+Two private localhost stations ran the final NRO. A had the complete mod stack
+and compatible standalone ImGui; B had only the rewrite and its embedded host.
+The first pair (`044519-4b92e6` / `044519-dff491`) loaded the exact INI files
+saved through b19's menu, verified by SHA equality. A restored Ultra, buffer 2,
+Stealth On and Streamer On; B restored LessLag, Auto buffer, Stealth On and
+Streamer Off. Streamer hid the remote fields and its chord restored them.
+
+Both learned/confirmed one native station. With fresh Stealth On, each logged
+one suppressed beacon, **zero beacon writes and zero custom payload writes**.
+Native name/RTT remained visible while unannounced interface/settings stayed
+unknown. Saving Off showed `Off (reconnect)` and did not enable writes within
+that connection. Both exited normally; complete logs/configs were archived
+before restart, with no external INI edits between sessions.
+
+The second pair (`045148-2c9fb4` / `045148-6e2cc5`) loaded saved Off and
+exchanged custom metadata. At the first checkpoint A/B had one beacon each and
+85/83 payload writes, with zero Stealth suppression. B displayed A's buffer 2;
+A displayed B's Auto. Names, Ethernet announcements and green 17–20 ms RTT
+were visible. The Ethernet value is the emulator's virtual nifm result.
+No ambiguous-identity skips occurred. A few bounded lock-contention skips were
+recorded; these are safe rejected attempts, not a claim of zero contention.
+
+Elite's menu was opened with Deluxe and enabled before a regular linked match.
+G&W on A used LessLag and the one-sided render fix; Sephiroth on B used Auto,
+which selected LLUltra at match start. The G&W log confirms full shader/constants
+verification and narrowed ranges restored after use. On Saffron City, both peers
+showed Sephiroth at 12.6% after G&W's attacks and agreed on subsequent stocks,
+G&W's victory, results and return to CSS. Cleanup committed Vanilla on both,
+with the saved manual choice retained. The corrected controller overlay remained
+visible on A. This was ordinary Smash; TM's save/load behavior was tested earlier.
+
+All four d9 frontends exited normally with zero memory-limit and OOM events.
+Fresh-On peaks were 6.08/5.24 GB; final match peaks were 6.21/5.92 GB under
+8/7 GiB caps. All staging files were restored with original hashes.
+
+```text
+dist/d9acd03611e1d1d6/checks/
+dist/d9acd03611e1d1d6/runtime-evidence/peer-and-gnw/
+```
+
+The bundle includes raw runs, checkpoints, screenshots, configuration receipts,
+acceptance notes and a SHA manifest. Runtime folders can contain older captures;
+attribute them by build ID and run window. The original packaging manifest's
+`runtime_tested=false` is preserved as build-time metadata; the separate runtime
+acceptance record supplies subsequent evidence.
+
+These tests are bounded observations, not simulation checksums or universal
+online-safety proof. No VPN/high-RTT, NSO filtering, four-network-station or new
+Switch-rendering acceptance follows. Fable's final follow-up review was blocked
+by the provider's model-access rejection; this final display review was performed
+by root after Grok's implementation, without claiming a new Fable sign-off.

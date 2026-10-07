@@ -1,93 +1,84 @@
-# Next session: Stealth identity, profile parity and console validation
+# Resume and test plan
 
-LessLag/LLUltra captured-response evidence is accepted for the tested Eden setup.
-The corrected overlay passed two user-run Switch matches. Manual profile
-selection now works live and persists. One-sided G&W-fix matches passed in both
-LessLag and LLUltra with matching results and return to CSS. See VALIDATION.md.
-Stealth remains Unavailable: its preference persists, but its transmit backend
-is blocked on peer identity reconciliation. Grok and Fable's second opinion did
-not establish a safe mapping; preserve both reports and collect the read-only
-evidence they identify before implementing packet writes. Do not take another
-opinion hop on the same unresolved design. Auto, full peer metadata and console
-profile-transition validation remain pending. Doubles is deferred by the latest
-operator instruction. Reduced FX follows a reproducible Switch performance dip.
-Use HANDOFF.md for the exact bundle, installed files, live state and receipts.
+Read [STATUS.md](STATUS.md) for current implementation and
+[VALIDATION.md](VALIDATION.md) for artifact-specific evidence. The cumulative
+root [HANDOFF.md](../HANDOFF.md) records exact live processes, staging journals,
+worker threads and next commands. Its latest entry takes precedence over older
+operational notes.
 
-## Environment
+## Environment and safety
 
-Use the verified custom Eden delivery at /home/intpa/eden-cli-handoff (READY,
-4644 checksums verified, AppImage SHA starting fd4b91536e3d60f9, source base
-10bcd2d849 plus its CLI patch). Read AGENT_HANDOFF.md and
-source/docs/user/CLIControl.md there. Launch with
-`launch-eden.ps1 -MemoryGiB 8 -Runtime 600`, then attach edenctl.py to the exact
-socket printed by that run. Keep one bounded instance with a finite lifetime.
-Two isolated profiles are permitted for linked tests; use separate data trees,
-memory limits and finite deadlines. The accepted pair used 8 GiB and 7 GiB.
-The older tools/EdenTest.ps1 is only for stock-baseline reproduction.
+Use the custom CLI Eden delivery and its handoff:
 
-Check the installed NRO hash and startup identity against HANDOFF.md, and back
-up the NRO and config before replacing either. `render_mode` and the INPUT_RECEIPT
-and DUMP_ULTRA_ROUTE flags are read at boot; external edits require a closed game.
-The NetProfile menu applies supported mode changes live. Restore exact staged
-files from each campaign's journal after collecting logs, with both games closed.
+```text
+/home/intpa/eden-cli-handoff/AGENT_HANDOFF.md
+/home/intpa/eden-cli-handoff/source/docs/user/CLIControl.md
+```
 
-## 1. LessLag/LLUltra response proof — accepted for this Eden setup
+Always use an isolated profile for autonomous tests:
 
-PERFORMANCE.md records 25 valid count trials across normal and approximately
-8 ms delayed injection phases. Normal-phase responses were Vanilla 6, LessLag 3,
-Ultra 2 captured frames. Delayed-phase responses were Vanilla 6–7, LessLag 3,
-Ultra 2–3; the exceptional Ultra trial had a capture/present stall and is retained.
-API records match the in-image input-marker serials in all three modes.
+```powershell
+/usr/bin/pwsh -NoLogo -NoProfile -NonInteractive -Command '& /home/intpa/eden-cli-handoff/launch-eden.ps1 -IsolatedProfile -MemoryGiB 8 -Runtime 900'
+```
 
-Fable 5.1/xhigh reviewed the raw data and accepted this limited emulator claim.
-The marker observes the plugin's existing input poll, not earliest HID receipt;
-its separation from the pose is phase-dependent. No display, photon, native
-console, or universal every-input frame-count claim follows. Extra release-side
-trials would broaden coverage but are not a prerequisite to the next investigation.
+Attach to the exact socket printed by that run. Two-console linked tests need
+separate profiles and finite runtime/memory limits; the tested pair used 8/7 GiB
+with zero swap. Latency measurements use one emulator. Do not run heavy builds
+alongside games. Do not change the user's Switch or normal Eden profile.
+Restore every staging journal after the corresponding frontends have exited.
+Preserve the NRO, optimized symbols, source, plugin hashes, raw logs and captures.
 
-## 2. Remaining crash and console checks
+## Completed emulator milestone
 
-The corrected SGPO build passed the user's Kirby and Palutena matches and
-returns to CSS. Do not call the new render-policy transitions console-tested.
-A separate Eden GPU subchannel crash remains unexplained (VALIDATION.md).
-For a recurrence, record the mode, scene, fighters,
-online/LDN topology, the exact NRO hash and the crash evidence. The v1.4.2
-release moved to persistent hooks and a per-frame render_opts snapshot, which
-this rewrite also uses; that design difference is not proof of the crash
-mechanism. A crash on externally stopping the emulator is a shutdown failure,
-not this crash.
+Final candidate `d9acd03611e1d1d6` passes 176 host tests and the required
+checks/build. Fresh Stealth On suppression, Off after reconnect, exact INI
+reload, Streamer privacy, peer names/buffers/profiles/colored RTT, standalone
+and embedded ImGui, enabled Elite, and a one-sided G&W LessLag match through
+results/CSS passed. Auto selected Ultra for linked singles and Vanilla on cleanup.
 
-## 3. Doubles — deferred
+Preceding candidate `b19b7d94ae136e55` supplies the 24 response trials,
+four-fighter linked Auto/LLDoubles match, G&W Ultra match, cut-in/Gigaflare
+scaling and corrected title crop test. D9 changes four display/test files only;
+do not relabel b19's timing measurements as a new d9 experiment.
 
-`doubles_core` gives three textures with OneBehind but no render_opts. Full
-LLDoubles also needs render_opts and its dynamic-resolution behavior, followed by
-multiplayer performance and crash checks.
+Preserved candidate and symbols:
 
-## Later: measured Reduced FX
+```text
+/home/intpa/ssbu-online-deluxe-rewrite/dist/d9acd03611e1d1d6/
+/home/intpa/ssbu-online-deluxe-rewrite/dist/b19b7d94ae136e55/
+```
 
-1. Smoke-test the remaining FX.md table one character/move at a time: On, Off,
-   On again, in the air and on the ground where applicable. Check unrelated
-   moves, hit/shield/KO feedback, menus and Training save/load afterward.
-   Ordinary offline Smash and online-to-offline scope transitions need coverage,
-   including arena/Quickplay/local-wireless entry and exit. Online is the
-   distributed default; all is only the test override.
-2. Identify the exact effect that causes a Switch dip. Record console/model,
-   game and plugin hashes, docked/handheld, resolution, clocks, render mode,
-   stage, fighters/costumes, damage, camera, move/charge and repetition, with
-   comparable FX On and Off traces or video.
-3. Reproduce that scene in Eden, recording emulator version, host hardware and
-   drivers, power profile, backend, resolution, speed, accuracy and shader cache.
-   Vary one setting at a time and separate first-use shader stutter from
-   repeatable cost. An arbitrary FPS cap is not a reproduction.
-4. Implement Reduced for one confirmed offender, preserving its charge,
-   trajectory, hit and size cues. Compare repeatable On/Off/Reduced runs, then
-   test the same candidate on Switch. Accept only after improved pacing and
-   correct feedback/coexistence there.
+All test frontends are closed and the staging journals restored. The user's
+Switch and normal Eden profile were not changed during this final test cycle.
+Use the final NRO and matching ELF for the next console test, retaining backups.
 
-Full Gigaflare charge needs the longer 4.2-second hold; earlier 2.2-second
-captures are not full-charge trials. Do not compare different render modes as if
-only the effect changed. Do not copy the peer's generic effect deletion, article
-scaling, global victim timers or color-reset suppression.
+High-RTT/VPN matches and more than two remote network stations remain additional
+coverage. Two local controllers on each of two consoles do not produce four
+network peers. Do not describe localhost or a delay relay as an actual VPN test.
 
-No performance improvement, console compatibility or crash fix follows from a
-successful build.
+## Switch follow-up
+
+The user accepted two corrected-overlay matches (Kirby and Palutena), including
+return from results to CSS. There is no special requirement for five runs.
+New Auto/DRS/render transitions are not yet console-tested. Use the existing
+backups and the exact tested candidate when the user is ready to install.
+Capture Atmosphère reports and matching optimized symbols for any recurrence.
+A separate Eden unbound GPU-subchannel crash is unresolved; do not attribute
+it to the rewrite or G&W without evidence.
+
+## Reduced FX
+
+Reduced remains unavailable. First establish the exact Switch scene and effect
+that causes a repeatable dip, then reproduce comparable load in Eden. Record
+mode, resolution, console/host settings, stage, fighters/costumes, damage,
+camera, move/charge and shader warmup. A forced FPS cap is not a reproduction.
+Implement one reduced effect while preserving charge/trajectory/hit cues, test
+On/Off/Reduced, and return to Switch before iterating the catalog.
+
+Full Gigaflare needs approximately a 4.5-second B hold in the current tests.
+Keep FX On and rendering mode fixed when isolating effect cost. Avoid the peer
+mod's broad generic deletion, article scaling, global timers or color-reset
+suppression. Test Training save/load, normal match cleanup and online-only FX
+scope separately. Elite Legal Stages should restrict NSO only, never offline.
+
+No hardware overclocking or unproven software FPS-boost field write is planned.

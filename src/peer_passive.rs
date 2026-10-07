@@ -68,6 +68,25 @@ pub fn packet_prefix_accepted(magic: u32, version: u8, wire_len: u32) -> bool {
         && (PACKET_LEN_MIN..=PACKET_LEN_MAX).contains(&wire_len)
 }
 
+/// Pia header byte at `H+4`. The low 7 bits are the version. Bit 7 is set
+/// once the message area is encrypted. Custom writes require version 4 with
+/// that bit clear.
+pub fn custom_write_allowed(version_flags: u8) -> bool {
+    version_flags & 0x80 == 0 && version_flags & 0x7f == PIA_VERSION
+}
+
+/// Kind-`0x58` body word. Only big-endian types 0 and 1 leave `body+4` unused
+/// by the game. Every other type is left unchanged.
+pub fn rtt_type_editable(body: &[u8]) -> bool {
+    let Some(bytes) = body.get(..4) else {
+        return false;
+    };
+    matches!(
+        u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]),
+        0 | 1
+    )
+}
+
 /// Walk `area` the way `0x41a8` walks the message list.
 ///
 /// `0xFF` ends the list and the bytes after it are ignored. The end of the
@@ -429,6 +448,20 @@ mod tests {
             parse_message_area(&[0, 0, 0, 0, 0, 0, 0, 0], &mut out),
             Err(ParseError::Capacity)
         );
+    }
+
+    #[test]
+    fn custom_writes_require_plaintext_version_4_and_rtt_type_0_or_1() {
+        assert!(custom_write_allowed(4));
+        assert!(!custom_write_allowed(4 | 0x80));
+        assert!(!custom_write_allowed(0x83));
+        assert!(!custom_write_allowed(3));
+        assert!(!custom_write_allowed(0));
+        assert!(rtt_type_editable(&[0, 0, 0, 0]));
+        assert!(rtt_type_editable(&[0, 0, 0, 1, 9]));
+        assert!(!rtt_type_editable(&[0, 0, 0, 2]));
+        assert!(!rtt_type_editable(&[0, 0, 1, 0]));
+        assert!(!rtt_type_editable(&[0, 0, 0]));
     }
 
     #[test]

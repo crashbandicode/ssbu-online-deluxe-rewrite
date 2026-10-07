@@ -10,7 +10,9 @@ use std::{
     fs::File,
     io::Write,
     path::Path,
-    sync::atomic::{AtomicI32, AtomicI64, AtomicU64, AtomicUsize, Ordering},
+    sync::atomic::{
+        AtomicBool, AtomicI32, AtomicI64, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering,
+    },
 };
 type Ptr = *mut c_void;
 type Getter = unsafe extern "C" fn(Ptr, *const c_char) -> *const c_void;
@@ -26,6 +28,11 @@ static GET_ACTIVE: AtomicUsize = AtomicUsize::new(0);
 static GET_TOTAL: AtomicUsize = AtomicUsize::new(0);
 static GET_INTERVAL: AtomicUsize = AtomicUsize::new(0);
 static SET_ACTIVE: AtomicUsize = AtomicUsize::new(0);
+static SET_CROP: AtomicUsize = AtomicUsize::new(0);
+/// 0 unread, 1 off, 2 on. The marker is consulted once.
+static CROP_PROBE: AtomicU8 = AtomicU8::new(0);
+static CROP_ARMED: AtomicBool = AtomicBool::new(false);
+static CROP_OBSERVED: AtomicU32 = AtomicU32::new(0);
 static WINDOW: AtomicUsize = AtomicUsize::new(0);
 static ACTIVE: AtomicI32 = AtomicI32::new(-1);
 
@@ -72,6 +79,24 @@ unsafe extern "C" fn get_proc(device: Ptr, name: *const c_char) -> *const c_void
         b"nvnQueuePresentTexture" => (&PRESENT, queue_present as *const c_void),
         b"nvnWindowAcquireTexture" => (&ACQUIRE, window_acquire as *const c_void),
         b"nvnDeviceGetProcAddress" => return get_proc as *const c_void,
+        b"nvnWindowSetCrop" => {
+            // `next` came from the original getter. Never replace a raw proc
+            // with this wrapper. `resolve` uses that getter, not `get_proc`.
+            remember_raw_crop(next as usize);
+            let raw = SET_CROP.load(Ordering::Acquire);
+            if raw == 0 || raw == crop_wrapper_address() {
+                return next;
+            }
+            if crop_probe_enabled()
+                && CROP_ARMED
+                    .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+                    .is_ok()
+            {
+                let (a, b) = crate::diagnostics::crop_armed_event();
+                super::record(super::Code::CropObserve, a, b);
+            }
+            return window_set_crop as *const c_void;
+        }
         _ => return next,
     };
     slot.store(next as usize, Ordering::Release);
@@ -114,10 +139,16 @@ unsafe extern "C" fn window_initialize(window: Ptr, builder: *const c_void) -> u
             (&GET_TOTAL, b"nvnWindowGetNumTextures\0".as_slice()),
             (&GET_INTERVAL, b"nvnWindowGetPresentInterval\0".as_slice()),
             (&SET_ACTIVE, b"nvnWindowSetNumActiveTextures\0".as_slice()),
+            (&SET_CROP, b"nvnWindowSetCrop\0".as_slice()),
         ] {
-            slot.store(resolve(name), Ordering::Release);
+            let address = resolve(name);
+            if std::ptr::eq(slot, &SET_CROP) && address == crop_wrapper_address() {
+                continue;
+            }
+            slot.store(address, Ordering::Release);
         }
         readback(window);
+        let _ = super::auto_driver::current_request();
         if let Some(count) = super::renderer::requested_textures() {
             let setter = SET_ACTIVE.load(Ordering::Acquire);
             if setter != 0
@@ -126,12 +157,18 @@ unsafe extern "C" fn window_initialize(window: Ptr, builder: *const c_void) -> u
                 && TOTAL.load(Ordering::Relaxed) == 3
                 && ACTIVE.load(Ordering::Relaxed) == 3
             {
-                let set: unsafe extern "C" fn(Ptr, i32) = std::mem::transmute(setter);
-                set(window, count);
+                // A saved 3-texture mode is already the window's active count.
+                // Skip that no-op setter. A real 3→2 change still sets, and both
+                // paths read the count back before arming.
+                if count != TOTAL.load(Ordering::Relaxed) {
+                    let set: unsafe extern "C" fn(Ptr, i32) = std::mem::transmute(setter);
+                    set(window, count);
+                }
                 readback(window);
                 if ACTIVE.load(Ordering::Relaxed) == count {
                     super::renderer::arm_mode(count);
                 } else {
+                    let set: unsafe extern "C" fn(Ptr, i32) = std::mem::transmute(setter);
                     set(window, 3);
                     readback(window);
                     // Continuing with an unknown texture ring is not safe.
@@ -223,7 +260,100 @@ fn mark_index(mask: &AtomicU64, index: i32) {
         mask.fetch_or(1 << index, Ordering::Relaxed);
     }
 }
+pub(super) fn tracked_presents() -> u64 {
+    TRACKED_PRESENTS.load(Ordering::Relaxed)
+}
+
+/// Calls the raw `nvnWindowSetCrop` stored from the original device getter.
+/// A stored wrapper address is refused so main cannot recurse into the probe.
+/// Accepted crops stay on code 80.
+pub(super) unsafe fn set_crop(window: Ptr, width: u32, height: u32) -> bool {
+    let address = SET_CROP.load(Ordering::Acquire);
+    if address == 0 || window.is_null() || address == crop_wrapper_address() {
+        return false;
+    }
+    let crop: unsafe extern "C" fn(Ptr, i32, i32, i32, i32) = std::mem::transmute(address);
+    crop(window, 0, 0, width as i32, height as i32);
+    true
+}
+
+fn crop_wrapper_address() -> usize {
+    window_set_crop as *const () as usize
+}
+
+fn remember_raw_crop(address: usize) {
+    if address == 0 || address == crop_wrapper_address() {
+        return;
+    }
+    SET_CROP.store(address, Ordering::Release);
+}
+
+fn crop_probe_enabled() -> bool {
+    match CROP_PROBE.load(Ordering::Acquire) {
+        1 => return false,
+        2 => return true,
+        _ => {}
+    }
+    let on = Path::new(DATA_DIR).join("PROBE_CROP").exists();
+    let stored = if on { 2 } else { 1 };
+    let _ = CROP_PROBE.compare_exchange(0, stored, Ordering::AcqRel, Ordering::Acquire);
+    CROP_PROBE.load(Ordering::Acquire) == 2
+}
+
+/// Game SetCrop entry. Forwards the original arguments once. Code 83 is
+/// recorded only while `PROBE_CROP` is present. A fullscreen reset is reported
+/// to the resolution policy, which does not call [`set_crop`].
+#[inline(never)]
+unsafe extern "C" fn window_set_crop(window: Ptr, x: i32, y: i32, w: i32, h: i32) {
+    let address = SET_CROP.load(Ordering::Acquire);
+    if address == 0 || address == crop_wrapper_address() {
+        return;
+    }
+    let crop: unsafe extern "C" fn(Ptr, i32, i32, i32, i32) = std::mem::transmute(address);
+    crop(window, x, y, w, h);
+    if crop_probe_enabled() {
+        note_crop_observe(x, y, w, h);
+    }
+    let delay =
+        crate::resolution::delay_for_profile(crate::render_policy::load_decision().committed);
+    let _ = crate::resolution::rearm_fullscreen_reset(
+        delay,
+        crate::resolution::ObservedCrop {
+            tracked: tracked_window(window),
+            hooks_ready: crate::resolution::hooks_ready(),
+            x,
+            y,
+            width: w,
+            height: h,
+        },
+    );
+}
+
+fn note_crop_observe(x: i32, y: i32, w: i32, h: i32) {
+    let seen = CROP_OBSERVED.load(Ordering::Relaxed);
+    if seen > crate::diagnostics::CROP_OBSERVE_CAP {
+        return;
+    }
+    if CROP_OBSERVED
+        .compare_exchange(seen, seen + 1, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
+        return;
+    }
+    let present = tracked_presents();
+    if seen == crate::diagnostics::CROP_OBSERVE_CAP {
+        let (a, b) = crate::diagnostics::crop_cap_event(present);
+        super::record(super::Code::CropObserve, a, b);
+        return;
+    }
+    let (rect_a, rect_b) = crate::diagnostics::crop_rect_event(present, x, y, w, h);
+    super::record(super::Code::CropObserve, rect_a, rect_b);
+}
+
 unsafe extern "C" fn queue_present(queue: Ptr, window: Ptr, index: i32) {
+    if tracked_window(window) {
+        super::resolution::on_present(window);
+    }
     PRESENT_TICK.store(skyline::nn::os::GetSystemTick() as u64, Ordering::Relaxed);
     let n = PRESENTS.fetch_add(1, Ordering::Relaxed) + 1;
     mark_index(&PRESENT_MASK, index);
@@ -244,7 +374,7 @@ unsafe extern "C" fn queue_present(queue: Ptr, window: Ptr, index: i32) {
             after as i32
         };
         super::api_trace::mark_thread(crate::render_trace::KIND_OUTSTANDING, shown);
-        let saved = super::saved_render_mode();
+        let saved = super::auto_driver::current_request();
         let snap = crate::render_policy::snapshot();
         let (active, allocated, fresh) = if snap.needs_fresh(saved, index, after) {
             fresh_counts(window)
@@ -300,10 +430,16 @@ unsafe extern "C" fn window_acquire(window: Ptr, sync: Ptr, index: *mut i32) {
 pub(super) fn write_status() {
     if let Ok(mut file) = File::create(Path::new(DATA_DIR).join("renderer-status.txt")) {
         let policy = crate::render_policy::labels(crate::render_policy::load_machine());
+        let auto = super::auto_driver::snapshot();
+        let auto_profile = if auto.auto_profile { "true" } else { "false" };
+        let cleanup_hold = if auto.cleanup_hold { "true" } else { "false" };
+        let scene_ready = if auto.ready { "true" } else { "false" };
         let _ = writeln!(file,
-            "build={}\nmetric=nvn_api_observation\nmode={}\nengine_status={}\npolicy_committed={}\npolicy_effective={}\npolicy_requested={}\npolicy_known_active={}\npolicy_count_target={}\npolicy_buffer={}\npolicy_index={}\npolicy_swapping={}\npolicy_failed={}\npolicy_force_wait={}\nindex_hook_calls={}\nindex_pair=0x{:x}\nskipped_render_waits={}\nflush_calls={}\nsequence_frames={}\nmodels_moved={}\nsequence_dispatches={}\nultra_entries={}\nultra_preflushes={}\nultra_late_skips={}\noriginal_flushes={}\nultra_bad_callers={}\nultra_alias_mismatches={}\nultra_last_target=0x{:x}\nwindow=0x{:x}\nget_active_resolved={}\nset_active_resolved={}\nallocated_textures={}\nactive_textures={}\npresent_interval={}\npresent_calls={}\nacquire_calls={}\ntracked_acquires={}\ntracked_presents={}\ntracked_outstanding={}\npresent_index_mask=0x{:x}\nacquire_index_mask=0x{:x}\nlast_present_call_tick={}\nlast_acquire_return_tick={}\nnot_measured=displayed_frames,input_to_photon",
+            "build={}\nmetric=nvn_api_observation\nmode={}\nengine_status={}\npolicy_committed={}\npolicy_effective={}\npolicy_requested={}\npolicy_known_active={}\npolicy_count_target={}\npolicy_buffer={}\npolicy_index={}\npolicy_swapping={}\npolicy_failed={}\npolicy_force_wait={}\nselected_profile={}\nauto_profile={}\nauto_requested={}\nplatform={}\nscene_ready={}\nscene_connection={}\nscene_status={}\ncleanup_hold={}\nselection_generation={}\nindex_hook_calls={}\nindex_pair=0x{:x}\nskipped_render_waits={}\nflush_calls={}\nsequence_frames={}\nmodels_moved={}\nsequence_dispatches={}\nultra_entries={}\nultra_preflushes={}\nultra_late_skips={}\noriginal_flushes={}\nultra_bad_callers={}\nultra_alias_mismatches={}\nultra_last_target=0x{:x}\nwindow=0x{:x}\nget_active_resolved={}\nset_active_resolved={}\nallocated_textures={}\nactive_textures={}\npresent_interval={}\npresent_calls={}\nacquire_calls={}\ntracked_acquires={}\ntracked_presents={}\ntracked_outstanding={}\npresent_index_mask=0x{:x}\nacquire_index_mask=0x{:x}\nlast_present_call_tick={}\nlast_acquire_return_tick={}\nnot_measured=displayed_frames,input_to_photon",
             crate::build_info::BUILD_ID, super::renderer::mode().key(), super::renderer::status(),
             policy.committed, policy.effective, policy.requested, policy.known_active, policy.count_target, policy.buffer, policy.index, policy.swapping, policy.failed, policy.force_wait,
+            auto.selected.key(), auto_profile, auto.request.key(), auto.platform.key(), scene_ready, auto.connection.key(),
+            crate::auto_policy::scene_status_key(auto.ready, auto.status), cleanup_hold, auto.selection_generation,
             super::renderer::INDEX_CALLS.load(Ordering::Relaxed), super::renderer::INDEX_PAIR.load(Ordering::Relaxed),
             super::renderer::SKIPPED_WAITS.load(Ordering::Relaxed), super::renderer::FLUSH_CALLS.load(Ordering::Relaxed),
             super::render_sequence::FRAMES.load(Ordering::Relaxed), super::render_sequence::MODELS_MOVED.load(Ordering::Relaxed), super::render_sequence::DISPATCHES.load(Ordering::Relaxed),
@@ -316,6 +452,18 @@ pub(super) fn write_status() {
             OUTSTANDING.load(Ordering::Relaxed),
             PRESENT_MASK.load(Ordering::Relaxed), ACQUIRE_MASK.load(Ordering::Relaxed),
             PRESENT_TICK.load(Ordering::Relaxed), ACQUIRE_TICK.load(Ordering::Relaxed));
+        let _ = write!(
+            file,
+            "{}",
+            crate::resolution::format_status(
+                crate::resolution::hooks_ready(),
+                {
+                    let view = super::fighter_main::view();
+                    crate::resolution::triggers_available(view.callback_armed, view.count_only)
+                },
+                crate::resolution::status()
+            )
+        );
         let _ = file.sync_all();
     }
 }

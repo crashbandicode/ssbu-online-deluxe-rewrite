@@ -119,19 +119,19 @@ then, so it sees the same context the draw calls use. Otherwise it returns
 - Training Modpack (`Layout::Draw`, layout-arc, fighter symbols), the overlay
   plugin (ui2d panes, 0x374812c, 0x1b6cc08, 0x1345558, 0x1d68b94) and
   `libcss_preserve.nro` (`set_text_string`) do not touch `nvnBootstrapLoader`
-  or the NVN proc table. The future render engine's present/acquire sites are
-  untouched because the backend deliberately does not wrap
+  or the NVN proc table. The ImGui backend does not wrap
   `nvnQueuePresentTexture`.
 - The backend snapshots window textures in its `nvnWindowBuilderSetTextures`
-  wrapper and wraps `nvnWindowAcquireTexture`; buffer-mode switching must be
-  tested with the overlay enabled when the engine lands.
+  wrapper and wraps `nvnWindowAcquireTexture`; the in-tree engine chains acquisition and preserves that texture ownership.
+  Live profile changes with the overlay enabled passed the recorded Eden tests.
 - The backend's own `InputHelper` only reads FullKey, Handheld and JoyDual
   pads, so ImGui-internal input ignores GameCube controllers; the menu polls
   `nn::hid` itself.
 - `IM_ASSERT` aborts the game: Begin/End and Push/Pop must balance in the draw
   callback, and `ig*` must not be called outside a frame.
-- Candidate NRO size is 1,683,456 bytes. Eden main-menu/CSS window and persistence
-  checks passed; match/Training/console validation remains separate.
+- Both Deluxe and Elite consume D-pad input when their menus are open. Edit
+  one menu at a time. Elite's stage restriction is NSO-only; offline stages
+  remaining unrestricted is expected.
 
 ## Attribution and live evidence
 
@@ -139,7 +139,7 @@ The backend source carries the [GPL v2 license](licenses/imgui-smash-GPL-2.0.txt
 Host glue is adapted from Coolsonickirby/imgui-smash; table layout and navigation
 follow the preserved MSFS-RyZe fork. The linked archive remains outside Git.
 
-Candidate 2ca7c6991f9a7565 is 1,683,456 bytes. Its embedded backend initializes in
+Historical candidate 2ca7c6991f9a7565 was 1,683,456 bytes. Its embedded backend initializes in
 Eden with TM and SGPO installed. User confirmed the top-left window on main menu
 and CSS, and FX changes persist across process restart. Other scene transitions
 and console behavior remain separately tracked in VALIDATION.md.

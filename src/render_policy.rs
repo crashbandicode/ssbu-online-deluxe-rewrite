@@ -1,4 +1,4 @@
-//! Live Vanilla, LessLag, and LLUltra on one atomic word.
+//! Live Vanilla, LessLag, LLUltra, and LLDoubles on one atomic word.
 //!
 //! A count change is a buffer swap: the opening present only forces the wait.
 //! A later present may call the setter at the canonical boundary, then three
@@ -42,12 +42,14 @@ pub enum Profile {
     Ultra = 0,
     LessLag = 1,
     Vanilla = 2,
+    /// 3 textures, OneBehind (+1), LessLag flush shape. Not `DoublesCore`.
+    Doubles = 3,
 }
 
 impl Profile {
     const fn textures(self) -> u8 {
         match self {
-            Self::Vanilla => 3,
+            Self::Vanilla | Self::Doubles => 3,
             Self::Ultra | Self::LessLag => 2,
         }
     }
@@ -55,7 +57,7 @@ impl Profile {
     const fn addend(self) -> u32 {
         match self {
             Self::Ultra => 0,
-            Self::LessLag => 1,
+            Self::LessLag | Self::Doubles => 1,
             Self::Vanilla => 2,
         }
     }
@@ -69,6 +71,7 @@ impl Profile {
             Self::Ultra => "ultra",
             Self::LessLag => "lesslag",
             Self::Vanilla => "vanilla",
+            Self::Doubles => "lldoubles",
         }
     }
 }
@@ -367,7 +370,7 @@ pub fn plan_flush(machine: Machine, armed: RenderMode) -> FlushPlan {
     }
     let (calls, lesslag_fields) = match decision.effective {
         Profile::Ultra => (3, false),
-        Profile::LessLag => (1, true),
+        Profile::LessLag | Profile::Doubles => (1, true),
         Profile::Vanilla => (1, false),
     };
     FlushPlan {
@@ -713,6 +716,7 @@ fn saved_profile(mode: RenderMode) -> Option<Profile> {
         RenderMode::Vanilla => Some(Profile::Vanilla),
         RenderMode::LessLag => Some(Profile::LessLag),
         RenderMode::LessLagUltra => Some(Profile::Ultra),
+        RenderMode::LessLagDoubles => Some(Profile::Doubles),
         RenderMode::LessLagCore | RenderMode::DoublesCore => None,
     }
 }
@@ -939,52 +943,70 @@ fn pack_profile(policy: Profile) -> u64 {
         Profile::Ultra => 0,
         Profile::LessLag => 1,
         Profile::Vanilla => 2,
+        Profile::Doubles => 3,
     }
 }
 
 fn unpack_profile(bits: u64) -> Option<Profile> {
-    match bits & 0b11 {
+    match bits & 0b111 {
         0 => Some(Profile::Ultra),
         1 => Some(Profile::LessLag),
         2 => Some(Profile::Vanilla),
+        3 => Some(Profile::Doubles),
         _ => None,
     }
 }
 
-fn encode(machine: Machine) -> u64 {
-    let failed_target = match machine.failed_target {
+/// 0 is "no failed target", not Ultra. 7 is the corrupt sentinel.
+fn pack_failed_target(target: Option<Profile>) -> u64 {
+    match target {
         None => 0,
         Some(Profile::Ultra) => 1,
         Some(Profile::LessLag) => 2,
         Some(Profile::Vanilla) => 3,
-    };
+        Some(Profile::Doubles) => 4,
+    }
+}
+
+fn unpack_failed_target(bits: u64) -> Result<Option<Profile>, ()> {
+    match bits & 0b111 {
+        0 => Ok(None),
+        1 => Ok(Some(Profile::Ultra)),
+        2 => Ok(Some(Profile::LessLag)),
+        3 => Ok(Some(Profile::Vanilla)),
+        4 => Ok(Some(Profile::Doubles)),
+        _ => Err(()),
+    }
+}
+
+fn encode(machine: Machine) -> u64 {
     let known_bit = u64::from(machine.known_active == 3);
     let target_bit = u64::from(machine.count_target == 3);
     u64::from(machine.live)
         | (pack_profile(machine.committed) << 1)
-        | (pack_profile(machine.requested) << 3)
-        | ((machine.index_phase as u64) << 5)
-        | ((machine.buffer_phase as u64) << 7)
-        | (u64::from(machine.index_marker) << 10)
-        | (u64::from(machine.buffer_marker) << 11)
-        | (known_bit << 12)
-        | (target_bit << 13)
-        | (u64::from(machine.failed) << 14)
-        | (failed_target << 15)
-        | (u64::from(machine.waited) << 17)
-        | (u64::from(machine.generation) << 25)
+        | (pack_profile(machine.requested) << 4)
+        | ((machine.index_phase as u64) << 7)
+        | ((machine.buffer_phase as u64) << 9)
+        | (u64::from(machine.index_marker) << 12)
+        | (u64::from(machine.buffer_marker) << 13)
+        | (known_bit << 14)
+        | (target_bit << 15)
+        | (u64::from(machine.failed) << 16)
+        | (pack_failed_target(machine.failed_target) << 17)
+        | (u64::from(machine.waited) << 20)
+        | (u64::from(machine.generation) << 28)
 }
 
 fn decode(word: u64) -> Machine {
     let committed = unpack_profile(word >> 1);
-    let requested = unpack_profile(word >> 3);
-    let index_phase = match (word >> 5) & 0b11 {
+    let requested = unpack_profile(word >> 4);
+    let index_phase = match (word >> 7) & 0b11 {
         0 => IndexPhase::Idle,
         1 => IndexPhase::WaitMarker,
         2 => IndexPhase::ReadyToCommit,
         _ => IndexPhase::Invalid,
     };
-    let buffer_phase = match (word >> 7) & 0b111 {
+    let buffer_phase = match (word >> 9) & 0b111 {
         0 => BufferPhase::Idle,
         1 => BufferPhase::AwaitSetter,
         2 => BufferPhase::SetterClaimed,
@@ -992,15 +1014,10 @@ fn decode(word: u64) -> Machine {
         4 => BufferPhase::Readback,
         _ => BufferPhase::Invalid,
     };
-    let failed_target = match (word >> 15) & 0b11 {
-        1 => Some(Profile::Ultra),
-        2 => Some(Profile::LessLag),
-        3 => Some(Profile::Vanilla),
-        _ => None,
-    };
-    let known_active = if (word >> 12) & 1 == 1 { 3 } else { 2 };
-    let count_target = if (word >> 13) & 1 == 1 { 3 } else { 2 };
-    let corrupt = committed.is_none() || requested.is_none();
+    let failed_target = unpack_failed_target(word >> 17);
+    let known_active = if (word >> 14) & 1 == 1 { 3 } else { 2 };
+    let count_target = if (word >> 15) & 1 == 1 { 3 } else { 2 };
+    let corrupt = committed.is_none() || requested.is_none() || failed_target.is_err();
     Machine {
         live: word & 1 == 1,
         committed: committed.unwrap_or(Profile::Vanilla),
@@ -1015,14 +1032,14 @@ fn decode(word: u64) -> Machine {
         } else {
             buffer_phase
         },
-        index_marker: (word >> 10) & 1 == 1,
-        buffer_marker: (word >> 11) & 1 == 1,
+        index_marker: (word >> 12) & 1 == 1,
+        buffer_marker: (word >> 13) & 1 == 1,
         known_active,
         count_target,
-        failed: (word >> 14) & 1 == 1,
-        failed_target,
-        waited: ((word >> 17) & 0xff) as u8,
-        generation: ((word >> 25) & 0xff) as u8,
+        failed: (word >> 16) & 1 == 1,
+        failed_target: failed_target.unwrap_or(None),
+        waited: ((word >> 20) & 0xff) as u8,
+        generation: ((word >> 28) & 0xff) as u8,
     }
 }
 
@@ -1162,6 +1179,7 @@ mod tests {
             Profile::Ultra => RenderMode::LessLagUltra,
             Profile::LessLag => RenderMode::LessLag,
             Profile::Vanilla => RenderMode::Vanilla,
+            Profile::Doubles => RenderMode::LessLagDoubles,
         };
         let (machine, event) = step(
             Machine::confirmed(from),
@@ -1643,8 +1661,11 @@ mod tests {
     #[test]
     fn a_corrupt_word_refuses_without_adopting_the_request() {
         let mut word = encode(Machine::confirmed(Profile::LessLag));
-        word |= 3 << 1;
+        // 3-bit fields reserve 7. The old 2-bit pattern `3 << 1` is now Doubles.
+        word = (word & !(0b111 << 1)) | (7 << 1);
         let machine = decode(word);
+        assert_eq!(machine.index_phase, IndexPhase::Invalid);
+        assert_eq!(machine.buffer_phase, BufferPhase::Invalid);
         let (kept, event) = step(machine, present(RenderMode::LessLagUltra, 1, 0, 2));
         assert!(matches!(
             event,
@@ -1655,5 +1676,188 @@ mod tests {
         ));
         assert_eq!(kept.known_active, machine.known_active);
         assert!(!matches!(event, StepEvent::SetTextures { .. }));
+    }
+
+    fn corrupt_field(word: u64, shift: u32) -> Machine {
+        decode((word & !(0b111 << shift)) | (7 << shift))
+    }
+
+    #[test]
+    fn three_bit_profiles_round_trip_and_the_sentinel_stays_invalid() {
+        for committed in [Profile::Ultra, Profile::LessLag, Profile::Vanilla, Profile::Doubles] {
+            for requested in [Profile::Ultra, Profile::LessLag, Profile::Vanilla, Profile::Doubles] {
+                let machine = Machine {
+                    live: true,
+                    committed,
+                    requested,
+                    index_phase: IndexPhase::WaitMarker,
+                    buffer_phase: BufferPhase::Drain,
+                    index_marker: true,
+                    buffer_marker: false,
+                    known_active: committed.textures(),
+                    count_target: requested.textures(),
+                    failed: true,
+                    failed_target: Some(requested),
+                    waited: 9,
+                    generation: 200,
+                };
+                assert_eq!(decode(encode(machine)), machine);
+            }
+        }
+        let base = encode(Machine::confirmed(Profile::Doubles));
+        for shift in [1_u32, 4, 17] {
+            let machine = corrupt_field(base, shift);
+            assert_eq!(machine.index_phase, IndexPhase::Invalid);
+            assert_eq!(machine.buffer_phase, BufferPhase::Invalid);
+            let (_, event) = step(machine, present(RenderMode::LessLagDoubles, 1, 0, 3));
+            assert!(matches!(
+                event,
+                StepEvent::Refused {
+                    reason: RefuseReason::Invalid,
+                    ..
+                }
+            ));
+        }
+        let unused = decode((base & !(0b111 << 1)) | (4 << 1));
+        assert_eq!(unused.index_phase, IndexPhase::Invalid);
+    }
+
+    #[test]
+    fn doubles_idle_uses_the_lesslag_flush_shape_on_a_three_ring() {
+        let doubles = Machine::confirmed(Profile::Doubles);
+        let decision = doubles.decision();
+        assert!(!decision.force_wait);
+        assert!(!decision.early);
+        assert!(!decision.suppress_late);
+        assert!(decision.render_opts);
+        assert!(decision.modulus.is_none());
+        assert!(skip_wait(decision, RenderMode::Vanilla));
+        assert!(!run_early(decision, RenderMode::Vanilla));
+        assert!(!skip_late(decision, RenderMode::Vanilla));
+        let plan = plan_flush(doubles, RenderMode::Vanilla);
+        assert_eq!((plan.calls, plan.lesslag_fields, plan.arm_drain), (1, true, false));
+        assert_eq!(index_value(5, decision, RenderMode::LessLagDoubles), 6);
+        let (toward_two, event) = step(doubles, present(RenderMode::LessLag, 0, 0, 3));
+        assert!(matches!(
+            event,
+            StepEvent::BufferStarted {
+                from_count: 3,
+                to_count: 2
+            }
+        ));
+        assert_eq!(toward_two.decision().effective, Profile::Doubles);
+        assert_eq!(toward_two.decision().modulus, Some(2));
+        for input in 0..32 {
+            assert!(index_value(input, toward_two.decision(), RenderMode::LessLagDoubles) < 2);
+        }
+        assert_eq!(
+            profile_status(RenderMode::LessLagDoubles, RenderMode::LessLagDoubles, 3, doubles, true),
+            "Active"
+        );
+        assert_eq!(labels(doubles).committed, "lldoubles");
+    }
+
+    fn commit_count(machine: Machine, saved: RenderMode, from_active: i32, to_count: i32) -> Machine {
+        let (waiting, event) = step(machine, present(saved, 0, 0, from_active));
+        assert_eq!(event, StepEvent::Waiting);
+        let mut stale = present(saved, 1, 0, from_active);
+        stale.fresh = false;
+        let (still, event) = step(waiting, stale);
+        assert_eq!(event, StepEvent::Waiting);
+        let (claimed, event) = step(still, present(saved, 1, 0, from_active));
+        assert_eq!(
+            event,
+            StepEvent::SetTextures {
+                count: to_count,
+                generation: machine.generation
+            }
+        );
+        let slot = AtomicU64::new(encode(claimed));
+        assert!(setter_returned_slot(&slot, claimed.generation));
+        let draining = decode(slot.load(Ordering::Acquire));
+        assert_eq!(draining.buffer_phase, BufferPhase::Drain);
+        let plan = plan_flush(draining, RenderMode::Vanilla);
+        assert!(plan.arm_drain);
+        assert_eq!(plan.calls, 3);
+        let marked = complete_drain(draining, plan.generation).unwrap();
+        let (ready, event) = step(marked, present(saved, 0, 0, from_active));
+        assert_eq!(event, StepEvent::BufferReady { count: to_count as u8 });
+        let (counted, event) = step(ready, present(saved, 0, 0, to_count));
+        assert_eq!(event, StepEvent::BufferCommitted { count: to_count as u8 });
+        assert_eq!(counted.known_active, to_count as u8);
+        assert_eq!(counted.buffer_phase, BufferPhase::Idle);
+        assert_eq!(counted.index_phase, IndexPhase::Idle);
+        counted
+    }
+
+    fn commit_index_swap(machine: Machine, saved: RenderMode, active: i32, to: Profile) -> Machine {
+        assert_eq!(machine.buffer_phase, BufferPhase::Idle);
+        let (opened, event) = step(machine, present(saved, 0, 0, active));
+        assert_eq!(
+            event,
+            StepEvent::Started {
+                from: machine.committed,
+                to
+            }
+        );
+        assert_eq!(opened.buffer_phase, BufferPhase::Idle);
+        let plan = plan_flush(opened, RenderMode::Vanilla);
+        assert!(plan.arm_drain);
+        assert_eq!(plan.calls, 3);
+        let marked = complete_drain(opened, plan.generation).unwrap();
+        let (ready, event) = step(marked, present(saved, 0, 0, active));
+        assert!(matches!(event, StepEvent::Ready { .. }));
+        let (done, event) = step(ready, present(saved, 0, 0, active));
+        assert_eq!(event, StepEvent::Committed { from: machine.committed, to });
+        assert_eq!(done.committed, to);
+        assert_eq!(done.index_phase, IndexPhase::Idle);
+        assert_eq!(done.buffer_phase, BufferPhase::Idle);
+        done
+    }
+
+    #[test]
+    fn vanilla_and_doubles_swap_index_only_and_two_three_rings_drain_both_ways() {
+        let vanilla = Machine::confirmed(Profile::Vanilla);
+        let (opened, event) = step(vanilla, present(RenderMode::LessLagDoubles, 0, 0, 3));
+        assert!(matches!(event, StepEvent::Started { .. }));
+        assert_eq!(opened.buffer_phase, BufferPhase::Idle);
+        let doubles = commit_index_swap(vanilla, RenderMode::LessLagDoubles, 3, Profile::Doubles);
+        assert_eq!(doubles.known_active, 3);
+        let back = commit_index_swap(doubles, RenderMode::Vanilla, 3, Profile::Vanilla);
+        assert_eq!(back.known_active, 3);
+
+        let less = Machine::confirmed(Profile::LessLag);
+        let (growing, event) = step(less, present(RenderMode::LessLagDoubles, 0, 0, 2));
+        assert_eq!(
+            event,
+            StepEvent::BufferStarted {
+                from_count: 2,
+                to_count: 3
+            }
+        );
+        assert_eq!(growing.decision().modulus, Some(2));
+        assert_eq!(growing.index_phase, IndexPhase::Idle);
+        let counted = commit_count(growing, RenderMode::LessLagDoubles, 2, 3);
+        assert_eq!(counted.committed, Profile::LessLag);
+        let doubles = commit_index_swap(counted, RenderMode::LessLagDoubles, 3, Profile::Doubles);
+        let (shrinking, event) = step(doubles, present(RenderMode::LessLagUltra, 0, 0, 3));
+        assert_eq!(
+            event,
+            StepEvent::BufferStarted {
+                from_count: 3,
+                to_count: 2
+            }
+        );
+        assert_eq!(shrinking.decision().effective, Profile::Doubles);
+        for input in 0..16 {
+            assert!(index_value(input, shrinking.decision(), RenderMode::LessLagDoubles) < 2);
+        }
+        let counted = commit_count(shrinking, RenderMode::LessLagUltra, 3, 2);
+        assert_eq!(counted.committed, Profile::Doubles);
+        let ultra = commit_index_swap(counted, RenderMode::LessLagUltra, 2, Profile::Ultra);
+        assert_eq!(ultra.known_active, 2);
+        for input in 0..16 {
+            assert!(index_value(input, ultra.decision(), RenderMode::LessLagUltra) < 2);
+        }
     }
 }

@@ -156,6 +156,79 @@ pub fn unpack_peer(peer: u64) -> Option<(Stability, u8)> {
     Some((stability, station))
 }
 
+/// Which station a draw is allowed to attach a published ping to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RttIdentity {
+    /// Mapped remote peer. The publication must name this index.
+    Station(u8),
+    /// No mapped peer. A measured publication is the single-opponent baseline.
+    Baseline,
+    /// The name gate was busy. The published number is not used.
+    Busy,
+}
+
+/// True only when this publication is the same station as the draw snapshot
+/// and belongs to the current session epoch.
+pub fn rtt_matches(identity: RttIdentity, publication: Publication, epoch: u64) -> bool {
+    if publication.epoch != epoch {
+        return false;
+    }
+    match identity {
+        RttIdentity::Busy => false,
+        RttIdentity::Station(index) => {
+            matches!(publication.reading(), PingReading::Measured(_))
+                && unpack_peer(publication.peer).is_some_and(|(_, station)| station == index)
+        }
+        RttIdentity::Baseline => matches!(publication.reading(), PingReading::Measured(_)),
+    }
+}
+
+/// Next draw generation. Accepted leave, cleanup, and protocol adoption each
+/// step twice: once before the station map changes, and once after.
+#[cfg_attr(not(test), allow(dead_code))]
+pub fn next_draw_generation(generation: u64) -> u64 {
+    generation.wrapping_add(1)
+}
+
+/// The diagnostic poll is the only writer of publication bytes. A draw shows
+/// them only while the generation it published is still the current one.
+pub fn rtt_published(
+    identity: RttIdentity,
+    publication: Publication,
+    session_epoch: u64,
+    published_generation: u64,
+    draw_generation: u64,
+) -> bool {
+    published_generation == draw_generation
+        && rtt_matches(identity, publication, session_epoch)
+}
+
+/// Measured ping when the publication is current. Otherwise an uncolored blank.
+pub fn present_published(
+    identity: RttIdentity,
+    publication: Publication,
+    session_epoch: u64,
+    published_generation: u64,
+    draw_generation: u64,
+) -> PresentedPing {
+    if rtt_published(
+        identity,
+        publication,
+        session_epoch,
+        published_generation,
+        draw_generation,
+    ) {
+        PresentedPing::from_publication(publication)
+    } else {
+        PresentedPing {
+            opponent: format_opponent_ping(None),
+            performance: None,
+            color: None,
+            detail: "no peer",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PingGap {
     NoneFresh,
@@ -499,6 +572,45 @@ impl Table {
         PingReading::Unavailable(PingGap::Stale)
     }
 
+    /// One station's mean. A missing, local, or stale station is not replaced.
+    pub fn reading_for(&self, index: u8, now_tick: u64) -> (PingReading, u64) {
+        if self.foreign_fresh(now_tick) {
+            return (PingReading::Unavailable(PingGap::OtherProtocol), NO_PEER);
+        }
+        if index > MAX_STATION_INDEX || index == self.local {
+            return (PingReading::Unavailable(PingGap::NoneFresh), NO_PEER);
+        }
+        let slot = &self.slots[usize::from(index)];
+        if !slot.occupied {
+            return (PingReading::Unavailable(PingGap::NoneFresh), NO_PEER);
+        }
+        match age_ms(now_tick, slot.tick, self.ticks_per_ms) {
+            Age::Ms(age) if age < STALE_MS => {
+                let mean = window_mean(slot.ring.initialized())
+                    .map(|value| value as i64)
+                    .unwrap_or(0);
+                let peer = window_stability(slot.ring.initialized())
+                    .map(|stability| pack_peer(stability, index))
+                    .unwrap_or(NO_PEER);
+                (PingReading::Measured(mean), peer)
+            }
+            Age::Ms(_) => (PingReading::Unavailable(PingGap::Stale), NO_PEER),
+            Age::Backwards | Age::Unknown => (PingReading::Unavailable(PingGap::Clock), NO_PEER),
+        }
+    }
+
+    fn stamp_for(&self, index: u8) -> (u64, u64) {
+        if index > MAX_STATION_INDEX {
+            return (0, 0);
+        }
+        let slot = &self.slots[usize::from(index)];
+        if slot.occupied {
+            (slot.tick, self.ticks_per_ms)
+        } else {
+            (0, 0)
+        }
+    }
+
     fn fresh_peer(&self, now_tick: u64) -> Option<(Stability, u8)> {
         let mut found = None;
         for index in 0..=MAX_STATION_INDEX {
@@ -722,30 +834,66 @@ impl Session {
         self.table.cleanups
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn accept_sample(&mut self, sample: Observation, epoch: u64) -> bool {
+        self.accept_sample_for(sample, epoch, StationPick::Absent)
+    }
+
+    pub fn accept_sample_for(
+        &mut self,
+        sample: Observation,
+        epoch: u64,
+        station: StationPick,
+    ) -> bool {
         self.reconcile(epoch);
         let adopted = self.table.observe_rtt(sample);
-        self.publish(sample.now_tick, epoch);
+        self.publish(sample.now_tick, epoch, station);
         adopted
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn accept_leave(&mut self, protocol: u64, remote: u32, epoch: u64) -> bool {
+        self.accept_leave_for(protocol, remote, epoch, StationPick::Absent)
+    }
+
+    pub fn accept_leave_for(
+        &mut self,
+        protocol: u64,
+        remote: u32,
+        epoch: u64,
+        station: StationPick,
+    ) -> bool {
         self.reconcile(epoch);
         let cleared = self.table.station_left(protocol, remote);
-        self.publish(self.table.last_tick, epoch);
+        self.publish(self.table.last_tick, epoch, station);
         cleared
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn accept_cleanup(&mut self, protocol: u64, epoch: u64) -> bool {
+        self.accept_cleanup_for(protocol, epoch, StationPick::Absent)
+    }
+
+    pub fn accept_cleanup_for(
+        &mut self,
+        protocol: u64,
+        epoch: u64,
+        station: StationPick,
+    ) -> bool {
         self.reconcile(epoch);
         let cleared = self.table.session_end(protocol);
-        self.publish(self.table.last_tick, epoch);
+        self.publish(self.table.last_tick, epoch, station);
         cleared
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn accept_poll(&mut self, now_tick: u64, epoch: u64) {
+        self.accept_poll_for(now_tick, epoch, StationPick::Absent)
+    }
+
+    pub fn accept_poll_for(&mut self, now_tick: u64, epoch: u64, station: StationPick) {
         self.reconcile(epoch);
-        self.publish(now_tick, epoch);
+        self.publish(now_tick, epoch, station);
     }
 
     fn reconcile(&mut self, epoch: u64) {
@@ -759,22 +907,48 @@ impl Session {
 
     /// `clock` only decides which samples are still fresh. A measurement keeps
     /// the RTT sample's own tick, so a later poll cannot make that sample new.
-    fn publish(&mut self, clock: u64, epoch: u64) {
-        let reading = self.table.reading(clock);
-        let (tick, ticks_per_ms, peer) = match reading {
-            PingReading::Measured(_) => {
-                let (tick, ticks_per_ms) = self.table.fresh_stamp(clock);
-                let peer = self
-                    .table
-                    .fresh_peer(clock)
-                    .map(|(stability, station)| pack_peer(stability, station))
-                    .unwrap_or(NO_PEER);
-                (tick, ticks_per_ms, peer)
+    fn publish(&mut self, clock: u64, epoch: u64, station: StationPick) {
+        let (reading, tick, ticks_per_ms, peer) = match station {
+            StationPick::Index(index) => {
+                let (reading, peer) = self.table.reading_for(index, clock);
+                let (tick, ticks_per_ms) = match reading {
+                    PingReading::Measured(_) => self.table.stamp_for(index),
+                    PingReading::Unavailable(_) => (0, 0),
+                };
+                (reading, tick, ticks_per_ms, peer)
             }
-            PingReading::Unavailable(_) => (0, 0, NO_PEER),
+            StationPick::Busy => (
+                PingReading::Unavailable(PingGap::NoneFresh),
+                0,
+                0,
+                NO_PEER,
+            ),
+            StationPick::Absent => {
+                let reading = self.table.reading(clock);
+                match reading {
+                    PingReading::Measured(_) => {
+                        let (tick, ticks_per_ms) = self.table.fresh_stamp(clock);
+                        let peer = self
+                            .table
+                            .fresh_peer(clock)
+                            .map(|(stability, station)| pack_peer(stability, station))
+                            .unwrap_or(NO_PEER);
+                        (reading, tick, ticks_per_ms, peer)
+                    }
+                    PingReading::Unavailable(_) => (reading, 0, 0, NO_PEER),
+                }
+            }
         };
         self.publication = Publication::from_reading(reading, tick, ticks_per_ms, epoch, peer);
     }
+}
+
+/// Which station the current draw is allowed to publish.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StationPick {
+    Index(u8),
+    Absent,
+    Busy,
 }
 
 impl Default for Session {
@@ -947,8 +1121,161 @@ mod tests {
             table.reading(0),
             PingReading::Unavailable(PingGap::MultiplePeers)
         );
+        let (ann, peer) = table.reading_for(2, 0);
+        assert_eq!(ann, PingReading::Measured(10));
+        assert_eq!(unpack_peer(peer).map(|(_, station)| station), Some(2));
+        let (bob, peer) = table.reading_for(3, 0);
+        assert_eq!(bob, PingReading::Measured(40));
+        assert_eq!(unpack_peer(peer).map(|(_, station)| station), Some(3));
+        assert_eq!(
+            table.reading_for(1, 0).0,
+            PingReading::Unavailable(PingGap::NoneFresh)
+        );
         table.station_left(PROTOCOL, 3);
         assert_eq!(table.reading(0), PingReading::Measured(10));
+        let mut session = Session::new();
+        session.accept_sample_for(at(PROTOCOL, 2, 1, 10, 0), 1, StationPick::Index(2));
+        session.accept_sample_for(at(PROTOCOL, 3, 1, 40, 0), 1, StationPick::Index(2));
+        assert_eq!(session.publication().reading(), PingReading::Measured(10));
+        assert_eq!(
+            unpack_peer(session.publication().peer).map(|(_, station)| station),
+            Some(2)
+        );
+        session.accept_poll_for(0, 1, StationPick::Index(3));
+        assert_eq!(session.publication().reading(), PingReading::Measured(40));
+        session.accept_poll_for(0, 1, StationPick::Busy);
+        assert_eq!(
+            session.publication().reading(),
+            PingReading::Unavailable(PingGap::NoneFresh)
+        );
+        session.accept_poll_for(0, 1, StationPick::Absent);
+        assert_eq!(
+            session.publication().reading(),
+            PingReading::Unavailable(PingGap::MultiplePeers)
+        );
+    }
+
+    fn published(station: u8, epoch: u64) -> Publication {
+        Publication::from_reading(
+            PingReading::Measured(20),
+            10,
+            PER_MS,
+            epoch,
+            pack_peer(Stability::Stable, station),
+        )
+    }
+
+    #[test]
+    fn a_changed_peer_hides_the_old_rtt_until_the_same_station_is_republished() {
+        let old = published(4, 1);
+        assert!(rtt_matches(RttIdentity::Station(4), old, 1));
+        assert!(!rtt_matches(RttIdentity::Station(9), old, 1));
+        let republished = published(9, 1);
+        assert!(rtt_matches(RttIdentity::Station(9), republished, 1));
+        assert_eq!(
+            present_published(RttIdentity::Station(9), republished, 1, 0, 0).opponent,
+            "20ms"
+        );
+        let hidden = present_published(RttIdentity::Station(4), republished, 1, 0, 0);
+        assert_eq!(hidden.opponent, "---");
+        assert!(hidden.performance.is_none());
+        assert!(hidden.color.is_none());
+        assert!(!rtt_matches(RttIdentity::Station(9), republished, 2));
+        assert!(!rtt_matches(RttIdentity::Baseline, old, 2));
+        assert!(!rtt_matches(RttIdentity::Busy, old, 1));
+        assert!(rtt_matches(RttIdentity::Baseline, old, 1));
+        let blank = Publication::unavailable(1);
+        assert!(!rtt_matches(RttIdentity::Baseline, blank, 1));
+        assert!(!rtt_matches(RttIdentity::Station(4), blank, 1));
+    }
+
+    #[test]
+    fn accepted_cleanup_hides_the_old_publication_until_poll() {
+        let old = published(4, 1);
+        let mut draw = 0u64;
+        let mut published_gen = 0u64;
+        assert!(rtt_published(
+            RttIdentity::Station(4),
+            old,
+            1,
+            published_gen,
+            draw
+        ));
+        assert!(rtt_published(RttIdentity::Baseline, old, 1, published_gen, draw));
+        draw = next_draw_generation(draw);
+        assert!(!rtt_published(
+            RttIdentity::Baseline,
+            old,
+            1,
+            published_gen,
+            draw
+        ));
+        assert!(!rtt_published(
+            RttIdentity::Station(4),
+            old,
+            1,
+            published_gen,
+            draw
+        ));
+        draw = next_draw_generation(draw);
+        assert!(!rtt_published(
+            RttIdentity::Baseline,
+            old,
+            1,
+            published_gen,
+            draw
+        ));
+        assert!(!rtt_published(
+            RttIdentity::Station(4),
+            old,
+            1,
+            published_gen,
+            draw
+        ));
+        assert_eq!(
+            present_published(RttIdentity::Baseline, old, 1, published_gen, draw).opponent,
+            "---"
+        );
+        let active = published(7, 1);
+        let active_draw = 4u64;
+        assert!(rtt_published(
+            RttIdentity::Station(7),
+            active,
+            1,
+            active_draw,
+            active_draw
+        ));
+        assert!(rtt_published(
+            RttIdentity::Baseline,
+            active,
+            1,
+            active_draw,
+            active_draw
+        ));
+        assert!(rtt_published(RttIdentity::Baseline, old, 1, draw, draw));
+        let replacement = published(9, 1);
+        published_gen = draw;
+        assert!(rtt_published(
+            RttIdentity::Station(9),
+            replacement,
+            1,
+            published_gen,
+            draw
+        ));
+        assert!(!rtt_published(
+            RttIdentity::Station(4),
+            replacement,
+            1,
+            published_gen,
+            draw
+        ));
+        assert!(!rtt_published(
+            RttIdentity::Baseline,
+            Publication::unavailable(1),
+            1,
+            published_gen,
+            draw
+        ));
     }
 
     #[test]

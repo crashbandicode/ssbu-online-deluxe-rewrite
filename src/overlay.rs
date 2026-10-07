@@ -8,6 +8,7 @@ pub(crate) const L: u64 = 1 << 6;
 pub(crate) const R: u64 = 1 << 7;
 const ZL: u64 = 1 << 8;
 const ZR: u64 = 1 << 9;
+const Y: u64 = 1 << 3;
 const PLUS_MINUS: u64 = (1 << 10) | (1 << 11);
 const LEFT: u64 = 1 << 12;
 pub(crate) const UP: u64 = 1 << 13;
@@ -37,7 +38,23 @@ impl Overlay {
     pub fn poll(&mut self, buttons: u64, config: &mut Config) -> bool {
         let pressed = buttons & !self.previous_buttons;
         self.previous_buttons = buttons;
-        let chord = buttons & (L | R) == L | R || buttons & (ZL | ZR) == ZL | ZR;
+        let shoulders = buttons & (L | R) == L | R;
+        let triggers = buttons & (ZL | ZR) == ZL | ZR;
+        if shoulders && buttons & (ZL | ZR) != 0 && pressed & Y != 0 {
+            config.streamer = !config.streamer;
+            return true;
+        }
+        if self.view != View::Settings && (shoulders || triggers) {
+            if pressed & LEFT != 0 {
+                crate::peer_transport::cycle_peer(-1);
+                return false;
+            }
+            if pressed & RIGHT != 0 {
+                crate::peer_transport::cycle_peer(1);
+                return false;
+            }
+        }
+        let chord = shoulders || triggers;
         if chord && pressed & DOWN != 0 {
             self.view = match (self.view, buttons & PLUS_MINUS != 0) {
                 (View::Hidden, _) => View::Settings,
@@ -116,8 +133,11 @@ mod tests {
         ui.poll(L | R | DOWN, &mut config);
         assert_eq!(
             (ui.view, ui.menu.selected),
-            (View::Settings, crate::menu::ROW_NET_LATENCY)
+            (View::Settings, crate::menu::ROW_PEER)
         );
+        ui.poll(0, &mut config);
+        ui.poll(DOWN, &mut config);
+        ui.poll(0, &mut config);
         assert!(ui.poll(RIGHT, &mut config));
         assert_eq!(config.input_buffer, 0);
         assert!(!ui.poll(RIGHT, &mut config));
@@ -159,5 +179,23 @@ mod tests {
         assert_eq!((f.count, f.plot_offset()), (180, 20));
         assert_eq!(f.values[f.plot_offset()], 21.0);
         assert_eq!(f.average(), Some(110.5));
+    }
+
+    #[test]
+    fn streamer_chord_persists_and_peer_cycle_does_not() {
+        let mut ui = Overlay::default();
+        let mut config = Config::default();
+        assert!(!config.streamer);
+        assert!(ui.poll(L | R | ZL | Y, &mut config));
+        assert!(config.streamer);
+        ui.poll(0, &mut config);
+        assert!(ui.poll(L | R | ZR | Y, &mut config));
+        assert!(!config.streamer);
+        ui.poll(0, &mut config);
+        let before = config.clone();
+        assert!(!ui.poll(L | R | RIGHT, &mut config));
+        assert_eq!(config, before);
+        assert!(!ui.poll(ZL | ZR | LEFT, &mut config));
+        assert_eq!(ui.view, View::Hidden);
     }
 }

@@ -115,6 +115,7 @@ pub(super) fn start(version: &str) {
     startup_phase("recorder_ready");
     let text_base =
         unsafe { skyline::hooks::getRegionAddress(skyline::hooks::Region::Text) as u64 };
+    super::peer_observer::refresh_local_facts();
     startup_phase("game_text_ready");
     let plugin_start = core::ptr::addr_of!(__text_start) as u64;
     let plugin_end = core::ptr::addr_of!(__bss_end) as u64;
@@ -208,6 +209,7 @@ pub(super) fn start(version: &str) {
                 super::presentation::poll();
                 super::pia_rtt::poll();
                 super::peer_observer::poll();
+                super::fighter_probe::poll();
                 iteration += 1;
                 if iteration.is_multiple_of(10) {
                     super::nvn::write_status();

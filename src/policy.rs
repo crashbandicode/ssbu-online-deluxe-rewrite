@@ -1,5 +1,7 @@
-//! Fork-parity policy specification. Profile selection is tested here but is
-//! not yet applied to renderer/game hooks. Training never receives a lag profile.
+//! Fork-parity profile table. Auto recommendations never give Training or the
+//! menu a lag profile. `auto_policy` applies this table when Auto is on.
+//! Manual runtime requests are separate: Training can still use an explicit
+//! saved profile. Connected local wireless is online, matching OnlineLocal.
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MatchKind {
@@ -27,13 +29,18 @@ pub fn select_profile(kind: MatchKind, emulator: bool, manual: Option<Profile>) 
     match kind {
         MatchKind::Menu | MatchKind::Training => Profile::Vanilla,
         _ if manual.is_some() => manual.unwrap_or(Profile::Vanilla),
-        MatchKind::QuickplayDoubles | MatchKind::ArenaDoubles => Profile::LessLagDoubles,
-        MatchKind::QuickplaySingles | MatchKind::ArenaSingles if emulator => Profile::LessLagUltra,
-        MatchKind::QuickplaySingles | MatchKind::ArenaSingles => Profile::LessLag,
-        MatchKind::OfflineSingles
-        | MatchKind::OfflineDoubles
-        | MatchKind::LocalSingles
-        | MatchKind::LocalDoubles => Profile::Vanilla,
+        MatchKind::QuickplayDoubles | MatchKind::ArenaDoubles | MatchKind::LocalDoubles => {
+            Profile::LessLagDoubles
+        }
+        MatchKind::QuickplaySingles | MatchKind::ArenaSingles | MatchKind::LocalSingles
+            if emulator =>
+        {
+            Profile::LessLagUltra
+        }
+        MatchKind::QuickplaySingles | MatchKind::ArenaSingles | MatchKind::LocalSingles => {
+            Profile::LessLag
+        }
+        MatchKind::OfflineSingles | MatchKind::OfflineDoubles => Profile::Vanilla,
     }
 }
 
@@ -98,11 +105,21 @@ mod tests {
                 MatchKind::Training,
                 MatchKind::OfflineSingles,
                 MatchKind::OfflineDoubles,
-                MatchKind::LocalSingles,
-                MatchKind::LocalDoubles,
             ] {
                 assert_eq!(select_profile(kind, emulator, None), Profile::Vanilla);
             }
+            assert_eq!(
+                select_profile(MatchKind::LocalSingles, emulator, None),
+                if emulator {
+                    Profile::LessLagUltra
+                } else {
+                    Profile::LessLag
+                }
+            );
+            assert_eq!(
+                select_profile(MatchKind::LocalDoubles, emulator, None),
+                Profile::LessLagDoubles
+            );
         }
     }
 

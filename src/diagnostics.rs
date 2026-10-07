@@ -66,6 +66,74 @@ pub enum Code {
     StationProbe = 64,
     /// Mixed source id from that sample. `a` is `mix_id` after a successful read.
     StationProbeId = 65,
+    /// Mixed constant id learned from an inverse connection request.
+    TransportHandshake = 66,
+    /// Mixed constant id confirmed by a matching connection response.
+    TransportConfirm = 67,
+    /// Session table cleared. `a` is the cleanup count.
+    TransportCleanup = 68,
+    /// Beacon write or skip. `a` is writes, `b` is skips.
+    TransportBeacon = 69,
+    /// Modded-peer payload write or skip. `a` is writes, `b` is skips.
+    TransportPayload = 70,
+    /// Stealth suppressed a beacon or payload write. `a` is the count.
+    TransportStealth = 71,
+    /// Ambiguous mapping or a busy gate. `a` is ambiguous, `b` is contention.
+    TransportSkip = 72,
+    /// Connection in the low byte, scene status in the next, ready in bit 16.
+    /// `b` is the hook offset. This is not the startup render mode.
+    AutoContext = 73,
+    /// Requested mode in the low byte, selected mode in the next, then auto,
+    /// platform, cleanup hold, and scene-ready bits. `b` is the selection generation.
+    AutoRequest = 74,
+    /// common.nro load observation. `a` is the module base, `b` is the symbol.
+    FighterModule = 75,
+    /// `call_line_status` offset in `a`. `b` is flags plus generation.
+    FighterSymbol = 76,
+    /// Two instruction words from the opt-in module probe. Not a hook site.
+    FighterWords = 77,
+    /// Report push, pop, or clear. `a` is the kind, `b` is the level or count.
+    ResolutionReport = 78,
+    /// The original resolution call returned. `a` is the applied level.
+    ResolutionApplied = 79,
+    /// Accepted crop. `a` is width, `b` is height.
+    ResolutionCrop = 80,
+    /// `common` Main arm or rejection. `a` is the result, `b` is the detail.
+    FighterMain = 81,
+    /// Cut-in or Sephiroth start/end. Not a per-tick counter.
+    FighterTransition = 82,
+    /// Opt-in `PROBE_CROP` view of a game `nvnWindowSetCrop`. Not main's crop.
+    ///
+    /// `a`/`b` come from [`crop_rect_event`], [`crop_cap_event`], or
+    /// [`crop_armed_event`]. Main's own crop stays [`Code::ResolutionCrop`].
+    CropObserve = 83,
+}
+
+/// Game SetCrop observations recorded before further calls are forwarded only.
+pub const CROP_OBSERVE_CAP: u32 = 32;
+const CROP_PRESENT_MARK: u64 = 1 << 63;
+
+/// `x,y,w,h` in the low 16 bits of each field. Values outside `0..=65535` truncate.
+pub const fn crop_rect_word(x: i32, y: i32, w: i32, h: i32) -> u64 {
+    (x as u16 as u64)
+        | ((y as u16 as u64) << 16)
+        | ((w as u16 as u64) << 32)
+        | ((h as u16 as u64) << 48)
+}
+
+/// Rect observation. Bit 63 of `b` is clear. There is no caller word.
+pub const fn crop_rect_event(present: u64, x: i32, y: i32, w: i32, h: i32) -> (u64, u64) {
+    (crop_rect_word(x, y, w, h), present & !CROP_PRESENT_MARK)
+}
+
+/// The observe cap was hit. Later SetCrop calls are not recorded.
+pub const fn crop_cap_event(present: u64) -> (u64, u64) {
+    (CROP_PRESENT_MARK, present & !CROP_PRESENT_MARK)
+}
+
+/// The wrapper was handed to the game once. Not a crop rectangle.
+pub const fn crop_armed_event() -> (u64, u64) {
+    (CROP_PRESENT_MARK | 1, 0)
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -172,6 +240,25 @@ mod tests {
             .all(|pair| pair[1].sequence == pair[0].sequence + 1));
         assert_eq!(snapshot.after(148).count(), 2);
         assert_eq!(snapshot.after(150).count(), 0);
+    }
+
+    #[test]
+    fn crop_observe_words_separate_rect_and_cap() {
+        assert_eq!(Code::CropObserve as u16, 83);
+        assert_eq!(Code::ResolutionCrop as u16, 80);
+        let rect = crop_rect_event(4, 0, 0, 1024, 576);
+        assert_eq!(rect.0, crop_rect_word(0, 0, 1024, 576));
+        assert_eq!(rect.1, 4);
+        assert_eq!(
+            crop_rect_word(0, 0, 1920, 1080) >> 32,
+            u64::from(1920u16) | (u64::from(1080u16) << 16)
+        );
+        let cap = crop_cap_event(9);
+        assert_eq!(cap.0, 1u64 << 63);
+        assert_eq!(cap.1, 9);
+        assert_ne!(cap.0, rect.0);
+        assert_eq!(crop_armed_event(), ((1u64 << 63) | 1, 0));
+        assert_ne!(crop_armed_event().0, cap.0);
     }
     #[test]
     fn recursive_or_contended_logging_drops_instead_of_deadlocking() {

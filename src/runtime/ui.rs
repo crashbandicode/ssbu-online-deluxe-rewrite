@@ -125,7 +125,24 @@ unsafe fn performance(
             igPopStyleColor(1);
         }
     }
-    row("Resolution", &format!("{width:.0}x{height:.0}"));
+    let resolution = crate::resolution::status();
+    row(
+        "Resolution",
+        crate::resolution::applied_label(resolution.applied),
+    );
+    row("DRS", if resolution.dynamic { "On" } else { "Off" });
+    let fighter = super::fighter_main::view();
+    row(
+        "Triggers",
+        if crate::resolution::triggers_available(fighter.callback_armed, fighter.count_only) {
+            "Available"
+        } else {
+            "Unavailable"
+        },
+    );
+    if width.is_finite() && height.is_finite() && width > 0.0 && height > 0.0 {
+        row("Output", &format!("{width:.0}x{height:.0}"));
+    }
     let mean = frames.average();
     let color = match mean {
         Some(ms) if ms > 19.17 => Vec4 {
@@ -209,8 +226,19 @@ unsafe extern "C" fn draw() {
             .push(now.duration_since(previous).as_secs_f32() * 1000.0);
     }
     let mut config = settings();
+    let saved = config.clone();
     let previous_view = ui.controls.view;
     if ui.controls.poll(buttons, &mut config) {
+        match crate::menu::profile_action(&saved, &config) {
+            crate::menu::ProfileAction::EnableAuto => {
+                crate::set_auto_profile(true);
+            }
+            crate::menu::ProfileAction::SelectManual(mode) => {
+                crate::set_auto_profile(false);
+                crate::select_user_profile(mode);
+            }
+            crate::menu::ProfileAction::Unchanged => {}
+        }
         publish(&config);
         record(
             Code::MenuChanged,
@@ -219,7 +247,21 @@ unsafe extern "C" fn draw() {
         );
     }
     let view = ui.controls.view;
-    let ping = super::pia_rtt::draw_state();
+    let show_remote = crate::peer_transport::remote_rows_visible(config.streamer);
+    let frame = crate::peer_transport::peer_frame();
+    let (publication, epoch, published_gen, draw_gen) = super::pia_rtt::current_publication();
+    let identity = if show_remote {
+        crate::peer_transport::display_identity(frame.selection)
+    } else {
+        crate::pia_rtt::RttIdentity::Busy
+    };
+    let ping = crate::pia_rtt::present_published(
+        identity,
+        publication,
+        epoch,
+        published_gen,
+        draw_gen,
+    );
     super::timing::set_view(view as u8);
     let pressed = buttons & !ui.previous_timing_buttons;
     ui.previous_timing_buttons = buttons;
@@ -238,49 +280,93 @@ unsafe extern "C" fn draw() {
         let sx = width / 1920.0;
         let sy = height / 1080.0;
         let window_height = match view {
-            View::Performance => 180.0,
+            View::Performance => 280.0,
             View::Debug => 370.0,
-            _ => 320.0,
+            _ => 500.0,
         };
+        let window_width = if view == View::Settings { 380.0 } else { 300.0 };
         igSetNextWindowPos(Vec2::default(), ALWAYS, Vec2::default());
         igSetNextWindowSize(
             Vec2 {
-                x: 300.0 * sx,
+                x: window_width * sx,
                 y: window_height * sy,
             },
             ALWAYS,
         );
         igPushFont(std::ptr::null_mut(), 16.0 * sy);
         if igBegin(c"Player Info".as_ptr(), std::ptr::null_mut(), WINDOW_FLAGS) {
-            if view == View::Settings && begin_player_table(b"conn_player_info\0", 100.0 * sx) {
-                row3("Name", "You", "");
-                igTableNextRow(0, 0.0);
-                igTableNextColumn();
-                text("Ping");
-                igTableNextColumn();
-                text("---");
-                igTableNextColumn();
-                if let Some(color) = ping.color {
-                    igPushStyleColor_Vec4(
-                        TEXT,
-                        Vec4 {
-                            x: color.r,
-                            y: color.g,
-                            z: color.b,
-                            w: color.a,
-                        },
-                    );
-                }
-                text(&ping.opponent);
-                if ping.color.is_some() {
-                    igPopStyleColor(1);
+            if view == View::Settings && begin_player_table(b"conn_player_info\0", 110.0 * sx) {
+                let selected = ui.controls.menu.selected;
+                let peer_name = if show_remote && frame.peer.known {
+                    crate::peer_transport::name_label(&frame.peer.name, frame.peer.name_len)
+                        .unwrap_or("Unavailable")
+                        .to_owned()
+                } else if show_remote {
+                    "Unavailable".to_owned()
+                } else {
+                    String::new()
+                };
+                let peer_interface = if show_remote {
+                    frame.peer.interface
+                } else {
+                    ""
+                };
+                let peer_settings = if show_remote && frame.peer.known && !frame.peer.settings.is_empty()
+                {
+                    frame.peer.settings
+                } else if show_remote {
+                    "---"
+                } else {
+                    ""
+                };
+                row3("Name", "You", &peer_name);
+                row3(
+                    "Interface",
+                    super::peer_observer::local_interface_label(),
+                    peer_interface,
+                );
+                row3(
+                    if selected == crate::menu::ROW_PEER {
+                        "> Peer"
+                    } else {
+                        "Peer"
+                    },
+                    "",
+                    "",
+                );
+                if show_remote {
+                    igTableNextRow(0, 0.0);
+                    igTableNextColumn();
+                    text("Ping");
+                    igTableNextColumn();
+                    text("---");
+                    igTableNextColumn();
+                    if let Some(color) = ping.color {
+                        igPushStyleColor_Vec4(
+                            TEXT,
+                            Vec4 {
+                                x: color.r,
+                                y: color.g,
+                                z: color.b,
+                                w: color.a,
+                            },
+                        );
+                    }
+                    text(&ping.opponent);
+                    if ping.color.is_some() {
+                        igPopStyleColor(1);
+                    }
                 }
                 let buffer = if config.input_buffer == -1 {
                     "Auto".into()
                 } else {
                     config.input_buffer.to_string()
                 };
-                let selected = ui.controls.menu.selected;
+                let remote_latency = if show_remote {
+                    crate::peer_transport::remote_latency_label(frame.peer.latency)
+                } else {
+                    String::new()
+                };
                 row3(
                     if selected == crate::menu::ROW_NET_LATENCY {
                         "> NetLatency"
@@ -288,20 +374,20 @@ unsafe extern "C" fn draw() {
                         "NetLatency"
                     },
                     &buffer,
-                    "---",
+                    &remote_latency,
                 );
                 let machine = crate::render_policy::load_machine();
                 let textures = super::nvn::active_count();
                 let applied = super::renderer::status() != "Awaiting window";
-                let profile = crate::menu::net_profile_value(
+                let auto = super::auto_driver::snapshot();
+                let profile = crate::auto_policy::profile_row_label(
+                    config.auto_profile,
+                    auto.ready,
                     config.render_mode,
-                    super::renderer::mode(),
-                    textures,
-                    machine,
-                    applied,
+                    auto.request,
                 );
                 let profile_state = crate::menu::net_profile_status(
-                    config.render_mode,
+                    auto.request,
                     super::renderer::mode(),
                     textures,
                     machine,
@@ -314,7 +400,13 @@ unsafe extern "C" fn draw() {
                         "NetProfile"
                     },
                     &profile,
-                    profile_state,
+                    peer_settings,
+                );
+                row3("Status", profile_state, "");
+                row3(
+                    "Platform",
+                    crate::menu::platform_label(config.platform),
+                    if show_remote { "---" } else { "" },
                 );
                 row3(
                     if selected == crate::menu::ROW_FX {
@@ -332,14 +424,22 @@ unsafe extern "C" fn draw() {
                     },
                     "---",
                 );
-                let _persisted_stealth = super::stealth();
                 row3(
                     if selected == crate::menu::ROW_STEALTH {
                         "> Stealth"
                     } else {
                         "Stealth"
                     },
-                    crate::menu::stealth_value(),
+                    crate::menu::stealth_value(super::stealth(), crate::peer_transport::latched_stealth()),
+                    "---",
+                );
+                row3(
+                    if selected == crate::menu::ROW_STREAMER {
+                        "> Streamer"
+                    } else {
+                        "Streamer"
+                    },
+                    if config.streamer { "On" } else { "Off" },
                     "---",
                 );
                 igEndTable();
@@ -363,11 +463,26 @@ unsafe extern "C" fn draw() {
                 row("Reduced FX", "Unavailable");
                 row("Engine", super::renderer::status());
                 row("Timing", super::timing::status());
-                row("Ping detail", ping.detail);
+                if !config.streamer {
+                    row("Ping detail", ping.detail);
+                }
                 row("Capture", "L+R+Up (10 s)");
                 igEndTable();
             }
-            performance(&ui.frames, width, height, sx, sy, &ping);
+            let quiet_ping = crate::pia_rtt::PresentedPing {
+                opponent: String::new(),
+                performance: None,
+                color: None,
+                detail: "",
+            };
+            performance(
+                &ui.frames,
+                width,
+                height,
+                sx,
+                sy,
+                if config.streamer { &quiet_ping } else { &ping },
+            );
         }
         igEnd();
         igPopFont();
