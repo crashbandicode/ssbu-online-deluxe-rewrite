@@ -613,3 +613,68 @@ online-safety proof. No VPN/high-RTT, NSO filtering, four-network-station or new
 Switch-rendering acceptance follows. Fable's final follow-up review was blocked
 by the provider's model-access rejection; this final display review was performed
 by root after Grok's implementation, without claiming a new Fable sign-off.
+
+
+## Fork native display restoration, 2026-10-07
+
+The fork's CSS title and arena room-ID code paths now accompany the existing
+global Player Info window. Provenance and precise differences are in
+[NATIVE_DISPLAY.md](NATIVE_DISPLAY.md). The window remains the editor.
+
+Final artifact:
+
+```text
+NRO: 4a927dc20904722dc903afcb5c8548d80a5afffb3aeedd68958c76c3181c0518
+ELF: 54a87dd43f7aaa3eb743dc73b20a6bc3cd61550549aae6c39c7c8acdc5dbe103
+Bundle: dist/4a927dc20904722d/
+```
+
+192 host tests, host Clippy with warnings denied, no-default-features build,
+Skyline Clippy with warnings denied and optimized package build passed. All 57
+packaged Rust/build inputs match disk. The NRO and ELF hashes and matching
+executable bytes were verified. One intermediate Skyline Clippy failure
+(too_many_arguments) was corrected before packaging; its raw log is retained.
+
+| Candidate / run | Observed result |
+| --- | --- |
+| `84d48448ac91e65d`, `20261007-101737-33eb02` | CSS window plus header; LessLag/buffer 0 edits; status persists with window hidden; Streamer restores original font/background; CSS re-entry; Olimar/Fox match through results and return to CSS; normal exit; 6,148,984,832-byte peak, no OOM |
+| `4a927dc20904722d`, `20261007-103320-77c12b` + `20261007-103321-17d19e` | Linked native names/profile/green RTT in both directions; B embedded window visible; A standalone Deluxe and Elite windows invisible despite callbacks/input edits; no match started; below full speed before CSS, no OOM |
+| `4a927dc20904722d`, `20261007-105849-510a19` | Solo standalone Deluxe and Elite windows plus native title, approximately 60 FPS; normal exit; 6,733,324,288-byte peak, no OOM |
+| `4a927dc20904722d`, `20261007-110542-4550ab` | Same solo coexistence with G&W loaded; configured 600-second runtime limit stopped the frontend; 7,787,769,856-byte peak, no OOM |
+
+The final build differs from 84 by the arena font/vertical-position correction
+and deriving the diagnostic site inside the painter. No rendering-profile
+behavior changed. Final solo screenshots show Elite Off; they prove menu
+coexistence, not enabled NSO filtering. The earlier d9 enabled-Elite gameplay
+result remains separately attributed to d9.
+
+The paired external-window anomaly is unresolved. A root source/hook audit
+found all three expected bootstrap registrations and external ImGui selection;
+it did not establish which component caused the failure. Solo runs with and
+without G&W both succeeded. Do not infer either a G&W fault or a fix from these
+results. A future identical-pair comparison with `DISABLE_NATIVE` can isolate
+the new native display without changing binary versions.
+
+In the paired shutdown, A's frontend receipt reports exit 0 although its
+supervisor tool returned 143. B remained in a game-stop confirmation flow;
+after a 15-second helper timeout, the owned B service was explicitly stopped.
+The G&W solo run ended at its configured runtime deadline before the manual
+stop helper, which received ConnectionRefusedError. These stops are retained
+as operational failures/limits, not reported as clean exits or match crashes.
+
+All staging journals are restored with original hashes checked. No normal
+Eden or Switch deployment occurred. Raw evidence is preserved outside Git:
+
+```text
+dist/4a927dc20904722d/runtime-evidence/native-display/
+dist/4a927dc20904722d/checks/
+dist/4a927dc20904722d/review/
+dist/4a927dc20904722d/native-evidence-manifest.json
+dist/84d48448ac91e65d/runtime-evidence/native-display/
+dist/fps-investigation-20261007/
+```
+
+NSO arena, new Switch behavior and the concurrent external-window anomaly
+remain unverified. No new latency, desync or FPS++ benefit is claimed by this
+UI change. The FPS++ read-only trace is documented separately in
+[FPS_BOOST_INVESTIGATION.md](FPS_BOOST_INVESTIGATION.md).

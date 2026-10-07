@@ -2,7 +2,7 @@
 
 A private Rust/Skyline reconstruction for **Super Smash Bros. Ultimate 13.0.5**,
 delivered as **one NRO**. It combines the rendering policies, global Player Info
-window, network display and scoped character-FX controls. No overclocking behavior
+window, native character-select status, network display and scoped character-FX controls. No overclocking behavior
 is included.
 
 The preserved fork and predecessor references are described in
@@ -44,6 +44,12 @@ The automated test profiles under `eden-cli-handoff` are separate from that path
 Hold **L+R** or **ZL+ZR**, then tap **D-pad Down** to cycle
 **settings → performance → hidden**. The small Player Info window works in menus,
 character select and matches.
+
+Character select also keeps the fork-style native status at the top after the
+window closes. It shows your selected profile and input buffer, plus the selected
+opponent's available settings and colored RTT. Edit values in the window;
+Streamer restores the game's original title and background. Arena text uses the
+fork's room-ID path, but still needs an NSO test. See [native display](docs/NATIVE_DISPLAY.md).
 
 | Control | Action |
 | --- | --- |
@@ -107,6 +113,12 @@ apply the saved manual mode again. Auto does not rewrite that saved mode.
 The INI-only `lesslag_core` and `doubles_core` modes are component experiments,
 require restart and are not substitutes for the full presets.
 
+Upstream's separate **FPS++** option is not implemented yet. A live debugger
+trace identifies it as an emulator composition-timing extension through the
+native-window swap interval, separate from hardware overclocking. Its additional
+latency benefit has not been measured in this rewrite. See the
+[FPS++ investigation](docs/FPS_BOOST_INVESTIGATION.md).
+
 ## Configuration
 
 Settings are created at:
@@ -142,7 +154,21 @@ missing Stealth settings default to true.
 
 ## Validation and frame measurements
 
-Final candidate `d9acd03611e1d1d6` passed **176 host tests**, host and Skyline
+Current candidate `4a927dc20904722d` passes **192 host tests** and all required
+host/Skyline checks. It restores the fork's native CSS display alongside Player
+Info. Tests covered edits, closing the window, Streamer restoration, CSS
+re-entry, a completed offline match on the preceding CSS-equivalent build,
+and bidirectional peer names/profiles/colored RTT in linked CSS. Solo tests
+showed both Deluxe and Elite windows with the standalone ImGui host, including
+with the G&W fix loaded.
+
+One concurrent two-instance run had invisible external ImGui windows on the
+full-stack peer; its native header and the other peer's embedded window worked.
+This did not recur in solo tests with or without G&W. The cause remains
+unresolved. Arena hooks are implemented but await a Switch NSO test. See
+[native display validation](docs/NATIVE_DISPLAY.md) for the exact scope.
+
+The preceding candidate `d9acd03611e1d1d6` passed **176 host tests**, host and Skyline
 checks with warnings denied, the no-default-features build and the optimized
 Skyline build. It passed fresh Stealth On suppression, Off after reconnect,
 exact menu-saved INI reload, Streamer privacy, remote buffer/profile/colored RTT,
@@ -153,7 +179,7 @@ used Deluxe's embedded host.
 
 The preceding `b19b7d94ae136e55` candidate also completed a four-fighter
 Auto/LLDoubles match against a clean peer, a G&W LLUltra match, cut-in/Gigaflare
-resolution recovery and the title crop regression. The final candidate changes
+resolution recovery and the title crop regression. The d9 candidate changed
 only four display/test files: the remote buffer cell and compact Auto labels.
 New rendering modes have not been validated on Switch.
 

@@ -1,4 +1,4 @@
-//! Fork-style global Player Info window. No game-owned pane is modified.
+//! Fork-style global Player Info window. This window does not write panes.
 use super::{imgui::*, input, overlay_host, publish, record, settings, Code};
 use crate::overlay::{FrameTimes, Overlay, View};
 use std::{sync::Mutex, time::Instant};

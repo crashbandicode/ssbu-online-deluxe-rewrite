@@ -8,6 +8,7 @@ mod imgui;
 mod input;
 mod logging;
 mod memory;
+mod native_banner;
 mod nvn;
 mod online;
 mod overlay_host;
@@ -151,7 +152,8 @@ pub fn main() {
         return;
     }
     // Scene entries are observed for FX scope only; no scene mutation, global
-    // Layout::Draw, fighter-frame or Training input-delay hook.
+    // Layout::Draw, fighter-frame or Training input-delay hook. Native titles
+    // are the CSS function hook, not Layout::Draw.
     if legacy_host_present() {
         record(Code::Compatibility, 1, 0);
         skyline::println!("[Deluxe] Existing SsbuSync host detected; rewrite hooks skipped");
@@ -162,6 +164,7 @@ pub fn main() {
     for (name, install) in [
         ("RENDERER", renderer::install as fn()),
         ("MENU", ui::install as fn()),
+        ("NATIVE", native_banner::install as fn()),
         ("FX", effects::install as fn()),
         ("BUFFER", hooks::install_latency as fn()),
         ("PIA", pia_rtt::install as fn()),

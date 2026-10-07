@@ -9,6 +9,7 @@ pub mod effects;
 mod effects_catalog;
 mod imgui_host;
 pub mod menu;
+pub mod native_banner;
 pub mod overlay;
 mod peer_observer;
 mod peer_passive;

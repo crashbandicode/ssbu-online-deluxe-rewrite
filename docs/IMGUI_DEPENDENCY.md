@@ -118,9 +118,14 @@ then, so it sees the same context the draw calls use. Otherwise it returns
 
 - Training Modpack (`Layout::Draw`, layout-arc, fighter symbols), the overlay
   plugin (ui2d panes, 0x374812c, 0x1b6cc08, 0x1345558, 0x1d68b94) and
-  `libcss_preserve.nro` (`set_text_string`) do not touch `nvnBootstrapLoader`
+  `libcss_preserve.nro` do not touch `nvnBootstrapLoader`
   or the NVN proc table. The ImGui backend does not wrap
   `nvnQueuePresentTexture`.
+- The game text setter at `0x37a28a0` already has a Skyline hook in the tested
+  combined installation. Its owner has not been identified; the earlier
+  attribution to CSS Preserve was unverified. The native banner calls through
+  this entry after checking its standard trampoline and untouched original
+  instruction tail.
 - The backend snapshots window textures in its `nvnWindowBuilderSetTextures`
   wrapper and wraps `nvnWindowAcquireTexture`; the in-tree engine chains acquisition and preserves that texture ownership.
   Live profile changes with the overlay enabled passed the recorded Eden tests.
@@ -170,3 +175,12 @@ also checked in the embedded and reversed-order runs. All three exited
 normally and test profiles were restored. Raw evidence and run IDs are in
 `VALIDATION.md`; actual Elite stage filtering and Switch coexistence remain
 separate tests.
+
+## Native display follow-up, 2026-10-07
+
+Candidate `4a927dc20904722d` showed standalone Deluxe and Elite windows together
+with native CSS text in solo Eden tests, both with and without G&W. One
+concurrent two-instance run had invisible external windows despite valid
+registrations and working input edits; its native text and the second peer's
+embedded window remained visible. This is unresolved and does not establish
+a G&W or native-pane cause. See [NATIVE_DISPLAY.md](NATIVE_DISPLAY.md).

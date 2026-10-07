@@ -39,6 +39,7 @@ fn reject_stage() {
 
 #[skyline::hook(offset = 0x235aaa0, inline)]
 unsafe fn deluxe_rewrite_main_menu(_: &InlineCtx) {
+    super::native_banner::drop_scene();
     auto_driver::set_scene(
         Some(Connection::Offline),
         Some(SceneStatus::Inactive),
@@ -48,6 +49,7 @@ unsafe fn deluxe_rewrite_main_menu(_: &InlineCtx) {
 
 #[skyline::hook(offset = 0x22da160, inline)]
 unsafe fn deluxe_rewrite_quickplay(_: &InlineCtx) {
+    super::native_banner::drop_scene();
     auto_driver::set_scene(
         Some(Connection::Quickplay),
         Some(SceneStatus::Inactive),
@@ -57,6 +59,7 @@ unsafe fn deluxe_rewrite_quickplay(_: &InlineCtx) {
 
 #[skyline::hook(offset = 0x22da090, inline)]
 unsafe fn deluxe_rewrite_background_matchmaking(_: &InlineCtx) {
+    super::native_banner::drop_scene();
     auto_driver::set_scene(
         Some(Connection::Quickplay),
         Some(SceneStatus::Inactive),
@@ -66,11 +69,13 @@ unsafe fn deluxe_rewrite_background_matchmaking(_: &InlineCtx) {
 
 #[skyline::hook(offset = 0x22d9fa0, inline)]
 unsafe fn deluxe_rewrite_arena(_: &InlineCtx) {
+    super::native_banner::drop_scene();
     auto_driver::set_scene(Some(Connection::Arena), None, 0x22d9fa0);
 }
 
 #[skyline::hook(offset = 0x1bd45e0, inline)]
 unsafe fn deluxe_rewrite_local_wireless(_: &InlineCtx) {
+    super::native_banner::drop_scene();
     auto_driver::set_scene(
         Some(Connection::Local),
         Some(SceneStatus::Inactive),
@@ -80,6 +85,7 @@ unsafe fn deluxe_rewrite_local_wireless(_: &InlineCtx) {
 
 #[skyline::hook(offset = STAGE_SETUP, inline)]
 unsafe fn deluxe_rewrite_stage_setup(ctx: &InlineCtx) {
+    super::native_banner::drop_scene();
     let base = ctx.registers[0].x() as usize;
     let Some(stage_addr) = base.checked_add(8) else {
         reject_stage();

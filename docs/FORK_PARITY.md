@@ -1,7 +1,7 @@
 # Fork feature parity
 
 Source of record: `reference/quickplay` at `35fdf7cf` (see `reference/README.md`).
-Live-profile candidate based on `082a40076979`, reviewed 2026-10-07.
+Current display candidate `4a927dc20904722d`, reviewed 2026-10-07.
 A feature is listed only when an `install()`
 path or an exported function actually registers it. `docs/STATUS.md` is a
 progress note, not this inventory.
@@ -166,13 +166,13 @@ retained. Auto's target and the renderer's committed state are distinct.
 | Cut-in and Sephiroth Gigaflare scaler | Bounded visual resolution reports driven by guarded fighter Main and cut-in sites | Two approximate callback-count gates and Gigaflare trigger passed; Luigi Up-B cut-in scaling/restoration passed |
 | Player Info / performance view | Global top-left ImGui table, peer/local columns, frame graph and transition status | Main/CSS/Training window confirmed with combined candidate and standalone host |
 | Standalone ImGui | Reuse compatible host, embedded fallback otherwise | Embedded and both standalone load orders tested previously; Elite coexistence observed |
-| Native CSS / Arena / LDN text | Not reinstated | Global window supplies the controls; game-owned panes caused clipping/font failures and are not modified |
-| 300-frame native-banner grace / LDN two-pane force | Not copied | Those native-pane workarounds are not prerequisites for the independent window; four-fighter testing must use actual controller slots |
+| Native CSS / Arena / LDN text | Fork CSS and arena display paths reinstated alongside the global window | CSS retains selected values after window closure; Streamer restores original styles. Arena uses the selected peer, not the full station list; NSO test pending. LDN lobby network-count replacement and native D-pad editing are not ported. [Details](NATIVE_DISPLAY.md) |
+| 300-frame native-banner grace / LDN two-pane force | Not copied | Scene generations and validated pane identities replace retained unguarded pointers; no forced controller slots |
 | SsbuSync arena marker | Not needed by the in-tree backend | Legacy host exports trigger a best-effort overlap refusal; do not install both stacks |
 | FX On/Off and scope | Added by this rewrite, not inherited from the fork | Named visual requests only; user-confirmed Palutena/Sephiroth and TM/SGPO coexistence on prior candidates; full expanded catalog not runtime-certified |
 | Reduced FX | Unavailable | Never silently converted to Off |
 | Hardware overclocking | Deliberately excluded by user request | No clock management or nx_over dependency |
-| Software FPS boost `+` | Not implemented | Fable and Grok could not prove the game's field reader or simulation safety; both attempts retained, no guessed write shipped |
+| Software FPS boost `+` | Not implemented | New live watchpoint identifies native-window swap interval and Eden's composition-speed extension; [mechanism documented](FPS_BOOST_INVESTIGATION.md), boost A/B measurements pending |
 
 The renderer drains outstanding work before native buffer-count changes. It
 confirms count/index state before Active. Missing drain markers retain a safe
@@ -190,8 +190,9 @@ reinstall hooks and never patch SGPO's `0x374812c` neighborhood.
   zero. A full ring retains the fork's mean behavior and stability thresholds.
 - Streamer is persistent display privacy; it does not alter packets or replace
   remote rows with the LDN network count.
-- The independent window replaces native text-pane writes. It leaves ordinary
-  game input unsuppressed.
+- The independent window edits settings; the fork-style native title displays
+  them while the window is closed. Original styles are captured once per pane
+  identity and restored by Streamer. Ordinary game input remains unsuppressed.
 - No hardware overclocking, unproven software FPS boost, or duplicate external
   backend is introduced.
 
@@ -226,6 +227,15 @@ fork-compatible fields of validated traffic; they do not originate game inputs.
 
 ## Validation coverage
 
+Current `4a927dc20904722d` passes 192 tests and required checks. The native CSS
+display retains edits when Player Info is closed, restores the original title
+under Streamer, and shows linked names/profiles/colored RTT. Solo standalone
+Deluxe/Elite coexistence passed with and without the G&W fix. One concurrent
+run had invisible external windows on the full-stack peer while native text
+and the other peer's embedded window worked; that cause is unresolved.
+Arena NSO and Switch validation remain pending. See
+[NATIVE_DISPLAY.md](NATIVE_DISPLAY.md) for build-specific evidence.
+
 Candidate `b19b7d94ae136e55` passed 175 host tests and all required host/Skyline
 checks. It fixes the observed title crop reset and passed 24 controlled response
 trials plus a real cut-in scaling/recovery test. A four-fighter linked team
@@ -238,9 +248,9 @@ Streamer menu/chord and Stealth Off-to-pending-On behaved as expected. An actual
 G&W-versus-Sephiroth match (A LLUltra, B LessLag, fix only on A) completed through
 results and stage select. A reached its configured runtime deadline during the
 next CSS load, so that return is not certified. A discovered remote-buffer
-placeholder bug is fixed in final candidate `d9acd03611e1d1d6`.
+placeholder bug is fixed in candidate `d9acd03611e1d1d6`.
 
-The final candidate passed 176 host tests and all required builds/checks. Its
+The d9 candidate passed 176 host tests and all required builds/checks. Its
 four changed source files contain display logic and tests only; rendering,
 input and packet-writing algorithms are unchanged from b19. It passed exact
 menu-saved INI reload, Streamer privacy, fresh Stealth On with a suppressed

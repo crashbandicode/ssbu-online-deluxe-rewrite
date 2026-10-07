@@ -19,17 +19,32 @@ No hardware overclocking is implemented.
 | Peer display | Selected station name, RTT/stability colors and announced settings | d9 remote Auto/2 buffers, profiles, names, green RTT and interface announcements passed in linked play |
 | Ethernet / Wi-Fi | Local nifm type and peer announcement, otherwise Unknown | Never inferred from RTT; an emulator may report a virtual interface |
 | Streamer / peer cycle | Persistent display privacy, menu and fork chord, identity-consistent peer selection | d9 exact saved INI reload and privacy passed; more than two network stations needs additional consoles |
-| Global Player Info | Small top-left ImGui window in menus, CSS and play | Confirmed in Eden and by user; no native game-pane writes |
-| Embedded / standalone ImGui | Export/ABI detection, one active backend, namespaced hooks | Embedded and both standalone load orders passed earlier tests; final candidate coexists with Elite standalone host |
+| Global Player Info | Small top-left ImGui window in menus, CSS and play | Confirmed in Eden and by user; retained alongside the native banner |
+| Native CSS / arena | Fork CSS pane path, room-ID arena hooks, saved-style Streamer restoration | CSS edits, closed-window display and match return verified in Eden; NSO arena and Switch testing pending. [Details](NATIVE_DISPLAY.md) |
+| Embedded / standalone ImGui | Export/ABI detection, one active backend, namespaced hooks | Embedded and both standalone load orders passed earlier tests; 4a solo coexistence passed; one concurrent run's external windows were invisible, cause unresolved |
 | Elite Legal Stages | Separate plugin, standalone ImGui retained | Both menus and settings persist; offline stages remain unrestricted as intended; NSO filtering untested |
 | FX On / Off | Named visual requests only, live for newly requested effects | User Palutena/Sephiroth tests and TM save/load passed; final Gigaflare suppression observed; expanded catalog not fully runtime-certified |
 | FX scope | Online-only default; all for offline+online tests | Offline Training preservation checked; full online-to-offline transition matrix pending |
 | Reduced FX | Reserved, unavailable; never silently mapped to Off | Requires a reproducible Switch performance case |
-| Software FPS boost | Excluded | Fable and Grok could not establish field-reader/simulation safety; no guessed write shipped |
+| Software FPS boost | Not implemented | Live guest watchpoint identifies native-window swap interval; Eden uses it for composition-speed control. [Investigation](FPS_BOOST_INVESTIGATION.md); boost A/B measurements pending |
 
 ## Current candidate
 
-Final candidate `d9acd03611e1d1d6` passed 176 host tests, host/Skyline checks with
+Current candidate `4a927dc20904722d` passes 192 host tests and the required
+host/Skyline checks/build. The fork's native CSS title and the global window
+work together. Solo validation covers stable sizing, edits, Streamer restoration,
+CSS re-entry and coexistence with standalone ImGui/Elite/TM/SGPO, also with G&W.
+The preceding CSS-equivalent `84d48448ac91e65d` completed an offline match and
+returned through results to CSS. Linked CSS showed both peers' names, profiles
+and green RTT; no match was started in that new pair.
+
+One full-stack peer's external ImGui windows were invisible during that linked
+run, despite callbacks and edits working. Its native title and the other peer's
+embedded window remained visible. Solo tests with and without G&W passed;
+the paired anomaly is unresolved. Arena NSO and console tests remain pending.
+[Native display](NATIVE_DISPLAY.md) records the evidence and differences.
+
+The previous candidate `d9acd03611e1d1d6` passed 176 host tests, host/Skyline checks with
 warnings denied, the no-default-features build, and the optimized Skyline build.
 The matching NRO, optimized ELF, source, hashes, raw checks and runtime evidence
 are preserved outside Git. This candidate passed a G&W LessLag-versus-Auto/Ultra

@@ -28,7 +28,35 @@ alongside games. Do not change the user's Switch or normal Eden profile.
 Restore every staging journal after the corresponding frontends have exited.
 Preserve the NRO, optimized symbols, source, plugin hashes, raw logs and captures.
 
-## Completed emulator milestone
+## Native display follow-up
+
+Current candidate `4a927dc20904722d` adds the fork's CSS and arena display path
+to the existing global window. It passes 192 host tests and required builds.
+CSS editing, hidden-window status, stable sizing, Streamer restoration and
+linked peer text passed. Final solo runs showed standalone Deluxe and Elite
+windows together, both with and without G&W. The arena path needs a Switch
+NSO test.
+
+One concurrent linked run's full-stack external windows were invisible while
+the native header and the other peer's embedded window worked. Reproduce under
+the same conditions, then compare the `DISABLE_NATIVE` marker on/off with the
+same binary and plugin hashes. Do not blame G&W or native text from the
+existing evidence. See [NATIVE_DISPLAY.md](NATIVE_DISPLAY.md) for exact runs,
+including bounded frontend-stop failures.
+
+FPS++ is now traced to native-window swap interval / emulator composition
+scheduling; the older simulation-cap hypothesis is superseded. It remains
+unimplemented and unmeasured. Read [FPS_BOOST_INVESTIGATION.md](FPS_BOOST_INVESTIGATION.md)
+before planning any controlled implementation or A/B experiment. Hardware
+overclocking remains excluded.
+
+Current matching bundle:
+
+```text
+/home/intpa/ssbu-online-deluxe-rewrite/dist/4a927dc20904722d/
+```
+
+## Previous emulator milestone
 
 Final candidate `d9acd03611e1d1d6` passes 176 host tests and the required
 checks/build. Fresh Stealth On suppression, Off after reconnect, exact INI
@@ -50,7 +78,7 @@ Preserved candidate and symbols:
 
 All test frontends are closed and the staging journals restored. The user's
 Switch and normal Eden profile were not changed during this final test cycle.
-Use the final NRO and matching ELF for the next console test, retaining backups.
+Use the current NRO and matching ELF for the next console test, retaining backups.
 
 High-RTT/VPN matches and more than two remote network stations remain additional
 coverage. Two local controllers on each of two consoles do not produce four
@@ -81,4 +109,4 @@ mod's broad generic deletion, article scaling, global timers or color-reset
 suppression. Test Training save/load, normal match cleanup and online-only FX
 scope separately. Elite Legal Stages should restrict NSO only, never offline.
 
-No hardware overclocking or unproven software FPS-boost field write is planned.
+No hardware overclocking is planned. FPS++ needs a separately reviewed implementation and controlled measurements.
