@@ -1311,7 +1311,10 @@ crates unchanged at 2.0.0. Tag `v0.2.1` (commit aa8c33f) clean NRO: build
 2453504 bytes, module `8e8e9491d0eddd5891357113cf68ca83b8f5fe0f1a82f6717eedc875f455977f`,
 ELF `d3e08612f7a6017c06d49e08bc7b35c0c938946a35f15bb333ce077d518d0b36`.
 Not installed on hardware (the Switch has d773). Package: tangent evidence
-`artifacts/eb87feb1cbcbc2b2/`.
+`artifacts/eb87feb1cbcbc2b2/`. Forgejo release `v0.2.1` carries the clean NRO
+and `manifest.json` as assets; release `v0.2.0` carries its NRO, manifest and
+the demo plugin NRO `2f9fcdd730b14ab22fc6c19cfc0a6fe9f61d072379b1cb30a695e43b8f004b60`.
+Every future tag ships its NRO the same way.
 
 ### Pinned release v0.2.0 — 2026-10-12
 
