@@ -1,24 +1,49 @@
 # Measuring performance and LessLag
 
-The rewrite defaults to Vanilla rendering. Opt-in, startup-only modes reconstruct
-the fork's modern LessLag and LLUltra rendering; Reduced FX remains unfinished. A
-constant 60 FPS does not establish low input latency, and a callback interval is
-not a displayed-frame interval.
+The rewrite defaults to Auto. Live profiles are Vanilla, LessLag, LLUltra, and
+LLDoubles. Hooks install once. Later profile, texture-count, index, flush, and
+resolution changes go through the guarded machine in `src/render_policy.rs`,
+fed by `src/runtime/auto_driver.rs`. Reduced FX is the live visual-layer policy
+in `src/runtime/effects.rs` and `src/effects_reduced.rs`. It keeps named cues.
+An unsupported Reduced request stays on its original visual. Open Reduced
+branches and the still-unshown Off-like frame-time benefit are in
+`docs/FX_RUNTIME_MATRIX.md` and `docs/FX_PERFORMANCE_METHOD.md`.
 
-## Startup render modes
+`lesslag_core` and `doubles_core` stay INI-only startup experiments. They are
+separate from the four live profiles. Hardware clocks stay excluded. Software
+FPS boost stays a gated diagnostic; the normal menu reports Unsupported.
 
-Set `render_mode` in config.ini while the game is closed. The renderer preflights
-each 13.0.5 instruction it touches, requests the texture count immediately after
-window initialization and enables the mode only after reading that count back.
-Any failed prerequisite leaves Vanilla behavior.
+A constant 60 FPS does not establish low input latency, and a callback interval
+is not a displayed-frame interval. Every percentile, captured-image count, and
+Gigaflare pilot below stays bound to the NRO named in that section. A later
+compatibility pass does not inherit those numbers.
 
-| `render_mode` | Active textures | Index | Dispatch flush | Render-finished poll | render_opts | Pre-present flush |
-| --- | --- | --- | --- | --- | --- | --- |
-| `vanilla` | 3 | TwoBehind (original) | Original once | Original | No | No |
-| `lesslag_core` | 2 | OneBehind | OneBehind adjustment, original once | Bypassed | No | No |
-| `doubles_core` | 3 | OneBehind | OneBehind adjustment, original once | Bypassed | No | No |
-| `lesslag` | 2 | OneBehind | OneBehind adjustment, original once | Bypassed | Yes | No |
-| `llultra` | 2 | Immediate | Original three times | Bypassed | Yes | Yes; later flush suppressed |
+The c0 Palutena follow-up completed 36 measured hit/whiff trials across
+Vanilla/LessLag/LLUltra and On/Off/Reduced. It did not establish a consistent
+On-specific penalty. Capacity-limited API captures were accepted only for
+individually verified complete move-window slices; no GPU, displayed-frame,
+hitbox-cost or Switch claim follows. See [results and limitations](FX_EMULATOR_RESULTS.md).
+
+## Registered render profiles
+
+`src/runtime/mod.rs` installs the renderer, then `resolution::install` and
+`fighter_probe::install`. `src/runtime/renderer.rs` `install` preflights the
+13.0.5 words, installs the index, render-wait, and flush hooks, then calls
+`render_sequence::install` and `render_ultra::install`. `src/render_policy.rs`
+keeps Vanilla, LessLag, LLUltra, and LLDoubles on one atomic word. A texture-count
+change drains before commit. A transition does not reinstall hooks.
+
+| Profile | Active textures | Index | Live flush when committed | Render opts | Resolution / dynamic resolution |
+| --- | --- | --- | --- | --- | --- |
+| Vanilla | 3 | TwoBehind | original once, fields off | No | 1080p, off |
+| LessLag | 2 | OneBehind | original once, LessLag fields | Yes | console 1080p on; emulator 1080p off |
+| LLUltra | 2 | Immediate | original three times, fields off, early flush | Yes | console 576p on; emulator 1080p off |
+| LLDoubles | 3 | OneBehind | original once, LessLag fields | Yes | 1080p on, both platforms |
+
+Sources: `src/render_policy.rs` `Profile` and `plan_flush`; `src/resolution.rs`
+`defaults_for` and `delay_for_profile`; `src/config.rs` `RenderMode::textures`
+and `render_opts`. LLDoubles is `Profile::Doubles`. `DoublesCore` is the
+startup experiment, not this profile.
 
 render_opts moves fighter model updates and fighter command recording after the
 scene update and dispatches the render queue there, using one per-frame decision
@@ -29,12 +54,39 @@ owner alias and virtual flush target; SGPO's 0x374812c neighborhood is not patch
 With any other non-Vanilla mode, an empty DUMP_ULTRA_ROUTE file installs that
 entry hook as an observer only; it never flushes or changes the mode.
 
-Texture-wait relocation, the VSync-event wait and the counter-thread patches are
-deliberately absent: v1.4.1 and v1.4.2 install them only when the profiling bit is
-set, and the shipped presets leave it off. The frame pacer stays enabled, as in
-those presets. Dynamic resolution, console clocks, runtime profile transitions
-and full LLDoubles are not implemented, so these modes target the fork's emulator
-preset conditions (1080p, no DRS) rather than its complete console presets.
+The LessLag path reads the gate byte at `+0x1d18` and the dispatch index at
+`+0x1d20`, then writes `+0x1d30` and `+0x1d28` when the gate is nonzero.
+Diagnostic candidate `c0e9a625eb44a735` samples those fields and checks whether
+the latest host EndRecording handle occurs in the incoming command list during
+finite API captures. It passes 247 host tests and all required build checks.
+The stores remain unchanged. In a fresh single-instance capture the window is
+visible, the gate is one, and the wide field flips between zero and one. The
+recorded host handle is present in all 273 sampled incoming lists. This does
+not explain the earlier b99 concurrent-run invisibility in LessLag/LLDoubles
+or observe the inner driver's appended UI handle.
+
+Texture-wait relocation, the VSync-event wait, and the counter-thread patches
+stay absent. v1.4.1 and v1.4.2 install them only when the profiling bit is set,
+and the shipped presets leave it off. The frame pacer stays enabled.
+
+## Local match note, outside the latency record
+
+b99 (`b99f087cf8ef0a9c`) completed one two-local-station Final Destination match,
+Game & Watch versus Sephiroth. Both stations reported the same winner, two KOs,
+and 47% damage, then returned to stage selection. LessLag and then LLUltra were
+each confirmed active. The Game & Watch plugin `bceef` was on A only. A used FX
+Reduced with online scope. B used FX On with scope all. Standalone ImGui and
+Elite were on B only. No disconnect was observed. Both sides held cleanup and
+requested Vanilla at results. The window sat on the right during connected CSS
+and stage select, and on the left during the match. The opponent column
+disappeared after B stopped. This match has no full-state or checksum proof. A
+three-station match is still undone. High-RTT, VPN, NSO, and Switch performance
+are not accepted from it. b99 Reduced branch limits stay in
+`docs/FX_RUNTIME_MATRIX.md`. The Switch already has b99 installed; that install
+is not a console performance acceptance.
+
+The sections from "Native latency baseline" through "Final renderer regression"
+are the exact-artifact record for the NROs they name.
 
 ## Native latency baseline and the emulator hypothesis
 
@@ -76,16 +128,19 @@ skipped counts. Recording stops before the background logger exports a CSV.
 No per-sample file write, allocation, or blocking lock occurs in the callback.
 
 From Settings, use the existing debug shortcut (hold L+R and Plus or Minus, tap
-Down), then hold L+R and tap Up to capture. `Timing` changes to `CSV saved` after
-export. The debug view's capture shortcut uses L/R, not ZL/ZR.
+Down), then hold L+R and tap Up to capture. The buffered-export source correction
+shows `Capturing (10 s)`, then `Exporting CSV`, then `CSV saved` only after both
+CSVs are flushed/synchronized and the saved status is persisted. Errors show
+`Export error`, even if writing the error status file also fails. The debug view's
+capture shortcut uses L/R, not ZL/ZR.
 The game's own input handling still receives these buttons; settle the scene
 before the measured move. Menu operations must not be included in a move window.
 
 For CLI-driven Eden tests, write an ASCII label (up to 48 letters, digits, `_`
 or `-`) to `CAPTURE_TIMING` in the mod's data directory. The background thread
 consumes that file and arms the capture. Wait for `timing-status.txt` to say
-`capturing`, then perform the move. A repeated controller request during capture
-is ignored. A file request left while busy waits for the next capture.
+`capturing`, then perform the move. A repeated controller request during recording
+or export is ignored. A file request left while busy waits for the next capture.
 
 Files live at `sd:/ultimate/ssbu_online_deluxe_rewrite/timing-<tick>.csv`.
 On this host, the data directory is:
@@ -103,6 +158,16 @@ Mixed settings are flagged. Truncated, unfinished and nonmonotonic traces are
 rejected. The footer and declared sample count identify incomplete file writes.
 The 30-second background timeout exports an explicitly aborted trace if the
 callback does not finish the capture. That timeout also uses the guest clock.
+It does not cancel blocked native filesystem calls. The CSV export uses a bounded
+64KiB buffer per file with an explicit fallible flush before `File::sync_all`.
+
+October9 Switch evidence on installed `5c72a0b54b8c8c95`: recording finished, but
+the API CSV stopped mid-row6308 of6602 while the callback CSV was complete602
+samples. The old status stayed Capturing through export. Skyline std requests
+a native flush for every unbuffered formatting fragment; this motivated the
+buffering/status correction above. Source/test/build evidence is separate from
+device export acceptance. The new correction is not yet deployed. The operator
+already tried repeated waits; do not request another uninstrumented wait.
 
 The button field is a sample taken on the render callback. It does not timestamp
 the physical button press or the game's simulation input read. Do not calculate
@@ -215,18 +280,23 @@ background writer. No global toolchain modification was made.
 
 ## Experimental core and API spans, 2026-10-05
 
+This section records the `lesslag_core` experiment and bundle `79790e610f0f24f8`.
+It is not a description of the current live profiles above.
+
 Set render_mode=lesslag_core in config.ini while the game is closed. Vanilla remains
-the distributed default. The experiment verifies each 13.0.5 instruction before
+the distributed default of that experiment's INI. The experiment verifies each 13.0.5 instruction before
 installing index, zero-timeout render-poll and flush hooks. It asks NVN for two
 active textures immediately after window initialization, before first acquisition,
 and enables its mode only after readback succeeds. Failed prerequisites keep
 Vanilla behavior; an unsuccessful texture-count rollback stops with diagnostics.
 
-This is a partial reconstruction: it omits the original render-task sequencing,
+That core build omitted the original render-task sequencing,
 dynamic resolution, clock changes and automatic profile transitions. It does not
 touch SGPO's 0x374812c neighborhood. The retained CPU texture wait matches the
 shipped modern presets; its relocation is profiling-only in the modern hosts.
-The later `lesslag` and `llultra` modes add the sequencing (see above).
+The later `lesslag` and `llultra` modes on that line of work added sequencing.
+Current source registers sequencing, resolution, LLDoubles, and live transitions
+together; see the registered-profile section.
 
 Each CAPTURE_TIMING request also writes api-<tick>.csv, a bounded capture using
 try_lock (4096 events in this build; 8192 in the current source). It records CPU
@@ -242,8 +312,9 @@ display frame. An occasional one-event difference is not itself a dropped frame.
 renderer-status.txt gives actual mode, startup state, texture readback, index masks
 and hook counters. In bundle 79790e610f0f24f8, LessLag core ran in Eden with three
 allocated/two active textures, interval 1, present/acquire indices {0,1}, progressing
-index/flush/poll counters, the global overlay and SGPO. Full console parity,
-runtime transitions and end-to-end latency remain unverified.
+index/flush/poll counters, the global overlay and SGPO. For that core bundle,
+full console parity and end-to-end latency remain unverified. Live transitions
+in current source are a separate, later registration.
 
 An opt-in DUMP_PRESENTATION_HISTORY file installs symbol-bound layer lifetime
 observers and runs a finite history probe. presentation-history.txt records raw
@@ -303,8 +374,8 @@ the Deluxe global window, SGPO, and opening/closing the Training Modpack menu.
 LessLag core reached the same Training-stage Sephiroth/Ganondorf pairing with
 SGPO and the global window. Both modes accepted live FX changes. Rendering
 status showed three active textures in Vanilla and two in LessLag core, with
-the latter's index/poll/flush counters advancing. These are functional checks;
-the full LessLag profile remains incomplete.
+the latter's index/poll/flush counters advancing. These are functional checks
+of NRO `5d47c70452ce73ba`. That artifact's full LessLag profile was still incomplete.
 
 Vulkan, docked, 1x, speed 100%, Bilinear, asynchronous shader compilation and
 presentation off. Custom source reports GPU accuracy High (UI label Accurate).

@@ -2,9 +2,90 @@
 
 use crate::pia_rtt::PingRgba;
 
-pub const TEXT_CAP: usize = 120;
 pub const MARKER: char = '\u{200B}';
+pub const MARKER_BYTES: usize = 3;
 pub const ROOM_ID_UNITS: usize = 5;
+/// Wire name window (`ENTRY_NAME_LEN`). Longer display names are cut on a char boundary.
+pub const ARENA_NAME_MAX: usize = 40;
+pub const ARENA_PROFILE_MAX: usize = 9;
+pub const ARENA_LATENCY_MAX: usize = 4;
+/// `9999999ms` plus ` [Wired]`.
+pub const ARENA_PING_MAX: usize = 17;
+pub const ROOM_LINE_MAX: usize = 25;
+/// Longest row label plus the applied FPS++ `++` suffix.
+pub const YOU_PROFILE_MAX: usize = 20;
+pub const YOU_LINE_MAX: usize = 32;
+
+pub const fn remote_line_max() -> usize {
+    1 + ARENA_NAME_MAX + 2 + ARENA_PROFILE_MAX + 3 + ARENA_LATENCY_MAX + 2 + ARENA_PING_MAX + 1
+}
+
+/// Marker, room line, You line, and eight remote lines at the bounds above.
+pub const TEXT_CAP: usize = MARKER_BYTES + ROOM_LINE_MAX + YOU_LINE_MAX + 8 * remote_line_max();
+/// One past the text the setter is given. Longer declared buffers are corrupt.
+pub const PANE_SCAN_MAX: usize = TEXT_CAP + 1;
+
+const _: () = assert!(TEXT_CAP == 692);
+const _: () = assert!(PANE_SCAN_MAX <= 1024);
+
+/// Local-wireless update site. Words are the clean 13.0.5 entry from the pane probe.
+pub const LOCAL_UPDATE: usize = 0x1bd7a80;
+pub const LOCAL_UPDATE_WORDS: [u32; 4] = [0x3600_00a0, 0xf940_c268, 0xb942_5517, 0x3700_08f6];
+/// Existing scene entry. Its hook is already installed; this word is checked before that patch.
+pub const LOCAL_SCENE: usize = 0x1bd45e0;
+pub const LOCAL_SCENE_WORD: u32 = 0x946e_9728;
+pub const LOCAL_PANE_NAME: &str = "set_text_dev_count";
+/// `0x85666320 - 0x80425000` from the same pane at the scene entry and the update site.
+pub const LOCAL_PANE_VTABLE: u64 = 0x0052_41320;
+/// `nn::ldn::NetworkState::Initialized`, observed from `GetState`.
+pub const LDN_INITIALIZED: u32 = 1;
+
+/// `LookupSymbol` names. The 13.0.5 image stores these without LLVM's leading `0x01`.
+pub const LDN_INITIALIZE: &[u8] = b"_ZN2nn3ldn10InitializeEv\0";
+pub const LDN_GET_STATE: &[u8] = b"_ZN2nn3ldn8GetStateEv\0";
+pub const LDN_SCAN: &[u8] = b"_ZN2nn3ldn4ScanEPNS0_11NetworkInfoEPiiRKNS0_10ScanFilterEi\0";
+
+pub fn local_update_accepted(words: [u32; 4]) -> bool {
+    words == LOCAL_UPDATE_WORDS
+}
+
+/// Name and vtable from the probed pane. The vtable is an offset from main text.
+pub fn local_pane_identity(name: &str, vtable: u64, text_base: u64) -> bool {
+    text_base != 0 && name == LOCAL_PANE_NAME && vtable == text_base.wrapping_add(LOCAL_PANE_VTABLE)
+}
+
+/// All three `LookupSymbol` results must be distinct and instruction-aligned.
+pub fn ldn_symbols_usable(initialize: usize, get_state: usize, scan: usize) -> bool {
+    let ok = |address: usize| address != 0 && address.is_multiple_of(4);
+    ok(initialize)
+        && ok(get_state)
+        && ok(scan)
+        && initialize != get_state
+        && get_state != scan
+        && scan != initialize
+}
+
+/// Missing symbols, a stale scene generation, or the wrong pane leave the game text alone.
+pub fn local_count_active(
+    symbols_ready: bool,
+    scene_generation: u64,
+    captured_generation: u64,
+    identity_ok: bool,
+) -> bool {
+    symbols_ready
+        && captured_generation != 0
+        && scene_generation == captured_generation
+        && identity_ok
+}
+
+/// Fork arena ping suffix. Unknown and emulated types add nothing.
+pub fn interface_suffix(interface: &str) -> &'static str {
+    match interface {
+        "Wi-Fi" => " [Wifi]",
+        "Ethernet" => " [Wired]",
+        _ => "",
+    }
+}
 
 /// Absolute telemetry size. Never a multiple of the live size.
 pub const TELEMETRY_FONT: FontMetrics = FontMetrics {
@@ -65,10 +146,12 @@ pub enum BannerPaint {
     },
 }
 
-/// Fork `update_online_arena_ui` Y for the lines this build can show.
-/// `displayed_remote_count` is the selected peer line: 0 or 1.
+/// Complete remote lines an arena pane can show. Matches the handshake table.
+pub const ARENA_REMOTE_CAP: u8 = 8;
+
+/// Fork `update_online_arena_ui` Y. The count is complete lines actually written.
 pub fn arena_pos_y(displayed_remote_count: u8) -> f32 {
-    let lines = f32::from(u8::from(displayed_remote_count > 0));
+    let lines = f32::from(displayed_remote_count.min(ARENA_REMOTE_CAP));
     -115.0 - (22.5 * lines)
 }
 
@@ -110,7 +193,7 @@ pub struct PaintInput<'a> {
     pub ping: Option<[u8; 4]>,
     /// Original `Pane.pos_y`, captured once with the arena style.
     pub saved_pos_y: Option<f32>,
-    /// Displayed selected-peer line. This build has 0 or 1.
+    /// Complete remote lines written on this arena pane. CSS passes 0.
     pub remote_lines: u8,
 }
 
@@ -127,23 +210,116 @@ pub fn local_latency_label(buffer: i8) -> String {
     }
 }
 
+/// Last `nn::ldn::Scan` count. Negative results are zero. The value stays a `u8`.
+pub fn store_scan_count(found: i32) -> u8 {
+    if found <= 0 {
+        0
+    } else {
+        u8::try_from(found).unwrap_or(u8::MAX)
+    }
+}
+
+/// Fork `num_available_networks`: only Initialized (`GetState == 1`) keeps the scan.
+pub fn displayed_network_count(state: u32, stored: u8) -> u8 {
+    visible_network_count(state == LDN_INITIALIZED, stored)
+}
+
+fn visible_network_count(initialized: bool, stored: u8) -> u8 {
+    if initialized {
+        stored
+    } else {
+        0
+    }
+}
+
+/// Local-wireless pane. Streamer replaces the private buffer with the scan count.
+///
+/// Provenance: `reference/quickplay/src/ui/native/mod.rs` `update_local_online_ui`
+/// and `reference/quickplay/src/net/ldn/mod.rs`. `Initialize` stores zero then
+/// calls the original once. `Scan` calls the original once, then keeps the count.
+/// `GetState == 1` is the only state that shows that count.
+pub fn local_wireless_text(streamer: bool, latency: &str, initialized: bool, stored: u8) -> String {
+    if streamer {
+        visible_network_count(initialized, stored).to_string()
+    } else {
+        field(latency, "---")
+    }
+}
+
+/// One arena remote line. Fields already belong to the same station.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RemoteLine<'a> {
+    pub name: &'a str,
+    pub profile: &'a str,
+    pub latency: &'a str,
+    pub ping: &'a str,
+}
+
+/// Room id, the local line, then each complete remote line that fits.
+/// A line that would exceed [`TEXT_CAP`] is omitted whole.
+pub fn arena_status(
+    room_id: &str,
+    you_profile: &str,
+    you_latency: &str,
+    remotes: &[RemoteLine<'_>],
+) -> (String, u8) {
+    let you_profile = bound_bytes(&field(you_profile, "---"), YOU_PROFILE_MAX);
+    let you_latency = bound_bytes(&field(you_latency, "---"), ARENA_LATENCY_MAX);
+    let room = bound_bytes(&field(room_id, ""), ROOM_LINE_MAX.saturating_sub(10));
+    let mut body = if room.is_empty() {
+        format!("You: {you_profile} | {you_latency}")
+    } else {
+        format!("ROOM ID: {room}\nYou: {you_profile} | {you_latency}")
+    };
+    let marker = MARKER.len_utf8();
+    if marker + body.len() > TEXT_CAP {
+        body = cap_str(&body, TEXT_CAP.saturating_sub(marker)).to_owned();
+        let mut out = String::new();
+        out.push(MARKER);
+        out.push_str(&body);
+        return (out, 0);
+    }
+    let mut shown = 0u8;
+    for remote in remotes.iter().take(usize::from(ARENA_REMOTE_CAP)) {
+        let name = bound_bytes(&field(remote.name, "Unavailable"), ARENA_NAME_MAX);
+        let profile = bound_bytes(&field(remote.profile, "---"), ARENA_PROFILE_MAX);
+        let latency = bound_bytes(&field(remote.latency, "---"), ARENA_LATENCY_MAX);
+        let ping = bound_bytes(&field(remote.ping, "---"), ARENA_PING_MAX);
+        let line = format!("\n{name}: {profile} | {latency} ({ping})");
+        if marker + body.len() + line.len() > TEXT_CAP {
+            break;
+        }
+        body.push_str(&line);
+        shown = shown.saturating_add(1);
+    }
+    let mut out = String::new();
+    out.push(MARKER);
+    out.push_str(&body);
+    (out, shown)
+}
+
 pub fn is_our_text(text: &str) -> bool {
     text.starts_with(MARKER)
 }
 
 pub fn metrics_plausible(metrics: &FontMetrics) -> bool {
-    [metrics.font_x, metrics.font_y, metrics.line_space, metrics.char_space]
-        .iter()
-        .all(|value| value.is_finite())
+    [
+        metrics.font_x,
+        metrics.font_y,
+        metrics.line_space,
+        metrics.char_space,
+    ]
+    .iter()
+    .all(|value| value.is_finite())
         && (1.0..=128.0).contains(&metrics.font_x)
         && (1.0..=160.0).contains(&metrics.font_y)
         && (-32.0..=32.0).contains(&metrics.line_space)
         && (-8.0..=16.0).contains(&metrics.char_space)
 }
 
-/// A remote line exists only for a known peer or a non-offline connection.
-pub fn show_native_remote(peer_known: bool, connection_online: bool) -> bool {
-    peer_known || connection_online
+/// A remote banner line exists only for a mapped connected station.
+pub fn show_native_remote(connected: bool) -> bool {
+    connected
 }
 
 pub fn font_for(streamer: bool, captured: Option<FontMetrics>) -> Option<FontMetrics> {
@@ -155,10 +331,7 @@ pub fn font_for(streamer: bool, captured: Option<FontMetrics>) -> Option<FontMet
     }
 }
 
-pub fn material_for(
-    streamer: bool,
-    captured: Option<[[u8; 4]; 2]>,
-) -> Option<[[u8; 4]; 2]> {
+pub fn material_for(streamer: bool, captured: Option<[[u8; 4]; 2]>) -> Option<[[u8; 4]; 2]> {
     let captured = captured?;
     if streamer {
         Some(captured)
@@ -167,11 +340,7 @@ pub fn material_for(
     }
 }
 
-pub fn colors_for(
-    streamer: bool,
-    captured: [[u8; 4]; 2],
-    ping: Option<[u8; 4]>,
-) -> [[u8; 4]; 2] {
+pub fn colors_for(streamer: bool, captured: [[u8; 4]; 2], ping: Option<[u8; 4]>) -> [[u8; 4]; 2] {
     if streamer {
         return captured;
     }
@@ -182,7 +351,12 @@ pub fn colors_for(
 }
 
 pub fn ping_bytes(color: PingRgba) -> [u8; 4] {
-    [channel(color.r), channel(color.g), channel(color.b), channel(color.a)]
+    [
+        channel(color.r),
+        channel(color.g),
+        channel(color.b),
+        channel(color.a),
+    ]
 }
 
 fn channel(value: f32) -> u8 {
@@ -242,14 +416,16 @@ pub fn banner_paint(input: &PaintInput<'_>) -> PaintOutcome {
         paint: BannerPaint::Leave,
         telemetry_applied: applied,
     };
-    if !input.captured || !input.same_identity || input.saved_text.is_empty() || is_our_text(input.saved_text)
+    if !input.captured
+        || !input.same_identity
+        || input.saved_text.is_empty()
+        || is_our_text(input.saved_text)
     {
         return leave(input.telemetry_applied);
     }
     if input.streamer {
-        let pending = input.telemetry_applied
-            || is_our_text(input.current)
-            || !style_matches(input);
+        let pending =
+            input.telemetry_applied || is_our_text(input.current) || !style_matches(input);
         if !pending {
             return leave(false);
         }
@@ -348,7 +524,10 @@ pub fn decode_room_id(units: &[u16]) -> Option<String> {
     if units.is_empty() || units.len() > ROOM_ID_UNITS {
         return None;
     }
-    let end = units.iter().position(|unit| *unit == 0).unwrap_or(units.len());
+    let end = units
+        .iter()
+        .position(|unit| *unit == 0)
+        .unwrap_or(units.len());
     if end == 0 {
         return None;
     }
@@ -397,13 +576,7 @@ pub fn chained_text_setter(entry: &[u32; 2], tail: &[u32; 3]) -> bool {
 }
 
 /// Readable vtable in main Rodata through `Data + 0x392570`, first slot in text.
-pub fn main_image_vtable(
-    vtable: u64,
-    entry: u64,
-    text: u64,
-    rodata: u64,
-    data_end: u64,
-) -> bool {
+pub fn main_image_vtable(vtable: u64, entry: u64, text: u64, rodata: u64, data_end: u64) -> bool {
     rodata > text
         && data_end > rodata
         && vtable.is_multiple_of(8)
@@ -429,7 +602,7 @@ pub fn setter_utf8(text: &str) -> Option<String> {
 }
 
 pub fn text_fits(is_utf8: bool, cap_units: usize, text: &str) -> bool {
-    if text.is_empty() || cap_units == 0 || cap_units > 512 || text.len() > TEXT_CAP {
+    if text.is_empty() || cap_units == 0 || cap_units > PANE_SCAN_MAX || text.len() > TEXT_CAP {
         return false;
     }
     if is_utf8 {
@@ -458,6 +631,17 @@ fn field(value: &str, fallback: &str) -> String {
     } else {
         cleaned
     }
+}
+
+fn bound_bytes(text: &str, max_bytes: usize) -> String {
+    if text.len() <= max_bytes {
+        return text.to_owned();
+    }
+    let mut end = max_bytes;
+    while end > 0 && !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    text[..end].to_owned()
 }
 
 fn cap_str(text: &str, max_bytes: usize) -> &str {
@@ -538,10 +722,10 @@ mod tests {
 
     #[test]
     fn offline_omits_the_remote_line_and_a_connection_keeps_masked_details() {
-        assert!(!show_native_remote(false, false));
-        assert!(show_native_remote(true, false));
-        assert!(show_native_remote(false, true));
+        assert!(!show_native_remote(false));
+        assert!(show_native_remote(true));
         let offline = telemetry_text(&parts("Auto:Van", "Auto", false, "Unavailable"));
+        assert!(offline.contains("You: Auto:Van | Auto"));
         assert!(!offline.contains("Unavailable"));
         assert_eq!(offline.matches('\n').count(), 0);
         let masked = telemetry_text(&LineParts {
@@ -621,7 +805,13 @@ mod tests {
     fn same_name_new_pane_captures_again_and_stale_identity_does_not_restore() {
         assert_eq!(observe_style(true, false, "Online"), Observe::Replace);
         let telemetry = telemetry_text(&parts("Auto:Van", "Auto", false, ""));
-        let mut stale = base_input(true, "Online", Some(game_font()), Some(TELEMETRY_FONT), &telemetry);
+        let mut stale = base_input(
+            true,
+            "Online",
+            Some(game_font()),
+            Some(TELEMETRY_FONT),
+            &telemetry,
+        );
         stale.same_identity = false;
         assert!(matches!(paint(stale).paint, BannerPaint::Leave));
     }
@@ -664,7 +854,13 @@ mod tests {
     #[test]
     fn missing_original_is_left_alone() {
         let telemetry = telemetry_text(&parts("Auto:Van", "Auto", false, ""));
-        let mut input = base_input(false, "Online", Some(game_font()), Some(game_font()), &telemetry);
+        let mut input = base_input(
+            false,
+            "Online",
+            Some(game_font()),
+            Some(game_font()),
+            &telemetry,
+        );
         input.captured = false;
         assert!(matches!(paint(input).paint, BannerPaint::Leave));
     }
@@ -686,13 +882,34 @@ mod tests {
     #[test]
     fn second_title_follows_the_fork_background_then_upward_prev() {
         let nodes = [
-            GraphNode { parent: Some(1), prev: None },
-            GraphNode { parent: None, prev: Some(2) },
-            GraphNode { parent: None, prev: Some(3) },
-            GraphNode { parent: Some(4), prev: None },
-            GraphNode { parent: Some(5), prev: None },
-            GraphNode { parent: None, prev: Some(6) },
-            GraphNode { parent: None, prev: None },
+            GraphNode {
+                parent: Some(1),
+                prev: None,
+            },
+            GraphNode {
+                parent: None,
+                prev: Some(2),
+            },
+            GraphNode {
+                parent: None,
+                prev: Some(3),
+            },
+            GraphNode {
+                parent: Some(4),
+                prev: None,
+            },
+            GraphNode {
+                parent: Some(5),
+                prev: None,
+            },
+            GraphNode {
+                parent: None,
+                prev: Some(6),
+            },
+            GraphNode {
+                parent: None,
+                prev: None,
+            },
         ];
         assert_eq!(
             walk_pane(&nodes, 0, &CSS_TITLE_WALK[..CSS_BACKGROUND_STEPS]),
@@ -708,7 +925,10 @@ mod tests {
     #[test]
     fn chained_setter_accepts_only_the_skyline_far_hook() {
         assert!(chained_text_setter(&SETTER_HOOK, &SETTER_TAIL));
-        assert!(!chained_text_setter(&[0xf81d_0ffc, 0xa901_4ff4], &SETTER_TAIL));
+        assert!(!chained_text_setter(
+            &[0xf81d_0ffc, 0xa901_4ff4],
+            &SETTER_TAIL
+        ));
         assert!(!chained_text_setter(&SETTER_HOOK, &[0; 3]));
     }
 
@@ -721,9 +941,27 @@ mod tests {
         let entry = 0x1000u64;
         assert_eq!(data_end, 0x052a_9570);
         assert!(0x0523_d9a8 >= data && 0x0524_1f38 < data_end);
-        assert!(main_image_vtable(0x0523_d9a8, entry, text, rodata, data_end));
-        assert!(main_image_vtable(0x0524_1f38, entry, text, rodata, data_end));
-        assert!(!main_image_vtable(0x0523_d9a8, data, text, rodata, data_end));
+        assert!(main_image_vtable(
+            0x0523_d9a8,
+            entry,
+            text,
+            rodata,
+            data_end
+        ));
+        assert!(main_image_vtable(
+            0x0524_1f38,
+            entry,
+            text,
+            rodata,
+            data_end
+        ));
+        assert!(!main_image_vtable(
+            0x0523_d9a8,
+            data,
+            text,
+            rodata,
+            data_end
+        ));
         assert!(!main_image_vtable(data_end, entry, text, rodata, data_end));
         assert!(main_data_end(u64::MAX).is_none());
     }
@@ -778,7 +1016,8 @@ mod tests {
             }
             BannerPaint::Leave => panic!("arena remote line should write"),
         }
-        assert_eq!(arena_pos_y(2), arena_pos_y(1));
+        assert_eq!(arena_pos_y(2), -160.0);
+        assert_eq!(arena_pos_y(9), arena_pos_y(ARENA_REMOTE_CAP));
         let mut streamer = base_input(
             true,
             "Online",
@@ -843,5 +1082,129 @@ mod tests {
         assert!(stable[1] > stable[0]);
         assert_eq!(stable[0], stable[2]);
         assert_eq!(stable[3], 255);
+    }
+
+    #[test]
+    fn arena_lists_each_peer_and_bounds_an_overlong_name() {
+        let remotes = [
+            RemoteLine {
+                name: "Ann",
+                profile: "LessLag",
+                latency: "4",
+                ping: "12ms",
+            },
+            RemoteLine {
+                name: "Bob",
+                profile: "LLUltra",
+                latency: "---",
+                ping: "---",
+            },
+        ];
+        let (text, shown) = arena_status("AB12", "Auto:Van", "Auto", &remotes);
+        assert_eq!(shown, 2);
+        assert!(text.starts_with(MARKER));
+        assert!(text.contains("ROOM ID: AB12\nYou: Auto:Van | Auto\nAnn: LessLag | 4 (12ms)\nBob: LLUltra | --- (---)"));
+        assert!(!text.contains("Ann: LLUltra"));
+        assert!(!text.contains("Bob: LessLag"));
+        assert_eq!(arena_pos_y(shown), -160.0);
+        let huge = "Z".repeat(200);
+        let overflow = [
+            remotes[0],
+            RemoteLine {
+                name: &huge,
+                profile: "Vanilla",
+                latency: "1",
+                ping: "9ms",
+            },
+        ];
+        let (capped, shown) = arena_status("AB12", "Auto:Van", "Auto", &overflow);
+        assert_eq!(shown, 2);
+        assert!(capped.contains("Ann: LessLag | 4 (12ms)"));
+        assert!(capped.contains(&huge[..ARENA_NAME_MAX]));
+        assert!(!capped.contains(&huge));
+        assert!(capped.len() <= TEXT_CAP);
+        let mut eight = Vec::new();
+        for index in 0..8 {
+            eight.push(RemoteLine {
+                name: "Name",
+                profile: "LLDoubles",
+                latency: "Auto",
+                ping: "12ms [Wifi]",
+            });
+            let _ = index;
+        }
+        let (full, shown) = arena_status("AB12", "Auto (unavailable)", "Auto", &eight);
+        assert_eq!(shown, 8);
+        assert_eq!(full.matches("LLDoubles").count(), 8);
+        assert!(full.len() <= TEXT_CAP);
+        assert_eq!(interface_suffix("Wi-Fi"), " [Wifi]");
+        assert_eq!(interface_suffix("Ethernet"), " [Wired]");
+        assert_eq!(interface_suffix("Unknown"), "");
+        let (boosted, _) = arena_status("AB12", "Auto (unavailable)++", "0", &[]);
+        assert!(boosted.contains("Auto (unavailable)++"));
+        let (quiet, shown) = arena_status("AB12", "LessLag", "0", &[]);
+        assert_eq!(shown, 0);
+        assert!(!quiet.contains("Unavailable"));
+        assert_eq!(arena_pos_y(shown), -115.0);
+    }
+
+    #[test]
+    fn streamer_lobby_count_hides_the_buffer_and_stale_scans() {
+        assert_eq!(store_scan_count(-3), 0);
+        assert_eq!(store_scan_count(4), 4);
+        assert_eq!(store_scan_count(400), 255);
+        assert_eq!(visible_network_count(false, 7), 0);
+        assert_eq!(visible_network_count(true, 7), 7);
+        assert_eq!(local_wireless_text(false, "Auto", true, 7), "Auto");
+        assert_eq!(local_wireless_text(true, "Auto", true, 7), "7");
+        assert_eq!(local_wireless_text(true, "Auto", false, 7), "0");
+        assert!(!local_wireless_text(false, "Auto", true, 7).contains('7'));
+        assert!(!local_wireless_text(true, "Auto", true, 7).contains("Auto"));
+        assert_eq!(displayed_network_count(LDN_INITIALIZED, 7), 7);
+        assert_eq!(displayed_network_count(0, 7), 0);
+        assert_eq!(displayed_network_count(3, 7), 0);
+    }
+
+    #[test]
+    fn local_count_requires_the_probed_pane_and_live_symbols() {
+        assert!(local_update_accepted(LOCAL_UPDATE_WORDS));
+        assert!(!local_update_accepted([
+            0x3600_00a0,
+            0xf940_c268,
+            0xb942_5517,
+            0
+        ]));
+        assert_eq!(LOCAL_SCENE_WORD, 0x946e_9728);
+        assert!(local_pane_identity(
+            "set_text_dev_count",
+            0x8566_6320,
+            0x8042_5000
+        ));
+        assert!(!local_pane_identity(
+            "set_txt_roomid",
+            0x8566_6320,
+            0x8042_5000
+        ));
+        assert!(!local_pane_identity(
+            "set_text_dev_count",
+            0x8566_6328,
+            0x8042_5000
+        ));
+        assert!(!local_pane_identity("set_text_dev_count", 0x8566_6320, 0));
+        assert_eq!(LDN_INITIALIZE[0], b'_');
+        assert_eq!(LDN_GET_STATE[0], b'_');
+        assert_eq!(LDN_SCAN[0], b'_');
+        assert!(!LDN_INITIALIZE.contains(&1));
+        assert!(LDN_INITIALIZE.starts_with(b"_ZN2nn3ldn10InitializeEv"));
+        assert!(LDN_SCAN.starts_with(b"_ZN2nn3ldn4ScanE"));
+        assert!(ldn_symbols_usable(0x1000, 0x2004, 0x3008));
+        assert!(!ldn_symbols_usable(0, 0x2004, 0x3008));
+        assert!(!ldn_symbols_usable(0x1001, 0x2004, 0x3008));
+        assert!(!ldn_symbols_usable(0x1000, 0x1000, 0x3008));
+        assert!(local_count_active(true, 4, 4, true));
+        assert!(!local_count_active(false, 4, 4, true));
+        assert!(!local_count_active(true, 5, 4, true));
+        assert!(!local_count_active(true, 4, 0, true));
+        assert!(!local_count_active(true, 4, 4, false));
     }
 }

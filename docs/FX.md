@@ -1,25 +1,29 @@
 # Character effects
 
 FX On forwards original requests. FX Off suppresses the named character effects
-below when the configured scope allows it. Reduced remains unavailable.
+below when the configured scope allows it. Reduced retains selected move cues and
+removes surrounding decoration. Its goal is to approach Off's spike stability in
+LessLag and LLUltra; a visible change alone does not establish that benefit.
 
 ## INI scope
 
-In sd:/ultimate/ssbu_online_deluxe_rewrite/config.ini:
+In `sd:/ultimate/ssbu_online_deluxe_rewrite/config.ini`:
 
-    version=1
-    effects=on
-    effects_scope=online
-    input_buffer=auto
+```ini
+version=1
+effects=on
+effects_scope=online
+input_buffer=auto
+```
 
-effects_scope=online is the default, including for existing files without this key.
-effects_scope=all enables the same policy offline and online. This restriction
-applies to Off now and to Reduced when implemented. FX On always preserves visuals.
+`effects_scope=online` is the default, including for existing files without this key.
+`effects_scope=all` enables the same policy offline and online. This restriction
+applies to both Off and Reduced. FX On always preserves visuals.
 INI edits take effect on game restart. Menu saves retain the scope; debug view shows it.
 
 The ready-to-copy [Eden test config](../config/eden-test.ini) sets scope to all.
-Install it with the new NRO while Eden is closed. The previously tested build does
-not recognize effects_scope; leave its live config intact until that upgrade.
+Install or merge it while Eden is closed. Preserve other existing INI settings;
+restore the default online-only scope after offline testing.
 
 Online context uses the preserved 13.0.5 fork's Quickplay, background matchmaking,
 arena and local-wireless scene entries, with an unconditional reset at main menu.
@@ -32,7 +36,7 @@ Quickplay/arena/wireless and return-to-offline validation is pending.
 ## Coverage
 
 The expanded candidate includes 314 distinct names from the peer's unconditional
-legacy tables and 19 qualified move groups. These overlap the initial 123-name
+legacy tables, three verified Inkling roller splash parents, and 19 qualified move groups. These overlap the initial 123-name
 policy. Aliases and emitter-child names are source candidates, not proof that
 every name reaches a request hook.
 
@@ -60,8 +64,8 @@ previously created effects expire naturally. There are no per-frame deletion swe
 
 ## Differences from the peer
 
-Off removes included layers even where the peer merely shrank them. Reduced will
-retain selected cues and lighter layers. The policy is not an exact copy of the peer.
+Off removes included layers even where the peer merely shrank them. Reduced
+retains selected cues and lighter layers. The policy is not an exact copy of the peer.
 
 Shared effect names require the correct fighter/weapon category, kind and move.
 There is no owner traversal or global victim timer. Forty-one named projectile/position, reflector/counter and hitbox cues are preserved,
@@ -105,10 +109,41 @@ Ordinary offline Smash, live online transitions and the rest of the expanded
 move catalog still need runtime tests.
 There is no console/performance acceptance yet.
 
-## Reduced next
+## Reduced implementation and acceptance
 
-Follow [next-session plan](NEXT_SESSION.md): establish a Switch dip first, reproduce
-with recorded Eden settings, change one effect, verify it on Switch, then iterate.
-Selective layers, lower particle counts/lifetimes or a cheaper authored substitute
-can preserve recognizable feedback. Smaller scale alone may reduce overdraw while
-leaving CPU/update costs unchanged. Do not assume it fixes the measured bottleneck.
+The request policy keeps identified move bodies, projectiles and other cues while
+suppressing selected surrounding layers. Palutena's up-air resource has a separate
+lighter copy so its visible cue remains; the stock resource is retained for On.
+The shipped Off policy deliberately protects that up-air parent, so Off is not
+a zero-cost reference for that particular parent.
+
+Candidate `833cc40bb7db2721` extends resource copies to Shadow Flare charge/projectile
+layers, Inkling roller splashes and Chrom's first side-B trail. Its visual checks
+confirm recognizable cues and normal expiry, including Shadow Flare and roller
+cleanup after switching back to On. These changes are not part of the existing
+Switch prerelease. A failed resource callback leaves that cue original. Stock
+game assets are read at runtime and are not distributed in the NRO or repository.
+
+The roller runtime check exposed an Off-table alias gap: the peer names
+`inkling_roller`, while the game requests `inkling_roller_splash_walk`,
+`inkling_roller_splash_run` and `inkling_roller_splash_air`. Candidate `24e714e77b3eabf0` adds those three unique parents to Off.
+Its ground-roller test confirms full splash On, splash absent Off and a smaller
+splash Reduced, with the same observed 12.1%/one hit against Bowser Jr. Switching
+Reduced to On during the roller and cancelling leaves no persistent splash. Ground ink and gameplay articles remain
+outside the filter. Runtime acceptance of that correction is pending.
+
+The mode applies to new requests during the match. Changing it does not erase an
+already active effect; normal script cleanup and finite emitter lifetimes still
+apply. A replacement resource must also respond to the original's stop/detach
+commands, including after Reduced is switched back to On.
+
+Follow the [performance method](FX_PERFORMANCE_METHOD.md): reproduce the dip,
+compare matched On/Off/Reduced trials under both LessLag and LLUltra, and then
+verify on Switch. Selective layers, fewer particles or shorter lifetimes can
+preserve recognizable feedback. Smaller scale alone may reduce overdraw while
+leaving CPU/update costs unchanged. See [validation](VALIDATION.md) for exact
+builds and observations; implementation and visual checks are not a demonstrated
+performance improvement.
+
+Move-level runtime checks and known unchanged paths are tracked in the
+[FX runtime matrix](FX_RUNTIME_MATRIX.md).

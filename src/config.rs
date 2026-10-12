@@ -20,20 +20,17 @@ impl FxMode {
         }
     }
 
-    /// Fail safely to normal visuals if an unsupported value reaches runtime.
+    /// Stored mode. Unknown raw bytes still become On in the runtime loader.
     pub const fn effective(self) -> Self {
-        match self {
-            Self::Reduced => Self::On,
-            supported => supported,
-        }
+        self
     }
 
     pub const fn available(self) -> bool {
-        !matches!(self, Self::Reduced)
+        true
     }
 }
 
-/// Restricts both Off and future Reduced policies; it never overrides FX On.
+/// Restricts Off and Reduced. It never overrides FX On.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 #[repr(u8)]
 pub enum FxScope {
@@ -157,6 +154,9 @@ pub struct Config {
     pub stealth: bool,
     /// Display privacy. Default and a missing key are off. It does not change packets.
     pub streamer: bool,
+    /// Emulator-only native-window swap interval. Default and a missing key are
+    /// off. Console never applies it. This is not a hardware clock.
+    pub fps_boost: bool,
 }
 
 impl Default for Config {
@@ -171,13 +171,14 @@ impl Default for Config {
             peer_observer: false,
             stealth: true,
             streamer: false,
+            fps_boost: false,
         }
     }
 }
 
 pub fn parse(text: &str) -> Result<Config, String> {
     let mut config = Config::default();
-    let mut seen = [false; 10];
+    let mut seen = [false; 11];
     for (index, raw) in text.lines().enumerate() {
         let line = raw.split('#').next().unwrap_or_default().trim();
         if line.is_empty() {
@@ -200,6 +201,7 @@ pub fn parse(text: &str) -> Result<Config, String> {
             "peer_observer" => 7,
             "stealth" => 8,
             "streamer" => 9,
+            "fps_boost" => 10,
             _ => return Err(error(&format!("unknown key '{key}'"))),
         };
         if seen[slot] {
@@ -213,10 +215,8 @@ pub fn parse(text: &str) -> Result<Config, String> {
                 config.effects = match value {
                     "on" => FxMode::On,
                     "off" => FxMode::Off,
-                    "reduced" => {
-                        return Err(error("Reduced FX is unavailable; choose on or off"));
-                    }
-                    _ => return Err(error("effects must be on or off (Reduced is unavailable)")),
+                    "reduced" => FxMode::Reduced,
+                    _ => return Err(error("effects must be on, off, or reduced")),
                 };
             }
             "effects_scope" => {
@@ -276,6 +276,13 @@ pub fn parse(text: &str) -> Result<Config, String> {
                     _ => return Err(error("streamer must be true or false")),
                 };
             }
+            "fps_boost" => {
+                config.fps_boost = match value {
+                    "true" => true,
+                    "false" => false,
+                    _ => return Err(error("fps_boost must be true or false")),
+                };
+            }
             "input_buffer" => {
                 config.input_buffer = if value == "auto" {
                     -1
@@ -324,12 +331,17 @@ pub fn serialize(config: &Config) -> String {
     } else {
         config.input_buffer.to_string()
     };
-    let peer_observer = if config.peer_observer { "true" } else { "false" };
+    let peer_observer = if config.peer_observer {
+        "true"
+    } else {
+        "false"
+    };
     let stealth = if config.stealth { "true" } else { "false" };
     let streamer = if config.streamer { "true" } else { "false" };
+    let fps_boost = if config.fps_boost { "true" } else { "false" };
     let auto_profile = if config.auto_profile { "true" } else { "false" };
     format!(
-        "# Online Deluxe settings\nversion=1\neffects={effects}\neffects_scope={effects_scope}\ninput_buffer={input_buffer}\nrender_mode={}\nauto_profile={auto_profile}\nplatform={}\npeer_observer={peer_observer}\nstealth={stealth}\nstreamer={streamer}\n",
+        "# Online Deluxe settings\nversion=1\neffects={effects}\neffects_scope={effects_scope}\ninput_buffer={input_buffer}\nrender_mode={}\nauto_profile={auto_profile}\nplatform={}\npeer_observer={peer_observer}\nstealth={stealth}\nstreamer={streamer}\nfps_boost={fps_boost}\n",
         config.render_mode.key(),
         config.platform.key(),
     )
@@ -369,7 +381,7 @@ mod tests {
 
     #[test]
     fn saved_settings_round_trip_at_every_buffer_boundary() {
-        for effects in [FxMode::On, FxMode::Off] {
+        for effects in [FxMode::On, FxMode::Off, FxMode::Reduced] {
             for input_buffer in [-1, 0, 25] {
                 let config = Config {
                     effects,
@@ -381,6 +393,7 @@ mod tests {
                     peer_observer: false,
                     stealth: false,
                     streamer: false,
+                    fps_boost: false,
                 };
                 assert_eq!(parse(&config.serialize()).unwrap(), config);
             }
@@ -437,12 +450,15 @@ mod tests {
     }
 
     #[test]
-    fn reduced_is_rejected_and_defensive_runtime_fallback_is_on() {
-        assert!(parse("version=1\neffects=reduced")
-            .unwrap_err()
-            .contains("unavailable"));
-        assert!(!FxMode::Reduced.available());
-        assert_eq!(FxMode::Reduced.effective(), FxMode::On);
+    fn reduced_round_trips_and_is_not_on_or_off() {
+        let config = parse("version=1\neffects=reduced\neffects_scope=all").unwrap();
+        assert_eq!(config.effects, FxMode::Reduced);
+        assert_eq!(config.effects_scope, FxScope::All);
+        assert_eq!(parse(&config.serialize()).unwrap().effects, FxMode::Reduced);
+        assert!(FxMode::Reduced.available());
+        assert_eq!(FxMode::Reduced.effective(), FxMode::Reduced);
+        assert_ne!(FxMode::Reduced.effective(), FxMode::Off);
+        assert!(parse("version=1\neffects=Reduced").is_err());
     }
     #[test]
     fn scope_defaults_migrates_and_round_trips() {
@@ -462,8 +478,16 @@ mod tests {
             assert!(parse(text).is_err());
         }
         assert!(!parse("version=1").unwrap().peer_observer);
-        assert!(parse("version=1\npeer_observer=true").unwrap().peer_observer);
-        assert!(!parse("version=1\npeer_observer=false").unwrap().peer_observer);
+        assert!(
+            parse("version=1\npeer_observer=true")
+                .unwrap()
+                .peer_observer
+        );
+        assert!(
+            !parse("version=1\npeer_observer=false")
+                .unwrap()
+                .peer_observer
+        );
         let enabled = Config {
             peer_observer: true,
             ..Config::default()
@@ -513,10 +537,7 @@ mod tests {
         ] {
             assert!(parse(text).is_err(), "accepted {text:?}");
         }
-        let dir = std::env::temp_dir().join(format!(
-            "deluxe-profile-menu-{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("deluxe-profile-menu-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("config.ini");
         let original = Config::default();
@@ -551,7 +572,8 @@ mod tests {
         assert!(untouched.auto_profile);
         assert_eq!(untouched.render_mode, RenderMode::Vanilla);
         assert_eq!(untouched.platform, Platform::Console);
-        let opted_in = parse("version=1\nrender_mode=lesslag\nauto_profile=true\nplatform=emulator").unwrap();
+        let opted_in =
+            parse("version=1\nrender_mode=lesslag\nauto_profile=true\nplatform=emulator").unwrap();
         assert!(opted_in.auto_profile);
         assert_eq!(opted_in.render_mode, RenderMode::LessLag);
         assert_eq!(opted_in.platform, Platform::Emulator);
@@ -565,5 +587,32 @@ mod tests {
         assert!(doubles.serialize().contains("render_mode=lldoubles"));
         assert!(doubles.serialize().contains("auto_profile=true"));
         assert!(doubles.serialize().contains("platform=emulator"));
+    }
+
+    #[test]
+    fn fps_boost_defaults_off_and_round_trips_only_as_a_bool() {
+        assert!(!Config::default().fps_boost);
+        assert!(!parse("version=1").unwrap().fps_boost);
+        let enabled = Config {
+            fps_boost: true,
+            platform: Platform::Emulator,
+            ..Config::default()
+        };
+        assert_eq!(parse(&enabled.serialize()).unwrap(), enabled);
+        assert!(enabled.serialize().contains("fps_boost=true"));
+        let disabled = Config {
+            fps_boost: false,
+            ..enabled
+        };
+        assert!(!parse(&disabled.serialize()).unwrap().fps_boost);
+        for text in [
+            "version=1\nfps_boost=yes",
+            "version=1\nfps_boost=TRUE",
+            "version=1\nfps_boost=1",
+            "version=1\nfps_boost=",
+            "version=1\nfps_boost=true\nfps_boost=false",
+        ] {
+            assert!(parse(text).is_err(), "accepted {text:?}");
+        }
     }
 }

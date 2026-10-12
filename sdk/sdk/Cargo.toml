@@ -1,0 +1,18 @@
+[package]
+name = "deluxe-plugin-sdk"
+version = "1.0.0"
+edition = "2021"
+publish = false
+description = "Rust consumer SDK for the Online Deluxe plugin registration ABI"
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+deluxe-plugin-abi = { path = "../abi" }
+
+[target.'cfg(target_os = "switch")'.dependencies]
+skyline = "=0.6.0"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("switch"))'] }

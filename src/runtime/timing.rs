@@ -1,9 +1,13 @@
 //! Opt-in, finite callback traces. These are not display/present timestamps.
 //! Only the existing diagnostic thread touches files or allocates an export.
 use super::{effects_off, record, settings, Code, DATA_DIR};
+use crate::capture_export::{
+    controller_request_busy, create_export_file, export_ready_csvs, status_label, write_buffered,
+    PHASE_CAPTURING, PHASE_EXPORT_ERROR, PHASE_IDLE,
+};
 use crate::timing::{Capture, Sample};
 use std::{
-    fs::{self, File, OpenOptions},
+    fs::{self, File},
     io::{self, Read, Write},
     path::Path,
     sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering},
@@ -13,7 +17,7 @@ use std::{
 static CAPTURE: Capture = Capture::new();
 static REQUESTED: AtomicBool = AtomicBool::new(false);
 static CALLBACK: AtomicU64 = AtomicU64::new(0);
-static STATUS: AtomicU8 = AtomicU8::new(0);
+static STATUS: AtomicU8 = AtomicU8::new(PHASE_IDLE);
 static VIEW: AtomicU8 = AtomicU8::new(0);
 
 pub(super) fn set_view(view: u8) {
@@ -21,24 +25,19 @@ pub(super) fn set_view(view: u8) {
 }
 
 pub(super) fn request() {
-    // A running/exporting capture is never interrupted by a repeated shortcut.
-    if STATUS.load(Ordering::Acquire) != 1 {
+    // Recording and CSV export both ignore a repeated controller shortcut.
+    if !controller_request_busy(STATUS.load(Ordering::Acquire)) {
         REQUESTED.store(true, Ordering::Release);
     }
 }
 
 pub(super) fn status() -> &'static str {
-    match STATUS.load(Ordering::Relaxed) {
-        1 => "Capturing (10 s)",
-        2 => "CSV saved",
-        3 => "Export error",
-        _ => "Idle",
-    }
+    status_label(STATUS.load(Ordering::Acquire))
 }
 
 pub(super) fn observe(buttons: u64) {
     let callback = CALLBACK.fetch_add(1, Ordering::Relaxed) + 1;
-    if STATUS.load(Ordering::Acquire) != 1 {
+    if STATUS.load(Ordering::Acquire) != PHASE_CAPTURING {
         return;
     }
     let config = settings();
@@ -83,6 +82,22 @@ fn read_request() -> io::Result<Option<String>> {
     Ok(Some(label.into()))
 }
 
+fn effective_engine() -> &'static str {
+    let decision = crate::render_policy::load_decision();
+    if !decision.live {
+        return super::renderer::mode().label();
+    }
+    if decision.swapping {
+        return "Transition";
+    }
+    match decision.effective {
+        crate::render_policy::Profile::Vanilla => "Vanilla",
+        crate::render_policy::Profile::LessLag => "LessLag",
+        crate::render_policy::Profile::Ultra => "LLUltra",
+        crate::render_policy::Profile::Doubles => "LLDoubles",
+    }
+}
+
 impl Service {
     /// Called only by the existing background sink, once every 500 ms.
     pub(super) fn poll(&mut self) {
@@ -98,53 +113,40 @@ impl Service {
                 self.api_ready = super::api_trace::TRACE.take_ready();
             }
             if let (Some(snapshot), Some(api)) = (&self.callback_ready, &self.api_ready) {
-                let engine = if *engine == super::renderer::mode().label() {
+                let engine = if *engine == effective_engine() {
                     *engine
                 } else {
                     "Mixed"
                 };
                 let path = Path::new(DATA_DIR).join(format!("timing-{}.csv", snapshot.id));
-                let result = (|| -> io::Result<()> {
-                    let mut file = OpenOptions::new()
-                        .write(true)
-                        // skyline-v3 checks `create_new` for existing paths,
-                        // but creates missing paths only when `create` is set.
-                        // Truncate stays off: an existing CSV is an error, not
-                        // an overwrite. A newly created file is already empty.
-                        .truncate(false)
-                        .create(true)
-                        .create_new(true)
-                        .open(&path)?;
-                    crate::timing::write_csv(
-                        &mut file,
-                        snapshot,
-                        crate::build_info::BUILD_ID,
-                        label,
-                        engine,
-                    )?;
-                    file.sync_all()?;
-                    let api_path = Path::new(DATA_DIR).join(format!("api-{}.csv", api.id));
-                    let mut api_file = OpenOptions::new()
-                        .write(true)
-                        .truncate(false)
-                        .create(true)
-                        .create_new(true)
-                        .open(api_path)?;
-                    crate::render_trace::write_csv(
-                        &mut api_file,
-                        api,
-                        crate::build_info::BUILD_ID,
-                        label,
-                        engine,
-                    )?;
-                    api_file.sync_all()?;
-                    write_status(&format!("saved {}", path.display()))
-                })();
-                STATUS.store(if result.is_ok() { 2 } else { 3 }, Ordering::Release);
+                let api_path = Path::new(DATA_DIR).join(format!("api-{}.csv", api.id));
+                let exporting = format!(
+                    "exporting {} {}; metric=render_callback",
+                    snapshot.id, label
+                );
+                let saved = format!("saved {}", path.display());
+                let build = crate::build_info::BUILD_ID;
+                let result = export_ready_csvs(
+                    &STATUS,
+                    &exporting,
+                    &saved,
+                    write_status,
+                    || -> io::Result<()> {
+                        let file = create_export_file(&path)?;
+                        let file = write_buffered(file, |out| {
+                            crate::timing::write_csv(out, snapshot, build, label, engine)
+                        })?;
+                        file.sync_all()
+                    },
+                    || -> io::Result<()> {
+                        let file = create_export_file(&api_path)?;
+                        let file = write_buffered(file, |out| {
+                            crate::render_trace::write_csv(out, api, build, label, engine)
+                        })?;
+                        file.sync_all()
+                    },
+                );
                 record(Code::TimingFinished, snapshot.id, u64::from(result.is_ok()));
-                if let Err(error) = result {
-                    let _ = write_status(&format!("timing export failed: {error}"));
-                }
                 self.current = None;
                 self.callback_ready = None;
                 self.api_ready = None;
@@ -160,7 +162,7 @@ impl Service {
                     value
                 }
                 Err(error) => {
-                    STATUS.store(3, Ordering::Release);
+                    STATUS.store(PHASE_EXPORT_ERROR, Ordering::Release);
                     if !self.request_error_reported {
                         let _ = write_status(&format!("timing request failed: {error}"));
                         self.request_error_reported = true;
@@ -174,15 +176,20 @@ impl Service {
             // Complete control-file I/O before starting the measured interval.
             let _ = write_status(&format!("capturing {id} {label}; metric=render_callback"));
             if CAPTURE.begin(id) && super::api_trace::TRACE.begin(id) {
-                self.current = Some((label, Instant::now(), super::renderer::mode().label()));
+                self.current = Some((label, Instant::now(), effective_engine()));
                 record(Code::TimingStarted, id, 0);
-                STATUS.store(1, Ordering::Release);
+                record(
+                    Code::MenuOrder,
+                    id,
+                    u64::from(super::overlay_host::embedded()),
+                );
+                STATUS.store(PHASE_CAPTURING, Ordering::Release);
             } else {
                 CAPTURE.finish();
                 super::api_trace::TRACE.finish();
                 let _ = CAPTURE.take_ready();
                 let _ = super::api_trace::TRACE.take_ready();
-                STATUS.store(3, Ordering::Release);
+                STATUS.store(PHASE_EXPORT_ERROR, Ordering::Release);
                 let _ = write_status("timing capture could not be armed");
             }
         }

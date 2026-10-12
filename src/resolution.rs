@@ -372,7 +372,11 @@ pub struct Transition {
     pub b: u32,
 }
 
-const NO_TRANSITION: Transition = Transition { kind: 0, a: 0, b: 0 };
+const NO_TRANSITION: Transition = Transition {
+    kind: 0,
+    a: 0,
+    b: 0,
+};
 
 #[derive(Clone, Copy)]
 struct Slot {
@@ -531,7 +535,11 @@ impl Policy {
         if self.effective() != before {
             self.dirty = true;
         }
-        self.note(TRANSITION_PUSH, level as u32, u32::from(self.live_reports()));
+        self.note(
+            TRANSITION_PUSH,
+            level as u32,
+            u32::from(self.live_reports()),
+        );
         PushResult::Stored(ReportToken {
             index: index as u8,
             generation,
@@ -550,7 +558,11 @@ impl Policy {
         if self.effective() != before {
             self.dirty = true;
         }
-        self.note(TRANSITION_POP, slot.level as u32, u32::from(self.live_reports()));
+        self.note(
+            TRANSITION_POP,
+            slot.level as u32,
+            u32::from(self.live_reports()),
+        );
         true
     }
 

@@ -1,10 +1,16 @@
 //! Narrow C ABI surface transcribed from skyline-smash bed642e/src/cpp.rs.
-//! Opaque pointers are forwarded untouched. Eight native function hooks chain
-//! through original!(), including Training Modpack's shared EffectModule hooks.
+//! Opaque pointers are forwarded untouched. Eight request hooks chain through
+//! original!(), including Training Modpack's shared EffectModule hooks.
+//! `kill_kind` and `detach_kind` return `u64`. Each calls the clone first, then
+//! the original hash, and returns only that original call. ACMD
+//! `EFFECT_OFF_KIND` and `EFFECT_DETACH_KIND` are void. They call the same
+//! lua_bind entry for the clone, then the original command, and do not rewrite
+//! the Lua stack. A thread-local key of accessor, original hash, and
+//! kill-or-detach skips only that duplicate clone call. FX mode is ignored.
 #![allow(clippy::too_many_arguments)] // Fixed native C++ ABI.
-use super::{effects_off, record, Code};
-use crate::{config::FxMode, effects};
-use std::sync::atomic::{AtomicU64, Ordering};
+use super::{record, Code};
+use crate::effects;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 #[repr(C)]
 struct OpaqueAccessor {
@@ -22,26 +28,99 @@ struct Vector3f {
     z: f32,
 }
 
-static SUPPRESSED: AtomicU64 = AtomicU64::new(0);
-fn note(hash: u64) {
-    let count = SUPPRESSED.fetch_add(1, Ordering::Relaxed) + 1;
-    if count == 1 || count.is_multiple_of(128) {
-        record(Code::FxSuppressed, hash, count);
+static CRITICAL_MARKER: AtomicBool = AtomicBool::new(false);
+static CRITICAL_SEEN: AtomicU64 = AtomicU64::new(0);
+
+/// Observe an allowlisted Special Zoom background before any On return.
+/// The marker file is not read here. Suppression does not touch screen counters.
+fn note_critical(hash: u64, path: u64, mode: crate::config::FxMode, scope: bool) -> bool {
+    if !crate::critical_probe::is_listed(hash) {
+        return false;
     }
+    let suppress =
+        crate::critical_probe::suppress(CRITICAL_MARKER.load(Ordering::Acquire), mode, scope, hash);
+    let ordinal = CRITICAL_SEEN.fetch_add(1, Ordering::Relaxed) + 1;
+    if crate::critical_probe::should_log(ordinal, super::api_trace::start() != 0) {
+        record(
+            Code::FxCriticalRequest,
+            hash,
+            crate::critical_probe::detail(path, suppress),
+        );
+    }
+    suppress
 }
 
-// Resolve actor context only for scoped names, before forwarding the original
-// request. On takes the existing fast path without any actor reads.
-unsafe fn rewrite(accessor: *mut OpaqueAccessor, hash: u64) -> u64 {
-    let global = effects::rewrite(FxMode::Off, hash);
-    if global != hash || !effects::needs_context(hash) {
-        return global;
+fn latch_critical_probe() {
+    let present = std::path::Path::new(super::DATA_DIR)
+        .join(crate::critical_probe::MARKER_FILE)
+        .exists();
+    CRITICAL_MARKER.store(present, Ordering::Release);
+    record(Code::CriticalProbe, u64::from(present), 0);
+}
+
+fn log_intent(intent: crate::effects_reduced::FxIntent, hash: u64, total: u64) {
+    use crate::effects_reduced::FxIntent;
+    // Existing finite CAPTURE_TIMING sessions also capture each FX decision.
+    // Ordinary play retains sampled logging; the callback never writes files.
+    if total == 0 || !(total == 1 || total.is_multiple_of(128) || super::api_trace::start() != 0) {
+        return;
     }
-    effects::rewrite_with_context(
-        FxMode::Off,
-        hash,
-        super::effect_context::from_accessor(accessor.cast()),
-    )
+    let code = match intent {
+        FxIntent::Suppress => Code::FxSuppressed,
+        FxIntent::ReducedCull => Code::FxReducedCull,
+        FxIntent::ReducedKeep => Code::FxReducedKeep,
+        FxIntent::ReducedRestore => Code::FxReducedRestore,
+        FxIntent::ReducedPreserve => Code::FxReducedPreserve,
+        FxIntent::Passthrough => return,
+    };
+    record(code, hash, total);
+}
+
+unsafe fn policy_hash(accessor: *mut OpaqueAccessor, hash: u64) -> u64 {
+    use crate::config::FxMode;
+    let mode = super::fx_mode();
+    let scope = super::fx_scope_allows();
+    if note_critical(hash, crate::critical_probe::PATH_ORDINARY, mode, scope) {
+        return effects::NULL_EFFECT;
+    }
+    if mode == FxMode::On || (mode == FxMode::Off && !scope) {
+        return hash;
+    }
+    let context = if (mode == FxMode::Reduced
+        && (crate::effects_reduced::reduced_named(hash) || crate::eff_variant::wants_context(hash)))
+        || (mode == FxMode::Off
+            && effects::rewrite(FxMode::Off, hash) == hash
+            && effects::needs_context(hash))
+    {
+        super::effect_context::from_accessor(accessor.cast())
+    } else {
+        None
+    };
+    let intent = crate::effects_reduced::classify(mode, scope, hash, context);
+    let total = crate::effects_reduced::observe(intent, false);
+    log_intent(intent, hash, total);
+    let requested = crate::effects_reduced::request_hash(intent, hash);
+    let mapped = crate::eff_variant::forward(mode, scope, requested, context);
+    if mapped != requested {
+        let swaps = crate::eff_variant::observe_swap(hash);
+        if swaps == 1 || swaps.is_multiple_of(128) || super::api_trace::start() != 0 {
+            record(
+                Code::FxVariantUse,
+                crate::eff_variant::source_file(hash),
+                hash,
+            );
+        }
+    }
+    mapped
+}
+
+fn skip_screen(hash: u64) -> bool {
+    let mode = super::fx_mode();
+    let scope = super::fx_scope_allows();
+    let intent = crate::effects_reduced::classify_screen(mode, scope, hash);
+    let total = crate::effects_reduced::observe(intent, true);
+    log_intent(intent, hash, total);
+    crate::effects_reduced::skips_screen(intent)
 }
 
 mod abi {
@@ -130,7 +209,63 @@ mod abi {
             arg3: bool,
             arg4: bool,
         ) -> u64;
+        #[link_name = "\u{1}_ZN3app8lua_bind28EffectModule__kill_kind_implEPNS_26BattleObjectModuleAccessorEN3phx6Hash40Ebb"]
+        pub(super) fn kill_kind(
+            module_accessor: *mut OpaqueAccessor,
+            effect: Hash40,
+            arg3: bool,
+            arg4: bool,
+        ) -> u64;
+        #[link_name = "\u{1}_ZN3app8lua_bind30EffectModule__detach_kind_implEPNS_26BattleObjectModuleAccessorEN3phx6Hash40Ei"]
+        pub(super) fn detach_kind(
+            module_accessor: *mut OpaqueAccessor,
+            effect: Hash40,
+            arg3: i32,
+        ) -> u64;
     }
+}
+
+pub(super) fn log_variant_cleanup(original: u64, alias: u64) {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNT: AtomicU64 = AtomicU64::new(0);
+    let count = COUNT.fetch_add(1, Ordering::Relaxed) + 1;
+    if count == 1 || count.is_multiple_of(128) {
+        record(Code::FxVariantCleanup, original, alias);
+    }
+}
+
+pub(super) fn log_cleanup_route(layer: u64, nested: bool) {
+    use std::sync::atomic::AtomicU64;
+    static COUNTS: [AtomicU64; crate::eff_cleanup::ROUTE_SLOTS] = [
+        AtomicU64::new(0),
+        AtomicU64::new(0),
+        AtomicU64::new(0),
+        AtomicU64::new(0),
+        AtomicU64::new(0),
+        AtomicU64::new(0),
+        AtomicU64::new(0),
+        AtomicU64::new(0),
+    ];
+    if crate::eff_cleanup::take_route_sample(&COUNTS, layer, nested) {
+        record(Code::FxCleanupRoute, layer, u64::from(nested));
+    }
+}
+
+pub(super) unsafe fn invoke_kill_kind(
+    accessor: *mut std::ffi::c_void,
+    hash: u64,
+    arg3: bool,
+    arg4: bool,
+) -> u64 {
+    abi::kill_kind(accessor.cast(), Hash40 { hash }, arg3, arg4)
+}
+
+pub(super) unsafe fn invoke_detach_kind(
+    accessor: *mut std::ffi::c_void,
+    hash: u64,
+    arg3: i32,
+) -> u64 {
+    abi::detach_kind(accessor.cast(), Hash40 { hash }, arg3)
 }
 
 #[skyline::hook(replace = abi::req)]
@@ -145,14 +280,8 @@ unsafe fn deluxe_rewrite_filter_req(
     arg8: bool,
     arg9: i32,
 ) -> u64 {
-    let effect = if effects_off() {
-        let hash = rewrite(module_accessor, effect.hash);
-        if hash != effect.hash {
-            note(effect.hash);
-        }
-        Hash40 { hash }
-    } else {
-        effect
+    let effect = Hash40 {
+        hash: policy_hash(module_accessor, effect.hash),
     };
     call_original!(
         module_accessor,
@@ -176,14 +305,8 @@ unsafe fn deluxe_rewrite_filter_req_2d(
     size: f32,
     arg6: u32,
 ) -> u64 {
-    let effect = if effects_off() {
-        let hash = rewrite(module_accessor, effect.hash);
-        if hash != effect.hash {
-            note(effect.hash);
-        }
-        Hash40 { hash }
-    } else {
-        effect
+    let effect = Hash40 {
+        hash: policy_hash(module_accessor, effect.hash),
     };
     call_original!(module_accessor, effect, pos, rot, size, arg6)
 }
@@ -203,14 +326,8 @@ unsafe fn deluxe_rewrite_filter_req_on_joint(
     arg11: i32,
     arg12: i32,
 ) -> u64 {
-    let effect = if effects_off() {
-        let hash = rewrite(module_accessor, effect.hash);
-        if hash != effect.hash {
-            note(effect.hash);
-        }
-        Hash40 { hash }
-    } else {
-        effect
+    let effect = Hash40 {
+        hash: policy_hash(module_accessor, effect.hash),
     };
     call_original!(
         module_accessor,
@@ -245,14 +362,8 @@ unsafe fn deluxe_rewrite_filter_req_follow(
     arg13: bool,
     arg14: bool,
 ) -> u64 {
-    let effect = if effects_off() {
-        let hash = rewrite(module_accessor, effect.hash);
-        if hash != effect.hash {
-            note(effect.hash);
-        }
-        Hash40 { hash }
-    } else {
-        effect
+    let effect = Hash40 {
+        hash: policy_hash(module_accessor, effect.hash),
     };
     call_original!(
         module_accessor,
@@ -281,28 +392,20 @@ unsafe fn deluxe_rewrite_filter_req_continual(
     arg5: u32,
     arg6: i32,
 ) -> u64 {
-    let effect = if effects_off() {
-        let hash = rewrite(module_accessor, effect.hash);
-        if hash != effect.hash {
-            note(effect.hash);
-        }
-        Hash40 { hash }
-    } else {
-        effect
+    let effect = Hash40 {
+        hash: policy_hash(module_accessor, effect.hash),
     };
     call_original!(module_accessor, effect, arg3, size, arg5, arg6)
 }
 
 #[skyline::hook(replace = abi::req_common)]
-unsafe fn deluxe_rewrite_filter_req_common(module_accessor: *mut OpaqueAccessor, arg2: Hash40, arg3: f32) -> u64 {
-    let arg2 = if effects_off() {
-        let hash = rewrite(module_accessor, arg2.hash);
-        if hash != arg2.hash {
-            note(arg2.hash);
-        }
-        Hash40 { hash }
-    } else {
-        arg2
+unsafe fn deluxe_rewrite_filter_req_common(
+    module_accessor: *mut OpaqueAccessor,
+    arg2: Hash40,
+    arg3: f32,
+) -> u64 {
+    let arg2 = Hash40 {
+        hash: policy_hash(module_accessor, arg2.hash),
     };
     call_original!(module_accessor, arg2, arg3)
 }
@@ -315,8 +418,12 @@ unsafe fn deluxe_rewrite_filter_req_screen(
     arg4: bool,
     arg5: bool,
 ) -> u64 {
-    if effects_off() && effects::suppress_screen(FxMode::Off, arg2.hash) {
-        note(arg2.hash);
+    let mode = super::fx_mode();
+    let scope = super::fx_scope_allows();
+    if note_critical(arg2.hash, crate::critical_probe::PATH_SCREEN, mode, scope) {
+        return 0;
+    }
+    if skip_screen(arg2.hash) {
         return 0;
     }
     call_original!(module_accessor, arg2, arg3, arg4, arg5)
@@ -329,14 +436,79 @@ unsafe fn deluxe_rewrite_filter_req_screen_system(
     arg3: bool,
     arg4: bool,
 ) -> u64 {
-    if effects_off() && effects::suppress_screen(FxMode::Off, arg2.hash) {
-        note(arg2.hash);
+    let mode = super::fx_mode();
+    let scope = super::fx_scope_allows();
+    if note_critical(arg2.hash, crate::critical_probe::PATH_SYSTEM, mode, scope) {
+        return 0;
+    }
+    if skip_screen(arg2.hash) {
         return 0;
     }
     call_original!(module_accessor, arg2, arg3, arg4)
 }
 
+#[skyline::hook(replace = abi::kill_kind)]
+unsafe fn deluxe_cleanup_kill_kind(
+    module_accessor: *mut OpaqueAccessor,
+    effect: Hash40,
+    arg3: bool,
+    arg4: bool,
+) -> u64 {
+    let accessor = module_accessor as usize;
+    if let Some(alias) = crate::eff_variant::cleanup_alias(effect.hash) {
+        if crate::eff_cleanup::delivered_matches(
+            accessor,
+            effect.hash,
+            crate::eff_cleanup::CLEANUP_KILL,
+        ) {
+            log_cleanup_route(1, true);
+        } else if let Some(_guard) = crate::eff_cleanup::begin_alias(
+            accessor,
+            effect.hash,
+            crate::eff_cleanup::CLEANUP_KILL,
+            Some(alias),
+        ) {
+            let _ignored = call_original!(module_accessor, Hash40 { hash: alias }, arg3, arg4);
+            log_variant_cleanup(effect.hash, alias);
+            log_cleanup_route(1, false);
+            return call_original!(module_accessor, effect, arg3, arg4);
+        }
+    }
+    call_original!(module_accessor, effect, arg3, arg4)
+}
+
+#[skyline::hook(replace = abi::detach_kind)]
+unsafe fn deluxe_cleanup_detach_kind(
+    module_accessor: *mut OpaqueAccessor,
+    effect: Hash40,
+    arg3: i32,
+) -> u64 {
+    let accessor = module_accessor as usize;
+    if let Some(alias) = crate::eff_variant::cleanup_alias(effect.hash) {
+        if crate::eff_cleanup::delivered_matches(
+            accessor,
+            effect.hash,
+            crate::eff_cleanup::CLEANUP_DETACH,
+        ) {
+            log_cleanup_route(2, true);
+        } else if let Some(_guard) = crate::eff_cleanup::begin_alias(
+            accessor,
+            effect.hash,
+            crate::eff_cleanup::CLEANUP_DETACH,
+            Some(alias),
+        ) {
+            let _ignored = call_original!(module_accessor, Hash40 { hash: alias }, arg3);
+            log_variant_cleanup(effect.hash, alias);
+            log_cleanup_route(2, false);
+            return call_original!(module_accessor, effect, arg3);
+        }
+    }
+    call_original!(module_accessor, effect, arg3)
+}
+
 pub(super) fn install() {
+    latch_critical_probe();
+    super::variant::install();
     super::online::install();
     super::acmd::install();
     macro_rules! install {
@@ -354,7 +526,13 @@ pub(super) fn install() {
     install!(260, abi::req_continual, deluxe_rewrite_filter_req_continual);
     install!(261, abi::req_common, deluxe_rewrite_filter_req_common);
     install!(262, abi::req_screen, deluxe_rewrite_filter_req_screen);
-    install!(263, abi::req_screen_system, deluxe_rewrite_filter_req_screen_system);
+    install!(
+        263,
+        abi::req_screen_system,
+        deluxe_rewrite_filter_req_screen_system
+    );
+    install!(264, abi::kill_kind, deluxe_cleanup_kill_kind);
+    install!(265, abi::detach_kind, deluxe_cleanup_detach_kind);
 }
 
 fn log_entry(id: u64, address: *const ()) -> bool {

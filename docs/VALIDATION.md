@@ -1,5 +1,110 @@
 # Validation record
 
+## Approved content-fit HUD installed on Switch, 2026-10-10
+
+- Operator approved the8328 screenshots, requested FTP installation, then freshly
+  confirmed Smash closed. Foreground DBI FTP192.168.0.226:5000 worked.
+- Fresh4c19 NRO, latest INI, all other plugin bytes and protected HOC/boot files
+  backed up. Exact approved8328 staged under a non-NRO name and fully read back;
+  old NRO moved outside the plugin loader, then staged candidate activated.
+- Final installed readback SHA256
+  `8328cc88123bd4320c550a95b5b3cc7c699110ab65c158b9f862975ec2f29534`
+  verified14:09:35.905632Z. Remote old-NRO backup readback matches4c19. INI SHA
+  `0617a94705ea8d2da3fff782161b5339f6a3880948a807894a01692bccd9c2d3`, all eight
+  other plugins, five HOC/boot files and nine plugin filenames unchanged. FTP closed.
+- Evidence: `~/.local/share/ssbu-mod-backups/hud-content-fit-20261010/switch-ftp/`,
+  deployment.json installed_verified, before/ snapshot and readback/ binaries.
+  Rollback on SD: `/ultimate/ssbu_online_deluxe_rewrite/backups/pre-hud-fit-8328cc88123bd432.nro`.
+- No new hardware gameplay result yet. User will test the content-fit two-row HUD,
+  menu coexistence/returns, export completion and actual peer departure/reconnect.
+  The original pre-preview manifest is immutable; device-validation.json records
+  deployment separately. No general launch-crash fix or performance gain claimed.
+
+## Content-fit HUD candidate, 2026-10-10 — images reviewed
+
+- Candidate `8328cc88123bd432`, build `0.1.0-2db70f90aaae-dirty-1791637336`,
+  NRO SHA256 `8328cc88123bd4320c550a95b5b3cc7c699110ab65c158b9f862975ec2f29534`.
+- User feedback accepted f1ce's two-row look and requested that its background
+  stop at the content. The only behavior change is compact ImGui width0; previous
+  positioning/adaptive-font bound, two rows, bar, alpha and other views remain.
+  menu.rs changes are comments. No new native dependency or Cargo.lock change.
+- 265hosttests, warnings-denied host/SkylineClippy, no-default and optimized target
+  builds pass. Six fit-1010-* gate receipts are in slim-hud-preview-20261009/.
+  All76archived sources match checkout; exact f1ce diff, NRO/ELF text and debug
+  sections independently verified in the immutable8328 bundle.
+- Parent opened original Settings `hud-content-fit-1010a-settings-inmatch-settled.png`
+  (6:42.95) and Performance `hud-content-fit-1010a-performance-inmatch.png` (6:54.26).
+  Actual offline Isabelle/Toon Link match,1920x1160 full-window captures/1080p output.
+  Both have exactly two inline rows and the same left edge. Backgrounds end after
+  Stream:Off / Out:1920x1080 respectively; no near-full-width empty rectangle.
+- Earlier settings-final.png is Results and excluded. settings-inmatch.png has
+  correct layout but still includes an emulator-pause interval in its180-sample
+  timing history; after8s resumed play the settled capture replaces it. Other
+  navigation/retry captures remain preserved and excluded from the final pair.
+- Exact candidate/config/startup/module and screenshot SHA values verified.
+  Config is console layout with FX Off/all, not a default-FX or performance test.
+  The6GiB cap was reached with zero observed OOM kills. No connected-peer/720p or
+  Switch-compatibility conclusion; operator visual feedback remains pending.
+- Owned unit eden-control-58c1ff0dc02b.service exited normally0 after native
+  game.stop/confirmation/ui.close; independently inactive/dead/MainPID0. Runtime,
+  worker and finite gate/capture jobs closed; GPU lock available. Original NRO/INI/
+  Qt files restored and independently rehashed against the fresh journal backups.
+- Evidence: `~/.local/share/ssbu-mod-backups/hud-content-fit-20261010/`, including
+  result.json, parent-review.json, profile-journal.json and run-evidence/.
+  Scoped artifact runtime-validation.json supplements the immutable pre-preview
+  manifest. Final parent-closeout.json records watcher cleanup. No Switch deployment.
+
+## Slim-HUD screenshot candidate, 2026-10-09/10 — images reviewed
+
+- Candidate `f1ce158107e826bf`, build `0.1.0-2db70f90aaae-dirty-1791588649`.
+  NRO2428928bytes, SHA256
+  `f1ce158107e826bf6ccff44f2e97abf94f145968e78224ca8521f7ee326840bb`.
+- 265 host tests pass; host Clippy with warnings denied and no-default build pass.
+  Parent repeated the host gates after review. TargetClippy first identified a
+  redundant eighth argument; deriving FPS visibility from the existing Config
+  fixed it without suppression. Final SkylineClippy/release pass.
+- Parent also fixed remote-field lookup to use stable field identity rather than
+  the selected row's decorated label. Only menu.rs/runtime/ui.rs differ from4c19.
+  All76archived files match checkout; Cargo.lock/native provenance unchanged;
+  NRO/ELF text matches and debug sections are present.
+- Host-only runtime UI tests originally executed zero tests; this was corrected
+  by testing portable format/fit helpers in menu.rs. Tests do not assert pixels.
+- Raw baseline4c19 in-match images reproduce the tall grid. Baseline's owned unit needed forced-stop
+  after teardown timeout; no OOM. Baseline screenshots are not f1ce evidence.
+- Evidence and gate receipts:
+  `~/.local/share/ssbu-mod-backups/slim-hud-preview-20261009/`.
+  No Switch deployment of f1ce; no new disconnect/export/crash acceptance.
+
+The G&W benchmark completed and released its reservation before f1ce preview launch
+at00:15:26Z on October10. Exact SHA/build/module bound through staging/launch receipts
+and install.log. Final Settings image at5:45.13 and Performance image at6:41.65 are
+actual offline1v1 Isabelle/Greninja match scenes, full-window1920x1160 with reported
+1920x1080 game output. Parent independently opened both originals: exactly two
+inline HUD rows, segmented timing bar, no title/table. Near-full-width translucent
+strip with text on the left. No connected-peer or720p image was collected.
+
+Original PNGs, sidecars, result.json and parent-review.json:
+`~/.local/share/ssbu-mod-backups/slim-hud-screenshots-20261009/`.
+Separate2x detail crops are labelled derivatives; original screenshots are unchanged.
+Countdown, wrong-view and Results captures are retained but excluded from the final
+pair. Copied Switch config is FX Off/all; this run does not establish default FX On.
+The6GiB cap was reached with zero OOM kills; screenshots are not performance evidence.
+Owned Eden unit exited normally0, runtime/worker/watch resources closed, three
+original profile files restored and independently rehashed. Operator visual feedback
+remains pending. Original package manifest keeps its pre-preview runtime flag;
+current scoped evidence is in runtime-validation.json, with prior checkpoint retained.
+
+## Operator-reported multi-person Eden lobby test, 2026-10-09
+
+The operator confirmed that multiple people joining the lobby in Eden had been
+tested by the Training Modpack agent. This is attributed operator-reported
+coverage; the message did not identify the candidate hash, exact participant
+count or test receipt. Keep the earlier artifact-linked lobby/peer-cycle results
+below as their own evidence. This confirmation does not establish that the newly
+reported disconnect/declined-rematch stale-opponent case was exercised, nor does
+it validate the current menu/peer-state candidate. No new emulator run was made
+to record this update.
+
 Development milestone, 2026-10-05:
 
 - Optimized AArch64 Skyline NRO built.
@@ -678,3 +783,444 @@ NSO arena, new Switch behavior and the concurrent external-window anomaly
 remain unverified. No new latency, desync or FPS++ benefit is claimed by this
 UI change. The FPS++ read-only trace is documented separately in
 [FPS_BOOST_INVESTIGATION.md](FPS_BOOST_INVESTIGATION.md).
+
+## Connected-only opponent display — 2026-10-07
+
+Candidate `9e9ce2ab036d3e7ce06b74bc3ff770c03c569b6583af038c93f1f5972878ff69`
+passed 230 host tests, host Clippy with warnings denied, the no-default-features
+build, Skyline Clippy and an optimized Skyline package. Main-menu screenshots
+showed the local-only table on both the standalone full-stack peer and the
+embedded-backend peer. Joining an identified station displayed the remote
+column; failed admission/disconnect cleared it again. Unknown RTT does not
+hide an otherwise connected station.
+
+A third independent station on the Surface joined the same private LAN room.
+The host selected B and then C, and each selection displayed that station's own
+name/profile/interface/RTT. Native local-wireless D-pad editing changed the host
+buffer from Auto to 0. All three fighters were selected and ready. The host's
+start chord was not sent before the finite run deadlines, so **no three-station
+match or desync acceptance is claimed**.
+
+The host used Mr. Game & Watch and the corrected G&W plugin `bceef1f0`; B used
+Sheik without it, C used Banjo & Kazooie without it. Selected policies were
+LLDoubles, LessLag and Vanilla respectively. These describe lobby configuration,
+not proven match behavior.
+
+Local runs `20261007-184606-b9a2f2` and `20261007-184607-a19c6b` ended at their
+2400-second runtime bounds, with no OOM events and peaks 5,931,536,384 and
+6,097,330,176 bytes. Remote C's 1800-second bound ended its run; its emulator and
+supervisor were verified absent. All staged profiles were restored. This used
+the wired LAN; neither NSO nor a VPN/high-RTT path was tested.
+
+~~~text
+~/.local/share/ssbu-mod-backups/combined-peer-native-9e9-20261007/
+/tmp/delay-audit-01a10c4e-93fe-7db0-9d89-4bcd50bf2340/peer-native-9e9/
+/tmp/deluxe-surface-1007/peer1/archive-0b2d5643/  (Surface)
+~~~
+
+## HUD placement candidate — 2026-10-07
+
+Candidate `a9c38567b4e368d2d7723d760a2b7852503cde3688ba419e221e1bf03a794dcd`
+adds right-side placement for validated Training and online lobby scenes.
+Settings, performance and debug views share the rule. Regular singles/doubles
+and the main menu stay left; native game banners are not relocated. The
+position uses the current viewport and configured outer width with a 16-pixel
+right margin.
+
+234 host tests, host Clippy with warnings denied, no-default-features build,
+Skyline Clippy and optimized Skyline packaging passed. Runtime placement
+acceptance is pending; build checks alone do not prove screen placement.
+
+## Reduced visual checks so far — 2026-10-07
+
+Candidate `829727230ef34139` passed a controlled Gigaflare On/Off/Reduced visual
+comparison: Reduced removed the first large flash while retaining the later
+purple blast. Training save-state repeats retained the observed 49.3% damage
+and 8 hits. This is a visual/damage observation, not a measured speed gain.
+
+Candidate `3335efb82e7633ad` passed Palutena up-air On/Reduced/Off/On captures:
+Reduced retained the blue wing cue while removing the bright rays/glare; On
+restored the full effect. The up-air parent is deliberately protected in Off,
+so its full appearance in Off is expected. Variant-load/use events 92/93
+corroborated the Reduced path. The attack whiffed; no damage or performance
+comparison is claimed for this trial. Other families still need runtime checks.
+
+### a9c Training placement — observed 2026-10-08 00:02 UTC
+
+Root visually reviewed the GNW worker's `training-hud-right.png` under
+`/tmp/gnw-four-training-1007/`. Player Info is anchored at the right of the game
+viewport in Training, with only local settings and no opponent column. Four G&Ws
+are visible. This accepts Training placement for that binary; an online lobby
+and an ordinary-match left-side regression are still separate checks.
+
+The screenshot is not a performance sample: the menu is open and P1 is in an
+action pose. The absent/enabled/absent idle benchmark was still running.
+
+## G&W idle performance sanity check
+
+[Three-window stock G&W check](GNW_FOUR_FIGHTER_CHECK.md): the enabled NRO executed its verified hooks and had steadier sampled FPS on Intel/ANV; all medians were near 60. This does not reproduce the original RTX bottleneck or prove a strict 60 FPS lock.
+
+## 833c Explosive Flame measurements
+
+[Thirty measured trials plus six warmups](FX_EMULATOR_RESULTS.md) completed across
+LessLag/LLUltra and On/Off/Reduced at 1×. No repeatable On-over-Off cost was
+established; Reduced's performance benefit remains unverified. Raw evidence is
+preserved with hashes outside Git. Paused screenshots are excluded from timing.
+
+## 2026-10-08: 24e candidate and longer stress session
+
+- NRO SHA-256: `24e714e77b3eabf0af188aec1a115f9f058b61beb7cc9119a29466ca2c26fc01`.
+- Optimized ELF SHA-256: `22795134b469c7c8d84dc767ebf9bba4e67236fca0284ba3188b2ffeb837bc3e`.
+- 242 host tests pass with eight threads; 20 further complete parallel runs pass.
+  A process-global peer-table test race was fixed using a shared test-only lock,
+  including readers that could contend with the nonblocking path under test.
+- Host all-target Clippy with warnings denied, no-default build, Skyline Clippy
+  with warnings denied, and optimized Skyline packaging pass.
+- Full-stack Eden boot at 2x host rendering resolution passes. Offline window
+  has no opponent column. FPS++ saved On displays `On (Unsupported)` and reports
+  applied=0; restored Off afterward. A first status read at 1.5 seconds was stale
+  and rejected; the later fresh report agrees with the visible label.
+- Run `20261007-235700-988c0a` uses a two-hour deadline and 10 GiB/no-swap limit
+  with startup/hang guards. Higher resolution is synthetic stress, not proof of
+  a Switch-equivalent bottleneck. Further FX and linked checks are pending.
+
+## 2026-10-08 — Inkling b99f policy correction
+
+The corrected policy preserves `inkling_slosher_splash2`, the empty-ink
+down-smash body, and filters `inkling_slosher_trace`, an additional full-ink
+trail. The full-ink splash stays visible. Forward-smash `pablo_trace2` policy
+is unchanged; its missing runtime cull evidence is not considered fixed.
+The generator reproduces the checked-in policy after rustfmt.
+
+Artifact `dist/b99f087cf8ef0a9c`:
+
+- NRO SHA-256: `b99f087cf8ef0a9c58a6ed7d60ae294a492b8f28183f4d182d090d81ebb9af0c`.
+- ELF SHA-256: `882b6ef8ee578a459d88d21e0fabf6f5d881821f959f7a8607c50fa5642fae3b`.
+- Source archive SHA-256: `2626352bea8cd631a34b25e91de5bf069746c21d6bc69410956cd3efe3eb6d31`.
+
+246 host tests passed. Host Clippy (all targets, warnings denied),
+no-default-features build, Skyline Clippy (warnings denied) and optimized
+Skyline packaging passed. Specific runtime acceptance is pending.
+The source archive precedes this documentation checkpoint. Nothing in this
+entry claims a new release, push or Switch installation.
+
+
+## b99 linked regression and c0 diagnostics — 2026-10-08
+
+- Exact runtime NRO: `b99f087cf8ef0a9c58a6ed7d60ae294a492b8f28183f4d182d090d81ebb9af0c`.
+  Two local Eden instances, CLI commit `10bcd2d849843b146a79c61a21df615e1bdcfcde`.
+  A embedded ImGui, G&W fix `bceef1f09e4339149cdab8e7826d17492680add02307002b0a5d62033d1090c8`,
+  FX Reduced/online; B standalone ImGui plus Elite, no G&W fix, FX On/all.
+- Private room join succeeded when the host challenger prompt was accepted promptly.
+  Earlier Surface stock guest attempts discovered the room but failed before gameplay;
+  they are not three-station desync tests.
+- One seven-minute G&W-versus-Sephiroth Final Destination match: confirmed LessLag,
+  then a live switch to LLUltra on both peers. Matching final winner, two KOs and
+  47% damage; both returned to stage selection. No disconnect observed.
+- Complete paired capture IDs: LessLag A `5319903644070`, B `5319902971610`;
+  LLUltra A `5325013204722`, B `5325017052606`. All eight CSVs end
+  `complete=1`. These concurrent traces establish active paths, not GPU performance.
+- A's captured request log culls `edge_fire3_burst` and retains
+  `edge_fire3_burst2` with online-only scope. Both peers restore Vanilla/three
+  textures during results cleanup while retaining the saved LLUltra choice.
+- Window position: right in connected CSS/stage selection; left in ordinary match.
+  Opponent column disappears after B closes. B's Stealth hides its announced
+  profile/interface from A; A's announced Ethernet is visible to B.
+- Both units were explicitly stopped after testing. Each reported a core dump
+  during that requested shutdown; neither is classified as a spontaneous match crash.
+  B's original 24 staged paths were restored and hash-verified.
+- Durable raw archive:
+  `~/.local/share/ssbu-mod-backups/b99-runtime-20261008/runtime-evidence.zip`,
+  SHA-256 `55a56f0c5c8882e7f6a9549c1b7a8605337cca4a6a60c5ea8bcc743c4d2cef82`.
+  Disconnect supplement:
+  `9eeea2bfda3c65ef6a67d32a3508acfc22ff5e2e8c8ae133e605b2c0dc45c3aa`.
+- New diagnostic-only NRO:
+  `c0e9a625eb44a7359545cb3264b2e7e58d45cf15ea7c7d79ba721fbb5be8dce7`;
+  ELF `880160b92d3956c5a9c1b6bc97e8be169592d483511afc71a028911db56cd987`;
+  source archive `56b299cef4fd54bf3ca824963e8cd23e4f18807702104021ecc839c9efbf91af`.
+  247 host tests, host/Skyline Clippy with warnings denied, no-default build and
+  optimized Skyline package pass. Initial host Clippy rejected hex grouping in
+  the new test; formatting was corrected and the check rerun successfully.
+  No rendering-policy fix is claimed. Runtime diagnosis is ongoing.
+
+
+## c0 online-only FX scope in offline Training (2026-10-08)
+
+The c0 diagnostic candidate, embedded menu, Training Modpack and SGPO completed
+three fresh-state Sephiroth-versus-Ridley Gigaflare captures with
+`effects_scope=online`: On 5383529109398, Off 5383900612625 and Reduced
+5384281487286. Both CSVs in each pair ended `complete=1`.
+All 490 / 487 / 488 callback samples respectively retained the requested mode,
+scope Online, effective-Off false and hidden Deluxe window. Full Gigaflare body
+and wash remained visible. Reduced emitted code86 (restore) for
+`edge_fire3_screen2`, `edge_fire3_burst` and `edge_fire3_burst2`; no suppression,
+cull or sibling-substitution decision appeared in these capture windows.
+These are visual and scope checks with paused screenshots, not frame-time trials.
+They do not close the same-session online-to-offline transition matrix.
+
+Raw files: audittemp/embedded-c0-a/scope-online-training; screenshots in the
+adjacent visuals directory, prefix c0-scope-online-training.
+
+
+## c0 grounded triggered-counter visual check (2026-10-08)
+
+Two finite captures per mode, all timing/API pairs complete:
+On 5406959689907 / 5407200212605; Reduced 5407543855417 /
+5407781445372; returned On 5408115596411 / 5408354185051.
+All callback rows retain the intended mode, scope All and hidden Deluxe menu.
+Root reviewed the contact/burst/expiry pictures of trial0 in each mode:
+Donkey Kong's jab visibly strikes Scintilla; the shield reacts, the counter
+connects and expires, and all three show 20.2% / four hits. This is a grounded
+right-facing fixture with TMP Jab/Always, not airborne or opposite-facing coverage.
+Both Reduced traces log cull84 for edge_senkou_start and edge_senkou_hold,
+keep85 for edge_senkou_shield. hold_attack was not observed. Success-layer names
+pass through unchanged and the filter logger omits them; screenshots provide the
+cue evidence. No frame-exact gameplay equivalence or performance claim.
+
+Raw audittemp/c0-all-a/counter-on-reduced-return and adjacent visuals,
+prefix c0-counter. Pilot1 missed and is excluded; pilot2 established the fixture.
+Paused screenshots explain the low sampled FPS shown in some images.
+
+## c0 peer-report performance follow-up and network attempt (October 8)
+
+- 54 Palutena callback windows completed: 18 excluded warmups and 36 measured
+  trials, Vanilla/LessLag/LLUltra crossed with On/Off/Reduced and hit/whiff.
+  No consistent On-specific penalty or Reduced performance benefit established.
+  [Full method, results and limits](FX_EMULATOR_RESULTS.md).
+- All accepted API slices cover the guest-input-anchored move plus margin.
+  API traces retain capacity termination; only callback traces cover all ten
+  seconds. Fable independently verified hit raw files, not the whiff matrix.
+- Original TMP counter settings were restored byte-for-byte before Palutena.
+  No effect-removal asset mods were installed; no gameplay changes were made.
+- The private emulator room reached three members across Yoga A and Surface
+  C/D. C discovered the native room and its identity/RTT appeared at the host
+  challenger prompt, but native joins did not complete. No match or desync
+  acceptance follows. D's first boot was 1.0.0: copied DisabledAddOns entries
+  explicitly disabled its installed 13.0.5 update. Root removed only those
+  entries after verifying D stopped. Corrected D boot remains untested.
+- Surface C/D were stopped and released by 18:01:46 UTC; both reported core
+  dumps during requested shutdown. Yoga A's requested stop completed with
+  MainPID0 and Result=timeout. These are shutdown outcomes, not spontaneous
+  in-match crash findings.
+- Both Yoga test profiles were restored with verified backup hashes: all 24
+  B paths and the 14 A parent/diagnostic paths. The Surface D fixture remains
+  stopped and isolated for a future explicitly coordinated test window.
+- Raw archive: `~/.local/share/ssbu-mod-backups/c0-all-runtime-20261008/evidence.zip`.
+  It includes raw traces, per-file hashes, fixtures, helpers, Fable review and
+  network screenshots/logs. Archive SHA-256:
+  `01274ef1a5bd912157502e24a490ab6c1bd88f44f284ee01cfc665c8c55107e2`
+  (195,165,945 bytes; CRC verified).
+- No Rust changes or new NRO were produced in this follow-up; the existing c0
+  build gates remain the applicable evidence. No new push, release or Switch
+  write occurred. The user's Switch still has b99.
+
+
+## Compact renderer acceptance, 2026-10-09
+
+The compact patch is built from public imgui-smash `bb47b205` plus patch
+`4e138e3513347326`. Two clean builds produced identical archive
+`6c9591cc9f140ca6`. Four C++ helper tests compile with warnings denied. The
+archive build still emits existing upstream warnings, which are distinct
+from the warning-free host and Switch Rust Clippy checks.
+
+The final rewrite `7fdad40f10705afbe5fe336ccb0a58543db935143a6601cc4d0045d8296ff12d`
+pairs with ELF `a77fe5fd440d02ff761158f4363cc3026299d90af21c3de800861ef192ead3fa`.
+All 247 host tests, no-default build, host/Skyline Clippy with warnings denied,
+and optimized Skyline build pass. Source packaging includes the exact patch,
+pin, toolchain and dependency license. No defined-symbol GLOB_DAT/JUMP_SLOT
+relocations point back into this module.
+
+- Embedded run `menu-compact-a` used the preceding `28ac474abf75f1aa` binary.
+  Removing one unused status accessor after that build changed only build-ID
+  immediates/string bytes in the executable; no other code or data changed.
+  At 3× Eden resolution it passed main/CSS Settings and Performance,
+  LLDoubles/LLUltra/LessLag edits, two screenshot-confirmed stage→CSS returns,
+  Link/Ness Training with the window on the right, unobscured native pause,
+  Training Modpack open/close, SGPO display and Training→CSS return.
+  Earlier short-hold scripts did not leave CSS and are not counted as returns.
+  The run was slower than real time (roughly 24–52 FPS), so this is visibility
+  and coexistence evidence, not a performance comparison. Final counters:
+  28,188 submissions, 28,180 reuses, three rejected overlapping frame entries,
+  zero pending-slot skips, failed slots, geometry skips or command overflows.
+  Normal exit after 882 s; peak memory 7,007,911,936 bytes, no cgroup OOM.
+- External run `menu-compact-b` used final `7fdad40f10705afb` and patched
+  standalone diagnostic `99bdfa66a6002826`, with Elite, TMP and SGPO.
+  Bootstrap ownership and external-ready checkpoints matched the rewrite's
+  module. Both windows appeared together on main, at the start of an actual
+  Lucario/Duck Hunt match on Hollow Bastion, on results, and after return to
+  CSS. All three profiles and a separate Rules→CSS return passed. Captures
+  named `match-input` and `match-playing` are results-screen images, not
+  gameplay evidence; `profiles-match-both` is the actual match-start image.
+  At 1× the observed menu/match run was approximately 60 FPS. Final native
+  counters: 29,286 submissions, 29,278 reuses, seven overlapping entries skipped,
+  zero pending/failed/geometry/overflow counts. Counter files are independent
+  snapshots. Normal exit after 511 s; peak 7,786,078,208 bytes, no cgroup OOM.
+- Boundary run `menu-csmall` used isolated small-budget diagnostic
+  `3c8c44bf13d3dcd2` and archive `12bd6129936ebee7`. It reached CSS while
+  10,218 command-memory overflows were safely discarded/reset, with zero GPU
+  submissions or failed slots and three overlapping entries skipped.
+  The absent overlay is intentional in this diagnostic. Normal exit after
+  227 s; peak 6,670,692,352 bytes, no cgroup OOM. It is never a deployable NRO.
+
+For the compact embedded runs, use the counters in `renderer-status.txt`.
+Older `imgui-renderer-status.txt` and `frame-guard-status.txt` files in that
+profile are stale pre-cleanup evidence. The external diagnostic writes fresh
+files labeled with the current archive digest. All three profile journals
+were restored after shutdown.
+
+Artifacts, raw logs, screenshots, source and SHA manifests are preserved under:
+
+```text
+/home/intpa/.local/share/ssbu-mod-backups/menu-backend-build-20261008/
+  final-compact/7fdad40f10705afb/
+  completed-runs/menu-compact-a/
+  completed-runs/menu-compact-b/
+  completed-runs/menu-csmall/
+```
+
+These trials do not prove a deterministic cure of every invisible-window
+case. The original failure was intermittent, and a guard-only rollback also
+passed a later repeat. Switch validation and input-to-display timing remain
+separate. No Switch files were changed for this campaign.
+
+The final standalone release companion is
+`9a9e575c910c6471152585459d8611d66eff08b7e2058c4f2a63711628a905ed`
+with ELF `1aa78f5e7b208c2963ccedeb95bfca6a0dbdde8be99201a5862618eee3e3ce75`.
+Its diagnostic features are disabled. Host Clippy/no-default build and
+Switch Clippy pass with warnings denied, including one compile with both
+diagnostic features. The corrected release log is warning-free.
+`menu-release-b` smoke-tested this exact NRO with final Deluxe: both menus on
+main and CSS, Performance view and valid external registration, around 60 FPS.
+It exited normally after 210 s, peak
+6,535,589,888 bytes; its four-file journal was restored.
+The old standalone counter files were not updated in this release and are
+not measurements of this run. The longer match test above uses the diagnostic
+build of the same native backend.
+
+## Buffered diagnostic export candidate, 2026-10-09
+
+Local candidate `62a42df8d01d1738` addresses the observed incomplete API CSV export,
+not the separate launch failures. Installed5c72's capture129729755560 had a complete
+602-sample callback CSV, but its API CSV stopped at partial row6308 of6602.
+The pinned Switch filesystem implementation requests Flush for each unbuffered
+formatting fragment. The correction uses64KiB buffered writes, explicit fallible
+flush followed by File sync_all, and Exporting/Saved/Error ordering. Capture
+semantics, CSV serializers and no-overwrite creation guards remain the same.
+
+- Final full host suite:257passed, including4export regressions. Byte equality,
+  bounded underlying writes, mixed-sign API fields, write/flush/status errors,
+  phase ordering and file overwrite protection are covered.
+- `cargo clippy --all-targets -- -D warnings`, `cargo build --no-default-features`,
+  `cargo skyline clippy -- -- -D warnings`, and `cargo skyline build --release`
+  passed on reviewed source. The private helper is compiled for Switch and tests;
+  no host dead-code suppression is retained.
+- Build `0.1.0-2db70f90aaae-dirty-1791570881`; NRO2420736bytes, SHA256
+  `62a42df8d01d17386a045fccd0c080770779223e9f7b62ddba9a665cc1da2bae`.
+- ELF SHA256 `842875e692f6363a8b984c45c54f5b03ef49613e887729517fcffb859521c935`;
+  NRO/ELF executable bytes match and debug_info/debug_line/symtab are present.
+- All76archived source files match checkout. Compared with installed5c72 source,
+  only src/lib.rs and src/runtime/timing.rs changed, plus new src/capture_export.rs.
+  Native ImGui dependency provenance is identical.
+- Exact bundle and immutable gate receipts are outside the repository under
+  `~/.local/share/ssbu-mod-backups/capture-export-fix-20261009/`.
+
+Not deployed, not runtime-tested. Hardware export completion/performance remains
+pending; neither these gates nor buffering establish a launch-crash fix. The
+operator has been released to play while separate crash/source audits continue.
+
+## Horizontal menu and peer-retirement candidate, 2026-10-09
+
+Local bundle `4c1947b84add6114` retains buffered-export62a and adds:
+
+- Horizontal Settings for ready Singles/Doubles with0.42 window-background alpha;
+  existing Training/lobby placement and vertical diagnostic/performance tables remain.
+- Internal-only Platform and emulator-only FPS++ display/navigation. Boost safety
+  gates remain unchanged.
+- Actual ImGui content-fit height, including wrapped local/opponent values and the
+  plot, replacing fixed or estimated row-count heights.
+- Identity-wide retirement on a confirmed station leave, including other aliases
+  that previously kept its peer visible. Explicit subtype3/4 disconnects also clear
+  aliases. Connected peers with Vanilla settings remain valid; other lobby peers
+  survive a departure. Unknown RTT protocols cannot retire a current station just
+  because their numeric indices overlap.
+
+Final parent gates passed:261hosttests, `cargo clippy --all-targets -- -D warnings`,
+`cargo build --no-default-features`, `cargo skyline clippy -- -- -D warnings`,
+`cargo skyline build --release`, exact package and source verification. Switch-only
+Clippy found two style lints in the draft; both were fixed without suppressions.
+The reconnect test uses an actual synthetic disconnect sequence, not manual cleanup
+of the stale index. Host tests do not claim live renderer/network behavior.
+
+Build `0.1.0-2db70f90aaae-dirty-1791574315`, NRO SHA256
+`4c1947b84add611414cd485c7aa62a4ccfc05db35f7b1e2a8bac7def4aed7db6`.
+NRO/ELF executable bytes match, debug_info/debug_line/symtab are present, all76
+archived source files match the reviewed checkout, and native dependency provenance
+is unchanged. Six files differ from62a: menu.rs, overlay.rs, peer_transport.rs,
+pia_rtt.rs (regression only), runtime/imgui.rs (existing wrap API bindings), and
+runtime/ui.rs. Runtime RTT hook source and buffered-export sources match62a exactly.
+Evidence: `~/.local/share/ssbu-mod-backups/menu-peer-fix-20261009/`.
+
+At package verification this was not deployed or runtime-tested; installation is
+recorded below. The specific declined-rematch path still needs
+runtime confirmation of its emitted lifecycle events; no speculative protocol
+cleanup is shipped to force the UI to disappear. The operator's earlier multi-
+person Eden lobby test above remains attributed to the Training Modpack agent.
+Crash investigation is separate.
+
+### DBI USB MTP installation — 2026-10-09 22:32Z
+
+The operator requested copying4c19 with Smash closed using DBI's USB MTP responder.
+Its `1: SD Card` storage was identified independently of the old Hekate block mount.
+Only the active rewrite NRO was replaced after verifying local and device backups.
+Full device readback matched SHA256
+`4c1947b84add611414cd485c7aa62a4ccfc05db35f7b1e2a8bac7def4aed7db6`,2420736bytes.
+
+Previous5c72 is backed up locally and on SD at
+`/ultimate/ssbu_online_deluxe_rewrite/backups/pre-menu-4c1947b84add6114.nro`;
+the remote backup was independently read back and hash-verified. All eight other
+plugins and six protected files match before/after hashes; plugin membership is
+still nine files. The freshly saved INI is LessLag/input3/FX Off/all/Stealth Off,
+SHA256 `0617a94705ea8d2da3fff782161b5339f6a3880948a807894a01692bccd9c2d3`.
+
+Evidence: `~/.local/share/ssbu-mod-backups/menu-peer-fix-20261009/switch-mtp/`,
+including `preflight.json`, `deployment.json` (`installed_verified`), local backups
+and downloaded readbacks. Both bounded jobs passed; the host MTP mount was released.
+This accepts the transfer, not menu/gameplay/disconnect/export behavior or a crash fix.
+
+## Plugin registration API candidate, 2026-10-12
+
+Local candidate `068a1cf6f418349b` adds the exported
+`ssbu_online_deluxe_plugin_api_v1` table, the `sdk/abi` ABI crate (a root path
+dependency), the host registry `src/plugin_api.rs`, and a Plugins view in the
+chord cycle that appears only after a separate NRO registers. Settings,
+Performance and Debug rendering are unchanged; the compact match strip reuses
+the approved two-row layout for the Plugins page with four-field paging.
+
+- Host suite: 277 unit tests plus `tests/plugin_sdk_roundtrip.rs` (the public
+  Rust SDK registering through a table of the exported shape into the host
+  registry, then stepping values through the real callbacks).
+- `cargo clippy --all-targets -- -D warnings`, `cargo skyline clippy -- -- -D warnings`,
+  `cargo build --no-default-features`, `cargo fmt --check` and
+  `cargo skyline build --release` passed.
+- Build `0.1.0-2db70f90aaae-dirty-1791806695`; NRO 2445312 bytes, SHA256
+  `068a1cf6f418349bd6379ed6beaaa1ade084e377a25077b548e2ad5ea9e28e0c`; module
+  `8b1648f683c5795940ee3bf283a03d4559f7e9da5c0499f8bd6804259e178d70`; ELF SHA256
+  `aa1c1b97dab38a64797faaf81576192e3f710d3b4d1405f573c747fbdc33999a`. NRO/ELF
+  executable bytes match; `nm -D` lists the export as a defined `T` symbol.
+- Demo consumer `sdk/examples/demo` (`cargo skyline build --release`): NRO SHA256
+  `80e023e2773b0a1734564563aa798e877f68ddd667e9b1b1548ef9a01471d0dc`; it imports
+  only `nn::ro::LookupSymbol`, has no undefined reference to the host symbol and
+  carries the symbol string in rodata. SDK crate: 13 host tests and 1 doctest.
+- Evidence: `~/.local/share/ssbu-mod-backups/plugin-api-tangent-20261012/`
+  (`artifacts/068a1cf6f418349b/`, `DESIGN.md`, `SDK_WORKER_REPORT.md`).
+
+Not deployed, not loaded in Eden, not runtime-tested. Page rendering,
+controller flow and live cross-NRO registration remain unverified; the demo's
+log line has not been observed. No replay recording is included.
+
+Follow-up the same day added optional host persistence (plugin-declared INI
+path; `OptionDesc` 48 bytes, `PluginDesc` 72 bytes, diagnostic 101). Root
+gates rerun: 280 host tests plus the round-trip test, host/Skyline Clippy with
+warnings denied, no-default build, rustfmt and Skyline release pass. The
+repackaged candidate's hashes are in the tangent evidence directory's
+`artifacts/` manifests. Still no emulator or hardware run.

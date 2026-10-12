@@ -454,15 +454,3 @@ fn finish(run: &mut Run, deadline_passed: bool) {
         logging::startup_phase("presentation_probe_done");
     }
 }
-
-/// Optional UI row; the primary may ignore it.
-#[allow(dead_code)]
-pub(super) fn status() -> &'static str {
-    match STATE.load(Ordering::Relaxed) {
-        STATE_ARMED => "Armed (waiting for layer)",
-        STATE_RUNNING => "Sampling",
-        STATE_DONE => "Done; see presentation-history.txt",
-        STATE_REFUSED => "Refused; see log",
-        _ => "Off",
-    }
-}

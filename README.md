@@ -17,15 +17,24 @@ Close Smash before replacing files. Copy the rewrite NRO to:
 sd:/atmosphere/contents/01006A800016E000/romfs/skyline/plugins/libssbu_online_deluxe_rewrite.nro
 ```
 
-Skyline is required. Replace the old Online Deluxe/SsbuSync/PIA-manager stack and
-overlapping latency or character-FX plugins. Keep dependencies needed by other
-installed mods. Training Modpack and the gamepad overlay remain separate mods.
+Skyline is required. This NRO implements the sync/render transitions and the
+peer-manager handshake itself (`src/render_policy.rs`, `src/runtime/resolution.rs`,
+`src/peer_transport.rs`, `src/runtime/pia_rtt.rs`). Leave out the old Online
+Deluxe, SsbuSync, and PIA-manager plugins: if SsbuSync exports are already
+present, the rewrite skips its hooks (`src/runtime/mod.rs` `legacy_host_present`).
+Replace overlapping latency or character-FX plugins. Keep dependencies needed by
+other installed mods. Training Modpack and the gamepad overlay remain separate mods.
 
-Deluxe contains its own ImGui backend. When a compatible standalone
-`libimgui_smash.nro` is installed, Deluxe reuses that host. Keep the standalone
-plugin if **Elite Legal Stages** needs it; Deluxe's embedded fallback does not
-replace another plugin's dependency. Compatibility is checked through host exports
-and the ImGui ABI, not just the filename. See [ImGui dependencies](docs/IMGUI_DEPENDENCY.md).
+The menu statically links `libimgui_smash.a`, built from pinned public source
+with our renderer patch. The source, build recipe and digest are recorded in
+[ImGui dependencies](docs/IMGUI_DEPENDENCY.md). When a compatible standalone
+`libimgui_smash.nro` is installed, Deluxe reuses that host.
+Keep the standalone plugin if **Elite Legal Stages** needs it; Deluxe's embedded
+copy does not replace another plugin's dependency. Compatibility is checked
+through host exports and the ImGui ABI, not just the filename.
+When the standalone host is active, its renderer owns the GPU buffers; updating
+Deluxe alone does not update that backend. Use the matching patched standalone
+host to receive the renderer fix in an Elite installation.
 
 Elite's stage filtering applies to **NSO**, not offline matches. Offline stages
 remaining unrestricted is expected. Emulator coexistence tests do not validate
@@ -42,8 +51,11 @@ The automated test profiles under `eden-cli-handoff` are separate from that path
 ## Controls
 
 Hold **L+R** or **ZL+ZR**, then tap **D-pad Down** to cycle
-**settings → performance → hidden**. The small Player Info window works in menus,
-character select and matches.
+**settings → performance → hidden**. When a separately installed plugin NRO has
+registered options, a **plugins** page sits between settings and performance
+(see [Plugins](#plugins)). The small Player Info window works in menus,
+character select and matches. It moves to the right in Training and connected
+lobbies, keeping the pause controls visible, and stays left in regular matches.
 
 Character select also keeps the fork-style native status at the top after the
 window closes. It shows your selected profile and input buffer, plus the selected
@@ -53,7 +65,7 @@ fork's room-ID path, but still needs an NSO test. See [native display](docs/NATI
 
 | Control | Action |
 | --- | --- |
-| Up / Down | Select Peer, NetLatency, NetProfile, FX, Stealth or Streamer |
+| Up / Down | Select Peer, NetLatency, NetProfile, FX, FPS++, Stealth or Streamer (or a plugin row on the plugins page) |
 | Left / Right | Change the selected value |
 | Shoulder chord + Left / Right outside settings | Cycle the selected remote peer |
 | L+R + either ZL or ZR + Y | Toggle Streamer |
@@ -68,9 +80,12 @@ NetLatency is the game's online input buffer, **Auto or 0–25**. It is separate
 from NetProfile's rendering policy. A menu change is saved immediately; the
 game's next relevant buffer hook applies the selected value.
 
-FX **On/Off** affects newly requested, named character effects. Existing effects
-expire naturally. Default **On** preserves them. **Reduced is not implemented**.
-See [effect coverage and exclusions](docs/FX.md).
+FX **On / Off / Reduced** affects newly requested, named character effects.
+Existing effects expire naturally. **On** is the default. **Reduced** keeps
+recognizable cues while removing selected extra layers; supported asset variants
+keep fewer particle emitters. Unsupported effects retain their original visuals.
+This is visual coverage, not a claim that every move now runs faster.
+See [effect coverage, dependencies and exclusions](docs/FX.md).
 
 Stealth defaults to **On** and suppresses this mod's recognition beacon and
 custom settings payload. Its value is latched for the connection. A change
@@ -79,10 +94,28 @@ It does not promise anonymity or detection avoidance by Nintendo.
 
 Streamer hides remote names, connection types, settings and ping; it does not
 change network traffic. Peer RTT uses the game's existing measurement and the
-fork's stability colors. Missing or stale data displays `---`. Interface shows
+fork's stability colors. The opponent column appears only for a connected,
+identified station; a connected peer with unknown RTT still appears with `---`.
+Interface shows
 local Wi-Fi/Ethernet/Unknown and the selected peer's announced type, if available.
 An emulator's reported interface can be virtual; it does not identify the host
 computer's physical network connection.
+
+## Plugins
+
+Other mods can add their own rows without writing menu code. A separately
+built Skyline NRO resolves the exported `ssbu_online_deluxe_plugin_api_v1`
+symbol at runtime and registers a plugin label plus one or more options, each
+with a finite list of choices (for example `Record: Off / On`). Deluxe draws
+them on the plugins page: a vertical table outside matches and the compact
+two-row strip during a ready match, with paging for long lists. Deluxe asks
+the plugin for the current value every frame and sends Left/Right as a
+request; the plugin decides whether it applies now, later, or not at all, and
+keeps its own saved settings. A plugin that declares its own `key=value` INI
+path gets that file updated by Deluxe after each accepted menu edit, so the
+plugin only has to read it at startup. Deluxe's `config.ini` is unchanged. The ABI,
+Rust SDK and a demo NRO live under [`sdk/`](sdk/README.md). The page is
+covered by host tests; emulator and hardware behaviour are not yet verified.
 
 ## Rendering profiles
 
@@ -113,11 +146,12 @@ apply the saved manual mode again. Auto does not rewrite that saved mode.
 The INI-only `lesslag_core` and `doubles_core` modes are component experiments,
 require restart and are not substitutes for the full presets.
 
-Upstream's separate **FPS++** option is not implemented yet. A live debugger
-trace identifies it as an emulator composition-timing extension through the
-native-window swap interval, separate from hardware overclocking. Its additional
-latency benefit has not been measured in this rewrite. See the
-[FPS++ investigation](docs/FPS_BOOST_INVESTIGATION.md).
+Upstream's separate **FPS++** option was implemented for investigation, but its
+native path sped up the match clock in Eden. The normal build reports it as
+**Unsupported** and does not apply it, even if its saved setting is On. It remains
+an explicit diagnostic experiment, separate from the working LessLag profiles
+and from hardware overclocking. See the
+[FPS++ measurements](docs/FPS_BOOST_INVESTIGATION.md).
 
 ## Configuration
 
@@ -139,6 +173,7 @@ auto_profile=true
 platform=console
 stealth=true
 streamer=false
+fps_boost=false
 peer_observer=false
 ```
 
@@ -154,37 +189,24 @@ missing Stealth settings default to true.
 
 ## Validation and frame measurements
 
-Current candidate `4a927dc20904722d` passes **192 host tests** and all required
-host/Skyline checks. It restores the fork's native CSS display alongside Player
-Info. Tests covered edits, closing the window, Streamer restoration, CSS
-re-entry, a completed offline match on the preceding CSS-equivalent build,
-and bidirectional peer names/profiles/colored RTT in linked CSS. Solo tests
-showed both Deluxe and Elite windows with the standalone ImGui host, including
-with the G&W fix loaded.
+Build-specific acceptance is recorded in [STATUS](docs/STATUS.md) and
+[VALIDATION](docs/VALIDATION.md). Tests have covered the global window plus native
+status, standalone and embedded ImGui, Training Modpack, the corrected gamepad
+overlay, Elite Legal Stages, persistent settings and linked play.
 
-One concurrent two-instance run had invisible external ImGui windows on the
-full-stack peer; its native header and the other peer's embedded window worked.
-This did not recur in solo tests with or without G&W. The cause remains
-unresolved. Arena hooks are implemented but await a Switch NSO test. See
-[native display validation](docs/NATIVE_DISPLAY.md) for the exact scope.
+Earlier builds completed asymmetric LessLag/LLUltra matches and a real
+four-fighter Auto/LLDoubles team match with the G&W fix on only one peer.
+The newer peer-display build also joined three independent network stations
+and exercised peer selection in the lobby. That run ended before a match;
+it is not a three-station desync result.
 
-The preceding candidate `d9acd03611e1d1d6` passed **176 host tests**, host and Skyline
-checks with warnings denied, the no-default-features build and the optimized
-Skyline build. It passed fresh Stealth On suppression, Off after reconnect,
-exact menu-saved INI reload, Streamer privacy, remote buffer/profile/colored RTT,
-Auto singles selection and a linked LessLag G&W match through results and CSS.
-The G&W fix was on one peer only. Elite was enabled alongside the standalone
-ImGui host, Training Modpack and corrected gamepad overlay; the second peer
-used Deluxe's embedded host.
+A known emulator issue remains: concurrent instances under host load can hide
+ImGui windows with manual LessLag/LLDoubles. Native text remains visible.
+Removing the load can restore the windows. The cause is under investigation.
 
-The preceding `b19b7d94ae136e55` candidate also completed a four-fighter
-Auto/LLDoubles match against a clean peer, a G&W LLUltra match, cut-in/Gigaflare
-resolution recovery and the title crop regression. The d9 candidate changed
-only four display/test files: the remote buffer cell and compact Auto labels.
-New rendering modes have not been validated on Switch.
-
-In 24 controlled Eden crouch trials on **b19**, the first captured response
-arrived after these frame counts:
+The following **24 response trials belong to `b19b7d94ae136e55`**; newer
+display/effect builds do not inherit a new timing measurement. Each cell contains
+three trials at the specified injection phase.
 
 | Profile | Normal injection phase, three trials | Later injection phase, three trials |
 | --- | --- | --- |
@@ -251,7 +273,8 @@ warning flags:
 cargo skyline clippy -- -- -D warnings
 ```
 
-Prepare the native dependency and build/package the Switch plugin:
+With Docker and Git available, build the native dependency from source, then
+build and package the Switch plugin:
 
 ```powershell
 /usr/bin/python3 tools/prepare_imgui.py

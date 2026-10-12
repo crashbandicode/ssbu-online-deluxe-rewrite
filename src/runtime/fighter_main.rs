@@ -170,10 +170,7 @@ fn install_site(base: u64) {
         return;
     }
     unsafe {
-        A64InlineHook(
-            site as *const c_void,
-            on_fighter_main as *const c_void,
-        );
+        A64InlineHook(site as *const c_void, on_fighter_main as *const c_void);
     }
     let word = read_u32(site).unwrap_or(0);
     if !fighter_probe::site_already_hooked(word) {
@@ -250,7 +247,13 @@ unsafe extern "C" fn on_fighter_main(ctx: &mut InlineCtx) {
         Ok(sample) => {
             {
                 let mut ticks = lock_ticks();
-                ticks.note(sample.entry, sample.kind, sample.status, sample.slow, present);
+                ticks.note(
+                    sample.entry,
+                    sample.kind,
+                    sample.status,
+                    sample.slow,
+                    present,
+                );
             }
             if COUNT_ONLY.load(Ordering::Acquire) {
                 return;

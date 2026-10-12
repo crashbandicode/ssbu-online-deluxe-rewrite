@@ -5,6 +5,7 @@
 
 use super::{fighter_main, logging, memory, record, Code, DATA_DIR};
 use crate::fighter_probe::{self, LoadView, LOAD_MODULE_INTERNAL, SITE_OFFSET, WORD_COUNT};
+use crate::hook_chain::{plan_far_chain, EntryPlan};
 use skyline::hooks::A64HookFunction;
 use skyline::nn::ro::Module;
 use std::fs::File;
@@ -22,14 +23,7 @@ static UNLOAD_ORIGINAL: AtomicUsize = AtomicUsize::new(0);
 static LAST_WRITTEN: AtomicU32 = AtomicU32::new(0);
 static STATE: Mutex<fighter_probe::Observation> = Mutex::new(fighter_probe::Observation::idle());
 
-type LoadFn = unsafe extern "C" fn(
-    *mut Module,
-    *const u8,
-    *mut u8,
-    usize,
-    i32,
-    bool,
-) -> u32;
+type LoadFn = unsafe extern "C" fn(*mut Module, *const u8, *mut u8, usize, i32, bool) -> u32;
 type UnloadFn = unsafe extern "C" fn(*mut Module) -> u32;
 
 pub(super) fn install() {
@@ -51,20 +45,16 @@ pub(super) fn install() {
         return;
     }
     let unload_linked = hook(unload, on_unload as *const (), &UNLOAD_ORIGINAL, 2);
-    if UNLOAD_ORIGINAL.load(Ordering::Acquire) == 0 {
+    if !unload_linked || UNLOAD_ORIGINAL.load(Ordering::Acquire) == 0 {
         logging::startup_phase("fighter_module_probe_unload_failed");
         return;
     }
     let load_linked = hook(load, on_load as *const (), &LOAD_ORIGINAL, 1);
-    if LOAD_ORIGINAL.load(Ordering::Acquire) == 0 {
+    if !load_linked || LOAD_ORIGINAL.load(Ordering::Acquire) == 0 {
         logging::startup_phase("fighter_module_probe_load_failed");
         return;
     }
-    if unload_linked && load_linked {
-        logging::startup_phase("fighter_module_probe_ready");
-    } else {
-        logging::startup_phase("fighter_module_probe_word_mismatch");
-    }
+    logging::startup_phase("fighter_module_probe_ready");
 }
 
 pub(super) fn poll() {
@@ -76,8 +66,7 @@ pub(super) fn poll() {
         let guard = STATE.lock().unwrap_or_else(|err| err.into_inner());
         *guard
     };
-    if observation.generation == 0
-        || observation.generation == LAST_WRITTEN.load(Ordering::Acquire)
+    if observation.generation == 0 || observation.generation == LAST_WRITTEN.load(Ordering::Acquire)
     {
         return;
     }
@@ -96,32 +85,90 @@ pub(super) fn poll() {
 fn lookup(symbol: &[u8]) -> usize {
     let mut address = 0usize;
     let result = unsafe { skyline::nn::ro::LookupSymbol(&mut address, symbol.as_ptr()) };
-    if result == 0 { address } else { 0 }
+    if result == 0 {
+        address
+    } else {
+        0
+    }
 }
 
 fn hookable(address: usize) -> bool {
-    address != 0 && unsafe { memory::accessible(address, 20, false) }
+    address != 0 && address & 3 == 0 && unsafe { memory::executable(address, 20) }
 }
 
 fn hook(target: usize, replacement: *const (), original: &AtomicUsize, site: u64) -> bool {
-    let before = unsafe { std::ptr::read_unaligned(target as *const u32) };
-    record(Code::HookEntryWord, site, before as u64);
-    record(Code::HookInstalling, site, target as u64);
-    let mut trampoline: *mut skyline::libc::c_void = std::ptr::null_mut();
-    unsafe {
-        A64HookFunction(
-            target as *const skyline::libc::c_void,
-            replacement as *const skyline::libc::c_void,
-            &mut trampoline,
-        );
-    }
-    if trampoline.is_null() {
-        record(Code::HookRejected, site, 1);
+    if !hookable(target) || !unsafe { memory::executable(replacement as usize, 4) } {
+        record(Code::HookRejected, site, 0);
         return false;
     }
-    original.store(trampoline as usize, Ordering::Release);
-    let after = unsafe { std::ptr::read_unaligned(target as *const u32) };
-    let installed = after == 0x5800_0051 || after & 0xfc00_0000 == 0x1400_0000;
+    let before = entry_words(target);
+    let plan = plan_far_chain(before, target as u64, replacement as u64);
+    let handler_region = match plan {
+        EntryPlan::Chain(handler) => unsafe { memory::region(handler as usize) },
+        _ => None,
+    };
+    // Ring events may not flush before a native exception. Persist the full stub
+    // and prior-handler mapping before entering Skyline's hook engine.
+    logging::startup_phase(&format!(
+        "fighter_module_hook_before site={site} target={target:#x} replacement={:#x} words={before:08x?} plan={plan:?} handler_region={handler_region:x?}",
+        replacement as usize,
+    ));
+    record(Code::HookEntryWord, site, before[0] as u64);
+    if plan == EntryPlan::Reject {
+        record(Code::HookRejected, site, 2);
+        return false;
+    }
+    record(Code::HookInstalling, site, target as u64);
+    match plan {
+        EntryPlan::Chain(handler) => {
+            if !unsafe { memory::executable(handler as usize, 4) } {
+                record(Code::HookRejected, site, handler);
+                return false;
+            }
+            // The existing LDR/BR stub already supplies the previous callable.
+            // Asking Skyline for a trampoline would decode its address payload
+            // as instructions (the captured 0x98bce454 LDRSW crash). A null result
+            // is the supported no-relocation path. Publish before patching so
+            // the replacement always has a valid previous handler to call.
+            original.store(handler as usize, Ordering::Release);
+            unsafe {
+                A64HookFunction(
+                    target as *const skyline::libc::c_void,
+                    replacement as *const skyline::libc::c_void,
+                    std::ptr::null_mut(),
+                );
+            }
+        }
+        EntryPlan::Relocate => {
+            let mut trampoline: *mut skyline::libc::c_void = std::ptr::null_mut();
+            unsafe {
+                A64HookFunction(
+                    target as *const skyline::libc::c_void,
+                    replacement as *const skyline::libc::c_void,
+                    &mut trampoline,
+                );
+            }
+            if trampoline.is_null() {
+                record(Code::HookRejected, site, 1);
+                return false;
+            }
+            original.store(trampoline as usize, Ordering::Release);
+        }
+        EntryPlan::Reject => unreachable!(),
+    }
+    let after = entry_words(target);
+    let installed = if after[0] == 0x5800_0051 && after[1] == 0xd61f_0220 {
+        u64::from(after[2]) | (u64::from(after[3]) << 32) == replacement as u64
+    } else if after[0] & 0xfc00_0000 == 0x1400_0000 {
+        let displacement = ((after[0] << 6) as i32) >> 4;
+        target.checked_add_signed(displacement as isize) == Some(replacement as usize)
+    } else {
+        false
+    };
+    logging::startup_phase(&format!(
+        "fighter_module_hook_after site={site} installed={installed} words={after:08x?} previous={:#x}",
+        original.load(Ordering::Acquire),
+    ));
     record(
         if installed {
             Code::HookInstalled
@@ -129,9 +176,16 @@ fn hook(target: usize, replacement: *const (), original: &AtomicUsize, site: u64
             Code::HookRejected
         },
         site,
-        after as u64,
+        after[0] as u64,
     );
     installed
+}
+
+fn entry_words(target: usize) -> [u32; 4] {
+    // Callers have checked the complete readable executable mapping.
+    std::array::from_fn(|index| unsafe {
+        std::ptr::read_unaligned((target as *const u32).add(index))
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -249,8 +303,7 @@ fn read_base(module: *mut Module) -> Option<u64> {
         return None;
     }
     let object_slot = unsafe { std::ptr::addr_of!((*module).ModuleObject) };
-    if !unsafe { memory::accessible(object_slot as usize, std::mem::size_of::<*mut u8>(), false) }
-    {
+    if !unsafe { memory::accessible(object_slot as usize, std::mem::size_of::<*mut u8>(), false) } {
         return None;
     }
     let object = unsafe { *object_slot };
@@ -262,7 +315,11 @@ fn read_base(module: *mut Module) -> Option<u64> {
         return None;
     }
     let base = unsafe { *base_slot };
-    if base == 0 { None } else { Some(base) }
+    if base == 0 {
+        None
+    } else {
+        Some(base)
+    }
 }
 
 fn snapshot() -> fighter_probe::Observation {

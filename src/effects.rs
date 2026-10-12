@@ -331,15 +331,28 @@ pub fn suppress_screen(mode: FxMode, hash: u64) -> bool {
 mod tests {
     use super::*;
     #[test]
-    fn on_and_reserved_reduced_preserve_every_request() {
+    fn reduced_rewrite_is_identity_until_the_policy_module() {
         for &hash in TARGET_HASHES
             .iter()
             .chain([0, u64::MAX, hash40("sys_hit_normal")].iter())
         {
             assert_eq!(rewrite(FxMode::On, hash), hash);
+            // Off still nulls TARGET_HASHES here. Reduced does not.
             assert_eq!(rewrite(FxMode::Reduced, hash), hash);
+            let intent = crate::effects_reduced::classify(FxMode::Reduced, true, hash, None);
+            if !crate::effects_reduced::unscoped(hash) {
+                assert_eq!(
+                    crate::effects_reduced::request_hash(intent, hash),
+                    hash,
+                    "a move-qualified name stays original until that move matches"
+                );
+            }
         }
         assert!(!suppress_screen(FxMode::On, hash40("edge_fire3_screen2")));
+        assert!(!suppress_screen(
+            FxMode::Reduced,
+            hash40("edge_fire3_screen2")
+        ));
     }
     #[test]
     fn off_is_scoped_and_does_not_erase_general_feedback() {
@@ -355,6 +368,28 @@ mod tests {
             assert!(!suppress_screen(FxMode::Off, hash40(name)));
         }
         assert!(suppress_screen(FxMode::Off, hash40("edge_fire3_screen2")));
+    }
+    #[test]
+    fn off_leaves_protected_up_air_parent_and_still_nulls_shadow_flare() {
+        use crate::effect_context::Context;
+        let up_air = Context {
+            category: 0,
+            kind: 0x36,
+            motion: hash40("attack_air_hi"),
+            status: 0x36,
+        };
+        let light = hash40("palutena_backlight2");
+        assert!(!crate::effects_catalog::global(light));
+        assert!(!needs_context(light));
+        assert_eq!(rewrite(FxMode::Off, light), light);
+        assert_eq!(
+            rewrite_with_context(FxMode::Off, light, Some(up_air)),
+            light
+        );
+        assert_eq!(
+            rewrite(FxMode::Off, hash40("edge_shadowflare_aura")),
+            NULL_EFFECT
+        );
     }
     #[test]
     fn hash_format_matches_crc32_and_name_table() {

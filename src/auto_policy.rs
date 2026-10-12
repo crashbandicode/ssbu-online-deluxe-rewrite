@@ -151,6 +151,15 @@ pub fn classify_stage(stage_id: u32, training: bool, fighter_count: i32) -> Scen
     }
 }
 
+/// CSS reflects the live Training-mode bit, not the stage that led to it.
+pub fn classify_css(training_mode: bool) -> SceneStatus {
+    if training_mode {
+        SceneStatus::Training
+    } else {
+        SceneStatus::Inactive
+    }
+}
+
 pub fn scene_status_key(ready: bool, status: SceneStatus) -> &'static str {
     if ready {
         status.key()
@@ -334,23 +343,187 @@ mod tests {
     }
 
     #[test]
+    fn regular_css_after_stage_311_is_inactive_left_and_holds_manual_cleanup() {
+        let waiting_room = Scene {
+            ready: true,
+            connection: Connection::Offline,
+            status: classify_stage(311, false, 2),
+        };
+        assert_eq!(waiting_room.status, SceneStatus::Training);
+
+        let css = Scene {
+            status: classify_css(false),
+            ..waiting_room
+        };
+        assert_eq!(css.connection, waiting_room.connection);
+        assert_eq!(css.status, SceneStatus::Inactive);
+        assert_eq!(match_kind(css.connection, css.status), MatchKind::Menu);
+        assert!(!crate::hud_place::on_right(
+            css.ready,
+            css.connection,
+            css.status
+        ));
+
+        let mut manual = selection(false, RenderMode::LessLag, Platform::Console);
+        let (active, generation) = transition_cleanup(
+            waiting_room.status,
+            css.status,
+            manual.selection_generation,
+            manual.cleanup_active,
+            manual.cleanup_generation,
+        );
+        manual.cleanup_active = active;
+        manual.cleanup_generation = generation;
+        let after_css = decide(css, manual);
+        assert!(after_css.cleanup_hold);
+        assert_eq!(after_css.request, RenderMode::Vanilla);
+
+        // CSS does not infer or overwrite the transport. Inactive remains the
+        // menu/Vanilla Auto choice regardless of the preserved connection.
+        for connection in [
+            Connection::Offline,
+            Connection::Local,
+            Connection::Arena,
+            Connection::Quickplay,
+        ] {
+            let context = Scene { connection, ..css };
+            assert_eq!(context.connection, connection);
+            assert_eq!(
+                match_kind(context.connection, context.status),
+                MatchKind::Menu
+            );
+            let auto = decide(
+                context,
+                selection(true, RenderMode::LessLagUltra, Platform::Console),
+            );
+            assert_eq!(auto.request, RenderMode::Vanilla, "{connection:?}");
+            assert!(auto.auto_applied);
+            assert!(!auto.cleanup_hold);
+        }
+    }
+
+    #[test]
+    fn training_mode_css_stays_training_and_right_without_cleanup() {
+        let status = classify_css(true);
+        assert_eq!(status, SceneStatus::Training);
+        let training_css = scene(Connection::Offline, status);
+        assert!(crate::hud_place::on_right(
+            training_css.ready,
+            training_css.connection,
+            training_css.status
+        ));
+
+        let (active, generation) = transition_cleanup(SceneStatus::Training, status, 4, false, 0);
+        assert!(!active);
+        assert_eq!(generation, 0);
+
+        let manual = decide(
+            training_css,
+            selection(false, RenderMode::LessLagUltra, Platform::Console),
+        );
+        assert_eq!(manual.request, RenderMode::LessLagUltra);
+        assert!(!manual.cleanup_hold);
+        let auto = decide(
+            training_css,
+            selection(true, RenderMode::LessLagUltra, Platform::Console),
+        );
+        assert_eq!(auto.request, RenderMode::Vanilla);
+        assert!(!auto.cleanup_hold);
+    }
+
+    #[test]
     fn auto_matrix_uses_connection_and_match_count_without_a_quickplay_guess() {
         let cases = [
-            (Connection::Offline, SceneStatus::Inactive, false, RenderMode::Vanilla),
-            (Connection::Offline, SceneStatus::Training, true, RenderMode::Vanilla),
-            (Connection::Offline, SceneStatus::Singles, false, RenderMode::Vanilla),
-            (Connection::Offline, SceneStatus::Doubles, true, RenderMode::Vanilla),
-            (Connection::Local, SceneStatus::Inactive, false, RenderMode::Vanilla),
-            (Connection::Local, SceneStatus::Inactive, true, RenderMode::Vanilla),
-            (Connection::Arena, SceneStatus::Inactive, false, RenderMode::Vanilla),
-            (Connection::Quickplay, SceneStatus::Inactive, true, RenderMode::Vanilla),
-            (Connection::Arena, SceneStatus::Singles, false, RenderMode::LessLag),
-            (Connection::Quickplay, SceneStatus::Singles, true, RenderMode::LessLagUltra),
-            (Connection::Local, SceneStatus::Doubles, false, RenderMode::LessLagDoubles),
-            (Connection::Arena, SceneStatus::Doubles, true, RenderMode::LessLagDoubles),
-            (Connection::Quickplay, SceneStatus::Doubles, false, RenderMode::LessLagDoubles),
-            (Connection::Local, SceneStatus::Training, true, RenderMode::Vanilla),
-            (Connection::Offline, SceneStatus::Singles, true, RenderMode::Vanilla),
+            (
+                Connection::Offline,
+                SceneStatus::Inactive,
+                false,
+                RenderMode::Vanilla,
+            ),
+            (
+                Connection::Offline,
+                SceneStatus::Training,
+                true,
+                RenderMode::Vanilla,
+            ),
+            (
+                Connection::Offline,
+                SceneStatus::Singles,
+                false,
+                RenderMode::Vanilla,
+            ),
+            (
+                Connection::Offline,
+                SceneStatus::Doubles,
+                true,
+                RenderMode::Vanilla,
+            ),
+            (
+                Connection::Local,
+                SceneStatus::Inactive,
+                false,
+                RenderMode::Vanilla,
+            ),
+            (
+                Connection::Local,
+                SceneStatus::Inactive,
+                true,
+                RenderMode::Vanilla,
+            ),
+            (
+                Connection::Arena,
+                SceneStatus::Inactive,
+                false,
+                RenderMode::Vanilla,
+            ),
+            (
+                Connection::Quickplay,
+                SceneStatus::Inactive,
+                true,
+                RenderMode::Vanilla,
+            ),
+            (
+                Connection::Arena,
+                SceneStatus::Singles,
+                false,
+                RenderMode::LessLag,
+            ),
+            (
+                Connection::Quickplay,
+                SceneStatus::Singles,
+                true,
+                RenderMode::LessLagUltra,
+            ),
+            (
+                Connection::Local,
+                SceneStatus::Doubles,
+                false,
+                RenderMode::LessLagDoubles,
+            ),
+            (
+                Connection::Arena,
+                SceneStatus::Doubles,
+                true,
+                RenderMode::LessLagDoubles,
+            ),
+            (
+                Connection::Quickplay,
+                SceneStatus::Doubles,
+                false,
+                RenderMode::LessLagDoubles,
+            ),
+            (
+                Connection::Local,
+                SceneStatus::Training,
+                true,
+                RenderMode::Vanilla,
+            ),
+            (
+                Connection::Offline,
+                SceneStatus::Singles,
+                true,
+                RenderMode::Vanilla,
+            ),
         ];
         for (connection, status, emulator, expected) in cases {
             let platform = if emulator {
@@ -362,7 +535,10 @@ mod tests {
                 scene(connection, status),
                 selection(true, RenderMode::LessLagUltra, platform),
             );
-            assert_eq!(applied.request, expected, "{connection:?} {status:?} {emulator}");
+            assert_eq!(
+                applied.request, expected,
+                "{connection:?} {status:?} {emulator}"
+            );
             assert!(applied.auto_applied);
             assert!(applied.available);
             assert!(!applied.cleanup_hold);
@@ -382,10 +558,7 @@ mod tests {
         assert_eq!(applied.request, RenderMode::LessLag);
         assert!(!applied.available);
         assert!(!applied.auto_applied);
-        assert_eq!(
-            scene_status_key(false, SceneStatus::Doubles),
-            "unavailable"
-        );
+        assert_eq!(scene_status_key(false, SceneStatus::Doubles), "unavailable");
         assert_eq!(
             profile_row_label(true, false, RenderMode::LessLag, applied.request),
             "Auto (unavailable)"

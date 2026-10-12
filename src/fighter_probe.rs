@@ -25,20 +25,30 @@ pub const OBJECT_MODULE_ACCESSOR: usize = 0x20;
 pub const FIGHTER_CATEGORY: u32 = 0;
 /// First eight words observed at `common+0x3250` on the 13.0.5 probe.
 pub const SITE_GUARD: [u32; 8] = [
-    0xd101_43ff, 0xf900_13f5, 0xa903_4ff4, 0xa904_7bfd, 0x9101_03fd, 0xaa00_03f3, 0xaa01_03e0,
+    0xd101_43ff,
+    0xf900_13f5,
+    0xa903_4ff4,
+    0xa904_7bfd,
+    0x9101_03fd,
+    0xaa00_03f3,
+    0xaa01_03e0,
     0xaa01_03f4,
 ];
 /// First eight words observed at the `call_line_status` export.
 pub const EXPORT_GUARD: [u32; 8] = [
-    0xa9be_4ff4, 0xa901_7bfd, 0x9100_43fd, 0xaa08_03f4, 0xd000_4008, 0xf942_bd08, 0xb940_0d08,
+    0xa9be_4ff4,
+    0xa901_7bfd,
+    0x9100_43fd,
+    0xaa08_03f4,
+    0xd000_4008,
+    0xf942_bd08,
+    0xb940_0d08,
     0xaa00_03f3,
 ];
 /// Export of `lua2cpp::L2CFighterBase::call_line_status`. Lookup only.
-pub const CALL_LINE_SYMBOL: &[u8] =
-    b"_ZN7lua2cpp14L2CFighterBase16call_line_statusEv\0";
+pub const CALL_LINE_SYMBOL: &[u8] = b"_ZN7lua2cpp14L2CFighterBase16call_line_statusEv\0";
 /// `nn::ro::LoadModuleInternal(Module*, void const*, void*, size_t, int, bool)`.
-pub const LOAD_MODULE_INTERNAL: &[u8] =
-    b"_ZN2nn2ro18LoadModuleInternalEPNS0_6ModuleEPKvPvmib\0";
+pub const LOAD_MODULE_INTERNAL: &[u8] = b"_ZN2nn2ro18LoadModuleInternalEPNS0_6ModuleEPKvPvmib\0";
 /// Installed nnsdk 0.6.0 binding. The probe hooks this symbol, not an internal.
 pub const UNLOAD_MODULE: &[u8] = b"_ZN2nn2ro12UnloadModuleEPNS0_6ModuleE\0";
 
@@ -466,7 +476,11 @@ impl TickLog {
 }
 
 fn flag(value: bool) -> &'static str {
-    if value { "true" } else { "false" }
+    if value {
+        "true"
+    } else {
+        "false"
+    }
 }
 
 #[cfg(test)]
@@ -566,10 +580,16 @@ mod tests {
         assert_eq!(events[0].a, 0x1000);
         assert_eq!(events[0].b, 0xaea0);
         assert_eq!(events[1].a, EXPORT_OFFSET);
-        assert_eq!(events[1].b & 0xffff, FLAG_LOOKUP | FLAG_SYMBOL_WORDS | FLAG_SITE_WORDS | FLAG_OFFSET_MATCH);
+        assert_eq!(
+            events[1].b & 0xffff,
+            FLAG_LOOKUP | FLAG_SYMBOL_WORDS | FLAG_SITE_WORDS | FLAG_OFFSET_MATCH
+        );
         assert_eq!(events[2].code, Code::FighterWords);
         assert_eq!(events[2].a, 0);
-        assert_eq!(events[2].b, u64::from(symbol_words[0]) | (u64::from(symbol_words[1]) << 32));
+        assert_eq!(
+            events[2].b,
+            u64::from(symbol_words[0]) | (u64::from(symbol_words[1]) << 32)
+        );
         assert_eq!(events[10].a, 1 << 32);
     }
 
@@ -671,7 +691,10 @@ mod tests {
 
     #[test]
     fn main_guard_accepts_only_the_observed_pair() {
-        assert_eq!(arm_plan(EXPORT_OFFSET, &EXPORT_GUARD, &SITE_GUARD), ArmPlan::Install);
+        assert_eq!(
+            arm_plan(EXPORT_OFFSET, &EXPORT_GUARD, &SITE_GUARD),
+            ArmPlan::Install
+        );
         assert_eq!(
             arm_plan(SITE_OFFSET, &EXPORT_GUARD, &SITE_GUARD),
             ArmPlan::Reject("export_offset")

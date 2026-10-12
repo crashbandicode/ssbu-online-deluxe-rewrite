@@ -14,7 +14,7 @@ use crate::peer_observer::{
 };
 use crate::peer_passive::{custom_write_allowed, MESSAGE_AREA_MAX, PIA_MAGIC};
 use skyline::hooks::{getRegionAddress, InlineCtx, Region};
-use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 
 const RING: usize = 4;
 
@@ -785,6 +785,7 @@ fn current_announce() -> crate::peer_transport::Announce {
         decision.live,
         decision.committed,
         setting,
+        super::fps_boost::applied(),
     )
 }
 

@@ -14,11 +14,32 @@ This shortens the requested compositor scheduling period. It does not request
 CPU/GPU hardware clock changes, and it does not mean Smash renders 6000 unique
 frames per second.
 
-**Status:** mechanism identified with live read-watchpoint evidence and emulator
-source. No FPS-boost implementation or enabled-versus-disabled latency result is
-included in the released rewrite yet. The previous concern that the field might
-be a simulation iteration cap was a hypothesis; the new trace identifies a
-different consumer and supersedes that hypothesis.
+**Status:** implemented as a gated diagnostic and rejected as a normal latency
+feature on the tested Eden build. The original fork's interval path accelerates
+the game clock; it does not preserve normal match speed. Hardware clocks are
+never changed.
+
+Candidate `18dc6c99c5b751f7` was tested in one timed match with LessLag active:
+Off, On, then Off again. The On screenshots show 10.38 game seconds elapsed
+within a bracketed 3.002–5.299 host seconds. That is **1.959–3.457 times real
+time**, with a midpoint estimate of **2.50 times**. Off midpoint estimates were
+1.017 and 1.041, consistent with normal speed given the screenshot brackets.
+These bounds exclude normal speed in the On condition.
+
+Ordinary builds retain the saved FPS++ toggle but report **Unsupported** and
+do not write the boost interval. Only the startup diagnostic marker below
+enables the experimental path; do not use it for normal play or an online-safety
+claim.
+
+~~~text
+sd:/ultimate/ssbu_online_deluxe_rewrite/ALLOW_FPS_BOOST
+~~~
+
+The applied suffix and peer announcement require actual applied/read-back state,
+so an unsupported saved toggle is not advertised as enabled. The previous idea
+that the field itself was a simulation-iteration counter is superseded by the
+native-window trace below. Its downstream pacing effect nevertheless changes
+observed game speed.
 
 ## Evidence chain
 
@@ -120,9 +141,10 @@ LessLag/LLUltra results.
   restored the title-mod trees and original configuration with hash checks.
   The user's normal profile and Switch were not changed.
 
-## Next experiment
+## Requirements for a future usable FPS++ implementation
 
-Keep the current renderer profile, 100% emulator speed, scene, input sequence,
+First separate guest 60 Hz game pacing from accelerated composition. The original
+path does not do that. Then keep the renderer profile, 100% emulator speed, scene, input sequence,
 host presentation settings and game mods fixed. Compare boost disabled, enabled,
 and disabled again. First verify that the requested interval reaches the queue
 and that cleanup restores the original value. Then measure:
@@ -138,3 +160,18 @@ Vanilla and LLUltra must be measured separately; the expected benefit depends
 on the existing buffering policy. A backend implementation needs live-window
 lifetime checks and explicit emulator opt-in. Identifying the mechanism does
 not by itself validate those implementation details or compatibility.
+
+## Timed-match evidence
+
+The accepted timer trial and raw bracket calculations are retained outside Git:
+
+~~~text
+/tmp/delay-audit-01a10c4e-93fe-7db0-9d89-4bcd50bf2340/poll-real-fx/fps-timer2/
+    clock-analysis.json
+    receipts.json
+~~~
+
+The first `fps-timer` attempt is excluded. Fable independently read the accepted
+screenshots, checked the timestamp bounds and reviewed the pacing path. A
+lockstep opponent can mask local acceleration, so merely completing an
+asymmetric network match would not validate this option.

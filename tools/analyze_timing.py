@@ -51,7 +51,9 @@ def analyze(text):
         sample = {k: int(v) for k, v in row.items()}
         if sample["sample"] != n or any(v < 0 for v in sample.values()):
             raise ValueError("invalid sample sequence or negative value")
-        if any(sample[k] not in (0, 1) for k in ("fx_mode", "fx_scope", "fx_effective_off")):
+        if (sample["fx_mode"] not in (0, 1, 2)
+                or any(sample[k] not in (0, 1) for k in ("fx_scope", "fx_effective_off"))
+                or (sample["fx_effective_off"] and sample["fx_mode"] != 1)):
             raise ValueError("invalid FX condition")
         if sample["overlay_view"] not in (0, 1, 2, 3):
             raise ValueError("invalid overlay view")

@@ -255,6 +255,11 @@ pub const LEGACY_NAMES: &[&str] = &[
     "inkling_attack_arc",
     "inkling_brush",
     "inkling_roller",
+    // Peer null `inkling_roller` is not a Hash40 request at pin 59004685.
+    // These three unique parents are the inkling_roller scripts at that pin.
+    "inkling_roller_splash_air",
+    "inkling_roller_splash_run",
+    "inkling_roller_splash_walk",
     "inkling_splash",
     "master_axe_aura",
     "master_axe_hold",
@@ -399,6 +404,8 @@ const FALCON_PUNCH_NAMES: &[&str] = &[
     "captain_fp_hold",
     "captain_fp_wing_l",
     "captain_fp_wing_r",
+    "captain_fk_air",
+    "captain_fk_hold",
 ];
 const FALCON_PUNCH: [u64; FALCON_PUNCH_NAMES.len()] = sorted_hashes(FALCON_PUNCH_NAMES);
 
@@ -882,6 +889,12 @@ const EDGE_PURPLE_DASH_NAMES: &[&str] = &[
     "impact_star_b2",
     "impact_star_f1",
     "impact_star_f2",
+    "debris1",
+    "fire3",
+    "flash1",
+    "flash2",
+    "ring1",
+    "sparkline1",
 ];
 const EDGE_PURPLE_DASH: [u64; EDGE_PURPLE_DASH_NAMES.len()] = sorted_hashes(EDGE_PURPLE_DASH_NAMES);
 
@@ -1342,11 +1355,22 @@ const CONTEXT_NAMES: &[&str] = &[
     "sys_flash",
     "sys_smash_flash",
     "sys_smash_flash_s",
+    "captain_fk_air",
+    "captain_fk_hold",
+    "debris1",
+    "fire3",
+    "flash1",
+    "flash2",
+    "ring1",
+    "sparkline1",
 ];
 const CONTEXT_HASHES: [u64; CONTEXT_NAMES.len()] = sorted_hashes(CONTEXT_NAMES);
 pub fn needs_context(hash: u64) -> bool {
     CONTEXT_HASHES.binary_search(&hash).is_ok()
 }
+/// Shadow Flare's Reduced cue is a sibling file, not an Off target added here.
+const EDGE_SIDE_B: [u64; 0] = [];
+
 pub fn scoped(profile: Profile, hash: u64) -> bool {
     let hashes: &[u64] = match profile {
         Profile::KazuyaFSmash => &KAZUYA_F_SMASH,
@@ -1368,6 +1392,7 @@ pub fn scoped(profile: Profile, hash: u64) -> bool {
         Profile::EdgeDownB => &EDGE_DOWN_B,
         Profile::EdgePurpleDash => &EDGE_PURPLE_DASH,
         Profile::EdgeFSmash => &EDGE_F_SMASH,
+        Profile::EdgeSideB => &EDGE_SIDE_B,
     };
     hashes.binary_search(&hash).is_ok()
 }
@@ -1427,10 +1452,25 @@ mod tests {
                     NULL_EFFECT
                 );
                 assert_eq!(rewrite_with_context(FxMode::On, hash, Some(context)), hash);
-                assert_eq!(
-                    rewrite_with_context(FxMode::Reduced, hash, Some(context)),
-                    hash
-                );
+                // rewrite_with_context is the Off path. Reduced forwarding is request_hash.
+                let intent =
+                    crate::effects_reduced::classify(FxMode::Reduced, true, hash, Some(context));
+                let forwarded = crate::effects_reduced::request_hash(intent, hash);
+                if name == "ness_pkt_attack" {
+                    assert_eq!(
+                        intent,
+                        crate::effects_reduced::FxIntent::ReducedKeep,
+                        "{name}"
+                    );
+                    assert_eq!(forwarded, hash, "{name}");
+                } else {
+                    assert_eq!(
+                        intent,
+                        crate::effects_reduced::FxIntent::ReducedCull,
+                        "{name}"
+                    );
+                    assert_eq!(forwarded, NULL_EFFECT, "{name}");
+                }
             }
             assert_eq!(rewrite_with_context(FxMode::Off, hash, None), hash);
             assert_eq!(
@@ -1441,8 +1481,13 @@ mod tests {
     }
 
     #[test]
-    fn every_expanded_name_is_passthrough_on_or_unavailable_reduced() {
-        use crate::{config::FxMode, effect_context::Context, effects::rewrite_with_context};
+    fn reduced_culls_only_named_layers_on_the_matching_move() {
+        use crate::{
+            config::FxMode,
+            effect_context::Context,
+            effects::{rewrite_with_context, NULL_EFFECT},
+            effects_reduced::{classify, request_hash, FxIntent},
+        };
         let actor = Context {
             category: 0,
             kind: 0x36,
@@ -1452,11 +1497,33 @@ mod tests {
         for name in LEGACY_NAMES.iter().chain(CONTEXT_NAMES) {
             let hash = hash40(name);
             assert_eq!(rewrite_with_context(FxMode::On, hash, Some(actor)), hash);
-            assert_eq!(
-                rewrite_with_context(FxMode::Reduced, hash, Some(actor)),
-                hash
-            );
+            let intent = classify(FxMode::Reduced, true, hash, Some(actor));
+            match intent {
+                FxIntent::ReducedCull => assert_eq!(request_hash(intent, hash), NULL_EFFECT),
+                FxIntent::ReducedKeep | FxIntent::ReducedPreserve | FxIntent::Passthrough => {
+                    assert_eq!(request_hash(intent, hash), hash, "{name}")
+                }
+                other => panic!("{name} became {other:?}"),
+            }
         }
+        let fake = hash40("palutena_explosiveflame");
+        let fake_intent = classify(FxMode::Reduced, true, fake, Some(actor));
+        assert_eq!(fake_intent, FxIntent::Passthrough);
+        assert_eq!(request_hash(fake_intent, fake), fake);
+        let bomb = hash40("palutena_bomb");
+        let bomb_intent = classify(FxMode::Reduced, true, bomb, Some(actor));
+        assert_eq!(bomb_intent, FxIntent::ReducedKeep);
+        assert_eq!(request_hash(bomb_intent, bomb), bomb);
+        for name in ["palutena_bomb_appear", "palutena_wand_light_trace"] {
+            let hash = hash40(name);
+            let intent = classify(FxMode::Reduced, true, hash, Some(actor));
+            assert_eq!(intent, FxIntent::ReducedCull, "{name}");
+            assert_eq!(request_hash(intent, hash), NULL_EFFECT, "{name}");
+        }
+        let burst = hash40("edge_fire3_burst");
+        let burst_intent = classify(FxMode::Reduced, true, burst, Some(actor));
+        assert_eq!(burst_intent, FxIntent::ReducedPreserve);
+        assert_eq!(request_hash(burst_intent, burst), burst);
     }
     #[test]
     fn preserved_projectile_and_hitbox_cues_are_never_filtered() {
@@ -1505,6 +1572,76 @@ mod tests {
         ] {
             assert!(!global(hash40(name)), "global cue {name}");
             assert!(!needs_context(hash40(name)), "scoped cue {name}");
+        }
+    }
+
+    #[test]
+    fn off_nulls_proven_roller_splash_parents_only() {
+        use crate::{
+            config::FxMode,
+            effects::{rewrite, NULL_EFFECT},
+            effects_reduced::{classify, request_hash, FxIntent},
+        };
+        for name in [
+            "inkling_roller_splash_air",
+            "inkling_roller_splash_run",
+            "inkling_roller_splash_walk",
+        ] {
+            let hash = hash40(name);
+            assert!(global(hash), "{name}");
+            assert!(!needs_context(hash), "{name}");
+            assert_eq!(rewrite(FxMode::On, hash), hash, "{name}");
+            assert_eq!(rewrite(FxMode::Reduced, hash), hash, "{name}");
+            assert_eq!(rewrite(FxMode::Off, hash), NULL_EFFECT, "{name}");
+            let reduced = classify(FxMode::Reduced, true, hash, None);
+            assert_eq!(reduced, FxIntent::Passthrough, "{name}");
+            assert_eq!(request_hash(reduced, hash), hash, "{name}");
+            assert_ne!(
+                crate::eff_variant::forward(FxMode::Reduced, true, hash, None),
+                NULL_EFFECT,
+                "{name}"
+            );
+        }
+        for name in [
+            "inkling_run_splash",
+            "inkling_result_roller_splash",
+            "inkling_inkbullet",
+            "inkling_splashbomb",
+            "inkling_squid",
+            "chrom_mc_1",
+            "chrom_mc_1_reduced",
+            "palutena_backlight2",
+            "palutena_backlight2_reduced",
+        ] {
+            let hash = hash40(name);
+            assert!(!global(hash), "{name}");
+            assert!(!needs_context(hash), "{name}");
+            for profile in [
+                Profile::KazuyaFSmash,
+                Profile::FalconPunch,
+                Profile::NessUpB,
+                Profile::LucasUpB,
+                Profile::IkeNeutralB,
+                Profile::ChromNeutralB,
+                Profile::RoyNeutralB,
+                Profile::PalutenaRapidJab,
+                Profile::PalutenaNeutralB,
+                Profile::PalutenaUpB,
+                Profile::PalutenaSideB,
+                Profile::PalutenaUpSmash,
+                Profile::PalutenaTilts,
+                Profile::PalutenaWingSmash,
+                Profile::PalutenaUpAir,
+                Profile::EdgeNeutralB,
+                Profile::EdgeDownB,
+                Profile::EdgePurpleDash,
+                Profile::EdgeFSmash,
+                Profile::EdgeSideB,
+            ] {
+                assert!(!scoped(profile, hash), "{name} {profile:?}");
+            }
+            assert_eq!(rewrite(FxMode::On, hash), hash, "{name}");
+            assert_eq!(rewrite(FxMode::Off, hash), hash, "{name}");
         }
     }
 }

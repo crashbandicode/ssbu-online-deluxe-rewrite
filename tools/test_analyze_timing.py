@@ -32,6 +32,21 @@ class TimingAnalysis(unittest.TestCase):
         self.assertEqual(report["callback_gaps_over_ms"]["25"], 0)
         self.assertTrue(report["warnings"])
 
+    def test_reduced_is_distinct_from_effective_off(self):
+        reduced = trace().replace(",0,0,1,0,0\n", ",0,2,1,0,0\n")
+        report = analyze(reduced)
+        self.assertEqual(report["conditions"], [{
+            "fx_mode": 2, "fx_scope": 1,
+            "fx_effective_off": False, "overlay_view": 0,
+        }])
+        self.assertFalse(report["warnings"])
+        for invalid in (
+                reduced.replace(",0,2,1,0,0\n", ",0,3,1,0,0\n"),
+                reduced.replace(",0,2,1,0,0\n", ",0,2,2,0,0\n"),
+                reduced.replace(",0,2,1,0,0\n", ",0,2,1,1,0\n")):
+            with self.assertRaises(ValueError):
+                analyze(invalid)
+
     def test_mixed_conditions_are_flagged(self):
         self.assertEqual(len(analyze(trace(mixed=True))["conditions"]), 2)
         self.assertTrue(analyze(trace(mixed=True))["warnings"])

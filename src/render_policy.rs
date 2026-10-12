@@ -169,27 +169,58 @@ pub enum RefuseReason {
 pub enum StepEvent {
     None,
     Waiting,
-    Started { from: Profile, to: Profile },
-    Ready { from: Profile, to: Profile },
-    Committed { from: Profile, to: Profile },
-    Settled { policy: Profile },
-    Cleared { policy: Profile },
-    ExpiredCancel { policy: Profile },
+    Started {
+        from: Profile,
+        to: Profile,
+    },
+    Ready {
+        from: Profile,
+        to: Profile,
+    },
+    Committed {
+        from: Profile,
+        to: Profile,
+    },
+    Settled {
+        policy: Profile,
+    },
+    Cleared {
+        policy: Profile,
+    },
+    ExpiredCancel {
+        policy: Profile,
+    },
     Refused {
         reason: RefuseReason,
         retained: Profile,
         abandoned: Profile,
     },
-    BufferStarted { from_count: u8, to_count: u8 },
+    BufferStarted {
+        from_count: u8,
+        to_count: u8,
+    },
     /// The present hook calls the setter, then `setter_returned`.
-    SetTextures { count: i32, generation: u8 },
-    BufferReady { count: u8 },
-    BufferCommitted { count: u8 },
+    SetTextures {
+        count: i32,
+        generation: u8,
+    },
+    BufferReady {
+        count: u8,
+    },
+    BufferCommitted {
+        count: u8,
+    },
     /// The setter already ran and the drain marker is still absent at the warning bound.
     /// The machine stays in `Drain`. This is not a refusal and not a second setter.
-    DrainStalled { known: u8, target: u8 },
+    DrainStalled {
+        known: u8,
+        target: u8,
+    },
     /// Fresh count after the marker is unusable. The runtime panics.
-    CountStop { seen: i32, expected: i32 },
+    CountStop {
+        seen: i32,
+        expected: i32,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -287,7 +318,11 @@ impl Machine {
             swapping: buffer || index,
             failed: self.failed && !buffer && !index,
             render_opts: self.live && effective.render_opts(),
-            modulus: if self.live && safe == 2 { Some(2) } else { None },
+            modulus: if self.live && safe == 2 {
+                Some(2)
+            } else {
+                None
+            },
             addend: effective.addend(),
         }
     }
@@ -330,6 +365,12 @@ pub fn skip_wait(decision: Decision, armed: RenderMode) -> bool {
     } else {
         armed != RenderMode::Vanilla
     }
+}
+
+/// Startup `PROBE_RENDER_POLL` gate. `probe` selects the original wait.
+/// `skip` is left as `skip_wait` computed it. Not a profile change.
+pub fn render_poll_calls_original(skip: bool, probe: bool) -> bool {
+    probe || !skip
 }
 
 pub fn run_early(decision: Decision, armed: RenderMode) -> bool {
@@ -440,7 +481,12 @@ fn step_idle(machine: Machine, input: PresentInput) -> (Machine, StepEvent) {
         let mut next = machine;
         next.failed = false;
         next.failed_target = None;
-        return (next, StepEvent::Cleared { policy: machine.committed });
+        return (
+            next,
+            StepEvent::Cleared {
+                policy: machine.committed,
+            },
+        );
     }
     if machine.failed && machine.failed_target == Some(want) {
         return (machine, StepEvent::None);
@@ -548,7 +594,12 @@ fn step_drain(machine: Machine) -> (Machine, StepEvent) {
         let mut next = machine;
         next.buffer_phase = BufferPhase::Readback;
         next.waited = 0;
-        return (next, StepEvent::BufferReady { count: machine.count_target });
+        return (
+            next,
+            StepEvent::BufferReady {
+                count: machine.count_target,
+            },
+        );
     }
     if machine.waited >= DRAIN_TIMEOUT {
         return (machine, StepEvent::Waiting);
@@ -591,7 +642,12 @@ fn step_readback(machine: Machine, input: PresentInput) -> (Machine, StepEvent) 
         done.waited = 0;
         done.failed = false;
         done.failed_target = None;
-        return (done, StepEvent::BufferCommitted { count: machine.count_target });
+        return (
+            done,
+            StepEvent::BufferCommitted {
+                count: machine.count_target,
+            },
+        );
     }
     let mut next = machine;
     next.waited = next.waited.saturating_add(1);
@@ -744,7 +800,10 @@ pub fn diagnostic(event: &StepEvent) -> Option<(u16, u64, u64)> {
             pack(KIND_EXPIRED_CANCEL, policy, policy),
             0,
         )),
-        StepEvent::BufferStarted { from_count, to_count } => Some((
+        StepEvent::BufferStarted {
+            from_count,
+            to_count,
+        } => Some((
             TRACE_TRANSITION,
             KIND_BUFFER_STARTED,
             u64::from(from_count) | (u64::from(to_count) << 8),
@@ -1339,10 +1398,7 @@ mod tests {
 
         let (claimed, _) = step(opened, present(RenderMode::LessLag, 1, 0, 3));
         let slot = AtomicU64::new(encode(claimed));
-        assert!(setter_returned_slot(
-            &slot,
-            claimed.generation
-        ));
+        assert!(setter_returned_slot(&slot, claimed.generation));
         let draining = decode(slot.load(Ordering::Acquire));
         let marked = complete_drain(draining, draining.generation).unwrap();
         let (ready, _) = step(marked, present(RenderMode::LessLag, 0, 0, 3));
@@ -1499,7 +1555,10 @@ mod tests {
         assert!(!skip_late(decision, RenderMode::Vanilla));
         assert!(!decision.render_opts);
         let plan = plan_flush(vanilla, RenderMode::Vanilla);
-        assert_eq!((plan.calls, plan.lesslag_fields, plan.arm_drain), (1, false, false));
+        assert_eq!(
+            (plan.calls, plan.lesslag_fields, plan.arm_drain),
+            (1, false, false)
+        );
         let less = Machine::confirmed(Profile::LessLag);
         let decision = less.decision();
         assert!(skip_wait(decision, RenderMode::Vanilla));
@@ -1607,7 +1666,10 @@ mod tests {
             assert!(index_value(index, machine.decision(), RenderMode::Vanilla) < 2);
             let (next, event) = step(machine, present(RenderMode::Vanilla, index as i32, 0, 2));
             match event {
-                StepEvent::DrainStalled { known: 2, target: 3 } => {
+                StepEvent::DrainStalled {
+                    known: 2,
+                    target: 3,
+                } => {
                     warnings += 1;
                     assert_eq!(
                         diagnostic(&event),
@@ -1684,8 +1746,18 @@ mod tests {
 
     #[test]
     fn three_bit_profiles_round_trip_and_the_sentinel_stays_invalid() {
-        for committed in [Profile::Ultra, Profile::LessLag, Profile::Vanilla, Profile::Doubles] {
-            for requested in [Profile::Ultra, Profile::LessLag, Profile::Vanilla, Profile::Doubles] {
+        for committed in [
+            Profile::Ultra,
+            Profile::LessLag,
+            Profile::Vanilla,
+            Profile::Doubles,
+        ] {
+            for requested in [
+                Profile::Ultra,
+                Profile::LessLag,
+                Profile::Vanilla,
+                Profile::Doubles,
+            ] {
                 let machine = Machine {
                     live: true,
                     committed,
@@ -1732,10 +1804,16 @@ mod tests {
         assert!(decision.render_opts);
         assert!(decision.modulus.is_none());
         assert!(skip_wait(decision, RenderMode::Vanilla));
+        assert!(!render_poll_calls_original(true, false));
+        assert!(render_poll_calls_original(true, true));
+        assert!(render_poll_calls_original(false, false));
         assert!(!run_early(decision, RenderMode::Vanilla));
         assert!(!skip_late(decision, RenderMode::Vanilla));
         let plan = plan_flush(doubles, RenderMode::Vanilla);
-        assert_eq!((plan.calls, plan.lesslag_fields, plan.arm_drain), (1, true, false));
+        assert_eq!(
+            (plan.calls, plan.lesslag_fields, plan.arm_drain),
+            (1, true, false)
+        );
         assert_eq!(index_value(5, decision, RenderMode::LessLagDoubles), 6);
         let (toward_two, event) = step(doubles, present(RenderMode::LessLag, 0, 0, 3));
         assert!(matches!(
@@ -1751,13 +1829,24 @@ mod tests {
             assert!(index_value(input, toward_two.decision(), RenderMode::LessLagDoubles) < 2);
         }
         assert_eq!(
-            profile_status(RenderMode::LessLagDoubles, RenderMode::LessLagDoubles, 3, doubles, true),
+            profile_status(
+                RenderMode::LessLagDoubles,
+                RenderMode::LessLagDoubles,
+                3,
+                doubles,
+                true
+            ),
             "Active"
         );
         assert_eq!(labels(doubles).committed, "lldoubles");
     }
 
-    fn commit_count(machine: Machine, saved: RenderMode, from_active: i32, to_count: i32) -> Machine {
+    fn commit_count(
+        machine: Machine,
+        saved: RenderMode,
+        from_active: i32,
+        to_count: i32,
+    ) -> Machine {
         let (waiting, event) = step(machine, present(saved, 0, 0, from_active));
         assert_eq!(event, StepEvent::Waiting);
         let mut stale = present(saved, 1, 0, from_active);
@@ -1781,9 +1870,19 @@ mod tests {
         assert_eq!(plan.calls, 3);
         let marked = complete_drain(draining, plan.generation).unwrap();
         let (ready, event) = step(marked, present(saved, 0, 0, from_active));
-        assert_eq!(event, StepEvent::BufferReady { count: to_count as u8 });
+        assert_eq!(
+            event,
+            StepEvent::BufferReady {
+                count: to_count as u8
+            }
+        );
         let (counted, event) = step(ready, present(saved, 0, 0, to_count));
-        assert_eq!(event, StepEvent::BufferCommitted { count: to_count as u8 });
+        assert_eq!(
+            event,
+            StepEvent::BufferCommitted {
+                count: to_count as u8
+            }
+        );
         assert_eq!(counted.known_active, to_count as u8);
         assert_eq!(counted.buffer_phase, BufferPhase::Idle);
         assert_eq!(counted.index_phase, IndexPhase::Idle);
@@ -1808,7 +1907,13 @@ mod tests {
         let (ready, event) = step(marked, present(saved, 0, 0, active));
         assert!(matches!(event, StepEvent::Ready { .. }));
         let (done, event) = step(ready, present(saved, 0, 0, active));
-        assert_eq!(event, StepEvent::Committed { from: machine.committed, to });
+        assert_eq!(
+            event,
+            StepEvent::Committed {
+                from: machine.committed,
+                to
+            }
+        );
         assert_eq!(done.committed, to);
         assert_eq!(done.index_phase, IndexPhase::Idle);
         assert_eq!(done.buffer_phase, BufferPhase::Idle);

@@ -29,6 +29,13 @@ unsafe fn capture(accessor: *mut c_void, category: u8, kind: i32) -> Option<Cont
     })
 }
 
+pub(super) unsafe fn module_accessor(lua_state: u64) -> *mut c_void {
+    if lua_state == 0 {
+        return std::ptr::null_mut();
+    }
+    lua_accessor(lua_state)
+}
+
 pub(super) unsafe fn from_lua(lua_state: u64) -> Option<Context> {
     if lua_state == 0 {
         return None;

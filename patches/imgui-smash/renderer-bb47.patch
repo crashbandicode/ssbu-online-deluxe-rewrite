@@ -1,0 +1,1896 @@
+diff --git a/imgui-smash/CMakeLists.txt b/imgui-smash/CMakeLists.txt
+--- a/imgui-smash/CMakeLists.txt
++++ b/imgui-smash/CMakeLists.txt
+@@ -55,3 +55,9 @@
+ add_library(imgui_smash STATIC ${SOURCES_ASM} ${SOURCES_C} ${SOURCES_H} ${SOURCES_CXX} ${IMGUI_SOURCES})
+ set_target_properties(imgui_smash PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS TRUE)
+ target_link_libraries(imgui_smash ${LOCAL_LIBRARIES})
++if(DEFINED IMGUI_SMASH_INITIAL_COMMAND_BUDGET)
++  target_compile_definitions(imgui_smash PRIVATE IMGUI_SMASH_INITIAL_COMMAND_BUDGET=${IMGUI_SMASH_INITIAL_COMMAND_BUDGET})
++endif()
++if(DEFINED IMGUI_SMASH_INITIAL_CONTROL_BUDGET)
++  target_compile_definitions(imgui_smash PRIVATE IMGUI_SMASH_INITIAL_CONTROL_BUDGET=${IMGUI_SMASH_INITIAL_CONTROL_BUDGET})
++endif()
+diff --git a/imgui-smash/src/imgui_backend/MemoryBuffer.cpp b/imgui-smash/src/imgui_backend/MemoryBuffer.cpp
+--- a/imgui-smash/src/imgui_backend/MemoryBuffer.cpp
++++ b/imgui-smash/src/imgui_backend/MemoryBuffer.cpp
+@@ -10,6 +10,10 @@
+   size_t alignedSize = ALIGN_UP(size, 0x1000);
+ 
+   memBuffer = Mem::AllocateAlign(0x1000, alignedSize);
++  if (memBuffer == nullptr) {
++    Logger::log("Failed to Allocate Memory Pool Storage!\n");
++    return;
++  }
+   memset(memBuffer, 0, alignedSize);
+ 
+   bd->memPoolBuilder.SetDefaults()
+@@ -21,6 +25,7 @@
+     Logger::log("Failed to Create Memory Pool!\n");
+     return;
+   }
++  mPoolLive = true;
+ 
+   bd->bufferBuilder.SetDevice(bd->device).SetDefaults().SetStorage(&pool, 0, alignedSize);
+ 
+@@ -28,6 +33,7 @@
+     Logger::log("Failed to Init Buffer!\n");
+     return;
+   }
++  mBufferLive = true;
+ 
+   mIsReady = true;
+ }
+@@ -39,6 +45,10 @@
+   size_t alignedSize = ALIGN_UP(size, 0x1000);
+ 
+   memBuffer = Mem::AllocateAlign(0x1000, alignedSize);
++  if (memBuffer == nullptr) {
++    Logger::log("Failed to Allocate Memory Pool Storage!\n");
++    return;
++  }
+   memset(memBuffer, 0, alignedSize);
+ 
+   bd->memPoolBuilder.SetDefaults()
+@@ -50,6 +60,7 @@
+     Logger::log("Failed to Create Memory Pool!\n");
+     return;
+   }
++  mPoolLive = true;
+ 
+   bd->bufferBuilder.SetDevice(bd->device).SetDefaults().SetStorage(&pool, 0, alignedSize);
+ 
+@@ -57,6 +68,7 @@
+     Logger::log("Failed to Init Buffer!\n");
+     return;
+   }
++  mBufferLive = true;
+ 
+   mIsReady = true;
+ }
+@@ -67,6 +79,10 @@
+ 
+   // Copy to respect alignment for both size and pointer
+   memBuffer = Mem::AllocateAlign(0x1000, size);
++  if (memBuffer == nullptr) {
++    Logger::log("Failed to Allocate Memory Pool Storage!\n");
++    return;
++  }
+   memcpy(memBuffer, bufferPtr, size);
+ 
+   bd->memPoolBuilder.SetDefaults()
+@@ -78,6 +94,7 @@
+     Logger::log("Failed to Create Memory Pool!\n");
+     return;
+   }
++  mPoolLive = true;
+ 
+   bd->bufferBuilder.SetDevice(bd->device).SetDefaults().SetStorage(&pool, 0, size);
+ 
+@@ -85,14 +102,25 @@
+     Logger::log("Failed to Init Buffer!\n");
+     return;
+   }
++  mBufferLive = true;
+ 
+   mIsReady = true;
+ }
+ 
+ void MemoryBuffer::Finalize() {
+-  IM_FREE(memBuffer);
+-  pool.Finalize();
+-  buffer.Finalize();
++  if (mBufferLive) {
++    buffer.Finalize();
++    mBufferLive = false;
++  }
++  if (mPoolLive) {
++    pool.Finalize();
++    mPoolLive = false;
++  }
++  if (memBuffer != nullptr) {
++    Mem::Deallocate(memBuffer);
++    memBuffer = nullptr;
++  }
++  mIsReady = false;
+ }
+ 
+ void MemoryBuffer::ClearBuffer() {
+diff --git a/imgui-smash/src/imgui_backend/MemoryBuffer.h b/imgui-smash/src/imgui_backend/MemoryBuffer.h
+--- a/imgui-smash/src/imgui_backend/MemoryBuffer.h
++++ b/imgui-smash/src/imgui_backend/MemoryBuffer.h
+@@ -30,6 +30,8 @@
+   nvn::MemoryPool pool;
+   nvn::Buffer buffer;
+ 
+-  void *memBuffer;
++  void *memBuffer = nullptr;
++  bool mPoolLive = false;
++  bool mBufferLive = false;
+   bool mIsReady = false;
+ };
+\ No newline at end of file
+diff --git a/imgui-smash/src/imgui_backend/imgui_impl_nvn.cpp b/imgui-smash/src/imgui_backend/imgui_impl_nvn.cpp
+--- a/imgui-smash/src/imgui_backend/imgui_impl_nvn.cpp
++++ b/imgui-smash/src/imgui_backend/imgui_impl_nvn.cpp
+@@ -1,4 +1,5 @@
+ #include "imgui_impl_nvn.hpp"
++#include "DrawSlots.h"
+ #include "helpers.h"
+ #include "imgui_hid_mappings.h"
+ #include "logger/Logger.hpp"
+@@ -19,6 +20,7 @@
+ #define UBOSIZE 0x1000
+ 
+ typedef float Matrix44f[4][4];
++static_assert(sizeof(Matrix44f) == 64, "projection matrix update is 64 bytes");
+ 
+ // orthographic matrix used for shader
+ static Matrix44f projMatrix = {};
+@@ -51,18 +53,43 @@
+   void loadIni();
+   void saveIni();
+ 
++  MemoryBuffer *checkedMemoryBuffer(size_t size) {
++    void *storage = ImGui::MemAlloc(sizeof(MemoryBuffer));
++    if (storage == nullptr) {
++      return nullptr;
++    }
++    return new (ImNewWrapper(), storage) MemoryBuffer(size);
++  }
++
++  MemoryBuffer *checkedMemoryBuffer(size_t size, nvn::MemoryPoolFlags flags) {
++    void *storage = ImGui::MemAlloc(sizeof(MemoryBuffer));
++    if (storage == nullptr) {
++      return nullptr;
++    }
++    return new (ImNewWrapper(), storage) MemoryBuffer(size, flags);
++  }
++
++  MemoryBuffer *checkedMemoryBuffer(size_t size, void *bytes, nvn::MemoryPoolFlags flags) {
++    void *storage = ImGui::MemAlloc(sizeof(MemoryBuffer));
++    if (storage == nullptr) {
++      return nullptr;
++    }
++    return new (ImNewWrapper(), storage) MemoryBuffer(size, bytes, flags);
++  }
++
+   // doesnt get used anymore really, as back when it was needed i had a simplified shader to test with, but now I just test with the actual imgui shader
+   void initTestShader() {
+ 
+     auto bd = getBackendData();
+     bd->testShaderBinary = ImguiShaderCompiler::CompileShader("test");
+ 
+-    bd->testShaderBuffer = IM_NEW(MemoryBuffer)(bd->testShaderBinary.size, bd->testShaderBinary.ptr,
+-                                                nvn::MemoryPoolFlags::CPU_UNCACHED |
+-                                                nvn::MemoryPoolFlags::GPU_CACHED |
+-                                                nvn::MemoryPoolFlags::SHADER_CODE);
+-
+-    SMASH_ASSERT(bd->testShaderBuffer->IsBufferReady(), "Shader Buffer was not ready! unable to continue.");
++    bd->testShaderBuffer = checkedMemoryBuffer(bd->testShaderBinary.size, bd->testShaderBinary.ptr,
++                                               nvn::MemoryPoolFlags::CPU_UNCACHED |
++                                               nvn::MemoryPoolFlags::GPU_CACHED |
++                                               nvn::MemoryPoolFlags::SHADER_CODE);
++
++    SMASH_ASSERT(bd->testShaderBuffer != nullptr && bd->testShaderBuffer->IsBufferReady(),
++                 "Shader Buffer was not ready! unable to continue.");
+ 
+     BinaryHeader offsetData = BinaryHeader((u32 *) bd->testShaderBinary.ptr);
+ 
+@@ -190,11 +217,11 @@
+         bd->vtxBuffer->Finalize();
+         IM_FREE(bd->vtxBuffer);
+       }
+-      bd->vtxBuffer = IM_NEW(MemoryBuffer)(totalVtxSize);
++      bd->vtxBuffer = checkedMemoryBuffer(totalVtxSize);
+       Logger::log("(Re)sized Vertex Buffer to Size: %d\n", totalVtxSize);
+     }
+ 
+-    if (!bd->vtxBuffer->IsBufferReady()) {
++    if (bd->vtxBuffer == nullptr || !bd->vtxBuffer->IsBufferReady()) {
+       Logger::log("Cannot Draw Data! Buffers are not Ready.\n");
+       return;
+     }
+@@ -374,11 +401,11 @@
+       return false;
+     }
+ 
+-    bd->shaderMemory = IM_NEW(MemoryBuffer)(binarySize, shaderBinary, nvn::MemoryPoolFlags::CPU_UNCACHED |
+-                                                                      nvn::MemoryPoolFlags::GPU_CACHED |
+-                                                                      nvn::MemoryPoolFlags::SHADER_CODE);
+-
+-    if (!bd->shaderMemory->IsBufferReady()) {
++    bd->shaderMemory = checkedMemoryBuffer(binarySize, shaderBinary, nvn::MemoryPoolFlags::CPU_UNCACHED |
++                                                                     nvn::MemoryPoolFlags::GPU_CACHED |
++                                                                     nvn::MemoryPoolFlags::SHADER_CODE);
++
++    if (bd->shaderMemory == nullptr || !bd->shaderMemory->IsBufferReady()) {
+       Logger::log("Shader Memory Pool not Ready! Unable to continue.\n");
+       return false;
+     }
+@@ -404,9 +431,9 @@
+ 
+     // Uniform Block Object Memory Setup
+ 
+-    bd->uniformMemory = IM_NEW(MemoryBuffer)(UBOSIZE);
+-
+-    if (!bd->uniformMemory->IsBufferReady()) {
++    bd->uniformMemory = checkedMemoryBuffer(UBOSIZE);
++
++    if (bd->uniformMemory == nullptr || !bd->uniformMemory->IsBufferReady()) {
+       Logger::log("Uniform Memory Pool not Ready! Unable to continue.\n");
+       return false;
+     }
+@@ -448,6 +475,7 @@
+     bd->device = initInfo.device;
+     bd->queue = initInfo.queue;
+     bd->cmdBuf = initInfo.cmdBuf;
++    bd->recordingCmd = nullptr;
+     bd->isInitialized = false;
+ 
+ #if IMGUI_SMASH_LOAD_DEFAULT_FONT
+@@ -484,6 +512,7 @@
+ 
+   void ShutdownBackend() {
+     auto *bd = getBackendData();
++    ImguiDrawSlots::shutdown(bd->device);
+     
+     if (bd->vtxBuffer) {
+         bd->vtxBuffer->Finalize();
+@@ -613,13 +642,14 @@
+   void setRenderStates() {
+ 
+     auto bd = getBackendData();
++    nvn::CommandBuffer *cmd = bd->recordingCmd != nullptr ? bd->recordingCmd : bd->cmdBuf;
+ 
+     nvn::PolygonState polyState;
+     polyState.SetDefaults();
+     polyState.SetPolygonMode(nvn::PolygonMode::FILL);
+     polyState.SetCullFace(nvn::Face::NONE);
+     polyState.SetFrontFace(nvn::FrontFace::CCW);
+-    bd->cmdBuf->BindPolygonState(&polyState);
++    cmd->BindPolygonState(&polyState);
+ 
+     nvn::ColorState colorState;
+     colorState.SetDefaults();
+@@ -628,20 +658,20 @@
+     for (int i = 0; i < 8; ++i) {
+       colorState.SetBlendEnable(i, true);
+     }
+-    bd->cmdBuf->BindColorState(&colorState);
++    cmd->BindColorState(&colorState);
+ 
+     nvn::BlendState blendState;
+     blendState.SetDefaults();
+     blendState.SetBlendFunc(nvn::BlendFunc::SRC_ALPHA, nvn::BlendFunc::ONE_MINUS_SRC_ALPHA, nvn::BlendFunc::ONE,
+                             nvn::BlendFunc::ZERO);
+     blendState.SetBlendEquation(nvn::BlendEquation::ADD, nvn::BlendEquation::ADD);
+-    bd->cmdBuf->BindBlendState(&blendState);
+-
+-    bd->cmdBuf->BindVertexAttribState(3, bd->attribStates);
+-    bd->cmdBuf->BindVertexStreamState(1, &bd->streamState);
+-
+-    bd->cmdBuf->SetTexturePool(&bd->texPool);
+-    bd->cmdBuf->SetSamplerPool(&bd->samplerPool);
++    cmd->BindBlendState(&blendState);
++
++    cmd->BindVertexAttribState(3, bd->attribStates);
++    cmd->BindVertexStreamState(1, &bd->streamState);
++
++    cmd->SetTexturePool(&bd->texPool);
++    cmd->SetSamplerPool(&bd->samplerPool);
+   }
+ 
+   nvn::CommandHandle renderDrawData(ImDrawData *drawData) {
+@@ -678,120 +708,78 @@
+       return 0;
+     }
+ 
+-    // initializes/resizes buffer used for all vertex data created by ImGui
+-    size_t totalVtxSize = drawData->TotalVtxCount * sizeof(ImDrawVert);
+-    if (!bd->vtxBuffer || bd->vtxBuffer->GetPoolSize() < totalVtxSize || bd->resetData) {
+-      if (bd->vtxBuffer) {
+-        bd->vtxBuffer->Finalize();
+-        IM_FREE(bd->vtxBuffer);
+-        Logger::log("Resizing Vertex Buffer to Size: %d\n", totalVtxSize);
+-      } else {
+-        Logger::log("Initializing Vertex Buffer to Size: %d\n", totalVtxSize);
+-      }
+-
+-      bd->vtxBuffer = IM_NEW(MemoryBuffer)(totalVtxSize);
+-    }
+-
+-    // initializes/resizes buffer used for all index data created by ImGui
+-    size_t totalIdxSize = drawData->TotalIdxCount * sizeof(ImDrawIdx);
+-    if (!bd->idxBuffer || bd->idxBuffer->GetPoolSize() < totalIdxSize || bd->resetData) {
+-      if (bd->idxBuffer) {
+-
+-        bd->idxBuffer->Finalize();
+-        IM_FREE(bd->idxBuffer);
+-
+-        Logger::log("Resizing Index Buffer to Size: %d\n", totalIdxSize);
+-      } else {
+-        Logger::log("Initializing Index Buffer to Size: %d\n", totalIdxSize);
+-      }
+-
+-      bd->idxBuffer = IM_NEW(MemoryBuffer)(totalIdxSize);
+-
+-    }
+-
+-    // if we fail to resize/init either buffers, end execution before we try to use said invalid buffer(s)
+-    if (!(bd->vtxBuffer->IsBufferReady() && bd->idxBuffer->IsBufferReady())) {
+-      Logger::log("Cannot Draw Data! Buffers are not Ready.\n");
++    size_t totalVtxSize = static_cast<size_t>(drawData->TotalVtxCount) * sizeof(ImDrawVert);
++    size_t totalIdxSize = static_cast<size_t>(drawData->TotalIdxCount) * sizeof(ImDrawIdx);
++    const int slot = ImguiDrawSlots::begin(bd->device, totalVtxSize, totalIdxSize);
++    if (slot < 0) {
+       return 0;
+     }
++    nvn::CommandBuffer *cmd = ImguiDrawSlots::commandBuffer(slot);
++    MemoryBuffer *vtx = ImguiDrawSlots::vertex(slot);
++    MemoryBuffer *idx = ImguiDrawSlots::index(slot);
++    MemoryBuffer *uniform = ImguiDrawSlots::uniform(slot);
++    if (cmd == nullptr || vtx == nullptr || idx == nullptr || uniform == nullptr || !vtx->IsBufferReady() ||
++        !idx->IsBufferReady() || !uniform->IsBufferReady()) {
++      ImguiDrawSlots::discardUnsubmitted(slot, bd->device);
++      return 0;
++    }
+ 
+     orthoRH_ZO(projMatrix, 0.0f, io.DisplaySize.x, io.DisplaySize.y, 0.0f, -1.0f, 1.0f);
+ 
+-    bd->cmdBuf->BeginRecording(); // start recording our commands to the cmd buffer
+-
+-    bd->cmdBuf->BindProgram(&bd->shaderProgram, nvn::ShaderStageBits::VERTEX |
+-                                                nvn::ShaderStageBits::FRAGMENT); // bind main imgui shader
+-
+-    bd->cmdBuf->BindUniformBuffer(nvn::ShaderStage::VERTEX, 0, *bd->uniformMemory,
+-                                  UBOSIZE); // bind uniform block ptr
+-    bd->cmdBuf->UpdateUniformBuffer(*bd->uniformMemory, UBOSIZE, 0, sizeof(projMatrix),
+-                                    &projMatrix); // add projection matrix data to uniform data
+-
+-    setRenderStates(); // sets up the rest of the render state, required so that our shader properly gets drawn to the screen
++    bd->recordingCmd = cmd;
++    cmd->BeginRecording();
++
++    // Setup is one uninterruptible group. Its largest immediate update is the
++    // 64-byte projection matrix. Later checks stop further groups after overflow.
++    if (!ImguiDrawSlots::overflowed(slot)) {
++      cmd->BindProgram(&bd->shaderProgram, nvn::ShaderStageBits::VERTEX | nvn::ShaderStageBits::FRAGMENT);
++      cmd->BindUniformBuffer(nvn::ShaderStage::VERTEX, 0, *uniform, UBOSIZE);
++      cmd->UpdateUniformBuffer(*uniform, UBOSIZE, 0, sizeof(projMatrix), &projMatrix);
++      setRenderStates();
++    }
+ 
+     size_t vtxOffset = 0, idxOffset = 0;
+     nvn::TextureHandle boundTextureHandle = 0;
+ 
+-    // load data into buffers, and process draw commands
+-    for (int i = 0; i < drawData->CmdListsCount; i++) {
+-
++    for (int i = 0; i < drawData->CmdListsCount && !ImguiDrawSlots::overflowed(slot); i++) {
+       auto cmdList = drawData->CmdLists[i];
+-
+-      // calc vertex and index buffer sizes
+-      size_t vtxSize = cmdList->VtxBuffer.Size * sizeof(ImDrawVert);
+-      size_t idxSize = cmdList->IdxBuffer.Size * sizeof(ImDrawIdx);
+-
+-      // bind vtx buffer at the current offset
+-      bd->cmdBuf->BindVertexBuffer(0, (*bd->vtxBuffer) + vtxOffset, vtxSize);
+-
+-      // copy data from imgui command list into our gpu dedicated memory
+-      memcpy(bd->vtxBuffer->GetMemPtr() + vtxOffset, cmdList->VtxBuffer.Data, vtxSize);
+-      memcpy(bd->idxBuffer->GetMemPtr() + idxOffset, cmdList->IdxBuffer.Data, idxSize);
+-
+-      for (auto cmd: cmdList->CmdBuffer) {
+-
+-
+-//                ImVec2 origRes(1280.0f, 720.0f);
+-//                ImVec2 newRes = io.DisplaySize; // (1600.0f, 900.0f);
+-
+-        // clipping seems to be a bit more broken here than in my other repo, not exactly sure what's changed, but it's disabled for now.
+-
+-        ImVec4 clipRect = ImVec4(cmd.ClipRect.x,
+-                                 cmd.ClipRect.y,
+-                                 cmd.ClipRect.z,
+-                                 cmd.ClipRect.w);
+-
++      size_t vtxSize = static_cast<size_t>(cmdList->VtxBuffer.Size) * sizeof(ImDrawVert);
++      size_t idxSize = static_cast<size_t>(cmdList->IdxBuffer.Size) * sizeof(ImDrawIdx);
++
++      cmd->BindVertexBuffer(0, (*vtx) + vtxOffset, vtxSize);
++      if (vtxSize > 0) {
++        memcpy(vtx->GetMemPtr() + vtxOffset, cmdList->VtxBuffer.Data, vtxSize);
++      }
++      if (idxSize > 0) {
++        memcpy(idx->GetMemPtr() + idxOffset, cmdList->IdxBuffer.Data, idxSize);
++      }
++      if (ImguiDrawSlots::overflowed(slot)) {
++        break;
++      }
++
++      for (auto draw : cmdList->CmdBuffer) {
++        ImVec4 clipRect = ImVec4(draw.ClipRect.x, draw.ClipRect.y, draw.ClipRect.z, draw.ClipRect.w);
+         ImVec2 clip_min(clipRect.x, clipRect.y);
+         ImVec2 clip_max(clipRect.z, clipRect.w);
+         ImVec2 clip_size(clip_max.x - clip_min.x, clip_max.y - clip_min.y);
+ 
+-        // if (clip_max.x <= clip_min.x || clip_max.y <= clip_min.y)
+-        //   continue;
+-        
+-        if(currentTextureIndex != -1) {
+-            // Logger::log("Current Tex Idx: %d  - Texture Ptr: 0x%p ", currentTextureIndex, (nvn::Texture* const*)&nvnTextures[currentTextureIndex]);
+-            bd->cmdBuf->SetRenderTargets(1, (nvn::Texture* const*)(&nvnTextures[currentTextureIndex]), 0, 0, 0);
++        if (currentTextureIndex != -1) {
++          cmd->SetRenderTargets(1, (nvn::Texture *const *)(&nvnTextures[currentTextureIndex]), 0, 0, 0);
+         }
+-        bd->cmdBuf->SetViewport(0, 0, static_cast<int>(io.DisplaySize.x), static_cast<int>(io.DisplaySize.y));
+-        bd->cmdBuf->SetScissor(static_cast<int>(clip_min.x), static_cast<int>(clip_min.y),static_cast<int>(clip_size.x), static_cast<int>(clip_size.y));
+-        // bd->cmdBuf->SetScissor(0, 0, static_cast<int>(io.DisplaySize.x), static_cast<int>(io.DisplaySize.y));
+-
+-        // float blue[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+-        // bd->cmdBuf->ClearColor(0, blue, 0x0000000F);
+-
+-        // get texture ID from the command
+-        nvn::TextureHandle TexID = *(nvn::TextureHandle *) cmd.GetTexID();
+-        // if our previous handle is different from the current, bind the texture
++        cmd->SetViewport(0, 0, static_cast<int>(io.DisplaySize.x), static_cast<int>(io.DisplaySize.y));
++        cmd->SetScissor(static_cast<int>(clip_min.x), static_cast<int>(clip_min.y), static_cast<int>(clip_size.x),
++                        static_cast<int>(clip_size.y));
++
++        nvn::TextureHandle TexID = *(nvn::TextureHandle *)draw.GetTexID();
+         if (boundTextureHandle != TexID) {
+           boundTextureHandle = TexID;
+-          bd->cmdBuf->BindTexture(nvn::ShaderStage::FRAGMENT, 0, TexID);
++          cmd->BindTexture(nvn::ShaderStage::FRAGMENT, 0, TexID);
+         }
+-        // draw our vertices using the indices stored in the buffer, offset by the current command index offset,
+-        // as well as the current offset into our buffer.
+-        bd->cmdBuf->DrawElementsBaseVertex(nvn::DrawPrimitive::TRIANGLES,
+-                                           nvn::IndexType::UNSIGNED_SHORT, cmd.ElemCount,
+-                                           (*bd->idxBuffer) + (cmd.IdxOffset * sizeof(ImDrawIdx)) + idxOffset,
+-                                           cmd.VtxOffset);
++        cmd->DrawElementsBaseVertex(nvn::DrawPrimitive::TRIANGLES, nvn::IndexType::UNSIGNED_SHORT, draw.ElemCount,
++                                    (*idx) + (draw.IdxOffset * sizeof(ImDrawIdx)) + idxOffset, draw.VtxOffset);
++        if (ImguiDrawSlots::overflowed(slot)) {
++          break;
++        }
+       }
+ 
+       vtxOffset += vtxSize;
+@@ -799,9 +787,12 @@
+     }
+ 
+     bd->resetData = false;
+-    // end the command recording and submit to queue.
+-    nvn::CommandHandle handle = bd->cmdBuf->EndRecording();
+-    // bd->queue->SubmitCommands(1, &handle);
++    nvn::CommandHandle handle = cmd->EndRecording();
++    bd->recordingCmd = nullptr;
++    ImguiDrawSlots::complete(slot, bd->device, handle);
++    if (ImguiDrawSlots::active() != slot) {
++      return 0;
++    }
+     return handle;
+   }
+ }
+\ No newline at end of file
+diff --git a/imgui-smash/src/imgui_backend/imgui_impl_nvn.hpp b/imgui-smash/src/imgui_backend/imgui_impl_nvn.hpp
+--- a/imgui-smash/src/imgui_backend/imgui_impl_nvn.hpp
++++ b/imgui-smash/src/imgui_backend/imgui_impl_nvn.hpp
+@@ -74,6 +74,7 @@
+ 
+     MemoryBuffer *vtxBuffer;
+     MemoryBuffer *idxBuffer;
++    nvn::CommandBuffer *recordingCmd = nullptr;
+ 
+     // misc data
+ 
+diff --git a/imgui-smash/src/imgui_backend/imgui_nvn.cpp b/imgui-smash/src/imgui_backend/imgui_nvn.cpp
+--- a/imgui-smash/src/imgui_backend/imgui_nvn.cpp
++++ b/imgui-smash/src/imgui_backend/imgui_nvn.cpp
+@@ -1,4 +1,6 @@
+ #include "imgui_nvn.h"
++#include "DrawSlots.h"
++#include "frame_guard.hpp"
+ #include "helpers/InputHelper.h"
+ #include "helpers/memoryHelper.h"
+ #include "imgui_backend/imgui_impl_nvn.hpp"
+@@ -7,7 +9,7 @@
+ #include "nvn_CppFuncPtrImpl.h"
+ #include "nx/abort.h"
+ 
+-bool IS_DRAWING = false;
++#include <climits>
+ 
+ nvn::Device *nvnDevice;
+ nvn::Queue *nvnQueue;
+@@ -108,23 +110,44 @@
+   tempPresentTexFunc(queue, window, texIndex);
+ }
+ 
+-void submitCommands(nvn::Queue *queue, int num_commands, nvn::CommandHandle * handles) {
+-  if(currentTextureIndex == -1 || !hasInitImGui || IS_DRAWING){
++void submitCommands(nvn::Queue *queue, int num_commands, nvn::CommandHandle *handles) {
++  const bool overlay_ready = currentTextureIndex != -1 && hasInitImGui;
++  FrameEntryOwner::Claim claim = claim_frame_entry(overlay_ready);
++  if (!claim.holds()) {
+     tempQueueSubmitFunc(queue, num_commands, handles);
+-  } else {
+-        nvn::CommandHandle handle = nvnImGui::procDraw();
+-        if(handle == 0){
+-            tempQueueSubmitFunc(queue, num_commands, handles);
+-            return;
+-        }
+-        void* new_handles = malloc((num_commands + 1) << 3);
+-        memcpy((void *)new_handles, (void *)handles, num_commands << 3);
+-        *((u64 *)(((u64)new_handles) + (num_commands * 8))) = handle;
+-        tempQueueSubmitFunc(queue, num_commands + 1, (nvn::CommandHandle *)new_handles);
+-        if((u64)new_handles != 0x0){
+-            free(new_handles);
+-        }
+-  }
++    return;
++  }
++  if (num_commands == INT_MAX || (num_commands > 0 && handles == nullptr)) {
++    tempQueueSubmitFunc(queue, num_commands, handles);
++    return;
++  }
++
++  nvn::CommandHandle handle = nvnImGui::procDraw();
++  const int slot = ImguiDrawSlots::active();
++  if (handle == 0 || slot < 0) {
++    tempQueueSubmitFunc(queue, num_commands, handles);
++    return;
++  }
++  if (num_commands < 0) {
++    ImguiDrawSlots::discardUnsubmitted(slot, nvnDevice);
++    tempQueueSubmitFunc(queue, num_commands, handles);
++    return;
++  }
++
++  const size_t bytes = (static_cast<size_t>(num_commands) + 1u) * sizeof(nvn::CommandHandle);
++  void *new_handles = malloc(bytes);
++  if (new_handles == nullptr) {
++    ImguiDrawSlots::discardUnsubmitted(slot, nvnDevice);
++    tempQueueSubmitFunc(queue, num_commands, handles);
++    return;
++  }
++  if (num_commands > 0) {
++    memcpy(new_handles, handles, static_cast<size_t>(num_commands) * sizeof(nvn::CommandHandle));
++  }
++  static_cast<nvn::CommandHandle *>(new_handles)[num_commands] = handle;
++  tempQueueSubmitFunc(queue, num_commands + 1, static_cast<nvn::CommandHandle *>(new_handles));
++  free(new_handles);
++  ImguiDrawSlots::fenceAfterSubmit(slot, queue);
+ }
+ 
+ void acquireTexture(nvn::Window * window, nvn::Sync * texture_avaliable_sync, int * texture_index){
+@@ -304,7 +327,6 @@
+     newFrameFunc();
+   }
+ 
+-  IS_DRAWING = true;
+   ImguiNvnBackend::newFrame();
+   ImGui::NewFrame();
+ 
+@@ -315,7 +337,6 @@
+   }
+ 
+   ImGui::Render();
+-  IS_DRAWING = false;
+ 
+   return ImguiNvnBackend::renderDrawData(ImGui::GetDrawData());
+ }
+diff --git a/imgui-smash/host-tests/command_memory_reserve_test.cpp b/imgui-smash/host-tests/command_memory_reserve_test.cpp
+new file mode 100644
+--- /dev/null
++++ b/imgui-smash/host-tests/command_memory_reserve_test.cpp
+@@ -0,0 +1,126 @@
++#include "imgui_backend/command_memory_reserve.hpp"
++
++#include <cstdint>
++#include <cstdio>
++#include <cstring>
++
++namespace {
++
++int g_failures = 0;
++
++void expect(bool condition, const char *name) {
++  if (!condition) {
++    std::fprintf(stderr, "FAIL %s\n", name);
++    g_failures += 1;
++  }
++}
++
++void test_alignment_and_minimum() {
++  const MemoryBudget small = align_budget(1, 512, 256);
++  expect(small.ok && small.bytes == 512, "request below minimum becomes the device minimum");
++  const MemoryBudget full = align_budget(256u * 1024u, 512, 256);
++  expect(full.ok && full.bytes == 256u * 1024u, "256KiB reserve stays 256KiB");
++  const MemoryBudget bad = align_budget(64, 8, 3);
++  expect(!bad.ok, "non power-of-two alignment is rejected");
++  const SlotReserveLayout layout =
++      plan_slot_memory(1, 1, 256u * 1024u, 64u * 1024u, 512, 64, 256, 64, 4096);
++  expect(layout.ok, "small initial budget plans");
++  expect(layout.command.base == 512, "command base is the device minimum");
++  expect(layout.command.reserve == 256u * 1024u, "command reserve stays full");
++  expect(layout.control.base == 64, "control base is the device minimum");
++  expect(layout.control.reserve == 64u * 1024u, "control reserve stays full");
++  expect(layout.command_pool >= layout.command.base + layout.command.reserve, "pool covers base plus reserve");
++  expect(layout.command_pool % 4096u == 0, "pool size is page rounded");
++  expect(layout.command.base + layout.command.reserve <= layout.command_pool, "reserve fits in the pool");
++}
++
++void test_second_use_and_reset() {
++  MemoryRegion command{512, 4096, false};
++  MemoryRegion control{64, 1024, false};
++  const ReserveSupply first = select_reserve(command, control, ReserveKind::Command, 32);
++  expect(first.choice == ReserveChoice::Supply && first.offset == 512 && first.bytes == 4096, "first command supply");
++  expect(command.used && !control.used, "only command reserve is marked");
++  const ReserveSupply second = select_reserve(command, control, ReserveKind::Command, 32);
++  expect(second.choice == ReserveChoice::Abort, "second command request is rejected");
++  expect(command.used, "rejected request leaves the reserve used");
++  const ReserveSupply control_supply = select_reserve(command, control, ReserveKind::Control, 1024);
++  expect(control_supply.choice == ReserveChoice::Supply && control_supply.offset == 64 && control_supply.bytes == 1024,
++         "unused control reserve can still be supplied");
++  MemoryRegion oversized{512, 4096, false};
++  MemoryRegion unused_control{64, 1024, false};
++  const ReserveSupply huge = select_reserve(oversized, unused_control, ReserveKind::Command, 8192);
++  expect(huge.choice == ReserveChoice::Abort && !oversized.used, "minSize above the reserve is rejected");
++  const ReserveSupply unknown = select_reserve(command, control, ReserveKind::Unrecognized, 1);
++  expect(unknown.choice == ReserveChoice::Abort && command.used && control.used, "unrecognized event is rejected");
++  command = {};
++  control = {};
++  command.base = 512;
++  command.reserve = 4096;
++  control.base = 64;
++  control.reserve = 1024;
++  expect(!command.used && !control.used, "retirement clears both reserves");
++  const ReserveSupply again = select_reserve(command, control, ReserveKind::Command, 32);
++  expect(again.choice == ReserveChoice::Supply, "reset reserve can be supplied again");
++}
++
++struct MockAdd {
++  bool command = false;
++  ptrdiff_t command_offset = -1;
++  size_t command_bytes = 0;
++  uintptr_t control_address = 0;
++  size_t control_bytes = 0;
++};
++
++void apply_mock(const ReserveSupply &supply, ReserveKind kind, unsigned char *control, MockAdd &add) {
++  if (supply.choice != ReserveChoice::Supply) {
++    return;
++  }
++  if (kind == ReserveKind::Command) {
++    add.command = true;
++    add.command_offset = static_cast<ptrdiff_t>(supply.offset);
++    add.command_bytes = supply.bytes;
++    return;
++  }
++  add.control_address = reinterpret_cast<uintptr_t>(control + supply.offset);
++  add.control_bytes = supply.bytes;
++}
++
++void test_mock_callback_regions() {
++  alignas(64) unsigned char control[64 + 1024];
++  std::memset(control, 0, sizeof(control));
++  MemoryRegion command_region{512, 4096, false};
++  MemoryRegion control_region{64, 1024, false};
++  const size_t min_command = 100;
++  const ReserveSupply command =
++      select_reserve(command_region, control_region, reserve_kind_from_event(0), min_command);
++  MockAdd add;
++  apply_mock(command, ReserveKind::Command, control, add);
++  expect(add.command, "mock records a command add");
++  expect(add.command_offset == 512, "command reserve starts after the base");
++  expect(add.command_bytes >= min_command, "command reserve is at least minSize");
++  expect(static_cast<size_t>(add.command_offset) + add.command_bytes > 512, "command reserve is past the base");
++  const size_t min_control = 40;
++  const ReserveSupply control_supply =
++      select_reserve(command_region, control_region, reserve_kind_from_event(1), min_control);
++  apply_mock(control_supply, ReserveKind::Control, control, add);
++  const uintptr_t base = reinterpret_cast<uintptr_t>(control);
++  expect(add.control_address == base + 64, "control reserve does not overlap the base");
++  expect(add.control_bytes >= min_control, "control reserve is at least minSize");
++  expect(reserve_kind_from_event(2) == ReserveKind::Unrecognized, "event 2 is unrecognized");
++  expect(reserve_kind_from_event(0) == ReserveKind::Command, "event 0 is command memory");
++  expect(reserve_kind_from_event(1) == ReserveKind::Control, "event 1 is control memory");
++}
++
++}  // namespace
++
++int main() {
++  test_alignment_and_minimum();
++  test_second_use_and_reset();
++  test_mock_callback_regions();
++  if (g_failures != 0) {
++    std::fprintf(stderr, "%d failure(s)\n", g_failures);
++    return 1;
++  }
++  std::printf("command memory reserve tests passed\n");
++  return 0;
++}
+diff --git a/imgui-smash/host-tests/draw_slot_rules_test.cpp b/imgui-smash/host-tests/draw_slot_rules_test.cpp
+new file mode 100644
+--- /dev/null
++++ b/imgui-smash/host-tests/draw_slot_rules_test.cpp
+@@ -0,0 +1,105 @@
++#include "draw_slot_rules.hpp"
++
++#include <cstdio>
++
++static int g_failures = 0;
++
++static void expect(bool condition, const char *name) {
++  if (!condition) {
++    std::fprintf(stderr, "fail %s\n", name);
++    g_failures += 1;
++  }
++}
++
++static void fill(int waits[DrawSlotRules::kCount], int value) {
++  for (int i = 0; i < DrawSlotRules::kCount; ++i) {
++    waits[i] = value;
++  }
++}
++
++static void testPendingIsNotReusable() {
++  DrawSlotRules rules;
++  int waits[DrawSlotRules::kCount];
++  fill(waits, -1);
++  rules.phase[0] = DrawSlotPhase::Submitted;
++  waits[0] = 2;
++  expect(rules.acquire(waits) == 1, "timeout selects the next free slot");
++  expect(rules.phase[0] == DrawSlotPhase::Submitted, "timeout stays submitted");
++  rules.phase[1] = DrawSlotPhase::Recorded;
++  for (int i = 0; i < DrawSlotRules::kCount; ++i) {
++    rules.phase[i] = DrawSlotPhase::Submitted;
++    waits[i] = 2;
++  }
++  expect(rules.acquire(waits) == -1, "all timeouts skip the draw");
++}
++
++static void testSignaledIsReusable() {
++  DrawSlotRules rules;
++  int waits[DrawSlotRules::kCount];
++  fill(waits, 2);
++  rules.phase[0] = DrawSlotPhase::Submitted;
++  waits[0] = 0;
++  expect(rules.acquire(waits) == 0, "already signaled is reusable");
++  rules.phase[0] = DrawSlotPhase::Submitted;
++  rules.cursor = 0;
++  waits[0] = 1;
++  expect(rules.acquire(waits) == 0, "condition satisfied is reusable");
++}
++
++static void testFailureQuarantine() {
++  DrawSlotRules rules;
++  int waits[DrawSlotRules::kCount];
++  fill(waits, -1);
++  rules.phase[0] = DrawSlotPhase::Submitted;
++  waits[0] = 3;
++  expect(rules.acquire(waits) == 1, "failed slot is skipped");
++  expect(rules.phase[0] == DrawSlotPhase::Failed, "failed slot is quarantined");
++  expect(rules.quarantined == 1, "quarantine counted once");
++  rules.phase[1] = DrawSlotPhase::Free;
++  rules.cursor = 0;
++  expect(rules.acquire(waits) == 1, "quarantine persists");
++  expect(rules.quarantined == 1, "second scan does not recount");
++}
++
++static void testRoundRobin() {
++  DrawSlotRules rules;
++  int waits[DrawSlotRules::kCount];
++  fill(waits, -1);
++  for (int i = 0; i < DrawSlotRules::kCount; ++i) {
++    const int got = rules.acquire(waits);
++    expect(got == i, "round robin order");
++    rules.markRecorded(got);
++  }
++  expect(rules.acquire(waits) == -1, "recorded slots are not acquired twice");
++}
++
++static void testUnsubmittedCancel() {
++  DrawSlotRules rules;
++  int waits[DrawSlotRules::kCount];
++  fill(waits, -1);
++  const int first = rules.acquire(waits);
++  rules.markRecorded(first);
++  expect(rules.cancelUnsubmitted(first), "cancel recorded slot");
++  expect(rules.phase[first] == DrawSlotPhase::Free, "cancel returns the slot");
++  expect(!rules.cancelUnsubmitted(first), "cancel is not a second free");
++  rules.cursor = 0;
++  expect(rules.acquire(waits) == first, "cancelled slot can be acquired");
++  rules.markRecorded(0);
++  rules.markSubmitted(0);
++  expect(rules.phase[0] == DrawSlotPhase::Submitted, "recorded slot can be submitted");
++  expect(!rules.cancelUnsubmitted(0), "submitted slot is not cancelled");
++}
++
++int main() {
++  testPendingIsNotReusable();
++  testSignaledIsReusable();
++  testFailureQuarantine();
++  testRoundRobin();
++  testUnsubmittedCancel();
++  if (g_failures != 0) {
++    std::fprintf(stderr, "%d failures\n", g_failures);
++    return 1;
++  }
++  std::printf("draw_slot_rules_test ok\n");
++  return 0;
++}
+diff --git a/imgui-smash/host-tests/frame_guard_concurrent_test.cpp b/imgui-smash/host-tests/frame_guard_concurrent_test.cpp
+new file mode 100644
+--- /dev/null
++++ b/imgui-smash/host-tests/frame_guard_concurrent_test.cpp
+@@ -0,0 +1,101 @@
++// Concurrent ownership checks against the frozen frame_guard.cpp helper.
++// Acceptance is FrameEntryOwner itself. This file does not imitate submitCommands.
++
++#include "imgui_backend/frame_guard.hpp"
++
++#include <atomic>
++#include <barrier>
++#include <cstdio>
++#include <cstdlib>
++#include <thread>
++
++namespace {
++
++int g_failures = 0;
++
++void expect(bool condition, const char* name) {
++    if (!condition) {
++        std::fprintf(stderr, "FAIL %s\n", name);
++        g_failures += 1;
++    }
++}
++
++void test_two_threads() {
++    FrameEntryOwner owner;
++    std::barrier<> holding(2);
++    std::barrier<> missed(2);
++    std::barrier<> released(2);
++    std::barrier<> acquired(2);
++    std::atomic<int> miss_holds{-1};
++    std::atomic<int> later_holds{-1};
++
++    std::thread contender([&] {
++        holding.arrive_and_wait();
++        FrameEntryOwner::Claim miss = owner.begin(true);
++        miss_holds.store(miss.holds() ? 1 : 0, std::memory_order_release);
++        missed.arrive_and_wait();
++        released.arrive_and_wait();
++        FrameEntryOwner::Claim later = owner.begin(true);
++        later_holds.store(later.holds() ? 1 : 0, std::memory_order_release);
++        acquired.arrive_and_wait();
++    });
++
++    {
++        FrameEntryOwner::Claim first = owner.begin(true);
++        expect(first.holds(), "first thread holds");
++        holding.arrive_and_wait();
++        missed.arrive_and_wait();
++        expect(miss_holds.load(std::memory_order_acquire) == 0, "second claim fails while held");
++        expect(owner.accepted() == 1, "one accept while held");
++        expect(owner.busy_skips() == 1, "busy increments while held");
++    }
++    released.arrive_and_wait();
++    acquired.arrive_and_wait();
++    contender.join();
++    expect(later_holds.load(std::memory_order_acquire) == 1, "second claim succeeds after release");
++    expect(owner.accepted() == 2, "accept after release");
++    expect(owner.busy_skips() == 1, "later success is not busy");
++}
++
++void leave_early(FrameEntryOwner& owner, int& stage) {
++    FrameEntryOwner::Claim claim = owner.begin(true);
++    if (!claim.holds()) {
++        stage = -1;
++        return;
++    }
++    stage = 1;
++}
++
++void test_early_return_releases() {
++    FrameEntryOwner owner;
++    int stage = 0;
++    leave_early(owner, stage);
++    expect(stage == 1, "early return left a held claim");
++    FrameEntryOwner::Claim next = owner.begin(true);
++    expect(next.holds(), "early return released the claim");
++    expect(owner.accepted() == 2, "accept after early return");
++    expect(owner.busy_skips() == 0, "early return is not a busy skip");
++}
++
++void test_production_getter_abi() {
++    expect(imgui_smash_frame_guard_stats(nullptr) == 0, "null getter returns 0");
++    ImguiSmashFrameGuardStats stats{};
++    expect(imgui_smash_frame_guard_stats(&stats) == 1, "getter returns 1");
++    expect(stats.version == 1, "getter version is 1");
++    expect(stats.size == 24, "getter size is 24");
++    expect(sizeof(ImguiSmashFrameGuardStats) == 24, "local layout is 24");
++}
++
++}  // namespace
++
++int main() {
++    test_two_threads();
++    test_early_return_releases();
++    test_production_getter_abi();
++    if (g_failures != 0) {
++        std::fprintf(stderr, "%d failure(s)\n", g_failures);
++        return 1;
++    }
++    std::printf("frame-guard concurrent tests passed\n");
++    return 0;
++}
+diff --git a/imgui-smash/host-tests/frame_guard_test.cpp b/imgui-smash/host-tests/frame_guard_test.cpp
+new file mode 100644
+--- /dev/null
++++ b/imgui-smash/host-tests/frame_guard_test.cpp
+@@ -0,0 +1,123 @@
++#include "imgui_backend/frame_guard.hpp"
++
++#include <cstdio>
++#include <cstdlib>
++
++namespace {
++
++int g_failures = 0;
++
++void expect(bool condition, const char* name) {
++    if (!condition) {
++        std::fprintf(stderr, "FAIL %s\n", name);
++        g_failures++;
++    }
++}
++
++struct SubmitCounts {
++    int original = 0;
++    int overlay = 0;
++};
++
++void submit_once(FrameEntryOwner& owner, bool overlay_ready, SubmitCounts& counts, bool reenter) {
++    FrameEntryOwner::Claim claim = owner.begin(overlay_ready);
++    if (!claim.holds()) {
++        counts.original += 1;
++        return;
++    }
++    counts.overlay += 1;
++    if (reenter) {
++        submit_once(owner, true, counts, false);
++    }
++}
++
++void test_unready_forwards_without_counters() {
++    FrameEntryOwner owner;
++    SubmitCounts counts;
++    submit_once(owner, false, counts, false);
++    expect(counts.original == 1, "unready forwards once");
++    expect(counts.overlay == 0, "unready omits overlay");
++    expect(owner.accepted() == 0, "unready does not accept");
++    expect(owner.busy_skips() == 0, "unready is not busy");
++}
++
++void test_enter_holds_until_release() {
++    FrameEntryOwner owner;
++    SubmitCounts counts;
++    submit_once(owner, true, counts, false);
++    expect(counts.original == 0, "enter does not forward");
++    expect(counts.overlay == 1, "enter draws once");
++    expect(owner.accepted() == 1, "enter accepts one");
++    expect(owner.busy_skips() == 0, "enter is not busy");
++    submit_once(owner, true, counts, false);
++    expect(owner.accepted() == 2, "release allows the next frame");
++    expect(counts.overlay == 2, "second frame enters");
++}
++
++void test_reentry_forwards_once() {
++    FrameEntryOwner owner;
++    SubmitCounts counts;
++    submit_once(owner, true, counts, true);
++    expect(counts.overlay == 1, "outer entry owns the frame");
++    expect(counts.original == 1, "reentry forwards original once");
++    expect(owner.accepted() == 1, "reentry does not accept another frame");
++    expect(owner.busy_skips() == 1, "reentry counts one busy skip");
++    submit_once(owner, true, counts, false);
++    expect(owner.accepted() == 2, "outer release clears the flag");
++    expect(owner.busy_skips() == 1, "later entry is not a busy skip");
++}
++
++void test_exclusive_second_claim() {
++    FrameEntryOwner owner;
++    FrameEntryOwner::Claim first = owner.begin(true);
++    FrameEntryOwner::Claim second = owner.begin(true);
++    expect(first.holds(), "first claim owns");
++    expect(!second.holds(), "second claim does not own");
++    expect(owner.accepted() == 1, "one accepted owner");
++    expect(owner.busy_skips() == 1, "second claim is busy");
++}
++
++void test_getter_copies_atomics() {
++    ImguiSmashFrameGuardStats before{};
++    expect(imgui_smash_frame_guard_stats(nullptr) == 0, "null getter returns 0");
++    expect(imgui_smash_frame_guard_stats(&before) == 1, "getter returns 1");
++    expect(before.version == 1, "version is 1");
++    expect(before.size == 24, "size is 24");
++    const uint64_t accepted = before.accepted;
++    const uint64_t busy = before.busy_skips;
++    {
++        FrameEntryOwner::Claim claim = claim_frame_entry(true);
++        expect(claim.holds(), "production claim owns");
++        FrameEntryOwner::Claim nested = claim_frame_entry(true);
++        expect(!nested.holds(), "production reentry does not own");
++        ImguiSmashFrameGuardStats during{};
++        expect(imgui_smash_frame_guard_stats(&during) == 1, "getter during claim");
++        expect(during.version == 1 && during.size == 24, "abi during claim");
++        expect(during.accepted == accepted + 1, "getter sees accepted");
++        expect(during.busy_skips == busy + 1, "getter sees busy skip");
++    }
++    FrameEntryOwner::Claim after = claim_frame_entry(false);
++    expect(!after.holds(), "unready production claim does not own");
++    ImguiSmashFrameGuardStats stats{};
++    expect(imgui_smash_frame_guard_stats(&stats) == 1, "getter after release");
++    expect(stats.accepted == accepted + 1, "unready does not accept");
++    expect(stats.busy_skips == busy + 1, "unready does not count busy");
++    FrameEntryOwner::Claim again = claim_frame_entry(true);
++    expect(again.holds(), "production release allows another claim");
++}
++
++}  // namespace
++
++int main() {
++    test_unready_forwards_without_counters();
++    test_enter_holds_until_release();
++    test_reentry_forwards_once();
++    test_exclusive_second_claim();
++    test_getter_copies_atomics();
++    if (g_failures != 0) {
++        std::fprintf(stderr, "%d failure(s)\n", g_failures);
++        return 1;
++    }
++    std::printf("frame-guard host tests passed\n");
++    return 0;
++}
+diff --git a/imgui-smash/include/imgui_smash_draw_stats.h b/imgui-smash/include/imgui_smash_draw_stats.h
+new file mode 100644
+--- /dev/null
++++ b/imgui-smash/include/imgui_smash_draw_stats.h
+@@ -0,0 +1,33 @@
++#pragma once
++
++#include <stdint.h>
++
++// Version 1 layout. `size` is sizeof(ImguiSmashDrawStats) as written by the getter.
++// commandOverflowSkips is the fixed-capacity callback counter. The local NVN
++// header does not define a safe way to continue a recording after the callback
++// returns without adding memory, so that slot is quarantined rather than reused.
++
++#define IMGUI_SMASH_DRAW_STATS_VERSION 1
++
++typedef struct ImguiSmashDrawStats {
++  uint32_t version;
++  uint32_t size;
++  uint64_t submitted;
++  uint64_t reused;
++  uint64_t pendingSkips;
++  uint64_t failed;
++  uint64_t maxCommandBytes;
++  uint64_t maxControlBytes;
++  uint64_t geometrySkips;
++  uint64_t commandOverflowSkips;
++} ImguiSmashDrawStats;
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++int imgui_smash_draw_stats(ImguiSmashDrawStats *out);
++
++#ifdef __cplusplus
++}
++#endif
+diff --git a/imgui-smash/src/imgui_backend/DrawSlots.cpp b/imgui-smash/src/imgui_backend/DrawSlots.cpp
+new file mode 100644
+--- /dev/null
++++ b/imgui-smash/src/imgui_backend/DrawSlots.cpp
+@@ -0,0 +1,434 @@
++#include "DrawSlots.h"
++
++#include "MemoryBuffer.h"
++#include "command_memory_reserve.hpp"
++#include "draw_slot_rules.hpp"
++#include "helpers/assert.hpp"
++#include "helpers/memoryHelper.h"
++#include "imgui.h"
++
++#include <atomic>
++#include <cstring>
++#include <cstddef>
++#include <cstdint>
++
++namespace {
++
++#ifndef IMGUI_SMASH_INITIAL_COMMAND_BUDGET
++#define IMGUI_SMASH_INITIAL_COMMAND_BUDGET (256u * 1024u)
++#endif
++#ifndef IMGUI_SMASH_INITIAL_CONTROL_BUDGET
++#define IMGUI_SMASH_INITIAL_CONTROL_BUDGET (64u * 1024u)
++#endif
++
++constexpr size_t kInitialCommand = IMGUI_SMASH_INITIAL_COMMAND_BUDGET;
++constexpr size_t kInitialControl = IMGUI_SMASH_INITIAL_CONTROL_BUDGET;
++constexpr size_t kReserveCommand = 256u * 1024u;
++constexpr size_t kReserveControl = 64u * 1024u;
++constexpr size_t kGeometryInitial = 64u * 1024u;
++constexpr size_t kGeometryCap = 1024u * 1024u;
++constexpr int kPageFallback = 0x1000;
++constexpr int kUniformBytes = 0x1000;
++
++struct alignas(8) Slot {
++  nvn::CommandBuffer command;
++  nvn::MemoryPool pool;
++  nvn::Sync sync;
++  void *commandStorage = nullptr;
++  void *controlStorage = nullptr;
++  MemoryRegion commandRegion;
++  MemoryRegion controlRegion;
++  MemoryBuffer *vertex = nullptr;
++  MemoryBuffer *indexBuffer = nullptr;
++  MemoryBuffer *uniform = nullptr;
++  nvn::CommandHandle handle = 0;
++  bool commandLive = false;
++  bool poolLive = false;
++  bool syncLive = false;
++  bool overflow = false;
++};
++
++static_assert(alignof(Slot) >= 8, "Slot must be at least 8-byte aligned");
++
++Slot g_slots[DrawSlotRules::kCount];
++DrawSlotRules g_rules;
++bool g_attempted = false;
++bool g_closed = false;
++int g_active = -1;
++
++std::atomic<uint64_t> g_submitted{0};
++std::atomic<uint64_t> g_reused{0};
++std::atomic<uint64_t> g_pendingSkips{0};
++std::atomic<uint64_t> g_geometrySkips{0};
++std::atomic<uint64_t> g_commandOverflowSkips{0};
++std::atomic<uint64_t> g_maxCommandBytes{0};
++std::atomic<uint64_t> g_maxControlBytes{0};
++
++void raiseMax(std::atomic<uint64_t> &slot, size_t used) {
++  uint64_t seen = slot.load(std::memory_order_relaxed);
++  const uint64_t value = static_cast<uint64_t>(used);
++  while (value > seen && !slot.compare_exchange_weak(seen, value, std::memory_order_relaxed)) {
++    continue;
++  }
++}
++
++void memoryCallback(nvn::CommandBuffer *buffer, nvn::CommandBufferMemoryEvent::Enum event, size_t minSize,
++                    void *data) {
++  auto *slot = static_cast<Slot *>(data);
++  if (slot == nullptr || buffer == nullptr || slot->controlStorage == nullptr) {
++    SMASH_ABORT("command memory callback has no slot");
++    __builtin_trap();
++  }
++  const ReserveKind kind = reserve_kind_from_event(static_cast<int>(event));
++  const ReserveSupply supply = select_reserve(slot->commandRegion, slot->controlRegion, kind, minSize);
++  if (supply.choice != ReserveChoice::Supply) {
++    SMASH_ABORT("command memory callback cannot satisfy request event=%d min=%zu", static_cast<int>(event),
++                minSize);
++    __builtin_trap();
++  }
++  slot->overflow = true;
++  if (kind == ReserveKind::Command) {
++    buffer->AddCommandMemory(&slot->pool, static_cast<ptrdiff_t>(supply.offset), supply.bytes);
++    return;
++  }
++  auto *base = static_cast<unsigned char *>(slot->controlStorage);
++  buffer->AddControlMemory(base + supply.offset, supply.bytes);
++}
++
++void attachMemory(Slot &slot) {
++  slot.command.SetMemoryCallback(&memoryCallback);
++  slot.command.SetMemoryCallbackData(&slot);
++  slot.command.AddCommandMemory(&slot.pool, 0, slot.commandRegion.base);
++  slot.command.AddControlMemory(slot.controlStorage, slot.controlRegion.base);
++  slot.overflow = false;
++  slot.commandRegion.used = false;
++  slot.controlRegion.used = false;
++}
++
++bool reinitCommand(Slot &slot, nvn::Device *device) {
++  if (slot.commandLive) {
++    slot.command.Finalize();
++    slot.commandLive = false;
++  }
++  if (device == nullptr || !slot.command.Initialize(device)) {
++    return false;
++  }
++  slot.commandLive = true;
++  attachMemory(slot);
++  return true;
++}
++
++void retireUnsubmitted(Slot &owned, int index, nvn::Device *device, nvn::CommandHandle extra) {
++  if (extra != 0 && device != nullptr) {
++    device->FinalizeCommandHandle(extra);
++  }
++  owned.handle = 0;
++  if (!reinitCommand(owned, device)) {
++    g_rules.fail(index);
++  } else {
++    g_rules.cancelUnsubmitted(index);
++  }
++}
++
++bool reinitSync(Slot &slot, nvn::Device *device) {
++  if (slot.syncLive) {
++    slot.sync.Finalize();
++    slot.syncLive = false;
++  }
++  if (device == nullptr || !slot.sync.Initialize(device)) {
++    return false;
++  }
++  slot.syncLive = true;
++  return true;
++}
++
++MemoryBuffer *createMemoryBuffer(size_t bytes, nvn::MemoryPoolFlags flags) {
++  void *storage = ImGui::MemAlloc(sizeof(MemoryBuffer));
++  if (storage == nullptr) {
++    return nullptr;
++  }
++  return new (ImNewWrapper(), storage) MemoryBuffer(bytes, flags);
++}
++
++void releaseBuffer(MemoryBuffer *&buffer) {
++  if (buffer == nullptr) {
++    return;
++  }
++  buffer->Finalize();
++  IM_FREE(buffer);
++  buffer = nullptr;
++}
++
++bool ensureGeometry(MemoryBuffer *&buffer, size_t bytes) {
++  if (bytes > kGeometryCap) {
++    return false;
++  }
++  if (buffer != nullptr && buffer->IsBufferReady() && buffer->GetPoolSize() >= bytes) {
++    return true;
++  }
++  releaseBuffer(buffer);
++  size_t alloc = bytes < kGeometryInitial ? kGeometryInitial : bytes;
++  if (alloc > kGeometryCap) {
++    return false;
++  }
++  buffer = createMemoryBuffer(alloc, nvn::MemoryPoolFlags::CPU_UNCACHED | nvn::MemoryPoolFlags::GPU_CACHED);
++  return buffer != nullptr && buffer->IsBufferReady();
++}
++
++bool initSlot(Slot &slot, nvn::Device *device, int commandAlign, int controlAlign, int minCommand, int minControl,
++              int poolPage) {
++  const SlotReserveLayout layout =
++      plan_slot_memory(kInitialCommand, kInitialControl, kReserveCommand, kReserveControl, minCommand, minControl,
++                       commandAlign, controlAlign, poolPage);
++  if (!layout.ok) {
++    return false;
++  }
++  slot.commandRegion = layout.command;
++  slot.controlRegion = layout.control;
++  const size_t commandPoolBytes = layout.command_pool;
++  const size_t controlBytes = layout.control.base + layout.control.reserve;
++  const int poolAlign = device_alignment(poolPage, kPageFallback);
++  if (poolAlign <= 0) {
++    return false;
++  }
++  slot.commandStorage = Mem::AllocateAlign(static_cast<size_t>(poolAlign), commandPoolBytes);
++  slot.controlStorage = Mem::AllocateAlign(static_cast<size_t>(controlAlign), controlBytes);
++  if (slot.commandStorage == nullptr || slot.controlStorage == nullptr) {
++    return false;
++  }
++  std::memset(slot.commandStorage, 0, commandPoolBytes);
++  std::memset(slot.controlStorage, 0, controlBytes);
++  nvn::MemoryPoolBuilder builder;
++  builder.SetDefaults()
++      .SetDevice(device)
++      .SetFlags(nvn::MemoryPoolFlags::CPU_UNCACHED | nvn::MemoryPoolFlags::GPU_UNCACHED)
++      .SetStorage(slot.commandStorage, commandPoolBytes);
++  if (!slot.pool.Initialize(&builder)) {
++    return false;
++  }
++  slot.poolLive = true;
++  if (!reinitCommand(slot, device) || !reinitSync(slot, device)) {
++    return false;
++  }
++  slot.uniform = createMemoryBuffer(kUniformBytes, nvn::MemoryPoolFlags::CPU_UNCACHED | nvn::MemoryPoolFlags::GPU_CACHED);
++  return slot.uniform != nullptr && slot.uniform->IsBufferReady();
++}
++
++void releaseIdleSlot(Slot &slot, nvn::Device *device) {
++  if (slot.handle != 0 && device != nullptr) {
++    device->FinalizeCommandHandle(slot.handle);
++    slot.handle = 0;
++  }
++  releaseBuffer(slot.vertex);
++  releaseBuffer(slot.indexBuffer);
++  releaseBuffer(slot.uniform);
++  if (slot.commandLive) {
++    slot.command.Finalize();
++    slot.commandLive = false;
++  }
++  if (slot.poolLive) {
++    slot.pool.Finalize();
++    slot.poolLive = false;
++  }
++  if (slot.syncLive) {
++    slot.sync.Finalize();
++    slot.syncLive = false;
++  }
++  if (slot.commandStorage != nullptr) {
++    Mem::Deallocate(slot.commandStorage);
++    slot.commandStorage = nullptr;
++  }
++  if (slot.controlStorage != nullptr) {
++    Mem::Deallocate(slot.controlStorage);
++    slot.controlStorage = nullptr;
++  }
++}
++
++}  // namespace
++
++namespace ImguiDrawSlots {
++
++void ensure(nvn::Device *device) {
++  if (g_attempted || g_closed) {
++    return;
++  }
++  g_attempted = true;
++  if (device == nullptr) {
++    for (int i = 0; i < DrawSlotRules::kCount; ++i) {
++      g_rules.fail(i);
++    }
++    return;
++  }
++  int commandQuery = 0;
++  int controlQuery = 0;
++  int minCommand = 0;
++  int minControl = 0;
++  device->GetInteger(nvn::DeviceInfo::COMMAND_BUFFER_COMMAND_ALIGNMENT, &commandQuery);
++  device->GetInteger(nvn::DeviceInfo::COMMAND_BUFFER_CONTROL_ALIGNMENT, &controlQuery);
++  device->GetInteger(nvn::DeviceInfo::COMMAND_BUFFER_MIN_COMMAND_SIZE, &minCommand);
++  device->GetInteger(nvn::DeviceInfo::COMMAND_BUFFER_MIN_CONTROL_SIZE, &minControl);
++  int pageQuery = 0;
++  device->GetInteger(nvn::DeviceInfo::MEMORY_POOL_PAGE_SIZE, &pageQuery);
++  const int poolPage = device_alignment(pageQuery, kPageFallback);
++  const int commandAlign = device_alignment(commandQuery, poolPage);
++  const int controlAlign = device_alignment(controlQuery, poolPage);
++  if (poolPage <= 0 || commandAlign <= 0 || controlAlign <= 0) {
++    for (int i = 0; i < DrawSlotRules::kCount; ++i) {
++      g_rules.fail(i);
++    }
++    return;
++  }
++  for (int i = 0; i < DrawSlotRules::kCount; ++i) {
++    if (!initSlot(g_slots[i], device, commandAlign, controlAlign, minCommand, minControl, poolPage)) {
++      releaseIdleSlot(g_slots[i], device);
++      g_rules.fail(i);
++    }
++  }
++}
++
++int begin(nvn::Device *device, size_t vertexBytes, size_t indexBytes) {
++  ensure(device);
++  if (g_closed) {
++    g_pendingSkips.fetch_add(1, std::memory_order_relaxed);
++    return -1;
++  }
++  int waits[DrawSlotRules::kCount];
++  for (int i = 0; i < DrawSlotRules::kCount; ++i) {
++    waits[i] = -1;
++    if (g_rules.phase[i] == DrawSlotPhase::Submitted && g_slots[i].syncLive) {
++      const nvn::SyncWaitResult result = g_slots[i].sync.Wait(0);
++      waits[i] = static_cast<int>(static_cast<nvn::SyncWaitResult::Enum>(result));
++    }
++  }
++  const int index = g_rules.acquire(waits);
++  if (index < 0) {
++    g_pendingSkips.fetch_add(1, std::memory_order_relaxed);
++    return -1;
++  }
++  Slot &slot = g_slots[index];
++  if (g_rules.phase[index] == DrawSlotPhase::Submitted) {
++    if (slot.handle != 0 && device != nullptr) {
++      device->FinalizeCommandHandle(slot.handle);
++      slot.handle = 0;
++    }
++    if (!reinitCommand(slot, device) || !reinitSync(slot, device)) {
++      g_rules.fail(index);
++      return -1;
++    }
++    g_reused.fetch_add(1, std::memory_order_relaxed);
++  }
++  if (g_rules.phase[index] == DrawSlotPhase::Failed || !slot.commandLive || slot.uniform == nullptr) {
++    g_rules.fail(index);
++    return -1;
++  }
++  g_rules.markRecorded(index);
++  if (!ensureGeometry(slot.vertex, vertexBytes) || !ensureGeometry(slot.indexBuffer, indexBytes)) {
++    g_rules.cancelUnsubmitted(index);
++    g_geometrySkips.fetch_add(1, std::memory_order_relaxed);
++    return -1;
++  }
++  slot.overflow = false;
++  return index;
++}
++
++bool overflowed(int slot) { return g_slots[slot].overflow; }
++
++nvn::CommandBuffer *commandBuffer(int slot) { return &g_slots[slot].command; }
++
++MemoryBuffer *vertex(int slot) { return g_slots[slot].vertex; }
++
++MemoryBuffer *index(int slot) { return g_slots[slot].indexBuffer; }
++
++MemoryBuffer *uniform(int slot) { return g_slots[slot].uniform; }
++
++void complete(int slot, nvn::Device *device, nvn::CommandHandle handle) {
++  g_active = -1;
++  Slot &owned = g_slots[slot];
++  if (owned.commandLive) {
++    raiseMax(g_maxCommandBytes, owned.command.GetCommandMemoryUsed());
++    raiseMax(g_maxControlBytes, owned.command.GetControlMemoryUsed());
++  }
++  const bool overflow = owned.overflow;
++  if (overflow || handle == 0) {
++    retireUnsubmitted(owned, slot, device, handle);
++    if (overflow) {
++      g_commandOverflowSkips.fetch_add(1, std::memory_order_relaxed);
++    }
++    return;
++  }
++  owned.handle = handle;
++  g_rules.markRecorded(slot);
++  g_active = slot;
++}
++
++void discardUnsubmitted(int slot, nvn::Device *device) {
++  if (g_active == slot) {
++    g_active = -1;
++  }
++  if (g_rules.phase[slot] != DrawSlotPhase::Recorded) {
++    return;
++  }
++  retireUnsubmitted(g_slots[slot], slot, device, g_slots[slot].handle);
++}
++
++void fenceAfterSubmit(int slot, nvn::Queue *queue) {
++  if (g_active == slot) {
++    g_active = -1;
++  }
++  Slot &owned = g_slots[slot];
++  if (g_rules.phase[slot] != DrawSlotPhase::Recorded || owned.handle == 0) {
++    return;
++  }
++  if (queue == nullptr || !owned.syncLive) {
++    g_rules.fail(slot);
++    return;
++  }
++  queue->FenceSync(&owned.sync, nvn::SyncCondition::ALL_GPU_COMMANDS_COMPLETE, nvn::SyncFlagBits(0));
++  g_rules.markSubmitted(slot);
++  g_submitted.fetch_add(1, std::memory_order_relaxed);
++}
++
++int active() { return g_active; }
++
++void shutdown(nvn::Device *device) {
++  if (g_closed) {
++    return;
++  }
++  g_closed = true;
++  g_active = -1;
++  for (int i = 0; i < DrawSlotRules::kCount; ++i) {
++    if (g_rules.phase[i] == DrawSlotPhase::Submitted || g_rules.phase[i] == DrawSlotPhase::Failed) {
++      continue;
++    }
++    releaseIdleSlot(g_slots[i], device);
++    if (g_rules.phase[i] == DrawSlotPhase::Recorded) {
++      g_rules.cancelUnsubmitted(i);
++    }
++  }
++}
++
++void copyStats(ImguiSmashDrawStats *out) {
++  if (out == nullptr) {
++    return;
++  }
++  out->version = IMGUI_SMASH_DRAW_STATS_VERSION;
++  out->size = static_cast<uint32_t>(sizeof(ImguiSmashDrawStats));
++  out->submitted = g_submitted.load(std::memory_order_relaxed);
++  out->reused = g_reused.load(std::memory_order_relaxed);
++  out->pendingSkips = g_pendingSkips.load(std::memory_order_relaxed);
++  out->failed = g_rules.quarantined.load(std::memory_order_relaxed);
++  out->maxCommandBytes = g_maxCommandBytes.load(std::memory_order_relaxed);
++  out->maxControlBytes = g_maxControlBytes.load(std::memory_order_relaxed);
++  out->geometrySkips = g_geometrySkips.load(std::memory_order_relaxed);
++  out->commandOverflowSkips = g_commandOverflowSkips.load(std::memory_order_relaxed);
++}
++
++}  // namespace ImguiDrawSlots
++
++extern "C" int imgui_smash_draw_stats(ImguiSmashDrawStats *out) {
++  if (out == nullptr) {
++    return 0;
++  }
++  ImguiDrawSlots::copyStats(out);
++  return 1;
++}
+diff --git a/imgui-smash/src/imgui_backend/DrawSlots.h b/imgui-smash/src/imgui_backend/DrawSlots.h
+new file mode 100644
+--- /dev/null
++++ b/imgui-smash/src/imgui_backend/DrawSlots.h
+@@ -0,0 +1,24 @@
++#pragma once
++
++#include "imgui_smash_draw_stats.h"
++#include "nvn_Cpp.h"
++
++class MemoryBuffer;
++
++namespace ImguiDrawSlots {
++
++void ensure(nvn::Device *device);
++int begin(nvn::Device *device, size_t vertexBytes, size_t indexBytes);
++bool overflowed(int slot);
++nvn::CommandBuffer *commandBuffer(int slot);
++MemoryBuffer *vertex(int slot);
++MemoryBuffer *index(int slot);
++MemoryBuffer *uniform(int slot);
++void complete(int slot, nvn::Device *device, nvn::CommandHandle handle);
++void discardUnsubmitted(int slot, nvn::Device *device);
++void fenceAfterSubmit(int slot, nvn::Queue *queue);
++int active();
++void shutdown(nvn::Device *device);
++void copyStats(ImguiSmashDrawStats *out);
++
++}
+diff --git a/imgui-smash/src/imgui_backend/command_memory_reserve.hpp b/imgui-smash/src/imgui_backend/command_memory_reserve.hpp
+new file mode 100644
+--- /dev/null
++++ b/imgui-smash/src/imgui_backend/command_memory_reserve.hpp
+@@ -0,0 +1,120 @@
++#pragma once
++
++#include <cstddef>
++#include <cstdint>
++#include <limits>
++
++// Shared by DrawSlots and the host tests. Event codes 0 and 1 are
++// NVNcommandBufferMemoryEvent OUT_OF_COMMAND_MEMORY and OUT_OF_CONTROL_MEMORY.
++
++struct MemoryBudget {
++  size_t bytes = 0;
++  bool ok = false;
++};
++
++inline int device_alignment(int queried, int fallback) {
++  if (queried > 0 && (queried & (queried - 1)) == 0) {
++    return queried;
++  }
++  if (fallback > 0 && (fallback & (fallback - 1)) == 0) {
++    return fallback;
++  }
++  return 0;
++}
++
++inline MemoryBudget align_budget(size_t requested, int minimum, int alignment) {
++  MemoryBudget out;
++  if (alignment <= 0 || (alignment & (alignment - 1)) != 0) {
++    return out;
++  }
++  size_t need = requested;
++  if (minimum > 0) {
++    const size_t min_bytes = static_cast<size_t>(minimum);
++    if (min_bytes > need) {
++      need = min_bytes;
++    }
++  }
++  const size_t align = static_cast<size_t>(alignment);
++  if (need > std::numeric_limits<size_t>::max() - (align - 1u)) {
++    return out;
++  }
++  out.bytes = (need + align - 1u) & ~(align - 1u);
++  out.ok = true;
++  return out;
++}
++
++struct MemoryRegion {
++  size_t base = 0;
++  size_t reserve = 0;
++  bool used = false;
++};
++
++struct SlotReserveLayout {
++  MemoryRegion command;
++  MemoryRegion control;
++  size_t command_pool = 0;
++  bool ok = false;
++};
++
++inline SlotReserveLayout plan_slot_memory(size_t initial_command, size_t initial_control,
++                                         size_t reserve_command, size_t reserve_control, int min_command,
++                                         int min_control, int command_align, int control_align, int pool_page) {
++  SlotReserveLayout layout;
++  const MemoryBudget command_base = align_budget(initial_command, min_command, command_align);
++  const MemoryBudget command_reserve = align_budget(reserve_command, min_command, command_align);
++  const MemoryBudget control_base = align_budget(initial_control, min_control, control_align);
++  const MemoryBudget control_reserve = align_budget(reserve_control, min_control, control_align);
++  if (!command_base.ok || !command_reserve.ok || !control_base.ok || !control_reserve.ok) {
++    return layout;
++  }
++  if (command_base.bytes > std::numeric_limits<size_t>::max() - command_reserve.bytes ||
++      control_base.bytes > std::numeric_limits<size_t>::max() - control_reserve.bytes) {
++    return layout;
++  }
++  const size_t command_bytes = command_base.bytes + command_reserve.bytes;
++  const MemoryBudget pool = align_budget(command_bytes, 0, pool_page);
++  if (!pool.ok || pool.bytes < command_bytes) {
++    return layout;
++  }
++  layout.command = {command_base.bytes, command_reserve.bytes, false};
++  layout.control = {control_base.bytes, control_reserve.bytes, false};
++  layout.command_pool = pool.bytes;
++  layout.ok = true;
++  return layout;
++}
++
++enum class ReserveKind { Command, Control, Unrecognized };
++
++inline ReserveKind reserve_kind_from_event(int event) {
++  if (event == 0) {
++    return ReserveKind::Command;
++  }
++  if (event == 1) {
++    return ReserveKind::Control;
++  }
++  return ReserveKind::Unrecognized;
++}
++
++enum class ReserveChoice { Supply, Abort };
++
++struct ReserveSupply {
++  ReserveChoice choice = ReserveChoice::Abort;
++  size_t offset = 0;
++  size_t bytes = 0;
++};
++
++inline ReserveSupply select_reserve(MemoryRegion &command, MemoryRegion &control, ReserveKind kind, size_t min_size) {
++  ReserveSupply supply;
++  if (kind == ReserveKind::Unrecognized) {
++    return supply;
++  }
++  MemoryRegion &region = kind == ReserveKind::Command ? command : control;
++  if (region.used || min_size > region.reserve) {
++    return supply;
++  }
++  region.used = true;
++  supply.choice = ReserveChoice::Supply;
++  supply.offset = region.base;
++  supply.bytes = region.reserve;
++  return supply;
++}
+diff --git a/imgui-smash/src/imgui_backend/draw_slot_rules.hpp b/imgui-smash/src/imgui_backend/draw_slot_rules.hpp
+new file mode 100644
+--- /dev/null
++++ b/imgui-smash/src/imgui_backend/draw_slot_rules.hpp
+@@ -0,0 +1,69 @@
++#pragma once
++
++#include <atomic>
++#include <cstdint>
++
++// Host-testable acquisition rules for the eight draw slots.
++// Wait codes match nvn::SyncWaitResult: 0 already signaled, 1 condition
++// satisfied, 2 timeout, 3 failed. Any other code leaves a submitted slot pending.
++
++enum class DrawSlotPhase : std::uint8_t { Free, Recorded, Submitted, Failed };
++
++struct DrawSlotRules {
++  static constexpr int kCount = 8;
++
++  DrawSlotPhase phase[kCount]{};
++  int cursor = 0;
++  std::atomic<std::uint64_t> quarantined{0};
++
++  int acquire(const int waits[kCount]) {
++    for (int step = 0; step < kCount; ++step) {
++      const int index = (cursor + step) % kCount;
++      if (phase[index] == DrawSlotPhase::Failed || phase[index] == DrawSlotPhase::Recorded) {
++        continue;
++      }
++      if (phase[index] == DrawSlotPhase::Submitted) {
++        const int wait = waits[index];
++        if (wait == 0 || wait == 1) {
++          cursor = (index + 1) % kCount;
++          return index;
++        }
++        if (wait == 3) {
++          fail(index);
++        }
++        continue;
++      }
++      cursor = (index + 1) % kCount;
++      return index;
++    }
++    return -1;
++  }
++
++  void markRecorded(int index) {
++    if (index >= 0 && index < kCount && phase[index] != DrawSlotPhase::Failed) {
++      phase[index] = DrawSlotPhase::Recorded;
++    }
++  }
++
++  void markSubmitted(int index) {
++    if (index >= 0 && index < kCount && phase[index] == DrawSlotPhase::Recorded) {
++      phase[index] = DrawSlotPhase::Submitted;
++    }
++  }
++
++  bool cancelUnsubmitted(int index) {
++    if (index < 0 || index >= kCount || phase[index] != DrawSlotPhase::Recorded) {
++      return false;
++    }
++    phase[index] = DrawSlotPhase::Free;
++    return true;
++  }
++
++  void fail(int index) {
++    if (index < 0 || index >= kCount || phase[index] == DrawSlotPhase::Failed) {
++      return;
++    }
++    phase[index] = DrawSlotPhase::Failed;
++    quarantined.fetch_add(1, std::memory_order_relaxed);
++  }
++};
+diff --git a/imgui-smash/src/imgui_backend/frame_guard.cpp b/imgui-smash/src/imgui_backend/frame_guard.cpp
+new file mode 100644
+--- /dev/null
++++ b/imgui-smash/src/imgui_backend/frame_guard.cpp
+@@ -0,0 +1,36 @@
++#include "frame_guard.hpp"
++
++namespace {
++FrameEntryOwner g_frame_entry;
++}
++
++FrameEntryOwner::Claim FrameEntryOwner::begin(bool overlay_ready) {
++    if (!overlay_ready) {
++        return Claim(nullptr);
++    }
++    if (flag_.test_and_set(std::memory_order_acquire)) {
++        busy_skips_.fetch_add(1, std::memory_order_relaxed);
++        return Claim(nullptr);
++    }
++    accepted_.fetch_add(1, std::memory_order_relaxed);
++    return Claim(this);
++}
++
++void FrameEntryOwner::release() noexcept {
++    flag_.clear(std::memory_order_release);
++}
++
++FrameEntryOwner::Claim claim_frame_entry(bool overlay_ready) {
++    return g_frame_entry.begin(overlay_ready);
++}
++
++extern "C" int imgui_smash_frame_guard_stats(ImguiSmashFrameGuardStats* out) {
++    if (out == nullptr) {
++        return 0;
++    }
++    out->version = 1;
++    out->size = static_cast<uint32_t>(sizeof(ImguiSmashFrameGuardStats));
++    out->accepted = g_frame_entry.accepted();
++    out->busy_skips = g_frame_entry.busy_skips();
++    return 1;
++}
+diff --git a/imgui-smash/src/imgui_backend/frame_guard.hpp b/imgui-smash/src/imgui_backend/frame_guard.hpp
+new file mode 100644
+--- /dev/null
++++ b/imgui-smash/src/imgui_backend/frame_guard.hpp
+@@ -0,0 +1,67 @@
++#pragma once
++
++#include <atomic>
++#include <cstdint>
++
++// Nonblocking exclusive ownership for one ImGui frame entry.
++// Contention does not wait, and this helper never calls ImGui or NVN.
++
++struct ImguiSmashFrameGuardStats {
++    uint32_t version;
++    uint32_t size;
++    uint64_t accepted;
++    uint64_t busy_skips;
++};
++
++static_assert(sizeof(ImguiSmashFrameGuardStats) == 24, "frame guard stats ABI is 24 bytes");
++
++class FrameEntryOwner {
++public:
++    class Claim {
++    public:
++        Claim(const Claim&) = delete;
++        Claim& operator=(const Claim&) = delete;
++        Claim(Claim&&) = delete;
++        Claim& operator=(Claim&&) = delete;
++
++        ~Claim() {
++            if (owner_ != nullptr) {
++                owner_->release();
++            }
++        }
++
++        bool holds() const { return owner_ != nullptr; }
++
++    private:
++        friend class FrameEntryOwner;
++        explicit Claim(FrameEntryOwner* owner) : owner_(owner) {}
++
++        FrameEntryOwner* owner_ = nullptr;
++    };
++
++    FrameEntryOwner() = default;
++    FrameEntryOwner(const FrameEntryOwner&) = delete;
++    FrameEntryOwner& operator=(const FrameEntryOwner&) = delete;
++
++    // overlay_ready false does not touch the flag. A taken flag increments
++    // busy_skips and does not own. A successful test_and_set increments
++    // accepted and owns until the claim is destroyed.
++    Claim begin(bool overlay_ready);
++
++    uint64_t accepted() const { return accepted_.load(std::memory_order_relaxed); }
++    uint64_t busy_skips() const { return busy_skips_.load(std::memory_order_relaxed); }
++
++private:
++    friend class Claim;
++    void release() noexcept;
++
++    std::atomic_flag flag_{};
++    std::atomic<uint64_t> accepted_{0};
++    std::atomic<uint64_t> busy_skips_{0};
++};
++
++// Production owner. Host tests use their own FrameEntryOwner for the
++// ownership cases and this function for the linked getter.
++FrameEntryOwner::Claim claim_frame_entry(bool overlay_ready);
++
++extern "C" int imgui_smash_frame_guard_stats(ImguiSmashFrameGuardStats* out);

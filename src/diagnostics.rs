@@ -107,6 +107,80 @@ pub enum Code {
     /// `a`/`b` come from [`crop_rect_event`], [`crop_cap_event`], or
     /// [`crop_armed_event`]. Main's own crop stays [`Code::ResolutionCrop`].
     CropObserve = 83,
+    /// Native-window FPS++ phase in the low byte of `a` and the note in the
+    /// next byte. `b` is 1 when the interval read back as applied. The
+    /// tracked NVN window thread produces the pair. The diagnostics poll only
+    /// publishes it, and only when it changes.
+    FpsBoost = 88,
+    /// One capture arm. `a` is the API-trace id. `b` is 1 when the embedded
+    /// backend is the one that will be sampled. Not a per-frame record.
+    MenuOrder = 89,
+    /// Startup-only PROBE_RENDER_POLL discriminator; not a shipping fix.
+    /// a=1: execute the original zero-timeout render poll without changing profile.
+    RenderPollProbe = 90,
+    /// Reduced substituted `null` for one decorative layer. `a` is the original hash.
+    FxReducedCull = 84,
+    /// Reduced kept a core effect request. `a` is the hash.
+    FxReducedKeep = 85,
+    /// Reduced was selected but scope blocked that matched request. `a` is the hash.
+    FxReducedRestore = 86,
+    /// A reduced-table name was seen on a different move, so it stayed On.
+    FxReducedPreserve = 87,
+    /// A sibling file was not registered or its load was rejected.
+    /// `a` is the reason: 1 missing API, 2 transform, 3 size.
+    /// `b` is that file's path hash. The original request stays. This is not Off.
+    FxVariantUnavailable = 91,
+    /// Sibling callback armed, or one successful load of that whole file.
+    /// Armed: `a` is 0 and `b` is the path hash.
+    /// Loaded: `a` is the path hash and `b` is the output length in bytes.
+    /// The load counter only decides whether this record is written.
+    FxVariantReady = 92,
+    /// Reduced forwarded one parent to its sibling. Sampled on the first swap
+    /// and every 128th. `a` is the EFF path hash. `b` is the original effect
+    /// hash. The swap counter is not stored.
+    FxVariantUse = 93,
+    /// A kill or detach of an original sibling parent also named its clone.
+    /// Sampled on the first event and every 128th. `a` is the original hash.
+    /// `b` is the alias hash. This is not a per-frame record.
+    FxVariantCleanup = 94,
+    /// Which cleanup boundary ran. Each layer and nested bit keeps its own
+    /// first event and every 128th, so one route cannot hide another.
+    /// `a` is 1 `kill_kind`, 2 `detach_kind`, 3 ACMD `EFFECT_OFF_KIND`, or 4
+    /// ACMD `EFFECT_DETACH_KIND`. `b` is 1 when that exact accessor, original
+    /// hash, and kill-or-detach was already delivered on this thread.
+    /// It is not a per-frame record.
+    FxCleanupRoute = 95,
+    /// Special Zoom background request. Diagnostic capture only: not a
+    /// performance measurement and not online proof.
+    ///
+    /// `a` is the original hash. `b` bits 0..7 are the path from
+    /// [`crate::critical_probe`]: 1 `req_screen`, 2 `req_screen_system`,
+    /// 3 ordinary `policy_hash`. Bit 8 is set when `PROBE_CRITICAL_SCREEN`
+    /// suppressed that request. The first 32 matches are kept, and every
+    /// later match while a finite API trace is active. On is included.
+    FxCriticalRequest = 96,
+    /// Latched once from `PROBE_CRITICAL_SCREEN` when effect hooks install.
+    /// `a` is 1 when that marker file was present, otherwise 0. Absent stays
+    /// off. This is not a config or menu setting, and it is not performance
+    /// or online proof.
+    CriticalProbe = 97,
+    /// A changed overlay command chord, not a per-frame input log. `a` is the
+    /// sampled HID button mask. `b`: previous view in bits 0..7, resulting view
+    /// 8..15, Npad id 16..23, style flags 24..55, command-edge flags 56..63
+    /// (bit 0 Down pressed, bit 1 Plus/Minus pressed). Style 0 means no device.
+    OverlayCommand = 98,
+    /// A separate NRO called the plugin registration export. `a` is the
+    /// returned handle, or the negative `REGISTER_ERR_*` code as a two's
+    /// complement word. `b` is the option count that was accepted (0 on error).
+    PluginRegistered = 99,
+    /// One accepted Left/Right edge on the Plugins page. `a` is plugin index
+    /// in bits 0..15 and option index in bits 16..31. `b` is the requested
+    /// choice in bits 0..15 and the plugin's `REQUEST_*` answer in bits 16..23.
+    PluginRequest = 100,
+    /// Host persistence wrote (or failed to write) a plugin's own INI after a
+    /// menu edit. `a` is plugin index in bits 0..15 and option index in bits
+    /// 16..31. `b` is 1 on success, 0 on an I/O error.
+    PluginPersisted = 101,
 }
 
 /// Game SetCrop observations recorded before further calls are forwarded only.
@@ -245,7 +319,25 @@ mod tests {
     #[test]
     fn crop_observe_words_separate_rect_and_cap() {
         assert_eq!(Code::CropObserve as u16, 83);
+        assert_eq!(Code::FpsBoost as u16, 88);
+        assert_eq!(Code::MenuOrder as u16, 89);
+        assert_eq!(Code::RenderPollProbe as u16, 90);
+        assert_eq!(Code::FxReducedCull as u16, 84);
+        assert_eq!(Code::FxReducedKeep as u16, 85);
+        assert_eq!(Code::FxReducedRestore as u16, 86);
+        assert_eq!(Code::FxReducedPreserve as u16, 87);
+        assert_eq!(Code::FxVariantUnavailable as u16, 91);
+        assert_eq!(Code::FxVariantReady as u16, 92);
+        assert_eq!(Code::FxVariantUse as u16, 93);
+        assert_eq!(Code::FxVariantCleanup as u16, 94);
+        assert_eq!(Code::FxCleanupRoute as u16, 95);
+        assert_eq!(Code::FxCriticalRequest as u16, 96);
+        assert_eq!(Code::CriticalProbe as u16, 97);
         assert_eq!(Code::ResolutionCrop as u16, 80);
+        assert_eq!(Code::OverlayCommand as u16, 98);
+        assert_eq!(Code::PluginRegistered as u16, 99);
+        assert_eq!(Code::PluginRequest as u16, 100);
+        assert_eq!(Code::PluginPersisted as u16, 101);
         let rect = crop_rect_event(4, 0, 0, 1024, 576);
         assert_eq!(rect.0, crop_rect_word(0, 0, 1024, 576));
         assert_eq!(rect.1, 4);

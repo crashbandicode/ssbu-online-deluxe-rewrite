@@ -8,8 +8,8 @@ use std::{
 /// Pinned imgui-smash static archive (see docs/IMGUI_DEPENDENCY.md). The
 /// preparation script verifies this digest when it places the file; build.rs
 /// only re-checks the sidecar and size so no hashing code is needed here.
-const IMGUI_SMASH_SHA256: &str = "0042ff0592313228b0746ee9214091249f7c70a1797e1826d990c27ca2fe0e45";
-const IMGUI_SMASH_SIZE: u64 = 16_798_872;
+const IMGUI_SMASH_SHA256: &str = "6c9591cc9f140ca6ce2efee2cdcaa0d8278b43319ea497b3f2434ce19d09ccca";
+const IMGUI_SMASH_SIZE: u64 = 17_181_302;
 const IMGUI_SMASH_DIR: &str = "target/native/imgui";
 const IMGUI_SMASH_LIB: &str = "libimgui_smash.a";
 
@@ -87,7 +87,7 @@ fn link_imgui_smash() {
         "imgui-smash static archive is required for the Switch build.\n\
          expected: {}\n\
          prepare it with:\n  /usr/bin/python3 tools/prepare_imgui.py --source <path-to-libimgui_smash.a>\n\
-         or let the script fetch the pinned upstream copy over HTTPS (see docs/IMGUI_DEPENDENCY.md).",
+         or build the pinned public source with /usr/bin/python3 tools/prepare_imgui.py (see docs/IMGUI_DEPENDENCY.md).",
         lib.display()
     );
     let metadata = match fs::metadata(&lib) {

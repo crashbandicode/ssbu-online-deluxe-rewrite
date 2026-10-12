@@ -1,0 +1,13 @@
+[package]
+name = "eff-variant"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+ssbu-online-deluxe-rewrite = { path = "../..", features = ["variant-test"] }
+
+[dev-dependencies]
+eff_lib = "0.1.0"
+effect_library = "1.1.4"
+sha2 = "0.10"

@@ -14,6 +14,15 @@ struct MemoryInfo {
 }
 
 pub(super) unsafe fn accessible(address: usize, size: usize, write: bool) -> bool {
+    permitted(address, size, if write { 3 } else { 1 })
+}
+
+/// Readable executable mapping, required before chaining a saved code pointer.
+pub(super) unsafe fn executable(address: usize, size: usize) -> bool {
+    permitted(address, size, 5)
+}
+
+unsafe fn permitted(address: usize, size: usize, required: u32) -> bool {
     let Some(end) = address.checked_add(size) else {
         return false;
     };
@@ -32,7 +41,6 @@ pub(super) unsafe fn accessible(address: usize, size: usize, write: bool) -> boo
         clobber_abi("C"),
         options(nostack),
     );
-    let required = if write { 3 } else { 1 };
     result as u32 == 0
         && info.permission & required == required
         && info.address <= address as u64

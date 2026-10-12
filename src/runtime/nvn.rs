@@ -102,7 +102,8 @@ unsafe extern "C" fn get_proc(device: Ptr, name: *const c_char) -> *const c_void
     slot.store(next as usize, Ordering::Release);
     replacement
 }
-unsafe fn resolve(name: &'static [u8]) -> usize {
+
+pub(super) unsafe fn resolve(name: &'static [u8]) -> usize {
     let getter: Getter = std::mem::transmute(GETTER.load(Ordering::Acquire));
     getter(DEVICE.load(Ordering::Acquire) as Ptr, name.as_ptr().cast()) as usize
 }
@@ -183,6 +184,7 @@ unsafe extern "C" fn window_initialize(window: Ptr, builder: *const c_void) -> u
         } else if TOTAL.load(Ordering::Relaxed) == 3 && ACTIVE.load(Ordering::Relaxed) == 3 {
             super::renderer::arm_mode(3);
         }
+        super::fps_boost::on_initialize(skyline::nn::os::GetSystemTick() as u64);
     }
     result
 }
@@ -194,6 +196,7 @@ unsafe extern "C" fn window_finalize(window: Ptr) {
         super::renderer::arm_mode(-1);
         ACTIVE.store(-1, Ordering::Relaxed);
         TOTAL.store(-1, Ordering::Relaxed);
+        super::fps_boost::on_finalize(skyline::nn::os::GetSystemTick() as u64);
     }
     let f: unsafe extern "C" fn(Ptr) = std::mem::transmute(FINALIZE.load(Ordering::Acquire));
     f(window);
@@ -351,10 +354,12 @@ fn note_crop_observe(x: i32, y: i32, w: i32, h: i32) {
 }
 
 unsafe extern "C" fn queue_present(queue: Ptr, window: Ptr, index: i32) {
+    let tick = skyline::nn::os::GetSystemTick() as u64;
     if tracked_window(window) {
         super::resolution::on_present(window);
+        super::fps_boost::on_present(tick);
     }
-    PRESENT_TICK.store(skyline::nn::os::GetSystemTick() as u64, Ordering::Relaxed);
+    PRESENT_TICK.store(tick, Ordering::Relaxed);
     let n = PRESENTS.fetch_add(1, Ordering::Relaxed) + 1;
     mark_index(&PRESENT_MASK, index);
     let f: unsafe extern "C" fn(Ptr, Ptr, i32) =
@@ -452,6 +457,18 @@ pub(super) fn write_status() {
             OUTSTANDING.load(Ordering::Relaxed),
             PRESENT_MASK.load(Ordering::Relaxed), ACQUIRE_MASK.load(Ordering::Relaxed),
             PRESENT_TICK.load(Ordering::Relaxed), ACQUIRE_TICK.load(Ordering::Relaxed));
+        let _ = writeln!(
+            file,
+            "fps_boost_status={}\nfps_boost_applied={}",
+            super::fps_boost::status_label(),
+            u8::from(super::fps_boost::applied())
+        );
+        let _ = writeln!(
+            file,
+            "lesslag_fields_skip={}",
+            u8::from(super::renderer::lesslag_fields_skipped())
+        );
+        super::imgui_stats::write_status(&mut file);
         let _ = write!(
             file,
             "{}",
@@ -473,6 +490,8 @@ unsafe extern "C" fn sync_wait(sync: Ptr, timeout: u64) -> i32 {
         std::mem::transmute(SYNC_WAIT.load(Ordering::Acquire));
     let kind = if timeout == u64::MAX && TEXTURE_SYNC.load(Ordering::Acquire) == sync as usize {
         3
+    } else if timeout == u64::MAX {
+        crate::render_trace::KIND_SYNC_INFINITE_OTHER
     } else if timeout == 0 {
         4
     } else {

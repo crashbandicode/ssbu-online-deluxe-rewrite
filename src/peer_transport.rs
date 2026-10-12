@@ -144,6 +144,8 @@ pub struct Announce {
     pub resolution: u8,
     /// Actual dynamic-resolution state. False when the resolution guard rejected.
     pub dynamic: bool,
+    /// Fork bit 14. Set only when this client has read back the native-window write.
+    pub boost_applied: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -197,6 +199,38 @@ pub struct ShownPeer {
     pub latency: RemoteLatency,
     /// Station index that owns this name, interface, and settings.
     pub station: Option<u8>,
+}
+
+/// Mapped remotes copied under one gate hold. Eight is the handshake table.
+pub const REMOTE_CAP: usize = SLOTS;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RemoteRoster {
+    pub peers: [ShownPeer; REMOTE_CAP],
+    pub len: u8,
+    pub busy: bool,
+}
+
+impl RemoteRoster {
+    const fn blank(busy: bool) -> Self {
+        Self {
+            peers: [blank_peer(); REMOTE_CAP],
+            len: 0,
+            busy,
+        }
+    }
+}
+
+const fn blank_peer() -> ShownPeer {
+    ShownPeer {
+        known: false,
+        name: [0; NAME_CAP],
+        name_len: 0,
+        interface: "Unknown",
+        settings: "",
+        latency: RemoteLatency::Unknown,
+        station: None,
+    }
 }
 
 /// Announced input buffer for the peer in this snapshot.
@@ -272,11 +306,12 @@ pub fn announced_profile(
     })
 }
 
-/// Fork `RenderProfileSettings::to_bits`.
+/// Fork `RenderProfileSettings::to_bits` without bit 14.
 ///
 /// Buffer, index, vsync, and render opts follow the committed profile. The
 /// resolution discriminant and dynamic-resolution bit are the configured
-/// state passed in. Boost stays 0.
+/// state passed in. [`encode_v3`] sets bit 14 only when the boost write
+/// read back as applied.
 pub fn profile_bits(mode: AnnounceMode, resolution: u8, dynamic: bool) -> u16 {
     let (buffer, index, vsync, opts) = match mode {
         AnnounceMode::Vanilla => (3u16, 2u16, 1u16, 0u16),
@@ -286,12 +321,7 @@ pub fn profile_bits(mode: AnnounceMode, resolution: u8, dynamic: bool) -> u16 {
     };
     let resolution = u16::from(resolution.min(4));
     let dynamic = u16::from(dynamic);
-    buffer
-        | (index << 2)
-        | (resolution << 4)
-        | (dynamic << 11)
-        | (vsync << 12)
-        | (opts << 13)
+    buffer | (index << 2) | (resolution << 4) | (dynamic << 11) | (vsync << 12) | (opts << 13)
 }
 
 pub fn announce_from(
@@ -299,24 +329,33 @@ pub fn announce_from(
     live: bool,
     committed: crate::render_policy::Profile,
     setting: crate::resolution::Setting,
+    boost_applied: bool,
 ) -> Announce {
+    let profile = announced_profile(live, committed);
     Announce {
         latency,
-        profile: announced_profile(live, committed),
+        profile,
         resolution: if live { setting.level as u8 } else { 0 },
         dynamic: live && setting.dynamic,
+        boost_applied: profile.is_some() && boost_applied,
     }
 }
 
 /// Fork `from_settings` names a preset from buffer, index, vsync, and render
 /// opts after `from_bits` accepts the resolution. Dynamic resolution may differ
-/// between console and emulator singles. A set boost bit is not a preset here.
+/// between console and emulator singles. Bit 14 is the fork boost bit and does
+/// not select another preset. Bit 15 and an out-of-range resolution stay Other.
 pub fn settings_label(bits: u16) -> &'static str {
     let resolution = (bits >> 4) & 0x7f;
-    if (bits & (1 << 14)) != 0 || resolution > 4 {
+    if (bits & (1 << 15)) != 0 || resolution > 4 {
         return "Other";
     }
-    match (bits & 0b11, (bits >> 2) & 0b11, (bits >> 12) & 1, (bits >> 13) & 1) {
+    match (
+        bits & 0b11,
+        (bits >> 2) & 0b11,
+        (bits >> 12) & 1,
+        (bits >> 13) & 1,
+    ) {
         (3, 2, 1, 0) => "Vanilla",
         (2, 1, 0, 1) => "LessLag",
         (2, 0, 0, 1) => "LLUltra",
@@ -326,13 +365,18 @@ pub fn settings_label(bits: u16) -> &'static str {
 }
 
 fn settings_code(bits: u16) -> u8 {
-    match settings_label(bits) {
+    let base = match settings_label(bits) {
         "Vanilla" => 1,
         "LessLag" => 2,
         "LLUltra" => 3,
         "Other" => 4,
         "LLDoubles" => 5,
         _ => 0,
+    };
+    if base != 0 && base != 4 && (bits & (1 << 14)) != 0 {
+        base | 0x80
+    } else {
+        base
     }
 }
 
@@ -343,15 +387,22 @@ fn label_from_code(code: u8) -> &'static str {
         3 => "LLUltra",
         4 => "Other",
         5 => "LLDoubles",
+        0x81 => "Vanilla++",
+        0x82 => "LessLag++",
+        0x83 => "LLUltra++",
+        0x85 => "LLDoubles++",
         _ => "",
     }
 }
 
 pub fn encode_v3(announce: Announce) -> [u8; 4] {
-    let bits = match announce.profile {
+    let mut bits = match announce.profile {
         Some(mode) => profile_bits(mode, announce.resolution, announce.dynamic),
         None => 0,
     };
+    if announce.boost_applied && announce.profile.is_some() {
+        bits |= 1 << 14;
+    }
     [3, announce.latency as u8, bits as u8, (bits >> 8) as u8]
 }
 
@@ -480,9 +531,16 @@ fn apply_leaves(table: &mut Table) {
         let word = usize::from(index) / 64;
         let bit = index % 64;
         if seen[word] & (1u64 << bit) != 0 {
+            let id = table.index_id[usize::from(index)];
             table.index_id[usize::from(index)] = 0;
             if table.selected == index as u8 {
                 table.selected = NONE_STATION;
+            }
+            // One constant id is one opponent. A rematch can leave the same
+            // id bound at an older index; dropping only the reported index
+            // keeps their column up.
+            if id != 0 {
+                retire_constant(table, id);
             }
         }
     }
@@ -659,6 +717,117 @@ fn frame_from(view: View) -> PeerFrame {
     PeerFrame { selection, peer }
 }
 
+/// Stations the RTT poll may publish, copied under the same gate as the names.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PublicationTargets {
+    pub selected: crate::pia_rtt::StationPick,
+    pub stations: [u8; REMOTE_CAP],
+    pub len: u8,
+    pub busy: bool,
+}
+
+pub fn publication_targets() -> PublicationTargets {
+    match try_banner_peers() {
+        None => PublicationTargets {
+            selected: crate::pia_rtt::StationPick::Busy,
+            stations: [0; REMOTE_CAP],
+            len: 0,
+            busy: true,
+        },
+        Some((view, roster)) => {
+            let selected = match frame_from(view).selection {
+                Selection::Station(index) => crate::pia_rtt::StationPick::Index(index),
+                Selection::None => crate::pia_rtt::StationPick::Absent,
+                Selection::Busy => crate::pia_rtt::StationPick::Busy,
+            };
+            let mut stations = [0u8; REMOTE_CAP];
+            let mut len = 0u8;
+            for peer in roster.peers.iter().take(usize::from(roster.len)) {
+                let Some(index) = peer.station else {
+                    continue;
+                };
+                if usize::from(len) >= stations.len() {
+                    break;
+                }
+                stations[usize::from(len)] = index;
+                len = len.saturating_add(1);
+            }
+            PublicationTargets {
+                selected,
+                stations,
+                len,
+                busy: roster.busy,
+            }
+        }
+    }
+}
+
+/// Selected peer and every mapped remote, copied under one gate hold.
+/// Busy carries no names. Local and unmapped peers are omitted from the roster.
+pub fn banner_peers() -> (PeerFrame, RemoteRoster) {
+    match try_banner_peers() {
+        Some((view, roster)) => (frame_from(view), roster),
+        None => (
+            PeerFrame {
+                selection: Selection::Busy,
+                peer: unknown_peer(),
+            },
+            RemoteRoster::blank(true),
+        ),
+    }
+}
+
+fn try_banner_peers() -> Option<(View, RemoteRoster)> {
+    if !enter() {
+        return None;
+    }
+    let table = unsafe { &mut *TABLE.0.get() };
+    apply_cleanup(table);
+    apply_leaves(table);
+    let roster = roster_of(table);
+    let view = view_of(table);
+    leave();
+    Some((view, roster))
+}
+
+fn roster_of(table: &mut Table) -> RemoteRoster {
+    resolve_selection(table);
+    let (found, count) = candidates(table);
+    let mut roster = RemoteRoster::blank(false);
+    for index in found.into_iter().take(count) {
+        if usize::from(roster.len) >= REMOTE_CAP {
+            break;
+        }
+        let id = table.index_id[usize::from(index)];
+        let Some(peer) = peer_by_id(table, id) else {
+            continue;
+        };
+        roster.peers[usize::from(roster.len)] = show_station(&peer, index);
+        roster.len += 1;
+    }
+    roster
+}
+
+fn show_station(peer: &Peer, station: u8) -> ShownPeer {
+    ShownPeer {
+        known: true,
+        name: peer.name,
+        name_len: peer.name_len,
+        interface: interface_label(peer.interface_raw, peer.modded),
+        settings: if peer.payload_known {
+            label_from_code(settings_code(peer.profile_bits))
+        } else {
+            ""
+        },
+        latency: if peer.modded && peer.payload_known {
+            latency_from_byte(display_latency(peer.latency_bits))
+        } else {
+            RemoteLatency::Unknown
+        },
+        station: Some(station),
+    }
+}
+
 /// Snapshot under the same nonblocking gate as the name. Busy is not `None`.
 pub fn selection_snapshot() -> Selection {
     peer_frame().selection
@@ -677,6 +846,20 @@ pub fn remote_rows_visible(streamer: bool) -> bool {
     !streamer
 }
 
+/// A mapped station is connected even while its ping is still pending.
+pub fn station_connected(selection: Selection) -> bool {
+    matches!(selection, Selection::Station(_))
+}
+
+/// Opponent column, ping cell, and remote banner line. Absent and busy stay blank.
+pub fn opponent_column_visible(streamer: bool, selection: Selection) -> bool {
+    remote_rows_visible(streamer) && station_connected(selection)
+}
+
+pub fn opponent_connected() -> bool {
+    station_connected(peer_frame().selection)
+}
+
 /// Draw rule for the publication sitting next to this snapshot.
 pub fn display_identity(selection: Selection) -> crate::pia_rtt::RttIdentity {
     match selection {
@@ -692,15 +875,7 @@ pub fn shown_peer() -> ShownPeer {
 }
 
 fn unknown_peer() -> ShownPeer {
-    ShownPeer {
-        known: false,
-        name: [0; NAME_CAP],
-        name_len: 0,
-        interface: "Unknown",
-        settings: "",
-        latency: RemoteLatency::Unknown,
-        station: None,
-    }
+    blank_peer()
 }
 
 pub fn latched_stealth() -> Option<bool> {
@@ -745,8 +920,16 @@ fn seed_global_peer(slot: usize, peer: Peer) {
     });
 }
 
-pub fn observe_incoming(source_id: u64, incoming_byte: u8, kind: u8, body: &[u8], saved_stealth: bool) {
-    let _ = with_table(|table| observe_incoming_table(table, source_id, incoming_byte, kind, body, saved_stealth));
+pub fn observe_incoming(
+    source_id: u64,
+    incoming_byte: u8,
+    kind: u8,
+    body: &[u8],
+    saved_stealth: bool,
+) {
+    let _ = with_table(|table| {
+        observe_incoming_table(table, source_id, incoming_byte, kind, body, saved_stealth)
+    });
 }
 
 fn observe_incoming_table(
@@ -993,17 +1176,32 @@ fn note_rtt(table: &mut Table, incoming_byte: u8, body: &[u8]) {
     }
 }
 
-fn forget_id(table: &mut Table, source_id: u64) {
+fn retire_constant(table: &mut Table, id: u64) {
+    if id == 0 {
+        return;
+    }
+    for slot in &mut table.index_id {
+        if *slot == id {
+            *slot = 0;
+        }
+    }
     for slot in &mut table.pending {
-        if slot.is_some_and(|pending| pending.constant_id == source_id) {
+        if slot.is_some_and(|pending| pending.constant_id == id) {
             *slot = None;
         }
     }
     for slot in &mut table.peers {
-        if slot.is_some_and(|peer| peer.constant_id == source_id) {
+        if slot.is_some_and(|peer| peer.constant_id == id) {
             *slot = None;
         }
     }
+}
+
+/// Kind `0x14` subtype 3 or 4. The manager compares those bytes as a disconnect.
+/// The source id is the same constant id a subtype-2 response confirmed.
+/// A zero id matches nothing. Vanilla settings are not a leave.
+fn forget_id(table: &mut Table, source_id: u64) {
+    retire_constant(table, source_id);
     resolve_selection(table);
 }
 
@@ -1122,7 +1320,9 @@ enum PendingStore {
 }
 
 fn pending_from(direction: Direction, request: &ConnectionRequest) -> Option<Pending> {
-    if request.is_inverse != 1 || request.target_constant_id == 0 || request.location_constant_id == 0
+    if request.is_inverse != 1
+        || request.target_constant_id == 0
+        || request.location_constant_id == 0
     {
         return None;
     }
@@ -1169,9 +1369,10 @@ fn pending_slot(table: &mut Table, pending: Pending) -> PendingStore {
 }
 
 fn pending_index(table: &Table, constant_id: u64) -> Option<usize> {
-    table.pending.iter().position(|slot| {
-        slot.is_some_and(|pending| pending.constant_id == constant_id)
-    })
+    table
+        .pending
+        .iter()
+        .position(|slot| slot.is_some_and(|pending| pending.constant_id == constant_id))
 }
 
 fn install_peer(table: &mut Table, peer: Peer) -> bool {
@@ -1296,7 +1497,10 @@ fn first_player_name(body: &[u8]) -> ([u8; NAME_CAP], u8) {
 fn decode_name(tag: u8, window: &[u8]) -> Option<([u8; NAME_CAP], u8)> {
     let mut out = [0u8; NAME_CAP];
     if tag == 1 {
-        let end = window.iter().position(|byte| *byte == 0).unwrap_or(window.len());
+        let end = window
+            .iter()
+            .position(|byte| *byte == 0)
+            .unwrap_or(window.len());
         let raw = std::str::from_utf8(&window[..end]).ok()?.as_bytes();
         if raw.is_empty() || raw.len() > NAME_CAP {
             return None;
@@ -1370,6 +1574,14 @@ fn shown_from(table: &mut Table) -> ShownPeer {
     frame_from(view_of(table)).peer
 }
 
+/// Serializes tests that use the process-wide station table.
+/// Runtime `enter` stays non-blocking. Do not take this lock again while held.
+#[cfg(test)]
+pub(crate) fn global_gate() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1384,6 +1596,7 @@ mod tests {
             profile: Some(mode),
             resolution: 0,
             dynamic: matches!(mode, AnnounceMode::LessLagDoubles),
+            boost_applied: false,
         }
     }
 
@@ -1470,10 +1683,31 @@ mod tests {
     fn response_before_request_does_not_confirm_and_order_then_does() {
         let mut table = Table::empty();
         let early = response(b"Samus", true, 1, 2);
-        feed(&mut table, 0x1122_3344_5566_7788, 0x10, KIND_STATION, &early, false);
+        feed(
+            &mut table,
+            0x1122_3344_5566_7788,
+            0x10,
+            KIND_STATION,
+            &early,
+            false,
+        );
         assert!(!shown_from(&mut table).known);
-        feed(&mut table, 0, 0, KIND_STATION, &request(1, 0x10, 0x20), false);
-        feed(&mut table, 0x1122_3344_5566_7788, 0x10, KIND_STATION, &early, false);
+        feed(
+            &mut table,
+            0,
+            0,
+            KIND_STATION,
+            &request(1, 0x10, 0x20),
+            false,
+        );
+        feed(
+            &mut table,
+            0x1122_3344_5566_7788,
+            0x10,
+            KIND_STATION,
+            &early,
+            false,
+        );
         let shown = shown_from(&mut table);
         assert!(shown.known);
         assert_eq!(&shown.name[..5], b"Samus");
@@ -1483,12 +1717,33 @@ mod tests {
     #[test]
     fn reused_connection_byte_does_not_keep_the_old_payload() {
         let mut table = Table::empty();
-        feed(&mut table, 0, 0, KIND_STATION, &request(1, 0x10, 0x20), false);
+        feed(
+            &mut table,
+            0,
+            0,
+            KIND_STATION,
+            &request(1, 0x10, 0x20),
+            false,
+        );
         let body = response(b"Samus", true, 1, 2);
-        feed(&mut table, 0x1122_3344_5566_7788, 0x10, KIND_STATION, &body, false);
+        feed(
+            &mut table,
+            0x1122_3344_5566_7788,
+            0x10,
+            KIND_STATION,
+            &body,
+            false,
+        );
         let mut reply = vec![0, 0, 0, 1, 3, 7, 0x0b, 0x10];
         reply.extend_from_slice(&[0u8; 8]);
-        feed(&mut table, 0x1122_3344_5566_7788, 0x10, KIND_RTT, &reply, false);
+        feed(
+            &mut table,
+            0x1122_3344_5566_7788,
+            0x10,
+            KIND_RTT,
+            &reply,
+            false,
+        );
         let shown = shown_from(&mut table);
         assert_eq!(shown.settings, "Vanilla");
         assert_eq!(shown.latency, RemoteLatency::Buffer(7));
@@ -1509,19 +1764,32 @@ mod tests {
     }
 
     fn global_gate() -> std::sync::MutexGuard<'static, ()> {
-        static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-        LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+        super::global_gate()
     }
 
     #[test]
     fn a_disputed_pending_id_and_a_busy_gate_do_not_write() {
         let _gate = global_gate();
         let mut table = Table::empty();
-        feed(&mut table, 0, 0, KIND_STATION, &request(1, 0x10, 0x20), false);
+        feed(
+            &mut table,
+            0,
+            0,
+            KIND_STATION,
+            &request(1, 0x10, 0x20),
+            false,
+        );
         let other = request(1, 0x12, 0x23);
         feed(&mut table, 0, 0, KIND_STATION, &other, false);
         let body = response(b"Samus", true, 1, 2);
-        feed(&mut table, 0x1122_3344_5566_7788, 0x10, KIND_STATION, &body, false);
+        feed(
+            &mut table,
+            0x1122_3344_5566_7788,
+            0x10,
+            KIND_STATION,
+            &body,
+            false,
+        );
         assert!(!shown_from(&mut table).known);
         assert!(BUSY
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
@@ -1561,13 +1829,7 @@ mod tests {
         rtt.extend_from_slice(&[0u8; 16]);
         let aligned = (rtt.len() + 3) & !3;
         rtt.resize(aligned, 0);
-        let writes = plan_outgoing(
-            0x55,
-            &rtt,
-            Some(announce(4, AnnounceMode::Ultra)),
-            0,
-            false,
-        );
+        let writes = plan_outgoing(0x55, &rtt, Some(announce(4, AnnounceMode::Ultra)), 0, false);
         assert!(writes.iter().flatten().next().is_none());
         assert!(!shown_peer().known);
         assert_eq!(shown_peer().interface, "Unknown");
@@ -1623,7 +1885,14 @@ mod tests {
     #[test]
     fn rtt_payload_is_written_only_for_types_0_and_1() {
         let mut table = Table::empty();
-        feed(&mut table, 0, 0, KIND_STATION, &request(1, 0x44, 0x55), false);
+        feed(
+            &mut table,
+            0,
+            0,
+            KIND_STATION,
+            &request(1, 0x44, 0x55),
+            false,
+        );
         feed(
             &mut table,
             0x1122_3344_5566_7788,
@@ -1661,7 +1930,14 @@ mod tests {
     #[test]
     fn beacon_and_payload_bytes_change_only_the_spare_and_modded_slots() {
         let mut table = Table::empty();
-        feed(&mut table, 0, 0, KIND_STATION, &request(1, 0x44, 0x55), true);
+        feed(
+            &mut table,
+            0,
+            0,
+            KIND_STATION,
+            &request(1, 0x44, 0x55),
+            true,
+        );
         let body = response(b"A", false, 1, 2);
         let mut area = vec![0x06];
         area.extend_from_slice(&(body.len() as u16).to_be_bytes());
@@ -1674,7 +1950,14 @@ mod tests {
         let writes = plan_outgoing_table(&mut table, 0x55, &area, Some(announce), 2, true);
         assert!(writes.iter().all(Option::is_none));
         clear_table(&mut table);
-        feed(&mut table, 0, 0, KIND_STATION, &request(1, 0x44, 0x55), false);
+        feed(
+            &mut table,
+            0,
+            0,
+            KIND_STATION,
+            &request(1, 0x44, 0x55),
+            false,
+        );
         feed(
             &mut table,
             0x1122_3344_5566_7788,
@@ -1721,12 +2004,33 @@ mod tests {
     #[test]
     fn v2_and_v3_payloads_decode_and_a_cleanup_drops_the_latch() {
         let mut table = Table::empty();
-        feed(&mut table, 0, 0, KIND_STATION, &request(1, 0x10, 0x20), false);
+        feed(
+            &mut table,
+            0,
+            0,
+            KIND_STATION,
+            &request(1, 0x10, 0x20),
+            false,
+        );
         assert!(!table.latched_stealth);
-        feed(&mut table, 0, 0, KIND_STATION, &request(1, 0x10, 0x20), true);
+        feed(
+            &mut table,
+            0,
+            0,
+            KIND_STATION,
+            &request(1, 0x10, 0x20),
+            true,
+        );
         assert!(!table.latched_stealth);
         let body = response(b"Samus", true, 1, 2);
-        feed(&mut table, 0x1122_3344_5566_7788, 0x10, KIND_STATION, &body, false);
+        feed(
+            &mut table,
+            0x1122_3344_5566_7788,
+            0x10,
+            KIND_STATION,
+            &body,
+            false,
+        );
         let mut v2 = vec![0, 0, 0, 1, 2, 5, 0xff, 0xff];
         v2.extend_from_slice(&[0u8; 8]);
         feed(&mut table, 1, 0x10, KIND_RTT, &v2, false);
@@ -1767,6 +2071,7 @@ mod tests {
                 level: crate::resolution::Level::P1080,
                 dynamic: false,
             },
+            false,
         );
         assert_eq!(quiet_doubles.profile, Some(AnnounceMode::LessLagDoubles));
         assert!(!quiet_doubles.dynamic);
@@ -1799,13 +2104,25 @@ mod tests {
             "LLUltra"
         );
         assert_eq!(settings_label(doubles | (5 << 4)), "Other");
-        assert_eq!(settings_label(doubles | (1 << 14)), "Other");
+        assert_eq!(settings_label(doubles | (1 << 14)), "LLDoubles");
+        assert_eq!(
+            label_from_code(settings_code(doubles | (1 << 14))),
+            "LLDoubles++"
+        );
+        assert_eq!(settings_label(doubles | (1 << 15)), "Other");
         let encoded = encode_v3(announce(4, AnnounceMode::LessLagDoubles));
         assert_eq!(encoded[0], 3);
         assert_eq!(encoded[1], 4);
         assert_eq!(u16::from_le_bytes([encoded[2], encoded[3]]), doubles);
         let mut table = Table::empty();
-        feed(&mut table, 0, 0, KIND_STATION, &request(1, 0x10, 0x20), false);
+        feed(
+            &mut table,
+            0,
+            0,
+            KIND_STATION,
+            &request(1, 0x10, 0x20),
+            false,
+        );
         feed(
             &mut table,
             0x1122_3344_5566_7788,
@@ -1819,6 +2136,55 @@ mod tests {
         feed(&mut table, 1, 0x10, KIND_RTT, &reply, false);
         assert_eq!(shown_from(&mut table).settings, "LLDoubles");
         assert_eq!(shown_from(&mut table).latency, RemoteLatency::Buffer(4));
+    }
+
+    #[test]
+    fn applied_boost_uses_fork_bit_14_and_v2_still_clears_it() {
+        let less = preset_bits(AnnounceMode::LessLag);
+        let boosted = less | (1 << 14);
+        assert_eq!(settings_label(boosted), "LessLag");
+        assert_eq!(label_from_code(settings_code(boosted)), "LessLag++");
+        let mut announced = announce(4, AnnounceMode::LessLag);
+        announced.boost_applied = true;
+        let encoded = encode_v3(announced);
+        assert_eq!(u16::from_le_bytes([encoded[2], encoded[3]]), boosted);
+        let quiet = announce_from(
+            4,
+            false,
+            crate::render_policy::Profile::LessLag,
+            crate::resolution::Setting {
+                level: crate::resolution::Level::P1080,
+                dynamic: false,
+            },
+            true,
+        );
+        assert!(!quiet.boost_applied);
+        assert_eq!(encode_v3(quiet), [3, 4, 0, 0]);
+        let mut table = Table::empty();
+        feed(
+            &mut table,
+            0,
+            0,
+            KIND_STATION,
+            &request(1, 0x10, 0x20),
+            false,
+        );
+        feed(
+            &mut table,
+            0x1122_3344_5566_7788,
+            0x10,
+            KIND_STATION,
+            &response(b"Samus", true, 1, 2),
+            false,
+        );
+        let mut v2 = vec![0, 0, 0, 1, 2, 1, boosted as u8, (boosted >> 8) as u8];
+        v2.extend_from_slice(&[0u8; 8]);
+        feed(&mut table, 1, 0x10, KIND_RTT, &v2, false);
+        assert_eq!(shown_from(&mut table).settings, "LessLag");
+        let mut v3 = vec![0, 0, 0, 1, 3, 1, boosted as u8, (boosted >> 8) as u8];
+        v3.extend_from_slice(&[0u8; 8]);
+        feed(&mut table, 1, 0x10, KIND_RTT, &v3, false);
+        assert_eq!(shown_from(&mut table).settings, "LessLag++");
     }
 
     fn rtt_reply(latency: u8, bits: u16) -> Vec<u8> {
@@ -1835,7 +2201,14 @@ mod tests {
         assert_eq!(remote_latency_label(RemoteLatency::Buffer(25)), "25");
 
         let mut table = Table::empty();
-        feed(&mut table, 0, 0, KIND_STATION, &request(1, 0x10, 0x20), false);
+        feed(
+            &mut table,
+            0,
+            0,
+            KIND_STATION,
+            &request(1, 0x10, 0x20),
+            false,
+        );
         feed(
             &mut table,
             0x1122_3344_5566_7788,
@@ -1992,6 +2365,81 @@ mod tests {
     }
 
     #[test]
+    fn arena_roster_keeps_each_station_identity_and_skips_local_and_unmapped() {
+        let mut table = Table::empty();
+        let mut ann = named(11, b"Ann", 2, AnnounceMode::Vanilla);
+        ann.latency_bits = 4;
+        let mut bob = named(22, b"Bob", 1, AnnounceMode::LessLag);
+        bob.latency_bits = 255;
+        table.peers[0] = Some(ann);
+        table.peers[1] = Some(bob);
+        table.peers[2] = Some(named(33, b"Cyd", 1, AnnounceMode::Ultra));
+        table.local_index = 1;
+        bind_index(&mut table, 1, 11);
+        bind_index(&mut table, 4, 11);
+        bind_index(&mut table, 9, 22);
+        let roster = roster_of(&mut table);
+        assert!(!roster.busy);
+        assert_eq!(roster.len, 2);
+        assert_eq!(roster.peers[0].station, Some(4));
+        assert_eq!(
+            name_label(&roster.peers[0].name, roster.peers[0].name_len),
+            Some("Ann")
+        );
+        assert_eq!(roster.peers[0].settings, "Vanilla");
+        assert_eq!(roster.peers[0].latency, RemoteLatency::Buffer(4));
+        assert_eq!(roster.peers[1].station, Some(9));
+        assert_eq!(
+            name_label(&roster.peers[1].name, roster.peers[1].name_len),
+            Some("Bob")
+        );
+        assert_eq!(roster.peers[1].settings, "LessLag");
+        assert_eq!(roster.peers[1].latency, RemoteLatency::Auto);
+        assert!(roster.peers[2..].iter().all(|peer| !peer.known));
+    }
+
+    #[test]
+    fn busy_banner_snapshot_copies_no_names() {
+        let _gate = global_gate();
+        BUSY.store(true, Ordering::Release);
+        let (frame, roster) = banner_peers();
+        BUSY.store(false, Ordering::Release);
+        assert!(roster.busy);
+        assert_eq!(roster.len, 0);
+        assert!(roster.peers.iter().all(|peer| !peer.known));
+        assert_eq!(frame.selection, Selection::Busy);
+        assert!(!frame.peer.known);
+    }
+
+    #[test]
+    fn publication_targets_follow_the_roster_and_go_busy_without_names() {
+        let _gate = global_gate();
+        for bits in &LEAVE_BITS {
+            bits.store(0, Ordering::Relaxed);
+        }
+        BUSY.store(false, Ordering::Release);
+        clear_session();
+        seed_global_peer(0, named(11, b"Ann", 2, AnnounceMode::Vanilla));
+        seed_global_peer(1, named(22, b"Bob", 1, AnnounceMode::LessLag));
+        note_local(1);
+        bind_station(4, 11);
+        bind_station(9, 22);
+        let targets = publication_targets();
+        assert!(!targets.busy);
+        assert_eq!(targets.len, 2);
+        assert_eq!(targets.stations[0], 4);
+        assert_eq!(targets.stations[1], 9);
+        assert_eq!(targets.selected, crate::pia_rtt::StationPick::Index(4));
+        BUSY.store(true, Ordering::Release);
+        let hidden = publication_targets();
+        BUSY.store(false, Ordering::Release);
+        assert!(hidden.busy);
+        assert_eq!(hidden.len, 0);
+        assert_eq!(hidden.selected, crate::pia_rtt::StationPick::Busy);
+        clear_session();
+    }
+
+    #[test]
     fn a_busy_leave_or_session_clear_drops_that_station_on_the_next_holder() {
         let _gate = global_gate();
         for bits in &LEAVE_BITS {
@@ -2035,6 +2483,139 @@ mod tests {
         clear_session();
     }
 
+    #[test]
+    fn a_connected_station_stays_visible_before_its_ping_and_leave_clears_it() {
+        let _gate = global_gate();
+        clear_session();
+        assert!(!opponent_connected());
+        assert!(!opponent_column_visible(false, Selection::None));
+        assert!(!opponent_column_visible(false, Selection::Busy));
+        assert!(!station_connected(Selection::None));
+        let mut pending = named(44, b"Ann", 2, AnnounceMode::Vanilla);
+        pending.payload_known = false;
+        pending.modded = false;
+        seed_global_peer(0, pending);
+        bind_station(4, 44);
+        let frame = peer_frame();
+        assert!(station_connected(frame.selection));
+        assert_eq!(frame.peer.latency, RemoteLatency::Unknown);
+        assert!(opponent_column_visible(false, frame.selection));
+        assert!(!opponent_column_visible(true, frame.selection));
+        clear_session();
+        assert!(!opponent_connected());
+        assert_eq!(peer_frame().selection, Selection::None);
+        assert!(!opponent_column_visible(false, peer_frame().selection));
+    }
+
+    #[test]
+    fn identified_disconnect_retires_aliases_and_a_later_join_shows_again() {
+        let mut table = Table::empty();
+        let ann = 0x1122_3344_5566_7788u64;
+        feed(
+            &mut table,
+            0,
+            0,
+            KIND_STATION,
+            &request(1, 0x10, 0x20),
+            false,
+        );
+        feed(
+            &mut table,
+            ann,
+            0x10,
+            KIND_STATION,
+            &response(b"Ann", true, 1, 2),
+            false,
+        );
+        table.local_index = 1;
+        bind_index(&mut table, 4, ann);
+        let bits = preset_bits(AnnounceMode::Vanilla);
+        feed(&mut table, 1, 0x10, KIND_RTT, &rtt_reply(4, bits), false);
+        let frame = frame_from(view_of(&mut table));
+        assert_eq!(frame.selection, Selection::Station(4));
+        assert_eq!(frame.peer.settings, "Vanilla");
+        assert_eq!(
+            name_label(&frame.peer.name, frame.peer.name_len),
+            Some("Ann")
+        );
+        assert!(opponent_column_visible(false, frame.selection));
+        // Both indices belong to the departing peer before its disconnect.
+        bind_index(&mut table, 7, ann);
+        feed(&mut table, ann, 0, KIND_STATION, &[4, 0], false);
+        let gone = frame_from(view_of(&mut table));
+        assert_eq!(gone.selection, Selection::None);
+        assert!(!gone.peer.known);
+        assert!(!opponent_column_visible(false, gone.selection));
+        assert_eq!(table.index_id[4], 0);
+        assert_eq!(table.index_id[7], 0);
+        let bob = 0x99;
+        table.peers[1] = Some(named(bob, b"Bob", 1, AnnounceMode::LessLag));
+        bind_index(&mut table, 9, bob);
+        feed(&mut table, 0, 0, KIND_STATION, &[3], false);
+        let kept = frame_from(view_of(&mut table));
+        assert_eq!(kept.selection, Selection::Station(9));
+        assert_eq!(name_label(&kept.peer.name, kept.peer.name_len), Some("Bob"));
+        assert_eq!(kept.peer.settings, "LessLag");
+        feed(&mut table, bob, 0, KIND_STATION, &[3], false);
+        let local = frame_from(view_of(&mut table));
+        assert_eq!(local.selection, Selection::None);
+        assert!(!local.peer.known);
+        feed(
+            &mut table,
+            0,
+            0,
+            KIND_STATION,
+            &request(1, 0x30, 0x40),
+            false,
+        );
+        feed(
+            &mut table,
+            ann,
+            0x30,
+            KIND_STATION,
+            &response(b"Ann", true, 1, 2),
+            false,
+        );
+        bind_index(&mut table, 4, ann);
+        let back = frame_from(view_of(&mut table));
+        assert_eq!(back.selection, Selection::Station(4));
+        assert_eq!(name_label(&back.peer.name, back.peer.name_len), Some("Ann"));
+        assert!(opponent_column_visible(false, back.selection));
+    }
+
+    #[test]
+    fn station_leave_drops_alias_indices_and_keeps_the_other_peer() {
+        let _gate = global_gate();
+        for bits in &LEAVE_BITS {
+            bits.store(0, Ordering::Relaxed);
+        }
+        BUSY.store(false, Ordering::Release);
+        clear_session();
+        seed_global_peer(0, named(11, b"Ann", 2, AnnounceMode::Vanilla));
+        seed_global_peer(1, named(22, b"Bob", 1, AnnounceMode::LessLag));
+        note_local(1);
+        bind_station(4, 11);
+        bind_station(7, 11);
+        bind_station(9, 22);
+        let frame = peer_frame();
+        assert_eq!(frame.peer.settings, "Vanilla");
+        assert!(opponent_column_visible(false, frame.selection));
+        clear_station(7);
+        let frame = peer_frame();
+        assert_eq!(frame.selection, Selection::Station(9));
+        assert_eq!(
+            name_label(&frame.peer.name, frame.peer.name_len),
+            Some("Bob")
+        );
+        assert_eq!(frame.peer.settings, "LessLag");
+        clear_station(9);
+        let frame = peer_frame();
+        assert_eq!(frame.selection, Selection::None);
+        assert!(!frame.peer.known);
+        assert!(!opponent_column_visible(false, frame.selection));
+        clear_session();
+    }
+
     fn published(station: u8, epoch: u64) -> crate::pia_rtt::Publication {
         crate::pia_rtt::Publication::from_reading(
             crate::pia_rtt::PingReading::Measured(20),
@@ -2060,7 +2641,10 @@ mod tests {
         bind_station(9, 22);
         let frame = peer_frame();
         assert_eq!(frame.selection, Selection::Station(4));
-        assert_eq!(name_label(&frame.peer.name, frame.peer.name_len), Some("Ann"));
+        assert_eq!(
+            name_label(&frame.peer.name, frame.peer.name_len),
+            Some("Ann")
+        );
         assert_eq!(frame.peer.interface, "Ethernet");
         assert_eq!(frame.peer.settings, "Vanilla");
         let old = published(4, 3);
@@ -2072,7 +2656,10 @@ mod tests {
         cycle_peer(1);
         let frame = peer_frame();
         assert_eq!(frame.selection, Selection::Station(9));
-        assert_eq!(name_label(&frame.peer.name, frame.peer.name_len), Some("Bob"));
+        assert_eq!(
+            name_label(&frame.peer.name, frame.peer.name_len),
+            Some("Bob")
+        );
         assert!(!crate::pia_rtt::rtt_matches(
             display_identity(frame.selection),
             old,

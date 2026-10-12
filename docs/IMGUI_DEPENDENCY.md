@@ -10,37 +10,71 @@ the overlay is available in every scene.
 
 ## Pinned artifact and sources
 
+The backend is built from public source with a local renderer patch.
+The compiled archive stays in the ignored `target/native/imgui/` directory.
+
 | Item | Value |
 |---|---|
-| Static archive | `libimgui_smash.a`, 16,798,872 bytes |
-| SHA-256 | `0042ff0592313228b0746ee9214091249f7c70a1797e1826d990c27ca2fe0e45` |
-| Immutable source | fork commit `35fdf7cf5fea0f8249ca9fbb848c241b590bb483`, path `lib/libimgui_smash.a` (git blob `aff8692e11b881b99d11dd67dbcfacc24f1cd497`) |
-| Host glue and headers | `Coolsonickirby/imgui-smash` commit `bb47b205ed0be2fb864269ee2d37fc886b81221e` (`src/lib.rs`, `include/imgui_smash.h`, `include/smash_types.h`, `src/cimgui.h`) |
-| Backend config at that commit | command buffer id 1, precompiled shaders not forced, viewport 1280x720, input port 0, SVC logging unless a logger is set, `IM_ASSERT` = `SMASH_ASSERT` (aborts) |
+| Static archive | `libimgui_smash.a`, 17,181,302 bytes |
+| SHA-256 | `6c9591cc9f140ca6ce2efee2cdcaa0d8278b43319ea497b3f2434ce19d09ccca` |
+| Public source | `Coolsonickirby/imgui-smash` at `bb47b205ed0be2fb864269ee2d37fc886b81221e` |
+| ImGui submodule | `2b415e642b002f4312ac02f6bfa955960f8bd3b6` |
+| Local patch | `patches/imgui-smash/renderer-bb47.patch` |
+| Patch SHA-256 | `4e138e351334732670ca250c859e44b53e1fa54eb59e447f2385281063b2871d` |
 
-The archive is third-party compiled code and is never committed. It lives in
-the git-ignored `target/native/imgui/` directory together with a sidecar digest
-and `provenance.json`.
+The patch prevents overlapping ImGui frames and gives each in-flight overlay
+submission its own command, control, geometry and uniform storage. Eight slots
+are reused only after a nonblocking fence check reports completion. If all slots
+are busy, that overlay draw is skipped. Exhausted command memory uses a bounded
+reserve to finish and discard the unsubmitted draw safely.
 
 ## Preparing the archive
 
+Docker and Git are required for a source build. The script uses the pinned
+devkitA64 image recorded in `archive-pin.json`, the current user's uid/gid,
+two CPUs and a 2 GiB container limit.
+
 ```text
-/usr/bin/python3 tools/prepare_imgui.py --source <path-to-libimgui_smash.a>
-/usr/bin/python3 tools/prepare_imgui.py            # fetches the pinned copy over HTTPS
+/usr/bin/python3 tools/prepare_imgui.py
 ```
 
-The script verifies size and SHA-256 before installing, refuses non-HTTPS
-URLs, and writes `libimgui_smash.a`, `libimgui_smash.a.sha256` and
-`provenance.json`. `build.rs` never downloads: for `target_os = "switch"` it
-requires the exact path, checks the size and the sidecar digest, then emits
-`rustc-link-search` plus `rustc-link-lib=static:-bundle=imgui_smash`. Host
-builds and tests ignore the archive entirely. A missing or mismatched archive
-fails the Switch build with instructions.
+A local checkout of the pinned source and submodule avoids cloning:
+
+```text
+/usr/bin/python3 tools/prepare_imgui.py --upstream /path/to/imgui-smash
+```
+
+An already-built archive must match the same digest:
+
+```text
+/usr/bin/python3 tools/prepare_imgui.py --source /path/to/libimgui_smash.a
+/usr/bin/python3 tools/test_prepare_imgui.py
+```
+
+The script applies the checked-in patch, builds from a clean source copy and
+verifies the result before installing the archive, sidecar digest and
+`provenance.json`. Deterministic `ar qcD` and `ranlib -D` rules produced
+identical archives in two clean builds. An existing verified archive skips
+the build. `build.rs` performs no downloads; host builds do not link the
+archive.
+
+## Renderer diagnostics
+
+The existing five-second writer appends `imgui_frame_*` and `imgui_draw_*`
+counters to `renderer-status.txt` when Deluxe owns the embedded backend.
+It adds no background thread or per-frame file writes. `imgui_stats=not_embedded`
+means those local counters do not describe the active host.
+
+The former `PROBE_MENU_GPU_COMPLETION` probe and original-command-buffer
+recording hooks have been removed. They were investigation tools and did not
+describe the replacement's per-slot buffers. The analysis script still reads
+their archived trace records; numeric event IDs have not been reassigned.
 
 ## What the archive provides and needs
 
 Members: `cimgui`, `InputHelper`, `fsHelper`, `memoryHelper`,
-`ImguiShaderCompiler`, `MemoryBuffer`, `MemoryPoolMaker`, `imgui_impl_nvn`,
+`ImguiShaderCompiler`, `MemoryBuffer`, `MemoryPoolMaker`, `DrawSlots`,
+`frame_guard`, `imgui_impl_nvn`,
 `imgui_nvn`, `imgui_smash`, `Logger`, ImGui core, demo, draw, tables, widgets.
 It defines the C API (`imgui_smash_init`, `imgui_smash_bootstrap_hook`,
 `imgui_smash_add_on_draw_frame`, `imgui_smash_context_setup`,
@@ -137,6 +171,13 @@ then, so it sees the same context the draw calls use. Otherwise it returns
 - Both Deluxe and Elite consume D-pad input when their menus are open. Edit
   one menu at a time. Elite's stage restriction is NSO-only; offline stages
   remaining unrestricted is expected.
+- On the October9 Switch build, the operator reports that Deluxe Debug's
+  `L+R+Up` capture shortcut also opens Elite. Deluxe shows `Capturing (10 s)`,
+  so both respond. The collected files show recording completed, with a complete
+  callback CSV and truncated API CSV; the source audit identified per-fragment
+  flush-requesting writes in export. Avoid repeated chord presses during collection.
+  The shortcut overlap does not establish the export cause or explain the launch
+  failures. Shortcut rebinding is separate from the buffered-export correction.
 
 ## Attribution and live evidence
 
@@ -182,5 +223,39 @@ Candidate `4a927dc20904722d` showed standalone Deluxe and Elite windows together
 with native CSS text in solo Eden tests, both with and without G&W. One
 concurrent two-instance run had invisible external windows despite valid
 registrations and working input edits; its native text and the second peer's
-embedded window remained visible. This is unresolved and does not establish
-a G&W or native-pane cause. See [NATIVE_DISPLAY.md](NATIVE_DISPLAY.md).
+embedded window remained visible. That run did not establish a G&W or native-pane cause. The follow-up below
+addresses two defects in the backend; the intermittent symptom still needs
+Switch confirmation. See [NATIVE_DISPLAY.md](NATIVE_DISPLAY.md).
+
+
+## Renderer correction and cleanup, 2026-10-09
+
+The original backend reproduced an ImGui assertion that a previous frame had
+not ended. The replacement uses one nonblocking owner for the whole frame.
+It also stops re-recording command, geometry and uniform memory that can still
+belong to an outstanding GPU submission. The fence belongs to the submitting
+queue, and polling it never waits for the GPU.
+
+The guard-only experiment still lost a menu once, then passed a later repeat.
+That limits causal claims: the source defects are established, but the
+intermittent visibility symptom was not deterministic. The combined correction
+has passed the recorded Eden transitions; Switch confirmation remains required.
+
+The final rewrite is `7fdad40f10705afb`. The cleanup removes three superseded
+probe modules, their original-command-buffer wrappers and one unused UI status
+accessor. Shared memory-region/reserve and retirement helpers reduce duplicate
+C++ logic. Compared with the pre-cleanup Rust snapshot and pinned upstream C++,
+the renderer correction plus cleanup adds 40 net production source lines.
+Tests and the source-build script are counted separately; temporary audit
+harnesses stay outside the repository.
+
+Required host and Skyline checks pass, including 247 Rust tests. Four focused
+C++ helpers pass with warnings denied; the full upstream C++ build retains its
+existing warnings. Two clean source builds produce the pinned archive byte for
+byte. Raw run evidence and exact artifact hashes are recorded in
+[VALIDATION.md](VALIDATION.md).
+
+The external-host path uses the standalone NRO's backend. It cannot acquire
+this embedded fix just by updating Deluxe. The patched standalone companion
+uses the same archive and preserves Elite's exports. Diagnostic variants used
+temporary counter threads; the release companion disables those features.

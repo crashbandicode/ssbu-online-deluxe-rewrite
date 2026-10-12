@@ -54,6 +54,8 @@ extern "C" {
     pub(super) fn igPushStyleColor_Vec4(index: i32, value: Vec4);
     pub(super) fn igPopStyleColor(count: i32);
     pub(super) fn igTextUnformatted(text: *const c_char, end: *const c_char);
+    pub(super) fn igPushTextWrapPos(wrap_local_pos_x: f32);
+    pub(super) fn igPopTextWrapPos();
     pub(super) fn igBeginTable(
         id: *const c_char,
         columns: i32,

@@ -42,9 +42,8 @@ pub fn parse_nro_header(header: &[u8]) -> Option<NroSegments> {
     let ro_size = u32_at(0x2c)?;
     let rw_offset = u32_at(0x30)?;
     let rw_size = u32_at(0x34)?;
-    let inside = |offset: u32, len: u32| {
-        len > 0 && offset.checked_add(len).is_some_and(|end| end <= size)
-    };
+    let inside =
+        |offset: u32, len: u32| len > 0 && offset.checked_add(len).is_some_and(|end| end <= size);
     if size < 0x80 || !inside(text_offset, text_size) || !inside(ro_offset, ro_size) {
         return None;
     }
@@ -167,7 +166,9 @@ mod tests {
         assert!(!ro_contains_tag(&ro));
         ro[..COMPATIBLE_IMGUI_VERSION.len()].copy_from_slice(COMPATIBLE_IMGUI_VERSION);
         assert!(ro_contains_tag(&ro));
-        assert!(!ro_contains_tag(&COMPATIBLE_IMGUI_VERSION[..COMPATIBLE_IMGUI_VERSION.len() - 1]));
+        assert!(!ro_contains_tag(
+            &COMPATIBLE_IMGUI_VERSION[..COMPATIBLE_IMGUI_VERSION.len() - 1]
+        ));
     }
 
     #[test]
@@ -190,7 +191,10 @@ mod tests {
         assert!(text_contains(&segments, 0x1000));
         assert!(!text_contains(&segments, tag));
         assert!(tag >= segments.ro_offset as usize);
-        assert!(tag + COMPATIBLE_IMGUI_VERSION.len() <= (segments.ro_offset + segments.ro_size) as usize);
+        assert!(
+            tag + COMPATIBLE_IMGUI_VERSION.len()
+                <= (segments.ro_offset + segments.ro_size) as usize
+        );
     }
 
     #[test]

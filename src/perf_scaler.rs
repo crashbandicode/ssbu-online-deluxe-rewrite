@@ -115,7 +115,8 @@ impl Scaler {
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
             .is_err()
         {
-            slot.cooldown.store(CUT_IN_COOLDOWN_FRAMES, Ordering::Release);
+            slot.cooldown
+                .store(CUT_IN_COOLDOWN_FRAMES, Ordering::Release);
             return Action::Already;
         }
         slot.cooldown
@@ -352,7 +353,10 @@ mod tests {
                 ));
             }
             assert_eq!(resolution::status().reports, (ENTRIES as u8) - 1);
-            assert_eq!(scaler.cut_in_tick(4, true, false), Action::Cooling { left: 6 });
+            assert_eq!(
+                scaler.cut_in_tick(4, true, false),
+                Action::Cooling { left: 6 }
+            );
         });
     }
 

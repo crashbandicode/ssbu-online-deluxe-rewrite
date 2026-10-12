@@ -83,6 +83,8 @@ static CONTEXT_READY: AtomicBool = AtomicBool::new(false);
 static BACKEND_READY: AtomicBool = AtomicBool::new(false);
 static BOOTSTRAP_CALLS: AtomicU64 = AtomicU64::new(0);
 static LOG_COUNT: AtomicU64 = AtomicU64::new(0);
+static RESIZE_COUNT: AtomicU64 = AtomicU64::new(0);
+static LOGGER_GUARD: AtomicBool = AtomicBool::new(false);
 static DRAW: AtomicUsize = AtomicUsize::new(0);
 static EXTERNAL_CONTEXT: AtomicUsize = AtomicUsize::new(0);
 static GET_CONTEXT: AtomicUsize = AtomicUsize::new(0);
@@ -158,11 +160,35 @@ unsafe extern "C" fn external_draw() {
 }
 
 unsafe extern "C" fn backend_logger(message: *const c_char, len: usize) {
-    let n = LOG_COUNT.fetch_add(1, Ordering::Relaxed) + 1;
-    if !(n <= 8 || n.is_multiple_of(256)) {
+    if LOGGER_GUARD
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
         return;
     }
-    if message.is_null() || len == 0 {
+    observe_backend_log(message, len);
+    LOGGER_GUARD.store(false, Ordering::Release);
+}
+
+unsafe fn observe_backend_log(message: *const c_char, len: usize) {
+    let resizing = if message.is_null() || len == 0 {
+        false
+    } else {
+        let n = len.min(512);
+        let bytes = std::slice::from_raw_parts(message.cast::<u8>(), n);
+        crate::render_trace::contains_resizing(bytes)
+    };
+    if resizing && embedded() {
+        let count = RESIZE_COUNT
+            .fetch_add(1, Ordering::Relaxed)
+            .saturating_add(1);
+        let tick = super::api_trace::start();
+        if tick != 0 {
+            super::api_trace::TRACE.observe(crate::render_trace::resize_event(tick, count));
+        }
+    }
+    let n = LOG_COUNT.fetch_add(1, Ordering::Relaxed) + 1;
+    if !(n <= 8 || n.is_multiple_of(256)) || message.is_null() || len == 0 {
         return;
     }
     let len = len.min(512);
@@ -170,6 +196,10 @@ unsafe extern "C" fn backend_logger(message: *const c_char, len: usize) {
     let end = bytes.iter().position(|b| *b == 0).unwrap_or(bytes.len());
     let text = String::from_utf8_lossy(&bytes[..end]);
     skyline::println!("[Deluxe/imgui #{}] {}", n, text.trim_end());
+}
+
+pub(super) fn embedded() -> bool {
+    STATE.load(Ordering::Acquire) == STATE_EMBEDDED
 }
 
 struct LoadedNro {
@@ -182,7 +212,8 @@ struct LoadedNro {
 /// begin with `NRO0`, or whose text offset is not zero, is not given a module.
 fn loaded_nro(symbol: usize) -> Option<LoadedNro> {
     let (map_base, map_size) = unsafe { memory::region(symbol) }?;
-    if map_size < NRO_HEADER_SIZE || !unsafe { memory::accessible(map_base, NRO_HEADER_SIZE, false) }
+    if map_size < NRO_HEADER_SIZE
+        || !unsafe { memory::accessible(map_base, NRO_HEADER_SIZE, false) }
     {
         return None;
     }
@@ -246,9 +277,7 @@ fn refuse(phase: &str, detail: u64) -> bool {
     STATE.store(STATE_REFUSED, Ordering::Release);
     record(Code::HookRejected, SITE_BOOTSTRAP, detail);
     logging::startup_phase(phase);
-    skyline::println!(
-        "[Deluxe] imgui host refused ({phase}); menu callbacks not installed"
-    );
+    skyline::println!("[Deluxe] imgui host refused ({phase}); menu callbacks not installed");
     false
 }
 
@@ -340,9 +369,12 @@ pub(super) fn install(draw: unsafe extern "C" fn()) -> bool {
     let draw_wrapper = locate_export(DRAW_WRAPPER);
     let get_context = locate_export(GET_CONTEXT_EXPORT);
     let (setup_addr, draw_addr, get_addr, choice) = match (&setup, &draw_wrapper, &get_context) {
-        (Export::Absent, Export::Absent, Export::Absent) => {
-            (None, None, None, select_imgui_host(false, false, false, false))
-        }
+        (Export::Absent, Export::Absent, Export::Absent) => (
+            None,
+            None,
+            None,
+            select_imgui_host(false, false, false, false),
+        ),
         (
             Export::Bound(setup_addr, setup_image),
             Export::Bound(draw_addr, draw_image),
@@ -365,12 +397,19 @@ pub(super) fn install(draw: unsafe extern "C" fn()) -> bool {
                 select_imgui_host(true, true, get_addr.is_some(), ro_tag_present(setup_image)),
             )
         }
-        _ => (None, None, None, select_imgui_host(true, false, false, false)),
+        _ => (
+            None,
+            None,
+            None,
+            select_imgui_host(true, false, false, false),
+        ),
     };
 
     match choice {
         ImguiHostChoice::External => {
             CHAIN.store(CHAIN_EXTERNAL, Ordering::Release);
+            // Selected before setup. `ready` is still false; NVN init is after main.
+            STATE.store(STATE_EXTERNAL, Ordering::Release);
             if let Err(error) = hook_bootstrap() {
                 return fail_bootstrap(error);
             }
@@ -388,7 +427,6 @@ pub(super) fn install(draw: unsafe extern "C" fn()) -> bool {
                 let add_draw: DrawWrapper = std::mem::transmute(draw_addr);
                 add_draw(external_draw as *const c_void);
             }
-            STATE.store(STATE_EXTERNAL, Ordering::Release);
             record(Code::Compatibility, 5, 19263);
             logging::startup_phase("overlay_host_external_ready");
             skyline::println!(

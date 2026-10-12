@@ -1,0 +1,30 @@
+{
+  "status": "ready",
+  "sha256": "6c9591cc9f140ca6ce2efee2cdcaa0d8278b43319ea497b3f2434ce19d09ccca",
+  "size": 17181302,
+  "note": "Two clean builds of the compact patch produced this archive byte for byte. Member mtime, uid, and gid are zero.",
+  "deterministic_archive": {
+    "cmake": "3.31.6",
+    "observed_link_rule": "aarch64-none-elf-gcc-ar qcD <archive> <objects>; aarch64-none-elf-gcc-ranlib -D <archive>",
+    "cmake_cxx_archive_create": "<CMAKE_AR> qcD <TARGET> <LINK_FLAGS> <OBJECTS>",
+    "cmake_cxx_archive_append": "<CMAKE_AR> qD <TARGET> <LINK_FLAGS> <OBJECTS>",
+    "cmake_cxx_archive_finish": "<CMAKE_RANLIB> -D <TARGET>",
+    "preload": "patches/imgui-smash/deterministic-archive.cmake"
+  },
+  "source": {
+    "repo": "https://github.com/Coolsonickirby/imgui-smash",
+    "commit": "bb47b205ed0be2fb864269ee2d37fc886b81221e",
+    "submodule_repo": "https://github.com/ocornut/imgui",
+    "submodule_path": "imgui-smash/extern/imgui",
+    "submodule_commit": "2b415e642b002f4312ac02f6bfa955960f8bd3b6",
+    "license": "GPL-2.0 text is imgui-smash/LICENSE in the upstream tree",
+    "patch": "patches/imgui-smash/renderer-bb47.patch",
+    "patch_sha256": "4e138e351334732670ca250c859e44b53e1fa54eb59e447f2385281063b2871d"
+  },
+  "image": "devkitpro/devkita64@sha256:1fc388c3a0d34bd2045a6dadcb1020e069d5f876a187fd705de14b4440c00282",
+  "container_paths": {
+    "mount": "/work",
+    "toolchain": "/work/imgui-smash/cmake/toolchain.cmake",
+    "build": "/work/lib/cmake-build"
+  }
+}

@@ -258,6 +258,9 @@
     "inkling_attack_arc",
     "inkling_brush",
     "inkling_roller",
+    "inkling_roller_splash_air",
+    "inkling_roller_splash_run",
+    "inkling_roller_splash_walk",
     "inkling_splash",
     "master_axe_aura",
     "master_axe_hold",
@@ -1532,7 +1535,8 @@
       "profile": "EdgeDownB"
     }
   ],
-  "off_semantics": "Off nulls included named character effects, including those the peer only scaled. Reduced remains unavailable; this is not byte-for-byte peer parity.",
+  "off_semantics": "Off nulls included named character effects, including those the peer only scaled. Reduced uses a separate lighter-cue policy; this is not byte-for-byte peer parity.",
+  "roller_off_qualification": "inkling_roller stays as the peer legacy_charge_effect_replacement null. It is not a parent Hash40 request in WuBoytH/SSBU-Dumped-Scripts 59004685238a3f6f93bae905d3a4e079701c40b4. Off also nulls the three unique parents those inkling_roller scripts request: inkling_roller_splash_air, inkling_roller_splash_run, and inkling_roller_splash_walk. Fighter inkling_run_splash, victory inkling_result_roller_splash, ink articles, and chrom_mc_1 are outside that null.",
   "runtime_status": "Expanded catalog and context gating await Eden/Switch move validation. Named aliases are source candidates, not confirmed emitters.",
   "excluded_cues": [
     "P_EflameBlazeEndSword",

@@ -62,6 +62,11 @@ fn save_config(config: &Config) -> io::Result<()> {
     crate::config_store::save(&path, &config.serialize())
 }
 
+/// Confirmed-missing check through the native API. Also used for plugin INIs.
+pub(super) fn file_is_missing(path: &Path) -> bool {
+    config_is_missing(path)
+}
+
 fn config_is_missing(path: &Path) -> bool {
     // skyline-v3's std maps GetEntryType's 0x202 to ErrorKind::Other.
     // Ask the native API so only a confirmed missing file is created; an
@@ -207,6 +212,7 @@ pub(super) fn start(version: &str) {
                 std::thread::sleep(Duration::from_millis(500));
                 timing.poll();
                 super::presentation::poll();
+                super::fps_boost::publish();
                 super::pia_rtt::poll();
                 super::peer_observer::poll();
                 super::fighter_probe::poll();
@@ -264,6 +270,7 @@ pub(super) fn start(version: &str) {
                         }
                     }
                 }
+                super::plugin_export::flush_persistence();
                 let next_generation = CONFIG_GENERATION.load(Ordering::Acquire);
                 if next_generation != generation {
                     match save_config(&settings()) {

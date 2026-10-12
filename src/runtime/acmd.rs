@@ -1,8 +1,12 @@
 //! ACMD has its own request path; lua_bind::EffectModule hooks do not cover it.
+//! `EFFECT_OFF_KIND` and `EFFECT_DETACH_KIND` are void in skyline-smash
+//! bed642e. Their hooks read the hash and flags, call the lua_bind cleanup for
+//! the clone, then call the original command. They do not rewrite the Lua
+//! stack and do not invent a return value.
 //! Mirrors the supplied FX mod's stack bridge, with bounded primitive storage,
 //! no per-frame allocation and an unchanged original call after substitution.
-use super::{effects_off, record, Code};
-use crate::{acmd::Value, config::FxMode};
+use super::{fx_mode, fx_scope_allows, record, Code};
+use crate::{acmd::Value, config::FxMode, effects_reduced::FxIntent};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 #[repr(C)]
@@ -22,7 +26,6 @@ extern "C" {
     fn stack_clear(agent: *mut Agent) -> u64;
 }
 
-static SUPPRESSED: AtomicU64 = AtomicU64::new(0);
 static REJECTED: AtomicU64 = AtomicU64::new(0);
 
 fn reject(path: u64, reason: u64) {
@@ -33,7 +36,9 @@ fn reject(path: u64, reason: u64) {
 }
 
 unsafe fn filter(lua_state: u64, path: u64, calls: &AtomicU64, hash_count: usize) {
-    if !effects_off() || lua_state == 0 {
+    let mode = fx_mode();
+    let scope = fx_scope_allows();
+    if lua_state == 0 || mode == FxMode::On || (mode == FxMode::Off && !scope) {
         return;
     }
     let count = calls.fetch_add(1, Ordering::Relaxed) + 1;
@@ -50,50 +55,95 @@ unsafe fn filter(lua_state: u64, path: u64, calls: &AtomicU64, hash_count: usize
     if count == 1 || count.is_multiple_of(256) {
         record(Code::AcmdEffectSeen, path, args[0].raw);
     }
-    let context = if args[..hash_count].iter().any(|v| {
-        crate::effects::rewrite(FxMode::Off, v.raw) == v.raw && crate::effects::needs_context(v.raw)
+    let context = if args[..hash_count].iter().any(|v| match mode {
+        FxMode::Off => {
+            crate::effects::rewrite(FxMode::Off, v.raw) == v.raw
+                && crate::effects::needs_context(v.raw)
+        }
+        FxMode::Reduced => {
+            crate::effects_reduced::reduced_named(v.raw) || crate::eff_variant::wants_context(v.raw)
+        }
+        FxMode::On => false,
     }) {
         super::effect_context::from_lua(lua_state)
     } else {
         None
     };
-    if crate::acmd::replacements(FxMode::Off, &args[..hash_count], hash_count, context)
-        .iter()
-        .all(Option::is_none)
-    {
-        return;
+    let mut intents = [FxIntent::Passthrough; 2];
+    let mut forwarded = [0u64; 2];
+    let mut variant = [false; 2];
+    let mut changed = false;
+    for index in 0..hash_count {
+        intents[index] = crate::effects_reduced::classify(mode, scope, args[index].raw, context);
+        let requested = crate::effects_reduced::request_hash(intents[index], args[index].raw);
+        let next = crate::eff_variant::forward(mode, scope, requested, context);
+        forwarded[index] = next;
+        variant[index] = next != requested;
+        if next != args[index].raw {
+            changed = true;
+        }
     }
-    // Reads don't clear Lua. Unknown/oversized commands pass through intact.
+    // Reads don't clear Lua. A rejected tail leaves the original request untouched.
     let mut len = hash_count;
-    loop {
-        let value = stack_value(&mut agent, (len + 1) as i32);
-        if value.kind == 0 {
-            break;
+    if changed && scope {
+        loop {
+            let value = stack_value(&mut agent, (len + 1) as i32);
+            if value.kind == 0 {
+                break;
+            }
+            if len == args.len() || !value.is_primitive() {
+                reject(path, value.kind as u64);
+                return;
+            }
+            args[len] = value;
+            len += 1;
         }
-        if len == args.len() || !value.is_primitive() {
-            reject(path, value.kind as u64);
-            return;
-        }
-        args[len] = value;
-        len += 1;
-    }
-    let replacements = crate::acmd::replacements(FxMode::Off, &args[..len], hash_count, context);
-    let old = [args[0].raw, args[1].raw];
-    for (index, hash) in replacements.iter().enumerate() {
-        if let Some(hash) = hash {
-            args[index].raw = *hash;
-        }
-    }
-    stack_clear(&mut agent);
-    for value in &args[..len] {
-        stack_push(&mut agent, value);
     }
     for index in 0..hash_count {
-        if replacements[index].is_some() {
-            let count = SUPPRESSED.fetch_add(1, Ordering::Relaxed) + 1;
-            if count <= 32 || count.is_multiple_of(128) {
-                record(Code::AcmdEffectSuppressed, old[index], (path << 32) | count);
+        if variant[index] {
+            let swaps = crate::eff_variant::observe_swap(args[index].raw);
+            if swaps == 1 || swaps.is_multiple_of(128) || super::api_trace::start() != 0 {
+                record(
+                    Code::FxVariantUse,
+                    crate::eff_variant::source_file(args[index].raw),
+                    args[index].raw,
+                );
             }
+        }
+    }
+    let originals = [args[0].raw, args[1].raw];
+    for index in 0..hash_count {
+        let intent = intents[index];
+        let next = forwarded[index];
+        let code = match intent {
+            FxIntent::Passthrough => {
+                if changed && scope {
+                    args[index].raw = next;
+                }
+                continue;
+            }
+            FxIntent::Suppress => Code::AcmdEffectSuppressed,
+            FxIntent::ReducedCull => Code::FxReducedCull,
+            FxIntent::ReducedKeep => Code::FxReducedKeep,
+            FxIntent::ReducedRestore => Code::FxReducedRestore,
+            FxIntent::ReducedPreserve => Code::FxReducedPreserve,
+        };
+        let total = crate::effects_reduced::observe(intent, false);
+        let sample = match intent {
+            FxIntent::Suppress => total <= 32 || total.is_multiple_of(128),
+            _ => total == 1 || total.is_multiple_of(128),
+        };
+        if sample || super::api_trace::start() != 0 {
+            record(code, originals[index], (path << 32) | total);
+        }
+        if changed && scope {
+            args[index].raw = next;
+        }
+    }
+    if changed && scope {
+        stack_clear(&mut agent);
+        for value in &args[..len] {
+            stack_push(&mut agent, value);
         }
     }
 }
@@ -183,6 +233,105 @@ effect_hook!(
     2
 );
 
+extern "C" {
+    #[link_name = "\u{1}_ZN3app10sv_animcmd15EFFECT_OFF_KINDEP9lua_State"]
+    fn effect_off_kind(lua_state: u64);
+    #[link_name = "\u{1}_ZN3app10sv_animcmd18EFFECT_DETACH_KINDEP9lua_State"]
+    fn effect_detach_kind(lua_state: u64);
+}
+
+struct OffFlags {
+    hash: u64,
+    second: bool,
+    third: bool,
+}
+
+struct DetachFlags {
+    hash: u64,
+    arg: i32,
+}
+
+unsafe fn read_off_flags(lua_state: u64) -> Option<OffFlags> {
+    if lua_state == 0 {
+        return None;
+    }
+    let mut agent = Agent { storage: [0; 9] };
+    agent_construct(&mut agent, lua_state);
+    let hash = stack_value(&mut agent, 1);
+    let second = stack_value(&mut agent, 2);
+    let third = stack_value(&mut agent, 3);
+    if !matches!(hash.kind, 2 | 7) || second.kind != 1 || third.kind != 1 {
+        return None;
+    }
+    Some(OffFlags {
+        hash: hash.raw,
+        second: second.raw != 0,
+        third: third.raw != 0,
+    })
+}
+
+unsafe fn read_detach_flags(lua_state: u64) -> Option<DetachFlags> {
+    if lua_state == 0 {
+        return None;
+    }
+    let mut agent = Agent { storage: [0; 9] };
+    agent_construct(&mut agent, lua_state);
+    let hash = stack_value(&mut agent, 1);
+    let arg = stack_value(&mut agent, 2);
+    if !matches!(hash.kind, 2 | 7) || arg.kind != 2 {
+        return None;
+    }
+    Some(DetachFlags {
+        hash: hash.raw,
+        arg: arg.raw as i32,
+    })
+}
+
+#[skyline::hook(replace = effect_off_kind)]
+unsafe fn deluxe_acmd_cleanup_off_kind(lua_state: u64) {
+    if let Some(saved) = read_off_flags(lua_state) {
+        if let Some(alias) = crate::eff_variant::cleanup_alias(saved.hash) {
+            let accessor = super::effect_context::module_accessor(lua_state);
+            if let Some(_guard) = crate::eff_cleanup::begin_alias(
+                accessor as usize,
+                saved.hash,
+                crate::eff_cleanup::CLEANUP_KILL,
+                Some(alias),
+            ) {
+                let _ignored =
+                    super::effects::invoke_kill_kind(accessor, alias, saved.second, saved.third);
+                super::effects::log_variant_cleanup(saved.hash, alias);
+                super::effects::log_cleanup_route(3, false);
+                call_original!(lua_state);
+                return;
+            }
+        }
+    }
+    call_original!(lua_state);
+}
+
+#[skyline::hook(replace = effect_detach_kind)]
+unsafe fn deluxe_acmd_cleanup_detach_kind(lua_state: u64) {
+    if let Some(saved) = read_detach_flags(lua_state) {
+        if let Some(alias) = crate::eff_variant::cleanup_alias(saved.hash) {
+            let accessor = super::effect_context::module_accessor(lua_state);
+            if let Some(_guard) = crate::eff_cleanup::begin_alias(
+                accessor as usize,
+                saved.hash,
+                crate::eff_cleanup::CLEANUP_DETACH,
+                Some(alias),
+            ) {
+                let _ignored = super::effects::invoke_detach_kind(accessor, alias, saved.arg);
+                super::effects::log_variant_cleanup(saved.hash, alias);
+                super::effects::log_cleanup_route(4, false);
+                call_original!(lua_state);
+                return;
+            }
+        }
+    }
+    call_original!(lua_state);
+}
+
 pub(super) fn install() {
     macro_rules! install {
         ($target:ident, $hook:ident, $id:expr) => {
@@ -209,4 +358,6 @@ pub(super) fn install() {
     install!(flip, deluxe_rewrite_filter_flip, 0x117);
     install!(flip_alpha, deluxe_rewrite_filter_flip_alpha, 0x118);
     install!(flip_no_stop, deluxe_rewrite_filter_flip_no_stop, 0x119);
+    install!(effect_off_kind, deluxe_acmd_cleanup_off_kind, 0x11a);
+    install!(effect_detach_kind, deluxe_acmd_cleanup_detach_kind, 0x11b);
 }

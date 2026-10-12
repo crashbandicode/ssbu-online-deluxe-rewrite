@@ -13,7 +13,7 @@ from pathlib import Path
 def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
-def package(root):
+def package(root, output=None):
     build = root / "target/aarch64-skyline-switch/release"
     nro = build / "libssbu_online_deluxe_rewrite.nro"
     elf = build / "libssbu_online_deluxe_rewrite.so"
@@ -46,7 +46,7 @@ def package(root):
     if len(ids) != 1:
         raise ValueError(f"expected one embedded build identity, found {len(ids)}")
     digest = sha(nro)
-    dest = root / "dist" / digest[:16]
+    dest = (output if output is not None else root / "dist") / digest[:16]
     dest.mkdir(parents=True, exist_ok=True)
     shutil.copy2(nro, dest / nro.name)
     shutil.copy2(elf, dest / "libssbu_online_deluxe_rewrite.elf")
@@ -55,7 +55,18 @@ def package(root):
     # Rust modules and is insufficient to reconstruct a development build.
     source_archive = dest / "source.tar.gz"
     with tarfile.open(source_archive, "w:gz") as archive:
-        for name in ("src", "Cargo.toml", "Cargo.lock", "build.rs", "tools/prepare_imgui.py"):
+        for name in (
+            "src",
+            "Cargo.toml",
+            "Cargo.lock",
+            "build.rs",
+            "rust-toolchain.toml",
+            "sdk/abi/Cargo.toml",
+            "sdk/abi/src",
+            "tools/prepare_imgui.py",
+            "patches/imgui-smash",
+            "docs/licenses/imgui-smash-GPL-2.0.txt",
+        ):
             archive.add(root / name, arcname=name)
     dependency = root / "target/native/imgui/provenance.json"
     native = []
@@ -84,4 +95,6 @@ def package(root):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
-    package(parser.parse_args().root)
+    parser.add_argument("--output", type=Path, help="Artifact directory outside the source checkout")
+    args = parser.parse_args()
+    package(args.root, args.output)

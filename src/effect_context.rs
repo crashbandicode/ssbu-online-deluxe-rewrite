@@ -24,6 +24,7 @@ pub enum Profile {
     EdgePurpleDash,
     EdgeNeutralB,
     EdgeDownB,
+    EdgeSideB,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -273,14 +274,21 @@ const RULES: &[Rule] = &[
             hash40("attack_s4_s"),
             hash40("attack_s4_hold"),
             hash40("attack_s4_start"),
+            hash40("attack_hi4"),
+            hash40("attack_hi4_start"),
+            hash40("attack_hi4_hold"),
+            hash40("attack_lw4"),
+            hash40("attack_lw4_start"),
+            hash40("attack_lw4_hold"),
         ],
-        statuses: &[0x2f],
+        // bed642e: S4 0x2f; HI4/START/HOLD 0x35/0x33/0x34; LW4/START/HOLD 0x32/0x30/0x31.
+        statuses: &[0x2f, 0x35, 0x33, 0x34, 0x32, 0x30, 0x31],
         require_both: false,
     },
     Rule {
         profile: Profile::EdgePurpleDash,
         kind: 0x59, // FIGHTER_KIND_EDGE
-        motions: &[hash40("attack_dash")],
+        motions: &[hash40("attack_dash"), hash40("attack_dash_hit")],
         statuses: &[0x29],
         require_both: false,
     },
@@ -305,12 +313,29 @@ const RULES: &[Rule] = &[
         statuses: &[0x1df, 0x1ee, 0x1ef],
         require_both: false,
     },
+    Rule {
+        profile: Profile::EdgeSideB,
+        kind: 0x59, // FIGHTER_KIND_EDGE
+        motions: &[
+            hash40("special_s"),
+            hash40("special_air_s"),
+            hash40("special_s_hold"),
+            hash40("special_air_s_hold"),
+        ],
+        statuses: &[0x1dd],
+        require_both: false,
+    },
 ];
 
 pub fn tracked(category: u8, kind: i32) -> bool {
     match category {
         0 => RULES.iter().any(|r| r.kind == kind),
-        1 => matches!(kind, 0x61 | 0x110 | 0x111 | 0x163 | 0x246 | 0x247),
+        // skyline-smash bed642e lua_const.rs: FALCONPUNCH 0x58, PK thunder 0x61/0x163,
+        // explosive flame 0x110 and reserve 0x111, autoaim bullet 0x112, Edge fire/flash 0x246/0x247.
+        1 => matches!(
+            kind,
+            0x58 | 0x61 | 0x110 | 0x111 | 0x112 | 0x163 | 0x246 | 0x247 | 0x248 | 0x249
+        ),
         _ => false,
     }
 }
@@ -319,11 +344,16 @@ pub fn profile(context: Context) -> Option<Profile> {
     // Fighter and weapon IDs overlap. Never interpret a weapon kind as a fighter.
     if context.category == 1 {
         return match context.kind {
+            0x58 => Some(Profile::FalconPunch),
             0x61 => Some(Profile::NessUpB),
             0x163 => Some(Profile::LucasUpB),
             0x110 | 0x111 => Some(Profile::PalutenaSideB),
-            0x246 if matches!(context.status, 4 | 5) => Some(Profile::EdgeNeutralB),
+            0x112 => Some(Profile::PalutenaNeutralB),
+            // BURST_S/M/L 0x3/0x4/0x5. FLY_S/M/L 0x0/0x1/0x2 stay excluded.
+            0x246 if matches!(context.status, 3..=5) => Some(Profile::EdgeNeutralB),
             0x247 => Some(Profile::EdgeDownB),
+            // skyline-smash bed642e lua_const.rs, cited in docs/FX.md: flare1, flare2.
+            0x248 | 0x249 => Some(Profile::EdgeSideB),
             _ => None,
         };
     }
@@ -381,8 +411,41 @@ mod tests {
             status: 4,
         };
         assert_eq!(profile(c), Some(Profile::EdgeNeutralB));
+        assert_eq!(
+            profile(Context { status: 3, ..c }),
+            Some(Profile::EdgeNeutralB)
+        );
+        assert_eq!(
+            profile(Context { status: 5, ..c }),
+            Some(Profile::EdgeNeutralB)
+        );
+        assert_eq!(profile(Context { status: 0, ..c }), None);
         assert_eq!(profile(Context { status: 1, ..c }), None);
-        assert_eq!(profile(Context { category: 0, ..c }), None);
+        assert_eq!(profile(Context { status: 2, ..c }), None);
+        assert_eq!(
+            profile(Context {
+                category: 0,
+                status: 3,
+                ..c
+            }),
+            None
+        );
+        assert_eq!(
+            profile(Context {
+                kind: 0x245,
+                status: 3,
+                ..c
+            }),
+            None
+        );
+        assert_ne!(
+            profile(Context {
+                kind: 0x247,
+                status: 3,
+                ..c
+            }),
+            Some(Profile::EdgeNeutralB)
+        );
         assert_eq!(
             profile(Context {
                 kind: 0x110,
@@ -390,6 +453,22 @@ mod tests {
                 ..c
             }),
             Some(Profile::PalutenaSideB)
+        );
+        assert_eq!(
+            profile(Context {
+                kind: 0x58,
+                status: 0,
+                ..c
+            }),
+            Some(Profile::FalconPunch)
+        );
+        assert_eq!(
+            profile(Context {
+                kind: 0x112,
+                status: 0,
+                ..c
+            }),
+            Some(Profile::PalutenaNeutralB)
         );
         // Palutena's aerial status alone must not classify every aerial as up-air.
         let c = Context {
@@ -405,6 +484,127 @@ mod tests {
                 ..c
             }),
             Some(Profile::PalutenaUpAir)
+        );
+        assert_eq!(
+            profile(Context {
+                category: 1,
+                kind: 0x248,
+                motion: 0,
+                status: 0,
+            }),
+            Some(Profile::EdgeSideB)
+        );
+        assert_eq!(
+            profile(Context {
+                category: 1,
+                kind: 0x249,
+                motion: 0,
+                status: 0,
+            }),
+            Some(Profile::EdgeSideB)
+        );
+        assert_eq!(
+            profile(Context {
+                category: 0,
+                kind: 0x59,
+                motion: hash40("special_s_hold"),
+                status: 0,
+            }),
+            Some(Profile::EdgeSideB)
+        );
+        assert_eq!(
+            profile(Context {
+                category: 0,
+                kind: 0x59,
+                motion: hash40("attack_s4"),
+                status: 0x2f,
+            }),
+            Some(Profile::EdgeFSmash)
+        );
+    }
+
+    #[test]
+    fn edge_up_and_down_smash_use_fsmash_profile() {
+        let edge = |motion: &str, status: i32| Context {
+            category: 0,
+            kind: 0x59,
+            motion: hash40(motion),
+            status,
+        };
+        for (motion, status) in [
+            ("attack_hi4", 0x35),
+            ("attack_hi4_start", 0x33),
+            ("attack_hi4_hold", 0x34),
+            ("attack_lw4", 0x32),
+            ("attack_lw4_start", 0x30),
+            ("attack_lw4_hold", 0x31),
+        ] {
+            assert_eq!(profile(edge(motion, status)), Some(Profile::EdgeFSmash));
+            assert_eq!(profile(edge(motion, 0)), Some(Profile::EdgeFSmash));
+            assert_eq!(
+                profile(Context {
+                    motion: hash40("wait"),
+                    ..edge(motion, status)
+                }),
+                Some(Profile::EdgeFSmash)
+            );
+        }
+        for motion in [
+            "attack_hi3",
+            "attack_lw3",
+            "attack_s3",
+            "attack_air_hi",
+            "attack_air_lw",
+            "attack_air_f",
+            "attack_air_n",
+            "attack_air_b",
+        ] {
+            assert_eq!(profile(edge(motion, 0)), None);
+        }
+        for status in [0x2a, 0x2b, 0x2c, 0x36] {
+            assert_eq!(
+                profile(Context {
+                    motion: hash40("wait"),
+                    ..edge("wait", status)
+                }),
+                None
+            );
+        }
+        assert_eq!(profile(edge("attack_air_hi", 0x36)), None);
+        assert_eq!(
+            profile(Context {
+                kind: 0x23,
+                ..edge("attack_hi4", 0x35)
+            }),
+            None
+        );
+        assert_eq!(
+            profile(Context {
+                kind: 0x23,
+                ..edge("attack_lw4_hold", 0x31)
+            }),
+            None
+        );
+        assert_eq!(
+            profile(Context {
+                kind: 0x36,
+                ..edge("attack_hi4", 0x35)
+            }),
+            Some(Profile::PalutenaUpSmash)
+        );
+        assert_eq!(
+            profile(Context {
+                kind: 0x36,
+                ..edge("attack_lw4_hold", 0x31)
+            }),
+            Some(Profile::PalutenaWingSmash)
+        );
+        assert_eq!(
+            profile(Context {
+                category: 1,
+                ..edge("attack_hi4", 0x35)
+            }),
+            None
         );
     }
 }

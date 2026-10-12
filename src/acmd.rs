@@ -1,5 +1,5 @@
 //! Primitive effect-command arguments. Layout follows skyline-smash bed642e.
-use crate::{config::FxMode, effects};
+use crate::config::FxMode;
 
 /// The game returns L2CValue through x8. The extra storage makes this 24 bytes,
 /// selecting that ABI; it is MaybeUninit because the game writes only 16 bytes.
@@ -40,7 +40,7 @@ pub fn replacements(
     context: Option<crate::effect_context::Context>,
 ) -> [Option<u64>; 2] {
     let mut result = [None; 2];
-    if mode != FxMode::Off
+    if !matches!(mode, FxMode::Off | FxMode::Reduced)
         || !(1..=2).contains(&hash_count)
         || args.len() < hash_count
         || !args.iter().all(Value::is_primitive)
@@ -49,7 +49,9 @@ pub fn replacements(
     }
     for index in 0..hash_count {
         if matches!(args[index].kind, 2 | 7) {
-            let hash = effects::rewrite_with_context(mode, args[index].raw, context);
+            let intent = crate::effects_reduced::classify(mode, true, args[index].raw, context);
+            let hash = crate::effects_reduced::request_hash(intent, args[index].raw);
+            let hash = crate::eff_variant::forward(mode, true, hash, context);
             result[index] = (hash != args[index].raw).then_some(hash);
         }
     }
@@ -62,6 +64,7 @@ const _: () = assert!(std::mem::align_of::<Value>() == 8);
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::effects;
 
     #[test]
     fn vanilla_explosion_command_changes_only_the_effect_name() {
@@ -96,6 +99,40 @@ mod tests {
         assert_eq!(replacement(FxMode::Off, &args), Some(effects::NULL_EFFECT));
         assert_eq!(replacement(FxMode::On, &args), None);
         assert_eq!(replacement(FxMode::Reduced, &args), None);
+        let side = crate::effect_context::Context {
+            category: 0,
+            kind: 0x36,
+            motion: effects::hash40("special_s"),
+            status: 0x1dd,
+        };
+        args[0].raw = effects::hash40("palutena_explosiveflame");
+        assert_eq!(
+            replacement(FxMode::Reduced, &args),
+            None,
+            "the explosiveflame string is not a script request"
+        );
+        assert_eq!(
+            replacements(FxMode::Reduced, &args, 1, Some(side)),
+            [None, None]
+        );
+        for name in ["palutena_wand_light_trace", "palutena_bomb_appear"] {
+            args[0].raw = effects::hash40(name);
+            assert_eq!(
+                replacements(FxMode::Reduced, &args, 1, None),
+                [None, None],
+                "{name} stays until the side-B move matches"
+            );
+            assert_eq!(
+                replacements(FxMode::Reduced, &args, 1, Some(side)),
+                [Some(effects::NULL_EFFECT), None],
+                "{name}"
+            );
+        }
+        args[0].raw = effects::hash40("palutena_bomb");
+        assert_eq!(
+            replacements(FxMode::Reduced, &args, 1, Some(side)),
+            [None, None]
+        );
         assert_eq!(
             before,
             args.iter()

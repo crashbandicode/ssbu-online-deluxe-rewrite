@@ -1,10 +1,14 @@
 mod acmd;
-mod auto_driver;
 mod api_trace;
+mod auto_driver;
 mod effect_context;
 mod effects;
+mod fighter_main;
+mod fighter_probe;
+mod fps_boost;
 mod hooks;
 mod imgui;
+mod imgui_stats;
 mod input;
 mod logging;
 mod memory;
@@ -14,9 +18,8 @@ mod online;
 mod overlay_host;
 mod peer_observer;
 mod pia_rtt;
+mod plugin_export;
 mod presentation;
-mod fighter_main;
-mod fighter_probe;
 mod render_probe;
 mod render_sequence;
 mod render_ultra;
@@ -25,6 +28,7 @@ mod resolution;
 mod response_probe;
 mod timing;
 mod ui;
+mod variant;
 
 use crate::{
     config::{Config, FxMode, FxScope},
@@ -42,6 +46,7 @@ static INPUT_BUFFER: AtomicI8 = AtomicI8::new(-1);
 static PEER_OBSERVER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static STEALTH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 static STREAMER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static FPS_BOOST: AtomicBool = AtomicBool::new(false);
 static CONFIG_GENERATION: AtomicU64 = AtomicU64::new(0);
 pub(super) const DATA_DIR: &str = "sd:/ultimate/ssbu_online_deluxe_rewrite";
 
@@ -51,10 +56,10 @@ pub(super) fn saved_render_mode() -> crate::config::RenderMode {
 
 pub(super) fn settings() -> Config {
     Config {
-        effects: if FX_MODE.load(Ordering::Acquire) == 1 {
-            FxMode::Off
-        } else {
-            FxMode::On
+        effects: match FX_MODE.load(Ordering::Acquire) {
+            1 => FxMode::Off,
+            2 => FxMode::Reduced,
+            _ => FxMode::On,
         },
         effects_scope: if FX_SCOPE.load(Ordering::Acquire) == FxScope::All as u8 {
             FxScope::All
@@ -72,6 +77,7 @@ pub(super) fn settings() -> Config {
         peer_observer: PEER_OBSERVER.load(Ordering::Acquire),
         stealth: STEALTH.load(Ordering::Acquire),
         streamer: STREAMER.load(Ordering::Acquire),
+        fps_boost: FPS_BOOST.load(Ordering::Acquire),
     }
 }
 
@@ -83,7 +89,9 @@ pub(super) fn stealth() -> bool {
 pub(super) fn publish(config: &Config) {
     let mode_changed = saved_render_mode() != config.render_mode;
     let auto_changed = AUTO_PROFILE.load(Ordering::Acquire) != config.auto_profile;
-    FX_MODE.store(config.effects.effective() as u8, Ordering::Release);
+    let previous_fx = fx_mode();
+    FX_MODE.store(config.effects as u8, Ordering::Release);
+    crate::effects_reduced::observe_mode(previous_fx, config.effects);
     FX_SCOPE.store(config.effects_scope as u8, Ordering::Release);
     INPUT_BUFFER.store(config.input_buffer, Ordering::Release);
     RENDER_MODE.store(config.render_mode as u8, Ordering::Release);
@@ -92,6 +100,7 @@ pub(super) fn publish(config: &Config) {
     PEER_OBSERVER.store(config.peer_observer, Ordering::Release);
     STEALTH.store(config.stealth, Ordering::Release);
     STREAMER.store(config.streamer, Ordering::Release);
+    FPS_BOOST.store(config.fps_boost, Ordering::Release);
     CONFIG_GENERATION.fetch_add(1, Ordering::Release);
     // Same saved mode and Auto flag do not clear a post-match Vanilla hold.
     auto_driver::note_published(mode_changed, auto_changed);
@@ -105,9 +114,20 @@ pub(crate) fn set_auto_profile(enabled: bool) {
     auto_driver::set_auto_profile(enabled);
 }
 
+pub(super) fn fx_mode() -> FxMode {
+    match FX_MODE.load(Ordering::Relaxed) {
+        1 => FxMode::Off,
+        2 => FxMode::Reduced,
+        _ => FxMode::On,
+    }
+}
+
+pub(super) fn fx_scope_allows() -> bool {
+    FX_SCOPE.load(Ordering::Relaxed) == FxScope::All as u8 || online::active()
+}
+
 pub(super) fn effects_off() -> bool {
-    FX_MODE.load(Ordering::Relaxed) == FxMode::Off as u8
-        && (FX_SCOPE.load(Ordering::Relaxed) == FxScope::All as u8 || online::active())
+    fx_mode() == FxMode::Off && fx_scope_allows()
 }
 
 pub(super) fn record(code: Code, a: u64, b: u64) {
@@ -182,6 +202,7 @@ pub fn main() {
     resolution::install();
     fighter_probe::install();
     peer_observer::install();
+    fps_boost::arm();
 }
 
 fn legacy_host_present() -> bool {

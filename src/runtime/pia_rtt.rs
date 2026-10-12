@@ -13,9 +13,9 @@
 //! up or make an old sample look new.
 use super::{record, Code};
 use crate::pia_rtt::{
-    expire_publication, Observation, Publication, Session, REASON_OFF,
-    RTT_ARITHMETIC_GUARD, RTT_ARITHMETIC_OFFSET, RTT_SAMPLE_GUARD, RTT_SAMPLE_OFFSET,
-    SESSION_END_GUARD, SESSION_END_OFFSET, STATION_LEAVE_GUARD, STATION_LEAVE_OFFSET,
+    expire_publication, Observation, Publication, Session, REASON_OFF, RTT_ARITHMETIC_GUARD,
+    RTT_ARITHMETIC_OFFSET, RTT_SAMPLE_GUARD, RTT_SAMPLE_OFFSET, SESSION_END_GUARD,
+    SESSION_END_OFFSET, STATION_LEAVE_GUARD, STATION_LEAVE_OFFSET,
 };
 use skyline::hooks::{getRegionAddress, InlineCtx, Region};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -36,6 +36,18 @@ static PUB_TICK: AtomicU64 = AtomicU64::new(0);
 static PUB_PER: AtomicU64 = AtomicU64::new(0);
 static PUB_EPOCH: AtomicU64 = AtomicU64::new(1);
 static PUB_PEER: AtomicU64 = AtomicU64::new(crate::pia_rtt::NO_PEER);
+static BOARD_SEQ: AtomicU64 = AtomicU64::new(0);
+static BOARD_LEN: AtomicU64 = AtomicU64::new(0);
+static BOARD_EPOCH: AtomicU64 = AtomicU64::new(1);
+static BOARD_BITS: [AtomicU64; crate::pia_rtt::BOARD_CAP] = board_zeros();
+static BOARD_TICK: [AtomicU64; crate::pia_rtt::BOARD_CAP] = board_zeros();
+static BOARD_PER: [AtomicU64; crate::pia_rtt::BOARD_CAP] = board_zeros();
+static BOARD_SLOT_EPOCH: [AtomicU64; crate::pia_rtt::BOARD_CAP] = board_zeros();
+static BOARD_PEER: [AtomicU64; crate::pia_rtt::BOARD_CAP] = board_zeros();
+
+const fn board_zeros() -> [AtomicU64; crate::pia_rtt::BOARD_CAP] {
+    [const { AtomicU64::new(0) }; crate::pia_rtt::BOARD_CAP]
+}
 static SAMPLES: AtomicU64 = AtomicU64::new(0);
 static FOREIGN: AtomicU64 = AtomicU64::new(0);
 static CLEANUPS: AtomicU64 = AtomicU64::new(0);
@@ -66,31 +78,56 @@ fn end_publication_retirement() {
 
 pub(super) fn poll() {
     if !INSTALLED.load(Ordering::Acquire) {
+        let epoch = EPOCH.load(Ordering::Acquire);
         write_publication(Publication {
             bits: (1u64 << 63) | (REASON_OFF as u64),
             tick: 0,
             ticks_per_ms: 0,
-            epoch: EPOCH.load(Ordering::Acquire),
+            epoch,
             peer: crate::pia_rtt::NO_PEER,
         });
+        write_board(crate::pia_rtt::StationBoard::unavailable(epoch));
         return;
     }
     let now = unsafe { skyline::nn::os::GetSystemTick() as u64 };
     let generation = DRAW_GEN.load(Ordering::Acquire);
-    let station = station_pick();
+    let targets = crate::peer_transport::publication_targets();
     let Ok(mut session) = lock_session() else {
         DROPPED.fetch_add(1, Ordering::Relaxed);
+        if targets.busy {
+            write_board(crate::pia_rtt::StationBoard::busy(
+                EPOCH.load(Ordering::Acquire),
+            ));
+        }
         return;
     };
     let epoch = EPOCH.load(Ordering::Acquire);
-    session.accept_poll_for(now, epoch, station);
+    session.accept_poll_for(now, epoch, targets.selected);
+    let board = if targets.busy {
+        crate::pia_rtt::StationBoard::busy(epoch)
+    } else {
+        session.board_for(now, epoch, &targets.stations[..usize::from(targets.len)])
+    };
     store_counters(&session);
     let publication = session.publication();
     drop(session);
     write_publication(publication);
+    write_board(board);
     if DRAW_GEN.load(Ordering::Acquire) == generation {
         PUBLISHED_GEN.store(generation, Ordering::Release);
     }
+}
+
+/// All-station snapshot from the last poll. A torn read is unavailable.
+pub(super) fn current_board() -> (crate::pia_rtt::StationBoard, u64, u64, u64) {
+    let epoch = EPOCH.load(Ordering::Acquire);
+    let published_gen = PUBLISHED_GEN.load(Ordering::Acquire);
+    let board = match shown_board() {
+        Some(board) => board,
+        None => crate::pia_rtt::StationBoard::unavailable(epoch),
+    };
+    let draw = DRAW_GEN.load(Ordering::Acquire);
+    (board, epoch, published_gen, draw)
 }
 
 pub(super) fn log_counters() {
@@ -199,6 +236,53 @@ fn write_publication(publication: Publication) {
     PUB_SEQ.fetch_add(1, Ordering::SeqCst);
 }
 
+fn write_board(board: crate::pia_rtt::StationBoard) {
+    BOARD_SEQ.fetch_add(1, Ordering::SeqCst);
+    let busy = u64::from(board.busy);
+    let len = u64::from(board.len) | (busy << 8);
+    BOARD_LEN.store(len, Ordering::SeqCst);
+    BOARD_EPOCH.store(board.epoch, Ordering::SeqCst);
+    for index in 0..crate::pia_rtt::BOARD_CAP {
+        let slot = board.slots[index];
+        BOARD_BITS[index].store(slot.bits, Ordering::SeqCst);
+        BOARD_TICK[index].store(slot.tick, Ordering::SeqCst);
+        BOARD_PER[index].store(slot.ticks_per_ms, Ordering::SeqCst);
+        BOARD_SLOT_EPOCH[index].store(slot.epoch, Ordering::SeqCst);
+        BOARD_PEER[index].store(slot.peer, Ordering::SeqCst);
+    }
+    BOARD_SEQ.fetch_add(1, Ordering::SeqCst);
+}
+
+fn shown_board() -> Option<crate::pia_rtt::StationBoard> {
+    let start = BOARD_SEQ.load(Ordering::SeqCst);
+    if start & 1 != 0 {
+        return None;
+    }
+    let meta = BOARD_LEN.load(Ordering::SeqCst);
+    let epoch = BOARD_EPOCH.load(Ordering::SeqCst);
+    let mut board = crate::pia_rtt::StationBoard::unavailable(epoch);
+    board.len = (meta & 0xff) as u8;
+    board.busy = meta & 0x100 != 0;
+    if usize::from(board.len) > crate::pia_rtt::BOARD_CAP {
+        return None;
+    }
+    for index in 0..crate::pia_rtt::BOARD_CAP {
+        board.slots[index] = Publication {
+            bits: BOARD_BITS[index].load(Ordering::SeqCst),
+            tick: BOARD_TICK[index].load(Ordering::SeqCst),
+            ticks_per_ms: BOARD_PER[index].load(Ordering::SeqCst),
+            epoch: BOARD_SLOT_EPOCH[index].load(Ordering::SeqCst),
+            peer: BOARD_PEER[index].load(Ordering::SeqCst),
+        };
+    }
+    if BOARD_SEQ.load(Ordering::SeqCst) != start {
+        return None;
+    }
+    let now = unsafe { skyline::nn::os::GetSystemTick() as u64 };
+    let live = EPOCH.load(Ordering::Acquire);
+    Some(crate::pia_rtt::expire_board(board, now, live))
+}
+
 fn read_publication() -> Option<Publication> {
     let start = PUB_SEQ.load(Ordering::SeqCst);
     if start & 1 != 0 {
@@ -271,7 +355,8 @@ unsafe fn deluxe_rewrite_observe_station_left(ctx: &InlineCtx) {
     let protocol = ctx.registers[0].x();
     let remote = ctx.registers[1].w();
     let station = station_pick();
-    match with_session(|session, epoch| session.accept_leave_for(protocol, remote, epoch, station)) {
+    match with_session(|session, epoch| session.accept_leave_for(protocol, remote, epoch, station))
+    {
         Some(true) => {
             begin_publication_retirement();
             super::peer_observer::invalidate_index(remote);

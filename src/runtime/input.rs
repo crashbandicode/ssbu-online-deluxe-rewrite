@@ -5,6 +5,8 @@ pub(super) struct Sample {
     pub buttons: u64,
     pub left_y: i32,
     pub update_count: i64,
+    pub npad_id: u8,
+    pub style_flags: u32,
 }
 
 /// Same HID families as the gamepad overlay; no game input is modified.
@@ -21,6 +23,8 @@ pub(super) unsafe fn read() -> Sample {
                 buttons: state.Buttons,
                 left_y: state.LStickY,
                 update_count: state.updateCount,
+                npad_id: id as u8,
+                style_flags: styles,
             };
         }
         let mut state = hid::NpadHandheldState::default();
@@ -39,6 +43,8 @@ pub(super) unsafe fn read() -> Sample {
             buttons: state.Buttons,
             left_y: state.LStickY,
             update_count: state.updateCount,
+            npad_id: id as u8,
+            style_flags: styles,
         };
     }
     Sample::default()

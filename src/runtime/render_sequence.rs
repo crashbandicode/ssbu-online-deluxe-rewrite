@@ -56,10 +56,7 @@ unsafe fn deluxe_rewrite_record_fighters(ctx: &InlineCtx) {
     } else {
         super::renderer::mode().render_opts()
     };
-    super::api_trace::mark_thread(
-        crate::render_trace::KIND_RECORD_FIGHTERS,
-        i32::from(active),
-    );
+    super::api_trace::mark_thread(crate::render_trace::KIND_RECORD_FIGHTERS, i32::from(active));
     FRAME_ACTIVE.store(active, Ordering::Release);
     if !active {
         // Replaces precisely the original BL; the four ABI arguments survive.

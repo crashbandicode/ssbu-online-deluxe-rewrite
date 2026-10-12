@@ -181,7 +181,11 @@ pub(crate) fn set_scene(
     }
     store_scene(connection, status);
     if previous_connection.is_online() != connection.is_online() {
-        record(Code::FxOnlineContext, u64::from(connection.is_online()), source);
+        record(
+            Code::FxOnlineContext,
+            u64::from(connection.is_online()),
+            source,
+        );
     }
     log_context(source);
     let _ = current_request();
@@ -200,9 +204,8 @@ pub(crate) fn current_request() -> RenderMode {
 
 fn log_context(source: u64) {
     let (connection, status) = scene_pair();
-    let packed = u64::from(connection as u8)
-        | (u64::from(status as u8) << 8)
-        | (u64::from(ready()) << 16);
+    let packed =
+        u64::from(connection as u8) | (u64::from(status as u8) << 8) | (u64::from(ready()) << 16);
     if LAST_CONTEXT.swap(packed, Ordering::AcqRel) != packed {
         record(Code::AutoContext, packed, source);
     }

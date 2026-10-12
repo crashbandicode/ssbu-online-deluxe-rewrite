@@ -1,21 +1,21 @@
-//! CSS and arena title text. Display only: no button reads, no network or render writes.
+//! CSS and arena title text. Hooks do not read buttons. Settings edges stay in the overlay.
 //!
 //! CSS `0x1a12f60` is replaced only when its entry words match the 13.0.5 image.
 //! The original runs once. Arena inline sites use the same kind of word guard.
 //! Style is stored once per pane address, vtable, name, and scene generation.
 
 use super::{auto_driver, hooks::preflight, memory, pia_rtt, record, renderer, settings, Code};
+use crate::menu::NativeSurface;
 use crate::native_banner::{
     self, BannerPaint, FontMetrics, Observe, CSS_BACKGROUND_STEPS, CSS_TITLE_WALK, TEXT_CAP,
 };
-use skyline::hooks::{getRegionAddress, InlineCtx, Region};
-use skyline::nn::ui2d::{
-    Material, MaterialFlags, Pane, PaneFlag, PaneNode, TextBox, TextBoxFlag,
-};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use skyline::hooks::{getRegionAddress, A64HookFunction, InlineCtx, Region};
+use skyline::nn::ui2d::{Material, MaterialFlags, Pane, PaneFlag, PaneNode, TextBox, TextBoxFlag};
+use std::ffi::c_void;
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Mutex;
 
-const CSS_UPDATE: usize = 0x1a12f60;
+pub(super) const CSS_UPDATE: usize = 0x1a12f60;
 const ARENA_INIT: usize = 0x1887b1c;
 const ARENA_UPDATE: usize = 0x18881f0;
 const SET_TEXT: usize = 0x37a28a0;
@@ -48,6 +48,8 @@ const REJECT_FIT: u8 = 4;
 const REJECT_ROOM: u8 = 5;
 
 static SCENE_GEN: AtomicU64 = AtomicU64::new(0);
+static SURFACE_KIND: AtomicU8 = AtomicU8::new(0);
+static SURFACE_GEN: AtomicU64 = AtomicU64::new(0);
 static LAST_REJECT: AtomicU64 = AtomicU64::new(u64::MAX);
 static SETTER_READY: AtomicBool = AtomicBool::new(false);
 static OPEN_LOGGED: AtomicU64 = AtomicU64::new(u64::MAX);
@@ -159,11 +161,275 @@ pub(super) fn install() {
         } else {
             skyline::println!("[Deluxe] native arena title hooks not installed");
         }
+        install_local_count();
+    }
+}
+
+const LOCAL_COUNT: usize = 0x1bd7a80;
+const _: () = assert!(LOCAL_COUNT == crate::native_banner::LOCAL_UPDATE);
+const LDN_INIT_ID: u64 = 0x1bd7_0001;
+const LDN_STATE_ID: u64 = 0x1bd7_0002;
+const LDN_SCAN_ID: u64 = 0x1bd7_0003;
+
+static LOCAL_PANE: AtomicUsize = AtomicUsize::new(0);
+static LOCAL_GEN: AtomicU64 = AtomicU64::new(0);
+static SCENE_WORD_OK: AtomicBool = AtomicBool::new(false);
+static SCAN_COUNT: AtomicU8 = AtomicU8::new(0);
+static LDN_READY: AtomicBool = AtomicBool::new(false);
+static ORIGINAL_INIT: AtomicUsize = AtomicUsize::new(0);
+static ORIGINAL_SCAN: AtomicUsize = AtomicUsize::new(0);
+static GET_STATE: AtomicUsize = AtomicUsize::new(0);
+
+fn install_local_count() {
+    let scene_ok =
+        unsafe { renderer::expect(native_banner::LOCAL_SCENE, native_banner::LOCAL_SCENE_WORD) };
+    SCENE_WORD_OK.store(scene_ok, Ordering::Release);
+    install_ldn();
+    let update_ok = unsafe {
+        words_ok(&[
+            (LOCAL_COUNT, native_banner::LOCAL_UPDATE_WORDS[0]),
+            (LOCAL_COUNT + 4, native_banner::LOCAL_UPDATE_WORDS[1]),
+            (LOCAL_COUNT + 8, native_banner::LOCAL_UPDATE_WORDS[2]),
+            (LOCAL_COUNT + 12, native_banner::LOCAL_UPDATE_WORDS[3]),
+        ]) && preflight(LOCAL_COUNT)
+    };
+    if update_ok {
+        skyline::install_hook!(deluxe_rewrite_local_count);
+        record(Code::HookInstalled, LOCAL_COUNT as u64, 0);
+    } else {
+        record(Code::HookRejected, LOCAL_COUNT as u64, 0);
+        skyline::println!("[Deluxe] local-wireless count hook not installed at {LOCAL_COUNT:x}");
+    }
+}
+
+fn install_ldn() {
+    let initialize = lookup_symbol(native_banner::LDN_INITIALIZE);
+    let get_state = lookup_symbol(native_banner::LDN_GET_STATE);
+    let scan = lookup_symbol(native_banner::LDN_SCAN);
+    record(Code::Compatibility, LDN_INIT_ID, initialize as u64);
+    record(Code::Compatibility, LDN_STATE_ID, get_state as u64);
+    record(Code::Compatibility, LDN_SCAN_ID, scan as u64);
+    if !native_banner::ldn_symbols_usable(initialize, get_state, scan)
+        || !symbol_mapped(initialize)
+        || !symbol_mapped(get_state)
+        || !symbol_mapped(scan)
+    {
+        record(Code::HookRejected, LDN_INIT_ID, 0);
+        skyline::println!("[Deluxe] LDN count symbols unavailable; original calls kept");
+        return;
+    }
+    unsafe {
+        if !hook_symbol(
+            scan,
+            on_ldn_scan as *const () as *const c_void,
+            &ORIGINAL_SCAN,
+            LDN_SCAN_ID,
+        ) || !hook_symbol(
+            initialize,
+            on_ldn_initialize as *const () as *const c_void,
+            &ORIGINAL_INIT,
+            LDN_INIT_ID,
+        ) {
+            return;
+        }
+    }
+    GET_STATE.store(get_state, Ordering::Release);
+    LDN_READY.store(true, Ordering::Release);
+}
+
+fn symbol_mapped(address: usize) -> bool {
+    address != 0 && unsafe { memory::accessible(address, 4, false) }
+}
+
+unsafe fn hook_symbol(
+    target: usize,
+    replacement: *const c_void,
+    original: &AtomicUsize,
+    site: u64,
+) -> bool {
+    if !symbol_mapped(target) {
+        record(Code::HookRejected, site, 0);
+        return false;
+    }
+    let before = *(target as *const u32);
+    record(Code::HookEntryWord, site, u64::from(before));
+    let branch = before & 0xfc00_0000 == 0x1400_0000;
+    if before == 0 || before == 0x5800_0051 || branch {
+        record(Code::HookRejected, site, u64::from(before));
+        return false;
+    }
+    let mut trampoline: *mut c_void = std::ptr::null_mut();
+    A64HookFunction(target as *const c_void, replacement, &mut trampoline);
+    if trampoline.is_null() {
+        record(Code::HookRejected, site, 1);
+        return false;
+    }
+    original.store(trampoline as usize, Ordering::Release);
+    record(Code::HookInstalled, site, trampoline as u64);
+    true
+}
+
+/// `nn::ldn::Initialize`. Pinned nnsdk 0.6.2 returns `nn::Result` (`u32` in W0).
+/// The stored scan count is cleared, then the original runs once and its W0 is returned.
+unsafe extern "C" fn on_ldn_initialize() -> u32 {
+    SCAN_COUNT.store(0, Ordering::Release);
+    let original = ORIGINAL_INIT.load(Ordering::Acquire);
+    if original == 0 {
+        return 1;
+    }
+    let original: unsafe extern "C" fn() -> u32 = std::mem::transmute(original);
+    original()
+}
+
+/// `nn::ldn::Scan(NetworkInfo*, int*, int, ScanFilter const&, int)`.
+/// The original runs once. Its W0 is kept across the count store.
+/// The count is stored only from a readable `found` pointer.
+unsafe extern "C" fn on_ldn_scan(
+    info: *mut u8,
+    found: *mut i32,
+    max_networks: i32,
+    filter: *const u8,
+    extra: i32,
+) -> u32 {
+    let original = ORIGINAL_SCAN.load(Ordering::Acquire);
+    if original == 0 {
+        return 1;
+    }
+    let original: unsafe extern "C" fn(*mut u8, *mut i32, i32, *const u8, i32) -> u32 =
+        std::mem::transmute(original);
+    let result = original(info, found, max_networks, filter, extra);
+    if result == 0
+        && !found.is_null()
+        && (found as usize).is_multiple_of(4)
+        && memory::accessible(found as usize, 4, false)
+    {
+        let found = std::ptr::read_volatile(found);
+        SCAN_COUNT.store(
+            native_banner::store_scan_count(found.min(max_networks.max(0))),
+            Ordering::Release,
+        );
+    } else {
+        SCAN_COUNT.store(0, Ordering::Release);
+    }
+    result
+}
+
+unsafe fn network_state() -> Option<u32> {
+    let address = GET_STATE.load(Ordering::Acquire);
+    if address == 0 {
+        return None;
+    }
+    let get_state: unsafe extern "C" fn() -> u32 = std::mem::transmute(address);
+    Some(get_state())
+}
+
+/// Scene entry already installed at `0x1bd45e0`. Drop the previous pane, then
+/// capture this one. Does not install another patch.
+pub(super) unsafe fn enter_local_scene(base: u64) {
+    drop_scene();
+    if !SCENE_WORD_OK.load(Ordering::Acquire) {
+        record(Code::HookRejected, native_banner::LOCAL_SCENE as u64, 0);
+        return;
+    }
+    let Some(address) =
+        crate::ui_safety::linked_pane(base as usize, 8, |addr| unsafe { read_ptr(addr) })
+    else {
+        record(Code::HookRejected, native_banner::LOCAL_SCENE as u64, 1);
+        return;
+    };
+    if !address.is_multiple_of(8)
+        || !memory::accessible(address, std::mem::size_of::<TextBox>(), false)
+    {
+        record(
+            Code::PaneRejected,
+            native_banner::LOCAL_SCENE as u64,
+            address as u64,
+        );
+        return;
+    }
+    let pane = &*(address as *const TextBox);
+    let text_base = getRegionAddress(Region::Text) as u64;
+    let Some(name) = copy_name(&pane.pane) else {
+        record(
+            Code::PaneRejected,
+            native_banner::LOCAL_SCENE as u64,
+            address as u64,
+        );
+        return;
+    };
+    let identity = native_banner::local_pane_identity(&name, pane.pane.vtable, text_base);
+    if !identity || !vtable_ok(pane.pane.vtable) {
+        record(
+            Code::PaneRejected,
+            native_banner::LOCAL_SCENE as u64,
+            pane.pane.vtable,
+        );
+        return;
+    }
+    LOCAL_PANE.store(address, Ordering::Release);
+    LOCAL_GEN.store(SCENE_GEN.load(Ordering::Acquire), Ordering::Release);
+    let (first, second) = native_banner::name_words(&name);
+    record(Code::PaneField, first, second);
+}
+
+#[skyline::hook(offset = LOCAL_COUNT, inline)]
+unsafe fn deluxe_rewrite_local_count(_: &InlineCtx) {
+    let address = LOCAL_PANE.load(Ordering::Acquire);
+    let captured = LOCAL_GEN.load(Ordering::Acquire);
+    let scene = SCENE_GEN.load(Ordering::Acquire);
+    if address == 0
+        || !address.is_multiple_of(8)
+        || !memory::accessible(address, std::mem::size_of::<TextBox>(), true)
+    {
+        return;
+    }
+    let pane = &*(address as *const TextBox);
+    let text_base = getRegionAddress(Region::Text) as u64;
+    let Some(name) = copy_name(&pane.pane) else {
+        return;
+    };
+    let identity = native_banner::local_pane_identity(&name, pane.pane.vtable, text_base)
+        && vtable_ok(pane.pane.vtable);
+    if captured == 0 || scene != captured || !identity {
+        return;
+    }
+    note_surface(NativeSurface::LocalLobby);
+    if !native_banner::local_count_active(
+        LDN_READY.load(Ordering::Acquire),
+        scene,
+        captured,
+        identity,
+    ) {
+        return;
+    }
+    let Some(state) = network_state() else {
+        return;
+    };
+    let config = settings();
+    let text = native_banner::local_wireless_text(
+        config.streamer,
+        &native_banner::local_latency_label(config.input_buffer),
+        state == native_banner::LDN_INITIALIZED,
+        SCAN_COUNT.load(Ordering::Acquire),
+    );
+    let _ = write_text(&mut *(address as *mut TextBox), &text);
+}
+
+fn lookup_symbol(symbol: &[u8]) -> usize {
+    let mut address = 0usize;
+    let result = unsafe { skyline::nn::ro::LookupSymbol(&mut address, symbol.as_ptr()) };
+    if result == 0 {
+        address
+    } else {
+        0
     }
 }
 
 /// Drops arena and title ownership. Scene hooks call this on entry.
 pub(super) fn drop_scene() {
+    LOCAL_PANE.store(0, Ordering::Release);
+    LOCAL_GEN.store(0, Ordering::Release);
+    clear_surface();
     LAST_REJECT.store(u64::MAX, Ordering::Relaxed);
     OPEN_LOGGED.store(u64::MAX, Ordering::Relaxed);
     let generation = SCENE_GEN.fetch_add(1, Ordering::Release) + 1;
@@ -221,7 +487,7 @@ unsafe fn deluxe_rewrite_arena_room_init(ctx: &InlineCtx) {
 
 #[skyline::hook(offset = ARENA_UPDATE, inline)]
 unsafe fn deluxe_rewrite_arena_room_update(_: &InlineCtx) {
-    let (streamer, telemetry, ping, remote_lines) = snapshot();
+    let parts = arena_parts();
     let Ok(mut state) = STATE.try_lock() else {
         return;
     };
@@ -247,6 +513,7 @@ unsafe fn deluxe_rewrite_arena_room_update(_: &InlineCtx) {
         clear_arena(&mut state);
         return;
     }
+    note_surface(NativeSurface::Arena);
     if state.room_len == 0 {
         note_reject(ARENA_UPDATE as u64, REJECT_ROOM);
         return;
@@ -259,13 +526,13 @@ unsafe fn deluxe_rewrite_arena_room_update(_: &InlineCtx) {
         note_reject(ARENA_UPDATE as u64, REJECT_ROOM);
         return;
     }
-    let lined = native_banner::with_room_id(&room, &telemetry);
+    let (telemetry, ping, remote_lines) = arena_text(&parts, &room);
     paint_one(
         &mut state,
         pane,
         false,
-        streamer,
-        &lined,
+        parts.streamer,
+        &telemetry,
         ping,
         remote_lines,
     );
@@ -281,6 +548,8 @@ unsafe fn paint_css(arg: u64) {
     let Some(first) = open_pane(address, true, CSS_UPDATE as u64) else {
         return;
     };
+    note_surface(NativeSurface::Css);
+    super::online::observe_css_scene();
     let first_pane = first.cast::<Pane>();
     let second = walk_links(first_pane, &CSS_TITLE_WALK).and_then(|pane| unsafe {
         let address = pane as usize;
@@ -303,25 +572,9 @@ unsafe fn paint_css(arg: u64) {
     if let Some(pane) = background {
         apply_background(&mut state, pane, streamer);
     }
-    paint_one(
-        &mut state,
-        first,
-        true,
-        streamer,
-        &telemetry,
-        ping,
-        0,
-    );
+    paint_one(&mut state, first, true, streamer, &telemetry, ping, 0);
     if let Some(pane) = second {
-        paint_one(
-            &mut state,
-            pane,
-            true,
-            streamer,
-            &telemetry,
-            ping,
-            0,
-        );
+        paint_one(&mut state, pane, true, streamer, &telemetry, ping, 0);
     }
 }
 
@@ -331,16 +584,20 @@ fn snapshot() -> (bool, String, Option<[u8; 4]>, u8) {
         return (true, String::new(), None, 0);
     }
     let auto = auto_driver::snapshot();
-    let profile = crate::auto_policy::profile_row_label(
-        config.auto_profile,
-        auto.ready,
-        config.render_mode,
-        auto.request,
+    let profile = crate::fps_boost::append_applied_suffix(
+        &crate::auto_policy::profile_row_label(
+            config.auto_profile,
+            auto.ready,
+            config.render_mode,
+            auto.request,
+        ),
+        super::fps_boost::applied(),
     );
     let latency = native_banner::local_latency_label(config.input_buffer);
     let frame = crate::peer_transport::peer_frame();
-    let show_remote =
-        native_banner::show_native_remote(frame.peer.known, auto.connection.is_online());
+    let show_remote = native_banner::show_native_remote(crate::peer_transport::station_connected(
+        frame.selection,
+    ));
     let name = if frame.peer.known {
         crate::peer_transport::name_label(&frame.peer.name, frame.peer.name_len)
             .unwrap_or("Unavailable")
@@ -355,13 +612,8 @@ fn snapshot() -> (bool, String, Option<[u8; 4]>, u8) {
     let remote_latency = crate::peer_transport::remote_latency_label(frame.peer.latency);
     let identity = crate::peer_transport::display_identity(frame.selection);
     let (publication, epoch, published_gen, draw_gen) = pia_rtt::current_publication();
-    let ping = crate::pia_rtt::present_published(
-        identity,
-        publication,
-        epoch,
-        published_gen,
-        draw_gen,
-    );
+    let ping =
+        crate::pia_rtt::present_published(identity, publication, epoch, published_gen, draw_gen);
     let text = native_banner::telemetry_text(&native_banner::LineParts {
         you_profile: &profile,
         you_latency: &latency,
@@ -372,7 +624,156 @@ fn snapshot() -> (bool, String, Option<[u8; 4]>, u8) {
         ping: &ping.opponent,
     });
     let remote_lines = u8::from(show_remote);
-    (false, text, ping.color.map(native_banner::ping_bytes), remote_lines)
+    (
+        false,
+        text,
+        ping.color.map(native_banner::ping_bytes),
+        remote_lines,
+    )
+}
+
+struct ArenaLine {
+    name: String,
+    profile: String,
+    latency: String,
+    ping: String,
+}
+
+struct ArenaParts {
+    streamer: bool,
+    profile: String,
+    latency: String,
+    lines: Vec<ArenaLine>,
+    pane_color: Option<[u8; 4]>,
+}
+
+fn arena_parts() -> ArenaParts {
+    let config = settings();
+    if config.streamer {
+        return ArenaParts {
+            streamer: true,
+            profile: String::new(),
+            latency: String::new(),
+            lines: Vec::new(),
+            pane_color: None,
+        };
+    }
+    let auto = auto_driver::snapshot();
+    let profile = crate::fps_boost::append_applied_suffix(
+        &crate::auto_policy::profile_row_label(
+            config.auto_profile,
+            auto.ready,
+            config.render_mode,
+            auto.request,
+        ),
+        super::fps_boost::applied(),
+    );
+    let latency = native_banner::local_latency_label(config.input_buffer);
+    let (_frame, roster) = crate::peer_transport::banner_peers();
+    let (board, epoch, published_gen, draw_gen) = pia_rtt::current_board();
+    if roster.busy || roster.len == 0 {
+        return ArenaParts {
+            streamer: false,
+            profile,
+            latency,
+            lines: Vec::new(),
+            pane_color: None,
+        };
+    }
+    let mut listed = [0u8; crate::pia_rtt::BOARD_CAP];
+    let mut listed_len = 0u8;
+    let mut lines = Vec::new();
+    for peer in roster.peers.iter().take(usize::from(roster.len)) {
+        if !peer.known || peer.station.is_none() {
+            continue;
+        }
+        let presented = match peer.station {
+            Some(index) => {
+                if usize::from(listed_len) < listed.len() {
+                    listed[usize::from(listed_len)] = index;
+                    listed_len = listed_len.saturating_add(1);
+                }
+                crate::pia_rtt::present_station(&board, index, epoch, published_gen, draw_gen)
+            }
+            None => crate::pia_rtt::present_published(
+                crate::pia_rtt::RttIdentity::Busy,
+                crate::pia_rtt::Publication::unavailable(epoch),
+                epoch,
+                published_gen,
+                draw_gen,
+            ),
+        };
+        let name = crate::peer_transport::name_label(&peer.name, peer.name_len)
+            .unwrap_or("Unavailable")
+            .to_owned();
+        let remote_profile = if peer.settings.is_empty() {
+            "---".to_owned()
+        } else {
+            peer.settings.to_owned()
+        };
+        let ping = format!(
+            "{}{}",
+            presented.opponent,
+            native_banner::interface_suffix(peer.interface)
+        );
+        lines.push(ArenaLine {
+            name,
+            profile: remote_profile,
+            latency: crate::peer_transport::remote_latency_label(peer.latency),
+            ping,
+        });
+    }
+    let pane_color = crate::pia_rtt::aggregate_stability(
+        &board,
+        &listed[..usize::from(listed_len)],
+        epoch,
+        published_gen,
+        draw_gen,
+    )
+    .map(crate::pia_rtt::ping_rgba)
+    .map(native_banner::ping_bytes);
+    ArenaParts {
+        streamer: false,
+        profile,
+        latency,
+        lines,
+        pane_color,
+    }
+}
+
+fn arena_text(parts: &ArenaParts, room: &str) -> (String, Option<[u8; 4]>, u8) {
+    if parts.streamer {
+        return (String::new(), None, 0);
+    }
+    let refs: Vec<native_banner::RemoteLine<'_>> = parts
+        .lines
+        .iter()
+        .take(usize::from(native_banner::ARENA_REMOTE_CAP))
+        .map(|line| native_banner::RemoteLine {
+            name: line.name.as_str(),
+            profile: line.profile.as_str(),
+            latency: line.latency.as_str(),
+            ping: line.ping.as_str(),
+        })
+        .collect();
+    let (text, shown) = native_banner::arena_status(room, &parts.profile, &parts.latency, &refs);
+    (text, parts.pane_color, shown)
+}
+
+fn note_surface(kind: NativeSurface) {
+    SURFACE_KIND.store(kind as u8, Ordering::Relaxed);
+    SURFACE_GEN.fetch_add(1, Ordering::Release);
+}
+
+pub(super) fn surface_sample() -> (u64, u8) {
+    let generation = SURFACE_GEN.load(Ordering::Acquire);
+    let kind = SURFACE_KIND.load(Ordering::Relaxed);
+    (generation, kind)
+}
+
+fn clear_surface() {
+    SURFACE_KIND.store(0, Ordering::Relaxed);
+    SURFACE_GEN.store(0, Ordering::Release);
 }
 
 unsafe fn paint_one(
@@ -384,7 +785,11 @@ unsafe fn paint_one(
     ping: Option<[u8; 4]>,
     remote_lines: u8,
 ) {
-    let site = if titles_only { CSS_UPDATE } else { ARENA_UPDATE } as u64;
+    let site = if titles_only {
+        CSS_UPDATE
+    } else {
+        ARENA_UPDATE
+    } as u64;
     if SCENE_GEN.load(Ordering::Acquire) != state.generation {
         let generation = SCENE_GEN.load(Ordering::Acquire);
         *state = BannerState::empty(generation);
@@ -584,7 +989,9 @@ unsafe fn parent_of(pane: *mut Pane) -> Option<*mut Pane> {
         return None;
     }
     let address = parent as usize;
-    if !address.is_multiple_of(8) || !memory::accessible(address, std::mem::size_of::<Pane>(), false) {
+    if !address.is_multiple_of(8)
+        || !memory::accessible(address, std::mem::size_of::<Pane>(), false)
+    {
         return None;
     }
     if !vtable_ok((*parent).vtable) {
@@ -604,7 +1011,9 @@ unsafe fn pane_from_link(node: usize) -> Option<*mut Pane> {
         return None;
     }
     let address = node.checked_sub(std::mem::offset_of!(Pane, link))?;
-    if !address.is_multiple_of(8) || !memory::accessible(address, std::mem::size_of::<Pane>(), false) {
+    if !address.is_multiple_of(8)
+        || !memory::accessible(address, std::mem::size_of::<Pane>(), false)
+    {
         return None;
     }
     let pane = address as *mut Pane;
@@ -625,7 +1034,8 @@ unsafe fn open_pane(address: usize, titles_only: bool, site: u64) -> Option<*mut
     let reject = |guard: u8, vtable: u64, name: [u8; 16]| unsafe {
         note_open(site, address as u64, guard, vtable, mapped, remain, name);
     };
-    if !address.is_multiple_of(8) || !memory::accessible(address, std::mem::size_of::<Pane>(), false)
+    if !address.is_multiple_of(8)
+        || !memory::accessible(address, std::mem::size_of::<Pane>(), false)
     {
         reject(1, 0, [0; 16]);
         return None;
@@ -662,7 +1072,8 @@ unsafe fn mapped_span(address: usize) -> (u64, u64) {
         return (0, 0);
     };
     let mapped = u64::try_from(size).unwrap_or(u64::MAX);
-    let remain = u64::try_from(base.saturating_add(size).saturating_sub(address)).unwrap_or(u64::MAX);
+    let remain =
+        u64::try_from(base.saturating_add(size).saturating_sub(address)).unwrap_or(u64::MAX);
     (mapped, remain)
 }
 
@@ -696,7 +1107,11 @@ unsafe fn note_open(
     );
     record(Code::PaneField, address, vtable);
     record(Code::PaneField, mapped, remain);
-    record(Code::PaneField, pack_half(&name[..8]), pack_half(&name[8..]));
+    record(
+        Code::PaneField,
+        pack_half(&name[..8]),
+        pack_half(&name[8..]),
+    );
     record(Code::PaneField, text, data);
 }
 
@@ -742,7 +1157,9 @@ unsafe fn setter_available() -> bool {
 }
 
 unsafe fn pane_name_at(address: usize) -> Option<String> {
-    if !address.is_multiple_of(8) || !memory::accessible(address, std::mem::size_of::<Pane>(), false) {
+    if !address.is_multiple_of(8)
+        || !memory::accessible(address, std::mem::size_of::<Pane>(), false)
+    {
         return None;
     }
     copy_name(&*(address as *const Pane))
@@ -750,7 +1167,7 @@ unsafe fn pane_name_at(address: usize) -> Option<String> {
 
 unsafe fn read_current(tb: &TextBox) -> Option<String> {
     let cap = usize::from(tb.text_buf_len);
-    if tb.text_buf.is_null() || cap == 0 || cap > 512 {
+    if tb.text_buf.is_null() || cap == 0 || cap > native_banner::PANE_SCAN_MAX {
         return None;
     }
     let declared = usize::from(tb.text_len);
@@ -806,7 +1223,10 @@ unsafe fn write_text(tb: &mut TextBox, text: &str) -> bool {
     // Four trailing zeros keep a mistaken 3-byte read inside this buffer.
     let mut raw = [0u8; TEXT_CAP + 4];
     raw[..text.len()].copy_from_slice(text.as_bytes());
-    set_text_string(std::ptr::from_mut::<TextBox>(tb).cast::<Pane>(), raw.as_ptr());
+    set_text_string(
+        std::ptr::from_mut::<TextBox>(tb).cast::<Pane>(),
+        raw.as_ptr(),
+    );
     tb.bits |= 1u16 << u32::from(TextBoxFlag::IsPTDirty as u8);
     true
 }
@@ -983,9 +1403,9 @@ fn free_slot(slots: &[Slot; 4]) -> Option<usize> {
 }
 
 fn address_slot(slots: &[Slot; 4], address: u64, generation: u64) -> Option<usize> {
-    slots.iter().position(|slot| {
-        slot.used && slot.address == address && slot.generation == generation
-    })
+    slots
+        .iter()
+        .position(|slot| slot.used && slot.address == address && slot.generation == generation)
 }
 
 fn slot_text(slot: &Slot) -> Option<&str> {
@@ -997,7 +1417,9 @@ fn slot_text(slot: &Slot) -> Option<&str> {
 }
 
 fn store_text(slot: &mut Slot, text: &str) -> bool {
-    let Some(len) = u16::try_from(text.len()).ok().filter(|len| usize::from(*len) <= TEXT_CAP)
+    let Some(len) = u16::try_from(text.len())
+        .ok()
+        .filter(|len| usize::from(*len) <= TEXT_CAP)
     else {
         return false;
     };

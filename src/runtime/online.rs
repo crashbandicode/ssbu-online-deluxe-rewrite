@@ -29,6 +29,14 @@ pub(super) fn ready() -> bool {
     auto_driver::ready()
 }
 
+pub(super) fn observe_css_scene() {
+    if !ready() {
+        return;
+    }
+    let status = auto_policy::classify_css(unsafe { is_training_mode() });
+    auto_driver::set_scene(None, Some(status), super::native_banner::CSS_UPDATE as u64);
+}
+
 pub(super) fn mark_match() {
     auto_driver::mark_match();
 }
@@ -74,8 +82,8 @@ unsafe fn deluxe_rewrite_arena(_: &InlineCtx) {
 }
 
 #[skyline::hook(offset = 0x1bd45e0, inline)]
-unsafe fn deluxe_rewrite_local_wireless(_: &InlineCtx) {
-    super::native_banner::drop_scene();
+unsafe fn deluxe_rewrite_local_wireless(ctx: &InlineCtx) {
+    super::native_banner::enter_local_scene(ctx.registers[0].x());
     auto_driver::set_scene(
         Some(Connection::Local),
         Some(SceneStatus::Inactive),
@@ -96,11 +104,8 @@ unsafe fn deluxe_rewrite_stage_setup(ctx: &InlineCtx) {
         return;
     }
     let stage_id = *(stage_addr as *const u32);
-    let status = auto_policy::classify_stage(
-        stage_id,
-        is_training_mode(),
-        get_fighter_entry_count(),
-    );
+    let status =
+        auto_policy::classify_stage(stage_id, is_training_mode(), get_fighter_entry_count());
     auto_driver::set_scene(None, Some(status), STAGE_SETUP as u64);
 }
 
