@@ -1244,3 +1244,20 @@ was started; navigation entered the World of Light map and was abandoned to
 avoid touching that save) and any hardware run.
 Evidence: `~/.local/share/ssbu-mod-backups/plugin-api-tangent-20261012/`
 (`result.json`, `screenshots/plugins-page-1012a-*.png`, `run-evidence/plugins-page-1012a/`).
+
+### Eden match preview `plugins-match-1012b` (same day, private display)
+
+Same candidate and demo NRO, launched on a private display (weston headless
+with the Intel GL renderer plus Xwayland `:2`, no desktop window; Eden at
+1280x720, 60 FPS). An Astra driver reached an offline Smash match, Shulk versus
+a level 9 Yoshi CPU on Final Destination. Observed in the match: the compact
+two-row Settings strip and the compact Plugins strip
+(`>Demo.Enabled:Off   Demo.Mode:A   Demo.Status:Ready` over
+`Plugins 1/1` and the timing line); Right on Enabled applied (codes 100 and
+101) and the host wrote `enabled=on`; after the match ended the window returned
+to the vertical table showing Enabled On. Not captured in this run: the compact
+Performance strip (match over first), a second edit and the hidden state. The
+profile was restored and the unit exited 0.
+Screenshots: `screenshots/plugins-match-1012b-settings-match.png`,
+`plugins-match-1012b-plugins-match.png`, `plugins-match-1012b-plugins-match-edit.png`;
+archive `run-evidence/plugins-match-1012b/`.
