@@ -1261,3 +1261,23 @@ profile was restored and the unit exited 0.
 Screenshots: `screenshots/plugins-match-1012b-settings-match.png`,
 `plugins-match-1012b-plugins-match.png`, `plugins-match-1012b-plugins-match-edit.png`;
 archive `run-evidence/plugins-match-1012b/`.
+
+### DBI USB MTP installation of 9d08 — 2026-10-12 14:00Z
+
+The operator authorized the install with Smash closed and DBI's USB MTP
+responder ready. The single-writer transaction (adapted from the 6c39 script)
+backed up all nine plugins and six protected files, confirmed the installed
+rewrite was still 6c39 immediately before writing, wrote the rollback archive
+`ultimate/ssbu_online_deluxe_rewrite/backups/pre-plugin-api-9d08a711b271e0ac.nro`
+with readback, staged the candidate with readback, copy-replaced the NRO and
+read every file back: the rewrite is
+`9d08a711b271e0acbb0b2be426c6892acf32eefe85e17deaccdd5050547ec40c`
+(2449408 bytes, module `5baf03f205f8fb39ce81cffa31459681fa21e0c7dc7b062aadd503eb1aad5f3f`);
+the INI (`c1272813e40bd694c7429c8103199141e8017341996f754309e54b2dbaa4158d`),
+eight other plugins, plugin names and protected files are unchanged. All
+device command processes exited. Only the rewrite NRO was written; the demo
+plugin was not deployed, so on hardware the chord cycle stays
+settings → performance → hidden until a plugin NRO registers.
+Evidence: `~/.local/share/ssbu-mod-backups/plugin-api-tangent-20261012/switch-mtp/`
+(`preflight.json`, `deployment.json`, `operator-approval.json`, before/after readbacks).
+This accepts the transfer, not runtime behaviour on hardware.
