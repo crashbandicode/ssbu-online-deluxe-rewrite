@@ -1355,8 +1355,43 @@ idle passes spin, then 5 µs doubling to 50 µs on every idle pass;
 `dispatcher_backoff.ini` overrides (`preset=measured` reproduces the Eden
 cadence, `cooldown_us` adds Astra's optional limiter). `DISABLE_BACKOFF`
 turns it off. Host gates: 293 tests, clippy host and Skyline with warnings
-denied, no-default build, rustfmt. Eden A/B of the production NRO and the
-Switch test are recorded below when run.
+denied, no-default build, rustfmt.
+
+Eden production A/B/A of the clean 0.3.0 NRO (`f22d94950be1b460`, build
+0.3.0-8aeaa5391343-1791833455; Astra low driver, isolated profile, private
+display, 1x, FX On, 175% quota with 5 ms period, 17–20 s API windows;
+ledger `css-budget/prod-ab/STATUS.md`, report `PROD_AB.md`):
+
+| Run | Hook | FPS | Eden CPU ms/frame | Backoff row |
+| --- | --- | ---: | ---: | --- |
+| CSS LessLag 175% (A) | `DISABLE_BACKOFF` | 55.59 | 26.55 | Off |
+| CSS LessLag 175% (B) | default policy | 60.00 | 19.50 | 3068/s 50 us |
+| CSS LessLag 175% (A) | `DISABLE_BACKOFF` | 54.15 | 26.83 | Off |
+| CSS LessLag 175% | `preset=measured` | 59.03 | 22.92 | 2744/s 1 us |
+| CSS Vanilla 175% | default policy | 60.01 | 20.08 | 2590/s 50 us |
+| Live match LessLag 175% (Lucario/Kirby, Battlefield) | default policy | 59.84 | 16.34 | compact strip has no row; code 103 rate 1069/s, last 50 us |
+| CSS LessLag unlimited | default policy | 60.0 | — | — |
+
+Install log code 102 outcome 1 (installed) on every boot; no crash,
+`Unavailable` or `External`. A first match attempt that crossed into the
+results screen during capture was excluded and repeated. Verdict: the
+production hook reproduces the diagnostic gain and exceeds it on the CSS
+(flat 60 under quota); Vanilla and the match keep 60 with lower CPU. The
+in-match compact Performance strip does not show the Backoff row; the
+vertical table does.
+
+### DBI USB MTP installation of f22d (0.3.0) — 2026-10-12 19:58Z
+
+`switch-mtp-f22d/deploy-f22d-mtp-1012.py` preflight 19:55:47Z (installed
+rewrite d773e7bf…2b17 as expected; all plugins and protected files backed
+up locally) and install 19:58:08Z `installed_verified`: rollback archive
+`/ultimate/ssbu_online_deluxe_rewrite/backups/pre-backoff-f22d94950be1b460.nro`
+read back as d773; staged copy read back as f22d; target read back
+f22d94950be1b4601ad9137a8d87acf6eccf2ec599eb48812e6f386f8e7403d8
+(2465792 B, module cac8cc1b…ca31); other plugins, plugin names, config.ini
+and protected files unchanged. Operator authorization recorded in
+`operator-approval.json`. Hardware behaviour not yet observed: the Switch
+test list is in the standalone repo's `docs/ANALYSIS.md` section 6.
 
 ### Pinned release v0.2.1 — 2026-10-12 (deferred persistence on PENDING)
 
