@@ -1293,6 +1293,23 @@ and native CSS panes still see Down before the bumpers, a Down-first chord on
 character select can nudge the native profile row once before the window
 opens; the old gesture (bumpers first) avoids it.
 
+### Character-select frame budget under LessLag — Eden measurements, 2026-10-12
+
+Twenty-one captures on the private display (candidate d773, isolated profile):
+at 1x every mode holds 60 on the CSS, so Eden does not reproduce the Switch
+drop directly. A CPU quota of 175% on Eden's own unit does reproduce a
+LessLag-only drop (Vanilla 60, LLDoubles 60, LessLag 53-57) while all modes
+show the same share of slow frames and the same main-thread time; the
+three-image modes recover with short frames and the two-image ring cannot.
+Core modes under quota separate the components: two images without render
+options still drop, three images without them hold, and render options add
+about 0.45 ms of serialized main-thread work per CSS frame. GPU stress at 2x,
+3x and 4x never singles out LessLag. The CSS is not heavier than a match on
+the instrumented spans; the hardware difference is frame-time variance.
+Report and raw captures: tangent evidence `css-budget/`. No code change; the
+hardware ABAB (LessLag, LLDoubles, Vanilla on one CSS visit; `lesslag_core`
+and `doubles_core` boots) is the decisive confirmation.
+
 ### Pinned release v0.2.1 — 2026-10-12 (deferred persistence on PENDING)
 
 Requested by the Training Modpack side: a `REQUEST_PENDING` answer no longer
