@@ -1293,6 +1293,21 @@ and native CSS panes still see Down before the bumpers, a Down-first chord on
 character select can nudge the native profile row once before the window
 opens; the old gesture (bumpers first) avoids it.
 
+### Pinned release v0.2.0 — 2026-10-12
+
+Tag `v0.2.0` (commit ae19c58, Forgejo `intpa/ssbu-online-deluxe-rewrite`) is
+the consumer reference for the plugin API: `deluxe-plugin-abi` 2.0.0 and
+`deluxe-plugin-sdk` 2.0.0. It adds pending-aware stepping on the Plugins page
+(a second Left/Right takes a pending change back). Clean NRO from that tree:
+build `0.2.0-ae19c58d9df6-1791821467`, SHA-256
+`7585760b9bc4c63404ea7ff0a605de8afb642ea3db851f1c4ff2429add52ad78`,
+2453504 bytes, module `829fa26224030349a7a84bfe48aab7a058e7c96c78cc2bedb855a5311409fb71`,
+ELF `b695068c0d08924d6dc964712e13b9c089f10c1cafde8a2463d047ae7d3a9001`.
+283 host tests plus the SDK round-trip; host and Skyline Clippy with warnings
+denied; no-default build; rustfmt; Skyline release. Not installed on hardware
+(the Switch has d773, which differs only by the pending-aware step and version
+strings). Package: tangent evidence `artifacts/7585760b9bc4c634/`.
+
 ### DBI USB MTP installation of d773 — 2026-10-12 15:46Z
 
 Operator authorized ("deploy d773 to the switch"); the live DBI MTP mount
