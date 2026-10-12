@@ -29,15 +29,60 @@ pub enum View {
 }
 
 /// Chord + Down walks Hidden → Settings → Plugins → Performance → Hidden.
-/// Plugins is skipped while no plugin has registered. Plus/Minus held from
-/// Settings or Plugins opens Debug, which then continues to Performance.
+/// Plugins is skipped while no plugin has registered. Plus/Minus held with
+/// the chord opens Debug from Settings or Plugins and keeps Debug open while
+/// it stays held; Debug then continues to Performance on a plain chord.
 pub fn next_view(view: View, debug_modifier: bool, plugins_available: bool) -> View {
     match (view, debug_modifier) {
         (View::Hidden, _) => View::Settings,
         (View::Settings | View::Plugins, true) => View::Debug,
+        (View::Debug, true) => View::Debug,
         (View::Settings, false) if plugins_available => View::Plugins,
         (View::Settings | View::Plugins | View::Debug, _) => View::Performance,
         (View::Performance, _) => View::Hidden,
+    }
+}
+
+/// Which window command a sample completes, if any. A command fires once
+/// when its whole combination is held, in any press order, and cannot fire
+/// again until at least one of its buttons is released. Hardware logs showed
+/// D-pad Down registering a frame before both bumpers, which the old
+/// "Down edge while the chord is held" rule silently ignored.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Command {
+    /// Chord + Down: cycle views (Plus/Minus also held selects Debug).
+    Cycle { debug_modifier: bool },
+    /// Chord + Plus/Minus without Down: open Debug, or hide it when open.
+    Debug,
+}
+
+/// Latched combination state between samples.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CommandLatch {
+    cycle_held: bool,
+    debug_held: bool,
+}
+
+impl CommandLatch {
+    pub fn sample(&mut self, buttons: u64) -> Option<Command> {
+        let chord = buttons & (L | R) == L | R || buttons & (ZL | ZR) == ZL | ZR;
+        let cycle = chord && buttons & DOWN != 0;
+        let debug = chord && buttons & PLUS_MINUS != 0 && buttons & DOWN == 0;
+        let fire_cycle = cycle && !self.cycle_held;
+        let fire_debug = debug && !self.debug_held;
+        self.cycle_held = cycle;
+        // A Debug toggle that was already consumed must not re-fire when Down
+        // is added and removed while Plus/Minus stays held.
+        self.debug_held = chord && buttons & PLUS_MINUS != 0;
+        if fire_cycle {
+            Some(Command::Cycle {
+                debug_modifier: buttons & PLUS_MINUS != 0,
+            })
+        } else if fire_debug {
+            Some(Command::Debug)
+        } else {
+            None
+        }
     }
 }
 
@@ -48,6 +93,7 @@ pub struct Overlay {
     /// Selected flattened row on the Plugins page (`plugin_api::plugin_rows`).
     pub plugin_row: usize,
     previous_buttons: u64,
+    latch: CommandLatch,
 }
 
 impl Overlay {
@@ -121,8 +167,15 @@ impl Overlay {
             }
         }
         let chord = shoulders || triggers;
-        if chord && pressed & DOWN != 0 {
-            self.view = next_view(self.view, buttons & PLUS_MINUS != 0, plugins.count() > 0);
+        let command = self.latch.sample(buttons);
+        if let Some(command) = command {
+            self.view = match command {
+                Command::Cycle { debug_modifier } => {
+                    next_view(self.view, debug_modifier, plugins.count() > 0)
+                }
+                Command::Debug if self.view == View::Debug => View::Hidden,
+                Command::Debug => View::Debug,
+            };
             self.menu.open = self.view == View::Settings;
             if self.menu.open {
                 let gate = crate::menu::row_gate(
@@ -304,8 +357,10 @@ mod tests {
                 ui.poll(chord | DOWN, &mut config);
                 assert_eq!(ui.view, View::Settings);
                 ui.poll(chord, &mut config);
+                // Chord + Plus/Minus is itself the Debug command now; adding
+                // Down while the modifier stays held keeps Debug open.
                 ui.poll(chord | modifier, &mut config);
-                assert_eq!(ui.view, View::Settings);
+                assert_eq!(ui.view, View::Debug);
                 assert_eq!(ui.command_edge(chord | modifier | DOWN), Some(1));
                 ui.poll(chord | modifier | DOWN, &mut config);
                 assert_eq!(ui.view, View::Debug);
@@ -314,6 +369,12 @@ mod tests {
                     ui.poll(chord | modifier | DOWN, &mut config);
                     assert_eq!(ui.view, View::Debug);
                 }
+                // Releasing Down, then the modifier, then pressing it again hides Debug.
+                ui.poll(chord | modifier, &mut config);
+                assert_eq!(ui.view, View::Debug);
+                ui.poll(chord, &mut config);
+                ui.poll(chord | modifier, &mut config);
+                assert_eq!(ui.view, View::Hidden);
                 assert_eq!(config, Config::default());
             }
         }
@@ -344,13 +405,69 @@ mod tests {
         assert_eq!(config, Config::default());
     }
     #[test]
+    fn window_commands_fire_on_completion_in_any_press_order_and_once_per_hold() {
+        let _gate = crate::peer_transport::global_gate();
+        crate::peer_transport::clear_session();
+        let mut ui = Overlay::default();
+        let mut config = Config::default();
+        // Hardware order: Down lands first, the bumpers a frame later.
+        ui.poll(DOWN, &mut config);
+        assert_eq!(ui.view, View::Hidden);
+        ui.poll(L | DOWN, &mut config);
+        assert_eq!(ui.view, View::Hidden);
+        ui.poll(L | R | DOWN, &mut config);
+        assert_eq!(ui.view, View::Settings);
+        // Holding everything does not repeat.
+        for _ in 0..5 {
+            ui.poll(L | R | DOWN, &mut config);
+            assert_eq!(ui.view, View::Settings);
+        }
+        // Releasing only Down re-arms the command; the bumpers may stay held.
+        ui.poll(L | R, &mut config);
+        ui.poll(L | R | DOWN, &mut config);
+        assert_eq!(ui.view, View::Performance);
+        // Releasing a bumper re-arms it too.
+        ui.poll(R | DOWN, &mut config);
+        ui.poll(L | R | DOWN, &mut config);
+        assert_eq!(ui.view, View::Hidden);
+        ui.poll(0, &mut config);
+        // Direct Debug toggle: chord + Minus, no Down, from any view.
+        ui.poll(L | R | (1 << 11), &mut config);
+        assert_eq!(ui.view, View::Debug);
+        ui.poll(L | R | (1 << 11), &mut config);
+        assert_eq!(ui.view, View::Debug);
+        ui.poll(L | R, &mut config);
+        ui.poll(L | R | (1 << 11), &mut config);
+        assert_eq!(ui.view, View::Hidden);
+        ui.poll(0, &mut config);
+        // Triggers behave the same, in the other order.
+        ui.poll(ZL | ZR, &mut config);
+        ui.poll(ZL | ZR | DOWN, &mut config);
+        assert_eq!(ui.view, View::Settings);
+        assert_eq!(config, Config::default());
+        let mut latch = CommandLatch::default();
+        assert_eq!(latch.sample(L | R), None);
+        assert_eq!(
+            latch.sample(L | R | DOWN | (1 << 10)),
+            Some(Command::Cycle {
+                debug_modifier: true
+            })
+        );
+        assert_eq!(latch.sample(L | R | DOWN | (1 << 10)), None);
+        assert_eq!(latch.sample(L | R | (1 << 10)), None);
+        assert_eq!(latch.sample(L | R), None);
+        assert_eq!(latch.sample(L | R | (1 << 10)), Some(Command::Debug));
+    }
+
+    #[test]
     fn plugins_view_enters_the_cycle_only_after_a_registration() {
         for debug in [false, true] {
             assert_eq!(next_view(View::Hidden, debug, false), View::Settings);
             assert_eq!(next_view(View::Hidden, debug, true), View::Settings);
-            assert_eq!(next_view(View::Debug, debug, true), View::Performance);
             assert_eq!(next_view(View::Performance, debug, true), View::Hidden);
         }
+        assert_eq!(next_view(View::Debug, false, true), View::Performance);
+        assert_eq!(next_view(View::Debug, true, true), View::Debug);
         assert_eq!(next_view(View::Settings, false, false), View::Performance);
         assert_eq!(next_view(View::Settings, false, true), View::Plugins);
         assert_eq!(next_view(View::Settings, true, true), View::Debug);

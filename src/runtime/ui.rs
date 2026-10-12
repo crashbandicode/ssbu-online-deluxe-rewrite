@@ -256,6 +256,34 @@ struct CompactLines {
     second: String,
     first_color: Option<Vec4>,
     second_color: Option<Vec4>,
+    /// When set, the first row is drawn as these `(text, tone)` segments on
+    /// one line instead of `first`; their concatenation equals `first`.
+    first_segments: Option<Vec<(String, u8)>>,
+}
+
+/// Text colour for a plugin `TONE_*` byte; neutral keeps the style default.
+fn tone_color(tone: u8) -> Option<Vec4> {
+    match tone {
+        deluxe_plugin_abi::TONE_OK => Some(Vec4 {
+            x: 0.45,
+            y: 0.90,
+            z: 0.45,
+            w: 1.0,
+        }),
+        deluxe_plugin_abi::TONE_WARN => Some(Vec4 {
+            x: 0.95,
+            y: 0.85,
+            z: 0.25,
+            w: 1.0,
+        }),
+        deluxe_plugin_abi::TONE_ERROR => Some(Vec4 {
+            x: 0.95,
+            y: 0.35,
+            z: 0.35,
+            w: 1.0,
+        }),
+        _ => None,
+    }
 }
 
 fn marked(on: bool, label: &str) -> String {
@@ -546,6 +574,7 @@ fn compact_settings_lines(
         second: supporting.join("   "),
         first_color: None,
         second_color: None,
+        first_segments: None,
     }
 }
 
@@ -583,6 +612,7 @@ fn compact_performance_lines(
         second: details.join("   "),
         first_color: Some(color),
         second_color: None,
+        first_segments: None,
     }
 }
 
@@ -611,16 +641,20 @@ fn compact_plugin_lines(
         })
         .collect();
     let (timing, _) = timing_line(frames);
-    let first = if fields.is_empty() {
-        "Plugins: none registered".to_owned()
+    let (first, first_segments) = if fields.is_empty() {
+        ("Plugins: none registered".to_owned(), None)
     } else {
-        compact_line(&fields)
+        (
+            compact_line(&fields),
+            Some(crate::plugin_api::compact_segments(&fields)),
+        )
     };
     CompactLines {
         first,
         second: format!("Plugins {page}/{pages}   {timing}"),
         first_color: None,
         second_color: None,
+        first_segments,
     }
 }
 
@@ -656,10 +690,11 @@ unsafe fn draw_plugins_vertical(registry: &crate::plugin_api::Registry, selected
         } else {
             value.label
         };
-        row(
-            &marked(index == selected, &format!("  {}", option.label)),
-            &value_text,
-        );
+        igTableNextRow(0, 0.0);
+        igTableNextColumn();
+        text(&marked(index == selected, &format!("  {}", option.label)));
+        igTableNextColumn();
+        paint_text(&value_text, tone_color(value.tone));
     }
     if end < rows.len() {
         row("...", "");
@@ -669,7 +704,19 @@ unsafe fn draw_plugins_vertical(registry: &crate::plugin_api::Registry, selected
 
 unsafe fn draw_compact_lines(lines: &CompactLines) {
     igPushTextWrapPos(-1.0);
-    paint_text(&lines.first, lines.first_color);
+    match &lines.first_segments {
+        Some(segments) => {
+            // One unwrapped line: each segment continues the previous with no
+            // extra spacing, so the row measures the same as `lines.first`.
+            for (index, (segment, tone)) in segments.iter().enumerate() {
+                if index > 0 {
+                    igSameLine(0.0, 0.0);
+                }
+                paint_text(segment, tone_color(*tone));
+            }
+        }
+        None => paint_text(&lines.first, lines.first_color),
+    }
     if !lines.second.is_empty() {
         paint_text(&lines.second, lines.second_color);
     }

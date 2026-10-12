@@ -1262,6 +1262,37 @@ Screenshots: `screenshots/plugins-match-1012b-settings-match.png`,
 `plugins-match-1012b-plugins-match.png`, `plugins-match-1012b-plugins-match-edit.png`;
 archive `run-evidence/plugins-match-1012b/`.
 
+### Plugin value tones and read-only rows — 2026-10-12
+
+Candidate `e59fc9a6bd266790` (descriptor version 2: per-choice tones and
+`OPTION_FLAG_READ_ONLY`; table and symbol unchanged; version 1 descriptors
+still accepted). 282 host tests plus the SDK round-trip; host/Skyline Clippy
+with warnings denied, no-default build, rustfmt and Skyline release pass. SDK:
+22 tests including the version 1 fallback. Eden run `plugins-tones-1012c` on
+the private display with the demo NRO
+`2f9fcdd730b14ab22fc6c19cfc0a6fe9f61d072379b1cb30a695e43b8f004b60`: on the
+main menu the Status row rendered Degraded in yellow and Ready in green and
+Enabled turned green after Right; Right on the read-only Status row changed
+nothing. In a Lucario-versus-CPU match the compact strip showed On in green
+and Failed in red while the status cycled. Profile restored, unit exited 0.
+Evidence: tangent root `result-tones-1012c.json`, `screenshots/plugins-tones-1012c-*`,
+`run-evidence/plugins-tones-1012c/`. Not on hardware.
+
+### Window chord fix — 2026-10-12
+
+Hardware logs from 9d08 (code 98 records in `switch-mtp/collect-1012/events.log`)
+showed every failed L+R+Down attempt with no Down edge: the D-pad registered a
+frame before both bumpers, so the old "Down edge while the chord is held" rule
+ignored it, while ZL+ZR+Down worked because the triggers register later. The
+Debug attempts (L+R+Minus, ZL+ZR+Minus) never had Down in the same sample.
+Commands now fire when the whole combination is held, in any order, once per
+hold (`overlay::CommandLatch`); chord + Plus/Minus alone toggles Debug, and
+Debug stays open while the modifier is held. 283 host tests pass with the new
+regression; gates as above. Hardware retest pending. Note: because the game
+and native CSS panes still see Down before the bumpers, a Down-first chord on
+character select can nudge the native profile row once before the window
+opens; the old gesture (bumpers first) avoids it.
+
 ### DBI USB MTP installation of 9d08 — 2026-10-12 14:00Z
 
 The operator authorized the install with Smash closed and DBI's USB MTP

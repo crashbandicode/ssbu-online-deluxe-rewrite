@@ -1,4 +1,4 @@
-//! Rust consumer SDK for the Online Deluxe plugin registration ABI (version 1).
+//! Rust consumer SDK for the Online Deluxe plugin registration ABI.
 //!
 //! A separately built Skyline NRO describes its menu options with a
 //! [`PluginSpec`], supplies a [`PluginHandler`] and calls [`register`]. The
@@ -26,19 +26,60 @@
 //! rewrite that `key=value` INI after each menu edit the handler answers with
 //! `Applied` or `Pending`. The key is [`OptionSpec::config_key`] or the option
 //! id; the value is the matching entry of [`OptionSpec::values`] or the decimal
-//! choice index. Read-only (single-choice) options and options with
-//! [`OptionSpec::no_persist`] are never written. The host never reads the file:
-//! the plugin loads it at startup and reports the result through `current`.
+//! choice index. Read-only options (a single choice, or [`OptionSpec::read_only`])
+//! and options with [`OptionSpec::no_persist`] are never written. The host never
+//! reads the file: the plugin loads it at startup and reports the result
+//! through `current`.
+//!
+//! # Descriptor version
+//!
+//! [`register`] sends descriptor version [`abi::ABI_VERSION`] (2). Each option
+//! is an [`abi::OptionDesc`] (56 bytes) with optional [`Tone`] bytes and the
+//! read-only flag. The exported host table stays version [`abi::TABLE_VERSION`]
+//! (1) under the same symbol. A host that answers `REGISTER_ERR_ABI` is retried
+//! once with descriptor version 1 ([`abi::OptionDescV1`], 48 bytes, no tones,
+//! read-only bit omitted). [`negotiated_descriptor_version`] reports which
+//! revision that host accepted.
 
 use std::ffi::{c_char, c_void, CString};
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 
 pub use deluxe_plugin_abi as abi;
 
+/// Colour the host uses for one choice's value text.
+///
+/// `None` on [`OptionSpec::tones`] is neutral for every choice. A `Some` slice
+/// has one entry per choice; the host draws the current choice in that tone in
+/// the vertical table and in the in-match strip.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Tone {
+    /// Default text colour.
+    Neutral,
+    /// Green: something is working.
+    Ok,
+    /// Yellow: degraded, or waiting on attention.
+    Warn,
+    /// Red: failed or unavailable.
+    Error,
+}
+
+impl Tone {
+    /// ABI `TONE_*` byte.
+    pub const fn code(self) -> u8 {
+        match self {
+            Tone::Neutral => abi::TONE_NEUTRAL,
+            Tone::Ok => abi::TONE_OK,
+            Tone::Warn => abi::TONE_WARN,
+            Tone::Error => abi::TONE_ERROR,
+        }
+    }
+}
+
 /// One menu option: a stable id, a display label and its ordered choices.
 ///
-/// One choice makes a read-only status row.
+/// One choice makes a read-only status row. [`Self::read_only`] does the same
+/// for a row with several choices.
 #[derive(Clone, Copy, Debug)]
 pub struct OptionSpec {
     /// Stable identifier, unique within the plugin. Lowercase ASCII, digits, `_`.
@@ -55,10 +96,18 @@ pub struct OptionSpec {
     pub values: Option<&'static [&'static str]>,
     /// Never persisted by the host even when the plugin sets a config path.
     pub no_persist: bool,
+    /// One tone per choice, or `None` for neutral text on every choice.
+    /// When `Some`, the length must equal [`Self::choices`].
+    pub tones: Option<&'static [Tone]>,
+    /// Pure status row. The host does not edit it and does not call `request`.
+    /// If a host calls `request` anyway, the SDK answers
+    /// [`RequestStatus::Rejected`].
+    pub read_only: bool,
 }
 
 impl OptionSpec {
-    /// An option with host-persistence fields defaulted (`None`/`false`).
+    /// An option with persistence, tone and read-only fields defaulted
+    /// (`None`/`false`).
     pub const fn new(
         id: &'static str,
         label: &'static str,
@@ -71,6 +120,8 @@ impl OptionSpec {
             config_key: None,
             values: None,
             no_persist: false,
+            tones: None,
+            read_only: false,
         }
     }
 }
@@ -183,6 +234,33 @@ impl RegisterError {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Handle(pub i32);
 
+/// `(host handle, descriptor version the host accepted)`.
+static NEGOTIATED_VERSIONS: Mutex<Vec<(i32, u32)>> = Mutex::new(Vec::new());
+
+fn remember_negotiated(handle: i32, version: u32) {
+    if let Ok(mut versions) = NEGOTIATED_VERSIONS.lock() {
+        versions.push((handle, version));
+    }
+}
+
+/// Descriptor revision the host accepted for `handle`.
+///
+/// `Some(2)` is the current [`abi::OptionDesc`] layout (tones and the read-only
+/// flag). `Some(1)` means the host answered [`abi::REGISTER_ERR_ABI`] and the
+/// SDK retried once with [`abi::OptionDescV1`]: tones are omitted and
+/// [`abi::OPTION_FLAG_READ_ONLY`] is not set, because a version 1 host rejects
+/// unknown flag bits. `None` when this process did not register `handle`
+/// (or the record lock was poisoned).
+pub fn negotiated_descriptor_version(handle: Handle) -> Option<u32> {
+    NEGOTIATED_VERSIONS
+        .lock()
+        .ok()?
+        .iter()
+        .rev()
+        .find(|(index, _)| *index == handle.0)
+        .map(|(_, version)| *version)
+}
+
 /// Runtime lookup of the host table; `None` when absent or incompatible.
 ///
 /// Always `None` on non-switch builds. The result is cached after the first call.
@@ -239,6 +317,13 @@ pub fn register<H: PluginHandler>(spec: &PluginSpec, handler: H) -> Result<Handl
 /// failure calls the host. On any failure the handler is dropped; on success it
 /// is leaked for the life of the process because the host keeps its pointer.
 ///
+/// The first descriptor is version [`abi::ABI_VERSION`]. If the host returns
+/// [`abi::REGISTER_ERR_ABI`], this retries once with a version 1 descriptor
+/// (no tones, and without [`abi::OPTION_FLAG_READ_ONLY`], which a version 1
+/// host rejects). Only that final result decides whether the handler is leaked
+/// or reclaimed. The accepted revision is recorded for
+/// [`negotiated_descriptor_version`].
+///
 /// # Safety
 ///
 /// `api` must be a valid version 1 table: its `register` function pointer must
@@ -264,11 +349,7 @@ pub unsafe fn register_with<H: PluginHandler>(
             label: option.label.as_ptr(),
             choices: option.choice_ptrs.as_ptr(),
             choice_count: option.choice_ptrs.len() as u32,
-            flags: if option_spec.no_persist {
-                abi::OPTION_FLAG_NO_PERSIST
-            } else {
-                0
-            },
+            flags: option_flags(option_spec, true),
             config_key: option
                 .config_key
                 .as_ref()
@@ -278,6 +359,11 @@ pub unsafe fn register_with<H: PluginHandler>(
             } else {
                 option.value_ptrs.as_ptr()
             },
+            choice_tones: if option.tones.is_empty() {
+                std::ptr::null()
+            } else {
+                option.tones.as_ptr()
+            },
         })
         .collect();
     let choice_counts = spec
@@ -285,11 +371,13 @@ pub unsafe fn register_with<H: PluginHandler>(
         .iter()
         .map(|option| option.choices.len() as u32)
         .collect();
+    let read_only = spec.options.iter().map(|option| option.read_only).collect();
     let user = Box::into_raw(Box::new(Registration {
         handler,
         choice_counts,
+        read_only,
     }));
-    let desc = abi::PluginDesc {
+    let mut desc = abi::PluginDesc {
         struct_size: std::mem::size_of::<abi::PluginDesc>() as u32,
         abi_version: abi::ABI_VERSION,
         id: strings.id.as_ptr(),
@@ -307,8 +395,21 @@ pub unsafe fn register_with<H: PluginHandler>(
     };
     // SAFETY: `desc` and every string it points at outlive this call; the
     // caller guarantees `api.register` follows the ABI.
-    let result = unsafe { (api.register)(&desc) };
+    let mut result = unsafe { (api.register)(&desc) };
+    let mut accepted = abi::ABI_VERSION;
+    if result == abi::REGISTER_ERR_ABI {
+        let v1_options = v1_option_descs(&strings, spec);
+        desc.abi_version = 1;
+        desc.options = v1_options.as_ptr().cast();
+        desc.option_count = v1_options.len() as u32;
+        // SAFETY: same contract as the first call. `v1_options` and `strings`
+        // stay alive until this call returns. The handler box is still ours
+        // because the host refused the version 2 descriptor.
+        result = unsafe { (api.register)(&desc) };
+        accepted = 1;
+    }
     if result >= 0 {
+        remember_negotiated(result, accepted);
         Ok(Handle(result))
     } else {
         // SAFETY: the host refused the registration, so it holds no copy of
@@ -322,6 +423,7 @@ pub unsafe fn register_with<H: PluginHandler>(
 struct Registration<H> {
     handler: H,
     choice_counts: Vec<u32>,
+    read_only: Vec<bool>,
 }
 
 /// Owns the NUL-terminated copies handed to the host for one `register` call.
@@ -343,6 +445,10 @@ struct OptionStrings {
     // the option has no value table.
     _values: Vec<CString>,
     value_ptrs: Vec<*const c_char>,
+    // Tone bytes for a version 2 descriptor. Empty means neutral (`choice_tones`
+    // is null). Kept alive for the `register` call, including a version 1 retry
+    // that does not point at them.
+    tones: Vec<u8>,
 }
 
 impl DescStrings {
@@ -362,6 +468,12 @@ impl DescStrings {
                 .map(|value| CString::new(*value).ok())
                 .collect::<Option<Vec<_>>>()?;
             let value_ptrs = values.iter().map(|value| value.as_ptr()).collect();
+            let tones = option
+                .tones
+                .unwrap_or_default()
+                .iter()
+                .map(|tone| tone.code())
+                .collect();
             options.push(OptionStrings {
                 id: CString::new(option.id).ok()?,
                 label: CString::new(option.label).ok()?,
@@ -370,6 +482,7 @@ impl DescStrings {
                 config_key: optional_cstring(option.config_key)?,
                 _values: values,
                 value_ptrs,
+                tones,
             });
         }
         Some(Self {
@@ -421,6 +534,9 @@ fn spec_is_valid(spec: &PluginSpec) -> bool {
                         .iter()
                         .all(|value| abi::valid_value(value.as_bytes()))
             })
+            && option
+                .tones
+                .is_none_or(|tones| tones.len() == option.choices.len())
             && !spec.options[..index]
                 .iter()
                 .any(|earlier| earlier.id == option.id)
@@ -453,12 +569,62 @@ unsafe extern "C" fn request_tramp<H: PluginHandler>(
     // SAFETY: `user` is the `Registration<H>` leaked by `register_with`.
     let registration = unsafe { &*user.cast::<Registration<H>>() };
     match registration.choice_counts.get(option as usize) {
-        Some(&choice_count) if choice < choice_count => registration
-            .handler
-            .request(option as usize, choice as usize)
-            .code(),
+        Some(&choice_count) if choice < choice_count => {
+            if registration
+                .read_only
+                .get(option as usize)
+                .copied()
+                .unwrap_or(false)
+            {
+                abi::REQUEST_REJECTED
+            } else {
+                registration
+                    .handler
+                    .request(option as usize, choice as usize)
+                    .code()
+            }
+        }
         _ => abi::REQUEST_REJECTED,
     }
+}
+
+/// `OPTION_FLAG_*` bits for one option. Version 1 hosts reject unknown bits, so
+/// the read-only flag is included only for a version 2 descriptor.
+fn option_flags(spec: &OptionSpec, include_read_only: bool) -> u32 {
+    let mut flags = 0;
+    if spec.no_persist {
+        flags |= abi::OPTION_FLAG_NO_PERSIST;
+    }
+    if include_read_only && spec.read_only {
+        flags |= abi::OPTION_FLAG_READ_ONLY;
+    }
+    flags
+}
+
+/// Version 1 rows. `choice_values` is spelled `*const c_char` on
+/// [`abi::OptionDescV1`]; it still points at the `*const c_char` table.
+fn v1_option_descs(strings: &DescStrings, spec: &PluginSpec) -> Vec<abi::OptionDescV1> {
+    strings
+        .options
+        .iter()
+        .zip(spec.options)
+        .map(|(option, option_spec)| abi::OptionDescV1 {
+            id: option.id.as_ptr(),
+            label: option.label.as_ptr(),
+            choices: option.choice_ptrs.as_ptr(),
+            choice_count: option.choice_ptrs.len() as u32,
+            flags: option_flags(option_spec, false),
+            config_key: option
+                .config_key
+                .as_ref()
+                .map_or(std::ptr::null(), |key| key.as_ptr()),
+            choice_values: if option.value_ptrs.is_empty() {
+                std::ptr::null()
+            } else {
+                option.value_ptrs.as_ptr().cast::<c_char>()
+            },
+        })
+        .collect()
 }
 
 /// Ready-made handler: one atomic per option holding the current choice index.
@@ -541,6 +707,7 @@ mod tests {
         flags: u32,
         config_key: Option<String>,
         values: Option<Vec<String>>,
+        tones: Option<Vec<u8>>,
     }
 
     #[derive(Clone)]
@@ -561,6 +728,8 @@ mod tests {
         static SEEN: RefCell<Option<Seen>> = const { RefCell::new(None) };
         static RESULT: Cell<i32> = const { Cell::new(0) };
         static CALLS: Cell<u32> = const { Cell::new(0) };
+        static REJECT_V2: Cell<bool> = const { Cell::new(false) };
+        static VERSIONS: RefCell<Vec<u32>> = const { RefCell::new(Vec::new()) };
     }
 
     // Copies a NUL-terminated string. `CStr` scans for the terminator, so the
@@ -575,29 +744,70 @@ mod tests {
         (!ptr.is_null()).then(|| unsafe { copy(ptr) })
     }
 
+    unsafe fn seen_choices(choices: *const *const c_char, count: u32) -> Vec<String> {
+        let mut out = Vec::with_capacity(count as usize);
+        for choice in 0..count as usize {
+            out.push(unsafe { copy(*choices.add(choice)) });
+        }
+        out
+    }
+
+    unsafe fn seen_values(values: *const *const c_char, count: u32) -> Option<Vec<String>> {
+        (!values.is_null()).then(|| {
+            (0..count as usize)
+                .map(|value| unsafe { copy(*values.add(value)) })
+                .collect()
+        })
+    }
+
+    unsafe fn seen_v2(option: &abi::OptionDesc) -> SeenOption {
+        let tones = (!option.choice_tones.is_null()).then(|| {
+            (0..option.choice_count as usize)
+                .map(|index| unsafe { *option.choice_tones.add(index) })
+                .collect()
+        });
+        SeenOption {
+            id: unsafe { copy(option.id) },
+            label: unsafe { copy(option.label) },
+            choices: unsafe { seen_choices(option.choices, option.choice_count) },
+            flags: option.flags,
+            config_key: unsafe { copy_opt(option.config_key) },
+            values: unsafe { seen_values(option.choice_values, option.choice_count) },
+            tones,
+        }
+    }
+
+    unsafe fn seen_v1(option: &abi::OptionDescV1) -> SeenOption {
+        SeenOption {
+            id: unsafe { copy(option.id) },
+            label: unsafe { copy(option.label) },
+            choices: unsafe { seen_choices(option.choices, option.choice_count) },
+            flags: option.flags,
+            config_key: unsafe { copy_opt(option.config_key) },
+            values: unsafe {
+                seen_values(
+                    option.choice_values.cast::<*const c_char>(),
+                    option.choice_count,
+                )
+            },
+            tones: None,
+        }
+    }
+
     unsafe extern "C" fn fake_register(desc: *const abi::PluginDesc) -> i32 {
         CALLS.with(|calls| calls.set(calls.get() + 1));
         let desc = unsafe { &*desc };
+        VERSIONS.with(|slot| slot.borrow_mut().push(desc.abi_version));
         let mut options = Vec::new();
-        for index in 0..desc.option_count as usize {
-            let option = unsafe { &*desc.options.add(index) };
-            let mut choices = Vec::new();
-            for choice in 0..option.choice_count as usize {
-                choices.push(unsafe { copy(*option.choices.add(choice)) });
+        if desc.abi_version == 1 {
+            let rows = desc.options.cast::<abi::OptionDescV1>();
+            for index in 0..desc.option_count as usize {
+                options.push(unsafe { seen_v1(&*rows.add(index)) });
             }
-            let values = (!option.choice_values.is_null()).then(|| {
-                (0..option.choice_count as usize)
-                    .map(|value| unsafe { copy(*option.choice_values.add(value)) })
-                    .collect::<Vec<_>>()
-            });
-            options.push(SeenOption {
-                id: unsafe { copy(option.id) },
-                label: unsafe { copy(option.label) },
-                choices,
-                flags: option.flags,
-                config_key: unsafe { copy_opt(option.config_key) },
-                values,
-            });
+        } else {
+            for index in 0..desc.option_count as usize {
+                options.push(unsafe { seen_v2(&*desc.options.add(index)) });
+            }
         }
         let seen = Seen {
             struct_size: desc.struct_size,
@@ -612,6 +822,9 @@ mod tests {
             request: desc.request,
         };
         SEEN.with(|slot| *slot.borrow_mut() = Some(seen));
+        if REJECT_V2.with(Cell::get) && desc.abi_version == abi::ABI_VERSION {
+            return abi::REGISTER_ERR_ABI;
+        }
         RESULT.with(Cell::get)
     }
 
@@ -637,10 +850,16 @@ mod tests {
         RESULT.with(|cell| cell.set(result));
         CALLS.with(|cell| cell.set(0));
         SEEN.with(|slot| *slot.borrow_mut() = None);
+        REJECT_V2.with(|cell| cell.set(false));
+        VERSIONS.with(|slot| slot.borrow_mut().clear());
     }
 
     fn calls() -> u32 {
         CALLS.with(Cell::get)
+    }
+
+    fn versions() -> Vec<u32> {
+        VERSIONS.with(|slot| slot.borrow().clone())
     }
 
     fn seen() -> Seen {
@@ -663,6 +882,8 @@ mod tests {
             config_key: Some("enabled_key"),
             values: Some(&["off", "on"]),
             no_persist: false,
+            tones: None,
+            read_only: false,
         },
         OptionSpec {
             id: "mode",
@@ -671,6 +892,8 @@ mod tests {
             config_key: None,
             values: Some(&["a", "b", "c"]),
             no_persist: false,
+            tones: None,
+            read_only: false,
         },
         OptionSpec {
             id: "status",
@@ -679,6 +902,8 @@ mod tests {
             config_key: None,
             values: None,
             no_persist: true,
+            tones: None,
+            read_only: false,
         },
     ];
 
@@ -717,7 +942,7 @@ mod tests {
 
     fn register_probe(state: &Arc<State>) -> Seen {
         reset(7);
-        let table = fake_table(abi::ABI_VERSION);
+        let table = fake_table(abi::TABLE_VERSION);
         let handle = unsafe { register_with(&table, &SPEC, Probe(state.clone())) };
         assert_eq!(handle, Ok(Handle(7)));
         seen()
@@ -750,7 +975,8 @@ mod tests {
 
     #[test]
     fn descriptor_sizes_match_the_abi() {
-        assert_eq!(std::mem::size_of::<abi::OptionDesc>(), 48);
+        assert_eq!(std::mem::size_of::<abi::OptionDesc>(), 56);
+        assert_eq!(std::mem::size_of::<abi::OptionDescV1>(), 48);
         assert_eq!(std::mem::size_of::<abi::PluginDesc>(), 72);
         let state = Arc::new(State::default());
         assert_eq!(register_probe(&state).struct_size, 72);
@@ -770,7 +996,7 @@ mod tests {
     #[test]
     fn config_fields_arrive_as_nul_terminated_strings() {
         reset(4);
-        let table = fake_table(abi::ABI_VERSION);
+        let table = fake_table(abi::TABLE_VERSION);
         let state = Arc::new(State::default());
         let result = unsafe { register_with(&table, &PERSIST_SPEC, Probe(state)) };
         assert_eq!(result, Ok(Handle(4)));
@@ -807,6 +1033,8 @@ mod tests {
         assert_eq!(option.config_key, None);
         assert_eq!(option.values, None);
         assert!(!option.no_persist);
+        assert_eq!(option.tones, None);
+        assert!(!option.read_only);
         static OPTIONS: [OptionSpec; 1] = [OptionSpec::new("id", "Label", &["x"])];
         let spec = PluginSpec::new("plug", "Plug", &OPTIONS);
         assert_eq!(spec.id, "plug");
@@ -887,7 +1115,7 @@ mod tests {
             with_path(long_path),
         ];
         assert_eq!(long_path.len(), abi::MAX_PATH_LEN + 1);
-        let table = fake_table(abi::ABI_VERSION);
+        let table = fake_table(abi::TABLE_VERSION);
         for (index, spec) in specs.iter().enumerate() {
             reset(0);
             let state = Arc::new(State::default());
@@ -997,7 +1225,7 @@ mod tests {
     fn atomic_options_register_by_reference() {
         static OPTIONS: AtomicOptions<2> = AtomicOptions::new([0, 1]);
         reset(0);
-        let table = fake_table(abi::ABI_VERSION);
+        let table = fake_table(abi::TABLE_VERSION);
         let handle = unsafe { register_with(&table, &SPEC, &OPTIONS) };
         assert_eq!(handle, Ok(Handle(0)));
         let seen = seen();
@@ -1064,7 +1292,7 @@ mod tests {
 
     #[test]
     fn local_validation_rejects_without_calling_the_host() {
-        let table = fake_table(abi::ABI_VERSION);
+        let table = fake_table(abi::TABLE_VERSION);
         let specs = bad_specs();
         assert_eq!(specs.len(), 19);
         for (index, spec) in specs.iter().enumerate() {
@@ -1103,7 +1331,7 @@ mod tests {
             &OPTIONS,
         );
         reset(3);
-        let table = fake_table(abi::ABI_VERSION);
+        let table = fake_table(abi::TABLE_VERSION);
         let state = Arc::new(State::default());
         let result = unsafe { register_with(&table, &spec, Probe(state)) };
         assert_eq!(result, Ok(Handle(3)));
@@ -1132,7 +1360,7 @@ mod tests {
             unsafe { register_with(&wrong_version, &SPEC, Probe(state.clone())) },
             Err(RegisterError::HostIncompatible)
         );
-        let mut wrong_size = fake_table(abi::ABI_VERSION);
+        let mut wrong_size = fake_table(abi::TABLE_VERSION);
         wrong_size.struct_size -= 8;
         assert_eq!(
             unsafe { register_with(&wrong_size, &SPEC, Probe(state.clone())) },
@@ -1144,7 +1372,7 @@ mod tests {
 
     #[test]
     fn host_error_codes_map_and_reclaim_the_handler() {
-        let table = fake_table(abi::ABI_VERSION);
+        let table = fake_table(abi::TABLE_VERSION);
         for (code, expected) in [
             (abi::REGISTER_ERR_NULL, RegisterError::Null),
             (abi::REGISTER_ERR_ABI, RegisterError::Abi),
@@ -1158,7 +1386,11 @@ mod tests {
             let state = Arc::new(State::default());
             let result = unsafe { register_with(&table, &SPEC, Probe(state.clone())) };
             assert_eq!(result, Err(expected), "code {code}");
-            assert_eq!(calls(), 1);
+            let expected_calls = if code == abi::REGISTER_ERR_ABI { 2 } else { 1 };
+            assert_eq!(calls(), expected_calls, "code {code}");
+            if code == abi::REGISTER_ERR_ABI {
+                assert_eq!(versions(), vec![abi::ABI_VERSION, 1]);
+            }
             assert_eq!(
                 Arc::strong_count(&state),
                 1,
@@ -1177,12 +1409,173 @@ mod tests {
 
     #[test]
     fn host_status_and_build_are_reachable_through_a_table() {
-        let table = fake_table(abi::ABI_VERSION);
+        let table = fake_table(abi::TABLE_VERSION);
         assert_eq!(
             unsafe { (table.host_status)() },
             abi::HOST_STATUS_MENU_ACTIVE
         );
         let build = unsafe { CStr::from_ptr((table.host_build)()) };
         assert_eq!(build.to_str().unwrap(), "test-host");
+    }
+
+    static ENABLED_TONES: [Tone; 2] = [Tone::Neutral, Tone::Ok];
+    static STATUS_TONES: [Tone; 3] = [Tone::Ok, Tone::Warn, Tone::Error];
+    static TONE_OPTIONS: [OptionSpec; 3] = [
+        OptionSpec {
+            values: Some(&["off", "on"]),
+            tones: Some(&ENABLED_TONES),
+            ..OptionSpec::new("enabled", "Enabled", &["Off", "On"])
+        },
+        OptionSpec::new("mode", "Mode", &["A", "B", "C"]),
+        OptionSpec {
+            no_persist: true,
+            tones: Some(&STATUS_TONES),
+            read_only: true,
+            ..OptionSpec::new("status", "Status", &["Ready", "Degraded", "Failed"])
+        },
+    ];
+    static TONE_SPEC: PluginSpec = PluginSpec::new("tones", "Tones", &TONE_OPTIONS);
+
+    static SHORT_TONES: [Tone; 1] = [Tone::Ok];
+    static LONG_TONES: [Tone; 3] = [Tone::Ok, Tone::Warn, Tone::Error];
+    static OFF_ON: [&str; 2] = ["Off", "On"];
+    static SHORT_TONE_OPTIONS: [OptionSpec; 1] = [OptionSpec {
+        tones: Some(&SHORT_TONES),
+        ..OptionSpec::new("enabled", "Enabled", &OFF_ON)
+    }];
+    static LONG_TONE_OPTIONS: [OptionSpec; 1] = [OptionSpec {
+        tones: Some(&LONG_TONES),
+        ..OptionSpec::new("enabled", "Enabled", &OFF_ON)
+    }];
+
+    #[test]
+    fn v2_descriptor_carries_tones_read_only_and_negotiated_version() {
+        assert_eq!(Tone::Neutral.code(), abi::TONE_NEUTRAL);
+        assert_eq!(Tone::Ok.code(), abi::TONE_OK);
+        assert_eq!(Tone::Warn.code(), abi::TONE_WARN);
+        assert_eq!(Tone::Error.code(), abi::TONE_ERROR);
+        reset(21);
+        let table = fake_table(abi::TABLE_VERSION);
+        let state = Arc::new(State::default());
+        let result = unsafe { register_with(&table, &TONE_SPEC, Probe(state.clone())) };
+        assert_eq!(result, Ok(Handle(21)));
+        assert_eq!(calls(), 1);
+        assert_eq!(versions(), vec![abi::ABI_VERSION]);
+        assert_eq!(
+            negotiated_descriptor_version(Handle(21)),
+            Some(abi::ABI_VERSION)
+        );
+        let seen = seen();
+        assert_eq!(seen.abi_version, 2);
+        assert_eq!(
+            seen.options[0].tones.as_deref(),
+            Some(&[abi::TONE_NEUTRAL, abi::TONE_OK][..])
+        );
+        assert_eq!(seen.options[0].flags, 0);
+        assert_eq!(
+            seen.options[0].values.as_deref(),
+            Some(&["off".to_owned(), "on".to_owned()][..])
+        );
+        assert_eq!(seen.options[1].id, "mode");
+        assert_eq!(seen.options[1].tones, None);
+        assert_eq!(seen.options[1].flags, 0);
+        assert_eq!(
+            seen.options[2].tones.as_deref(),
+            Some(&[abi::TONE_OK, abi::TONE_WARN, abi::TONE_ERROR][..])
+        );
+        assert_eq!(
+            seen.options[2].flags,
+            abi::OPTION_FLAG_NO_PERSIST | abi::OPTION_FLAG_READ_ONLY
+        );
+        assert_eq!(seen.options[2].choices, ["Ready", "Degraded", "Failed"]);
+        let request = seen.request.unwrap();
+        let current = seen.current.unwrap();
+        // In range, but the host must not be able to edit a read-only row.
+        assert_eq!(unsafe { request(seen.user, 2, 1) }, abi::REQUEST_REJECTED);
+        assert!(state.requests.lock().unwrap().is_empty());
+        // Out of range is still rejected, and still does not reach the handler.
+        assert_eq!(unsafe { request(seen.user, 2, 3) }, abi::REQUEST_REJECTED);
+        assert!(state.requests.lock().unwrap().is_empty());
+        *state.current.lock().unwrap() = Some(2);
+        assert_eq!(unsafe { current(seen.user, 2) }, 2);
+        assert_eq!(unsafe { request(seen.user, 0, 1) }, abi::REQUEST_APPLIED);
+        assert_eq!(state.requests.lock().unwrap().as_slice(), &[(0, 1)]);
+        assert_eq!(Arc::strong_count(&state), 2);
+    }
+
+    #[test]
+    fn tones_length_mismatch_is_invalid_without_calling_the_host() {
+        let table = fake_table(abi::TABLE_VERSION);
+        for (index, options) in [&SHORT_TONE_OPTIONS[..], &LONG_TONE_OPTIONS[..]]
+            .into_iter()
+            .enumerate()
+        {
+            reset(0);
+            let spec = PluginSpec::new("tones", "Tones", options);
+            let state = Arc::new(State::default());
+            let result = unsafe { register_with(&table, &spec, Probe(state.clone())) };
+            assert_eq!(result, Err(RegisterError::Invalid), "spec {index}");
+            assert_eq!(calls(), 0, "spec {index}");
+            assert_eq!(Arc::strong_count(&state), 1, "spec {index}");
+            assert_eq!(
+                register(&spec, Probe(state.clone())),
+                Err(RegisterError::Invalid),
+                "spec {index}"
+            );
+        }
+    }
+
+    #[test]
+    fn abi_error_retries_once_with_a_v1_descriptor() {
+        reset(22);
+        REJECT_V2.with(|cell| cell.set(true));
+        let table = fake_table(abi::TABLE_VERSION);
+        let state = Arc::new(State::default());
+        let result = unsafe { register_with(&table, &TONE_SPEC, Probe(state.clone())) };
+        assert_eq!(result, Ok(Handle(22)));
+        assert_eq!(calls(), 2);
+        assert_eq!(versions(), vec![abi::ABI_VERSION, 1]);
+        assert_eq!(negotiated_descriptor_version(Handle(22)), Some(1));
+        let seen = seen();
+        assert_eq!(seen.abi_version, 1);
+        assert_eq!(std::mem::size_of::<abi::OptionDescV1>(), 48);
+        assert_eq!(seen.options.len(), 3);
+        assert_eq!(seen.options[0].id, "enabled");
+        assert_eq!(seen.options[0].choices, ["Off", "On"]);
+        assert_eq!(
+            seen.options[0].values.as_deref(),
+            Some(&["off".to_owned(), "on".to_owned()][..])
+        );
+        assert_eq!(seen.options[0].flags, 0);
+        assert_eq!(seen.options[0].tones, None);
+        assert_eq!(seen.options[1].id, "mode");
+        assert_eq!(seen.options[1].choices, ["A", "B", "C"]);
+        assert_eq!(seen.options[1].flags, 0);
+        assert_eq!(seen.options[2].id, "status");
+        assert_eq!(seen.options[2].label, "Status");
+        assert_eq!(seen.options[2].choices, ["Ready", "Degraded", "Failed"]);
+        assert_eq!(seen.options[2].flags, abi::OPTION_FLAG_NO_PERSIST);
+        assert_eq!(seen.options[2].flags & abi::OPTION_FLAG_READ_ONLY, 0);
+        assert_eq!(seen.options[2].tones, None);
+        assert!(!seen.user.is_null());
+        assert!(seen.current.is_some() && seen.request.is_some());
+        assert_eq!(Arc::strong_count(&state), 2);
+        let request = seen.request.unwrap();
+        assert_eq!(unsafe { request(seen.user, 0, 1) }, abi::REQUEST_APPLIED);
+        assert_eq!(state.requests.lock().unwrap().as_slice(), &[(0, 1)]);
+    }
+
+    #[test]
+    fn abi_error_twice_yields_abi_and_reclaims_the_handler() {
+        reset(abi::REGISTER_ERR_ABI);
+        let table = fake_table(abi::TABLE_VERSION);
+        let state = Arc::new(State::default());
+        let result = unsafe { register_with(&table, &TONE_SPEC, Probe(state.clone())) };
+        assert_eq!(result, Err(RegisterError::Abi));
+        assert_eq!(calls(), 2);
+        assert_eq!(versions(), vec![abi::ABI_VERSION, 1]);
+        assert_eq!(Arc::strong_count(&state), 1);
+        // The refused attempts stored a version 1 view; nothing was recorded.
+        assert_eq!(seen().abi_version, 1);
     }
 }

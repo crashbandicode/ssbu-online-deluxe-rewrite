@@ -24,12 +24,25 @@ pub struct PluginOption {
     pub values: Option<Vec<String>>,
     /// Cleared by `OPTION_FLAG_NO_PERSIST`.
     pub persist: bool,
+    /// `TONE_*` byte per choice from a version 2 descriptor; `None` is neutral.
+    pub tones: Option<Vec<u8>>,
+    /// `OPTION_FLAG_READ_ONLY`: a status row whose value follows `current`.
+    pub locked: bool,
 }
 
 impl PluginOption {
-    /// A single choice is a status row: Left/Right do nothing.
+    /// A single choice, or a row flagged read-only, is a status row:
+    /// Left/Right do nothing and `request` is never called.
     pub fn read_only(&self) -> bool {
-        self.choices.len() <= 1
+        self.locked || self.choices.len() <= 1
+    }
+
+    /// Tone for `choice`; neutral when the plugin declared none.
+    pub fn tone_of(&self, choice: usize) -> u8 {
+        self.tones
+            .as_ref()
+            .and_then(|tones| tones.get(choice).copied())
+            .unwrap_or(abi::TONE_NEUTRAL)
     }
 
     /// Token written for `choice` when the plugin persists.
@@ -140,6 +153,8 @@ pub struct ValueText {
     pub label: String,
     /// A `Pending` request has not yet become the plugin's current answer.
     pub pending: bool,
+    /// `TONE_*` byte for the displayed choice; neutral for `Unavailable`.
+    pub tone: u8,
 }
 
 /// Registered plugins plus the host-side pending bookkeeping. The runtime uses
@@ -240,7 +255,7 @@ pub unsafe fn parse_descriptor(desc: *const abi::PluginDesc) -> Result<ParsedPlu
     }
     let desc = &*desc;
     if desc.struct_size as usize != core::mem::size_of::<abi::PluginDesc>()
-        || desc.abi_version != abi::ABI_VERSION
+        || !abi::descriptor_version_supported(desc.abi_version)
     {
         return Err(abi::REGISTER_ERR_ABI);
     }
@@ -268,10 +283,23 @@ pub unsafe fn parse_descriptor(desc: *const abi::PluginDesc) -> Result<ParsedPlu
     if desc.options.is_null() {
         return Err(abi::REGISTER_ERR_NULL);
     }
-    let raw_options = std::slice::from_raw_parts(desc.options, option_count);
+    // Version 1 rows are 48 bytes without tones; widen them to the current layout.
+    let raw_options: Vec<abi::OptionDesc> = if desc.abi_version == 1 {
+        std::slice::from_raw_parts(desc.options.cast::<abi::OptionDescV1>(), option_count)
+            .iter()
+            .map(|raw| raw.widen())
+            .collect()
+    } else {
+        std::slice::from_raw_parts(desc.options, option_count).to_vec()
+    };
+    let allowed_flags = if desc.abi_version >= 2 {
+        abi::OPTION_FLAG_NO_PERSIST | abi::OPTION_FLAG_READ_ONLY
+    } else {
+        abi::OPTION_FLAG_NO_PERSIST
+    };
     let mut options = Vec::with_capacity(option_count);
-    for raw in raw_options {
-        if raw.flags & !abi::OPTION_FLAG_NO_PERSIST != 0 {
+    for raw in &raw_options {
+        if raw.flags & !allowed_flags != 0 {
             return Err(abi::REGISTER_ERR_INVALID);
         }
         let option_id = owned_id(raw.id)?;
@@ -306,13 +334,26 @@ pub unsafe fn parse_descriptor(desc: *const abi::PluginDesc) -> Result<ParsedPlu
             }
             Some(values)
         };
+        let tones = if raw.choice_tones.is_null() {
+            None
+        } else {
+            let bytes = std::slice::from_raw_parts(raw.choice_tones, choice_count);
+            if !abi::valid_tones(bytes) {
+                return Err(abi::REGISTER_ERR_INVALID);
+            }
+            Some(bytes.to_vec())
+        };
+        let locked = raw.flags & abi::OPTION_FLAG_READ_ONLY != 0;
         options.push(PluginOption {
             id: option_id,
             label: option_label,
             choices,
             config_key,
             values,
-            persist: raw.flags & abi::OPTION_FLAG_NO_PERSIST == 0,
+            // Read-only rows are never edited, so there is nothing to persist.
+            persist: raw.flags & abi::OPTION_FLAG_NO_PERSIST == 0 && !locked,
+            tones,
+            locked,
         });
     }
     if options
@@ -463,6 +504,7 @@ impl Registry {
             return ValueText {
                 label: "Unavailable".to_owned(),
                 pending: false,
+                tone: abi::TONE_NEUTRAL,
             };
         };
         let current = plugin.current(option);
@@ -480,6 +522,7 @@ impl Registry {
                 .and_then(|index| spec.choices.get(index).cloned())
                 .unwrap_or_else(|| "Unavailable".to_owned()),
             pending,
+            tone: current.map_or(abi::TONE_NEUTRAL, |index| spec.tone_of(index)),
         }
     }
 
@@ -611,18 +654,32 @@ pub fn compact_label(plugin_label: &str, option_label: &str, option_count: usize
 
 /// One unwrapped compact row for a page of plugin fields.
 pub fn compact_line(fields: &[(String, ValueText, bool)]) -> String {
-    fields
-        .iter()
-        .map(|(label, value, selected)| {
-            format!(
-                "{}{label}:{}{}",
-                if *selected { ">" } else { "" },
-                value.label,
-                if value.pending { "~" } else { "" }
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("   ")
+    compact_segments(fields)
+        .into_iter()
+        .map(|(text, _)| text)
+        .collect()
+}
+
+/// The same row split into `(text, tone)` segments so the renderer can colour
+/// each value: `>Label:` and the separators stay neutral, the value and its
+/// pending marker take the choice's tone. Concatenating the texts gives
+/// [`compact_line`] exactly, so font fitting can use the joined string.
+pub fn compact_segments(fields: &[(String, ValueText, bool)]) -> Vec<(String, u8)> {
+    let mut segments = Vec::with_capacity(fields.len() * 3);
+    for (index, (label, value, selected)) in fields.iter().enumerate() {
+        if index > 0 {
+            segments.push(("   ".to_owned(), abi::TONE_NEUTRAL));
+        }
+        segments.push((
+            format!("{}{label}:", if *selected { ">" } else { "" }),
+            abi::TONE_NEUTRAL,
+        ));
+        segments.push((
+            format!("{}{}", value.label, if value.pending { "~" } else { "" }),
+            value.tone,
+        ));
+    }
+    segments
 }
 
 /// Process-wide registry used by the runtime export and the overlay.
@@ -637,16 +694,42 @@ pub(crate) mod testing {
     pub struct DescHolder {
         _strings: Vec<CString>,
         _choice_tables: Vec<Vec<*const c_char>>,
+        _tone_tables: Vec<Vec<u8>>,
         pub _options: Vec<abi::OptionDesc>,
+        pub _options_v1: Vec<abi::OptionDescV1>,
         pub desc: abi::PluginDesc,
     }
 
-    /// Persistence settings for one option in [`descriptor_with`].
+    impl DescHolder {
+        /// Re-points the descriptor at a version 1 (48-byte, tone-less) option
+        /// array, as an older consumer would send it.
+        pub fn as_version_1(&mut self) {
+            self._options_v1 = self
+                ._options
+                .iter()
+                .map(|o| abi::OptionDescV1 {
+                    id: o.id,
+                    label: o.label,
+                    choices: o.choices,
+                    choice_count: o.choice_count,
+                    flags: o.flags,
+                    config_key: o.config_key,
+                    choice_values: o.choice_values.cast::<c_char>(),
+                })
+                .collect();
+            self.desc.abi_version = 1;
+            self.desc.options = self._options_v1.as_ptr().cast::<abi::OptionDesc>();
+        }
+    }
+
+    /// Persistence and presentation settings for one option in [`descriptor_with`].
     #[derive(Clone, Copy, Default)]
     pub struct Persist {
         pub key: Option<&'static str>,
         pub values: Option<&'static [&'static str]>,
         pub no_persist: bool,
+        pub tones: Option<&'static [u8]>,
+        pub read_only: bool,
     }
 
     pub fn descriptor(
@@ -682,6 +765,7 @@ pub(crate) mod testing {
         let label_ptr = keep(label);
         let path_ptr = config_path.map_or(std::ptr::null(), &mut keep);
         let mut choice_tables = Vec::new();
+        let mut tone_tables: Vec<Vec<u8>> = Vec::new();
         let mut raw_options = Vec::new();
         for (index, (oid, olabel, choices)) in options.iter().enumerate() {
             let oid_ptr = keep(oid);
@@ -703,18 +787,29 @@ pub(crate) mod testing {
             } else {
                 choice_tables.last().unwrap()
             };
+            let tones_ptr = match settings.tones {
+                Some(tones) => {
+                    tone_tables.push(tones.to_vec());
+                    tone_tables.last().unwrap().as_ptr()
+                }
+                None => std::ptr::null(),
+            };
+            let mut flags = 0;
+            if settings.no_persist {
+                flags |= abi::OPTION_FLAG_NO_PERSIST;
+            }
+            if settings.read_only {
+                flags |= abi::OPTION_FLAG_READ_ONLY;
+            }
             raw_options.push(abi::OptionDesc {
                 id: oid_ptr,
                 label: olabel_ptr,
                 choices: table.as_ptr(),
                 choice_count: table.len() as u32,
-                flags: if settings.no_persist {
-                    abi::OPTION_FLAG_NO_PERSIST
-                } else {
-                    0
-                },
+                flags,
                 config_key: key_ptr,
                 choice_values: values_ptr,
+                choice_tones: tones_ptr,
             });
         }
         let desc = abi::PluginDesc {
@@ -733,7 +828,9 @@ pub(crate) mod testing {
         DescHolder {
             _strings: strings,
             _choice_tables: choice_tables,
+            _tone_tables: tone_tables,
             _options: raw_options,
+            _options_v1: Vec::new(),
             desc,
         }
     }
@@ -885,7 +982,12 @@ mod tests {
             Some(fake_current),
             Some(fake_request),
         );
-        holder.desc.abi_version = 2;
+        holder.desc.abi_version = abi::ABI_VERSION + 1;
+        assert_eq!(
+            unsafe { registry.register_raw(&holder.desc) },
+            abi::REGISTER_ERR_ABI
+        );
+        holder.desc.abi_version = 0;
         assert_eq!(
             unsafe { registry.register_raw(&holder.desc) },
             abi::REGISTER_ERR_ABI
@@ -1005,7 +1107,8 @@ mod tests {
             registry.value(0, &plugin, 0),
             ValueText {
                 label: "Off".to_owned(),
-                pending: false
+                pending: false,
+                tone: abi::TONE_NEUTRAL,
             }
         );
         let step = registry.step(0, 0, 1).unwrap();
@@ -1058,7 +1161,8 @@ mod tests {
             registry.value(0, &plugins[0], 0),
             ValueText {
                 label: "On".to_owned(),
-                pending: true
+                pending: true,
+                tone: abi::TONE_NEUTRAL,
             }
         );
         PENDING.values[0].store(2, Ordering::Relaxed);
@@ -1066,7 +1170,8 @@ mod tests {
             registry.value(0, &plugins[0], 0),
             ValueText {
                 label: "Auto".to_owned(),
-                pending: false
+                pending: false,
+                tone: abi::TONE_NEUTRAL,
             }
         );
         PENDING.values[0].store(1, Ordering::Relaxed);
@@ -1116,14 +1221,13 @@ mod tests {
                 Persist {
                     key: Some("record_enabled"),
                     values: Some(&["off", "on"]),
-                    no_persist: false,
+                    ..Persist::default()
                 },
                 Persist::default(),
                 Persist::default(),
                 Persist {
-                    key: None,
-                    values: None,
                     no_persist: true,
+                    ..Persist::default()
                 },
             ],
             fake as *const FakePlugin as *mut c_void,
@@ -1232,16 +1336,14 @@ mod tests {
                 Some("sd:/ok.ini"),
                 Persist {
                     key: Some("Bad Key"),
-                    values: None,
-                    no_persist: false,
+                    ..Persist::default()
                 },
             ),
             (
                 Some("sd:/ok.ini"),
                 Persist {
-                    key: None,
                     values: Some(&["o n", "off"]),
-                    no_persist: false,
+                    ..Persist::default()
                 },
             ),
         ] {
@@ -1270,13 +1372,11 @@ mod tests {
             &[
                 Persist {
                     key: Some("same"),
-                    values: None,
-                    no_persist: false,
+                    ..Persist::default()
                 },
                 Persist {
                     key: Some("same"),
-                    values: None,
-                    no_persist: false,
+                    ..Persist::default()
                 },
             ],
             user,
@@ -1295,12 +1395,174 @@ mod tests {
             Some(fake_current),
             Some(fake_request),
         );
-        holder._options[0].flags = 2;
+        // Bit 2 is READ_ONLY in version 2; bit 3 is still unknown.
+        holder._options[0].flags = 1 << 2;
         assert_eq!(
             unsafe { registry.register_raw(&holder.desc) },
             abi::REGISTER_ERR_INVALID
         );
         assert_eq!(registry.count(), 0);
+    }
+
+    static TONED: FakePlugin = FakePlugin::new([1, 2, 0, 0], abi::REQUEST_APPLIED);
+
+    #[test]
+    fn version_two_tones_and_read_only_rows_render_and_lock_as_declared() {
+        let registry = Registry::new();
+        let user = &TONED as *const FakePlugin as *mut c_void;
+        let holder = descriptor_with(
+            "link",
+            "Link",
+            &[
+                ("enabled", "Enabled", &["Off", "On"]),
+                ("health", "Health", &["Ok", "Warn", "Fail"]),
+                ("plain", "Plain", &["A", "B"]),
+            ],
+            None,
+            &[
+                Persist {
+                    tones: Some(&[abi::TONE_NEUTRAL, abi::TONE_OK]),
+                    ..Persist::default()
+                },
+                Persist {
+                    tones: Some(&[abi::TONE_OK, abi::TONE_WARN, abi::TONE_ERROR]),
+                    read_only: true,
+                    ..Persist::default()
+                },
+                Persist::default(),
+            ],
+            user,
+            Some(fake_current),
+            Some(fake_request),
+        );
+        assert_eq!(holder.desc.abi_version, 2);
+        assert_eq!(unsafe { registry.register_raw(&holder.desc) }, 0);
+        let plugin = registry.snapshot()[0].clone();
+        assert_eq!(plugin.options[0].tone_of(1), abi::TONE_OK);
+        assert_eq!(plugin.options[0].tone_of(0), abi::TONE_NEUTRAL);
+        assert_eq!(plugin.options[2].tone_of(1), abi::TONE_NEUTRAL);
+        assert!(plugin.options[1].read_only());
+        assert!(plugin.options[1].locked);
+        assert!(!plugin.options[1].persist);
+        assert!(!plugin.options[0].read_only());
+        let enabled = registry.value(0, &plugin, 0);
+        assert_eq!((enabled.label.as_str(), enabled.tone), ("On", abi::TONE_OK));
+        let health = registry.value(0, &plugin, 1);
+        assert_eq!(
+            (health.label.as_str(), health.tone),
+            ("Fail", abi::TONE_ERROR)
+        );
+        // Read-only: no request reaches the plugin.
+        assert_eq!(registry.step(0, 1, 1), None);
+        assert!(TONED.requests.lock().unwrap().is_empty());
+        // Plain rows still edit.
+        assert_eq!(registry.step(0, 2, 1).unwrap().requested, 1);
+        TONED.values[2].store(0, Ordering::Relaxed);
+
+        let fields = vec![
+            ("Link.Enabled".to_owned(), enabled, true),
+            ("Link.Health".to_owned(), health, false),
+        ];
+        let segments = compact_segments(&fields);
+        assert_eq!(
+            segments,
+            vec![
+                (">Link.Enabled:".to_owned(), abi::TONE_NEUTRAL),
+                ("On".to_owned(), abi::TONE_OK),
+                ("   ".to_owned(), abi::TONE_NEUTRAL),
+                ("Link.Health:".to_owned(), abi::TONE_NEUTRAL),
+                ("Fail".to_owned(), abi::TONE_ERROR),
+            ]
+        );
+        assert_eq!(compact_line(&fields), ">Link.Enabled:On   Link.Health:Fail");
+    }
+
+    #[test]
+    fn version_one_descriptors_still_register_without_tones() {
+        let registry = Registry::new();
+        let user = &TONED as *const FakePlugin as *mut c_void;
+        let mut holder = descriptor_with(
+            "old",
+            "Old",
+            &[
+                ("enabled", "Enabled", &["Off", "On"]),
+                ("mode", "Mode", &["A", "B"]),
+            ],
+            Some("sd:/ultimate/old/config.ini"),
+            &[
+                Persist {
+                    key: Some("enabled"),
+                    values: Some(&["off", "on"]),
+                    ..Persist::default()
+                },
+                Persist {
+                    no_persist: true,
+                    ..Persist::default()
+                },
+            ],
+            user,
+            Some(fake_current),
+            Some(fake_request),
+        );
+        holder.as_version_1();
+        assert_eq!(holder.desc.abi_version, 1);
+        assert_eq!(unsafe { registry.register_raw(&holder.desc) }, 0);
+        let plugin = registry.snapshot()[0].clone();
+        assert_eq!(plugin.options.len(), 2);
+        assert_eq!(plugin.options[0].config_key, "enabled");
+        assert_eq!(plugin.options[0].persisted_value(1), "on");
+        assert_eq!(plugin.options[0].tones, None);
+        assert!(!plugin.options[1].persist);
+        assert_eq!(registry.value(0, &plugin, 0).tone, abi::TONE_NEUTRAL);
+        assert_eq!(
+            plugin.config_path.as_deref(),
+            Some("sd:/ultimate/old/config.ini")
+        );
+
+        // A version 1 descriptor may not use version 2 flag bits.
+        let mut flagged = descriptor_with(
+            "old2",
+            "Old2",
+            &[("health", "Health", &["Ok", "Fail"])],
+            None,
+            &[Persist {
+                read_only: true,
+                ..Persist::default()
+            }],
+            user,
+            Some(fake_current),
+            Some(fake_request),
+        );
+        flagged.as_version_1();
+        assert_eq!(
+            unsafe { registry.register_raw(&flagged.desc) },
+            abi::REGISTER_ERR_INVALID
+        );
+        // Unknown descriptor versions are refused as ABI errors.
+        flagged.desc.abi_version = 3;
+        assert_eq!(
+            unsafe { registry.register_raw(&flagged.desc) },
+            abi::REGISTER_ERR_ABI
+        );
+        // Bad tone bytes are invalid.
+        let bad = descriptor_with(
+            "bad",
+            "Bad",
+            &[("health", "Health", &["Ok", "Fail"])],
+            None,
+            &[Persist {
+                tones: Some(&[abi::TONE_OK, 9]),
+                ..Persist::default()
+            }],
+            user,
+            Some(fake_current),
+            Some(fake_request),
+        );
+        assert_eq!(
+            unsafe { registry.register_raw(&bad.desc) },
+            abi::REGISTER_ERR_INVALID
+        );
+        assert_eq!(registry.count(), 1);
     }
 
     #[test]
@@ -1361,6 +1623,7 @@ mod tests {
                 ValueText {
                     label: "On".to_owned(),
                     pending: true,
+                    tone: abi::TONE_NEUTRAL,
                 },
                 true,
             ),
@@ -1369,6 +1632,7 @@ mod tests {
                 ValueText {
                     label: "B".to_owned(),
                     pending: false,
+                    tone: abi::TONE_NEUTRAL,
                 },
                 false,
             ),

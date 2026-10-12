@@ -41,6 +41,13 @@ fn parse_config(text: &str) -> (Option<u32>, Option<u32>) {
     (enabled, mode)
 }
 
+/// Read-only status choice: Ready, Degraded, then Failed, repeating every five
+/// seconds from startup.
+#[cfg_attr(not(any(test, target_os = "switch")), allow(dead_code))]
+fn status_choice(elapsed_secs: u64) -> usize {
+    (elapsed_secs / 5) as usize % 3
+}
+
 #[cfg(test)]
 mod tests {
     use super::parse_config;
@@ -66,21 +73,41 @@ mod tests {
         );
         assert_eq!(parse_config("enabled=on\nenabled=bogus\n").0, Some(1));
     }
+
+    #[test]
+    fn status_cycles_every_five_seconds() {
+        assert_eq!(super::status_choice(0), 0);
+        assert_eq!(super::status_choice(4), 0);
+        assert_eq!(super::status_choice(5), 1);
+        assert_eq!(super::status_choice(9), 1);
+        assert_eq!(super::status_choice(10), 2);
+        assert_eq!(super::status_choice(14), 2);
+        assert_eq!(super::status_choice(15), 0);
+    }
 }
 
 #[cfg(target_os = "switch")]
 mod switch {
-    use super::parse_config;
-    use deluxe_plugin_sdk::{abi, host, register, AtomicOptions, OptionSpec, PluginSpec};
+    use super::{parse_config, status_choice};
+    use deluxe_plugin_sdk::{
+        abi, host, negotiated_descriptor_version, register, AtomicOptions, OptionSpec,
+        PluginHandler, PluginSpec, RequestStatus, Tone,
+    };
     use std::ffi::CStr;
+    use std::sync::OnceLock;
+    use std::time::Instant;
 
     const CONFIG_PATH: &str = "sd:/ultimate/deluxe_plugin_demo/config.ini";
 
-    // enabled: Off/On, mode: A/B/C, status: one choice, so a read-only row.
-    static OPTIONS: AtomicOptions<3> = AtomicOptions::new([0, 0, 0]);
+    // enabled and mode. Status is computed from time, not stored here.
+    static OPTIONS: AtomicOptions<2> = AtomicOptions::new([0, 0]);
+    static STARTED: OnceLock<Instant> = OnceLock::new();
+
+    static ENABLED_TONES: [Tone; 2] = [Tone::Neutral, Tone::Ok];
+    static STATUS_TONES: [Tone; 3] = [Tone::Ok, Tone::Warn, Tone::Error];
 
     // The host persists `enabled` and `mode` into CONFIG_PATH after a menu edit.
-    // `status` is read-only and flagged `no_persist`.
+    // `status` is a read-only row and flagged `no_persist`.
     static SPEC: PluginSpec = PluginSpec {
         id: "demo",
         label: "Demo",
@@ -92,6 +119,8 @@ mod switch {
                 config_key: Some("enabled"),
                 values: Some(&["off", "on"]),
                 no_persist: false,
+                tones: Some(&ENABLED_TONES),
+                read_only: false,
             },
             OptionSpec {
                 id: "mode",
@@ -100,18 +129,43 @@ mod switch {
                 config_key: None,
                 values: Some(&["a", "b", "c"]),
                 no_persist: false,
+                tones: None,
+                read_only: false,
             },
             OptionSpec {
                 id: "status",
                 label: "Status",
-                choices: &["Ready"],
+                choices: &["Ready", "Degraded", "Failed"],
                 config_key: None,
                 values: None,
                 no_persist: true,
+                tones: Some(&STATUS_TONES),
+                read_only: true,
             },
         ],
         config_path: Some(CONFIG_PATH),
     };
+
+    struct DemoHandler;
+
+    impl PluginHandler for DemoHandler {
+        fn current(&self, option: usize) -> Option<usize> {
+            match option {
+                2 => {
+                    let started = STARTED.get_or_init(Instant::now);
+                    Some(status_choice(started.elapsed().as_secs()))
+                }
+                option => (&OPTIONS).current(option),
+            }
+        }
+
+        fn request(&self, option: usize, choice: usize) -> RequestStatus {
+            match option {
+                2 => RequestStatus::Rejected,
+                option => (&OPTIONS).request(option, choice),
+            }
+        }
+    }
 
     /// Seeds `OPTIONS` from the persisted INI when it exists. The host never
     /// reads this file, so a choice survives a restart only through this.
@@ -139,6 +193,7 @@ mod switch {
 
     #[skyline::main(name = "deluxe-plugin-demo")]
     pub fn main() {
+        let _ = STARTED.get_or_init(Instant::now);
         match host() {
             Some(api) => {
                 // SAFETY: `host()` only returns tables that passed `table_matches`;
@@ -162,7 +217,10 @@ mod switch {
         // Load before registering so the first `current` call already reports
         // the persisted choice.
         load_config();
-        let result = register(&SPEC, &OPTIONS);
-        skyline::println!("[deluxe-plugin-demo] register: {result:?}");
+        let result = register(&SPEC, DemoHandler);
+        let version = result.ok().and_then(negotiated_descriptor_version);
+        skyline::println!(
+            "[deluxe-plugin-demo] register: {result:?} descriptor_version: {version:?}"
+        );
     }
 }

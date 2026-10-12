@@ -48,8 +48,15 @@
 
 use core::ffi::{c_char, c_void};
 
-/// ABI revision carried in [`PluginDesc::abi_version`] and [`PluginApiV1::abi_version`].
-pub const ABI_VERSION: u32 = 1;
+/// Descriptor revision carried in [`PluginDesc::abi_version`]. Version 2 adds
+/// [`OptionDesc::choice_tones`] and [`OPTION_FLAG_READ_ONLY`]; the host also
+/// accepts version 1 descriptors ([`OptionDescV1`] layout).
+pub const ABI_VERSION: u32 = 2;
+/// Oldest descriptor revision the host accepts.
+pub const MIN_ABI_VERSION: u32 = 1;
+/// Revision carried in [`PluginApiV1::abi_version`]. The exported table shape
+/// has not changed, so consumers built against version 1 keep matching it.
+pub const TABLE_VERSION: u32 = 1;
 
 /// Exported host function name: `extern "C" fn() -> *const PluginApiV1`.
 pub const API_SYMBOL: &str = "ssbu_online_deluxe_plugin_api_v1";
@@ -76,6 +83,21 @@ pub const CONFIG_PATH_PREFIX: &str = "sd:/";
 
 /// `OptionDesc::flags`: never write this option even when the plugin persists.
 pub const OPTION_FLAG_NO_PERSIST: u32 = 1 << 0;
+/// `OptionDesc::flags` (version 2): a pure status row. Left/Right do nothing,
+/// `request` is never called, and the value shown is whatever `current`
+/// reports, so a multi-choice row can display state such as Ok/Warn/Fail.
+pub const OPTION_FLAG_READ_ONLY: u32 = 1 << 1;
+
+/// `choice_tones` entry: default text colour.
+pub const TONE_NEUTRAL: u8 = 0;
+/// `choice_tones` entry: green, something is working.
+pub const TONE_OK: u8 = 1;
+/// `choice_tones` entry: yellow, degraded or pending attention.
+pub const TONE_WARN: u8 = 2;
+/// `choice_tones` entry: red, failed or unavailable.
+pub const TONE_ERROR: u8 = 3;
+/// Highest valid tone byte.
+pub const TONE_MAX: u8 = TONE_ERROR;
 
 /// `current` result meaning the option has no displayable value right now.
 pub const CHOICE_UNAVAILABLE: u32 = u32::MAX;
@@ -115,7 +137,7 @@ pub type CurrentFn = unsafe extern "C" fn(user: *mut c_void, option: u32) -> u32
 /// assumes the change succeeded.
 pub type RequestFn = unsafe extern "C" fn(user: *mut c_void, option: u32, choice: u32) -> u32;
 
-/// One menu row.
+/// One menu row (descriptor version 2, 56 bytes).
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct OptionDesc {
@@ -136,15 +158,52 @@ pub struct OptionDesc {
     /// Tokens are 1 to [`MAX_VALUE_LEN`] printable ASCII bytes with no
     /// whitespace, `=` or `#`.
     pub choice_values: *const *const c_char,
+    /// Null for neutral text, or `choice_count` `TONE_*` bytes: the host draws
+    /// the current choice's value text in that tone in the vertical table and
+    /// in the in-match strip.
+    pub choice_tones: *const u8,
+}
+
+/// One menu row as laid out by descriptor version 1 (48 bytes). Hosts read
+/// this layout when [`PluginDesc::abi_version`] is 1.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct OptionDescV1 {
+    pub id: *const c_char,
+    pub label: *const c_char,
+    pub choices: *const *const c_char,
+    pub choice_count: u32,
+    pub flags: u32,
+    pub config_key: *const c_char,
+    pub choice_values: *const c_char,
+}
+
+impl OptionDescV1 {
+    /// Widens a version 1 row to the current layout with neutral tones.
+    pub const fn widen(self) -> OptionDesc {
+        OptionDesc {
+            id: self.id,
+            label: self.label,
+            choices: self.choices,
+            choice_count: self.choice_count,
+            flags: self.flags,
+            config_key: self.config_key,
+            choice_values: self.choice_values.cast::<*const c_char>(),
+            choice_tones: core::ptr::null(),
+        }
+    }
 }
 
 /// One plugin's registration.
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct PluginDesc {
-    /// `size_of::<PluginDesc>()` for the ABI the plugin was built against.
+    /// `size_of::<PluginDesc>()` (72 in versions 1 and 2).
     pub struct_size: u32,
-    /// [`ABI_VERSION`].
+    /// [`ABI_VERSION`] for the layout of `options`: 2 for [`OptionDesc`],
+    /// 1 for [`OptionDescV1`]. A host that predates version 2 answers
+    /// [`REGISTER_ERR_ABI`] to a version 2 descriptor; the SDK then retries
+    /// with version 1 and no tones.
     pub abi_version: u32,
     /// Stable identifier, unique across plugins. Not displayed.
     pub id: *const c_char,
@@ -170,7 +229,7 @@ pub struct PluginDesc {
 pub struct PluginApiV1 {
     /// `size_of::<PluginApiV1>()`.
     pub struct_size: u32,
-    /// [`ABI_VERSION`].
+    /// [`TABLE_VERSION`] (always 1; the table shape is unchanged).
     pub abi_version: u32,
     /// Registers one plugin. Returns a non-negative handle, or a `REGISTER_ERR_*` code.
     pub register: unsafe extern "C" fn(desc: *const PluginDesc) -> i32,
@@ -185,7 +244,17 @@ pub type ApiEntryFn = unsafe extern "C" fn() -> *const PluginApiV1;
 
 /// Byte-level identity checks a consumer can use before trusting a table.
 pub const fn table_matches(struct_size: u32, abi_version: u32) -> bool {
-    struct_size as usize == core::mem::size_of::<PluginApiV1>() && abi_version == ABI_VERSION
+    struct_size as usize == core::mem::size_of::<PluginApiV1>() && abi_version == TABLE_VERSION
+}
+
+/// True when a host should parse a descriptor of this revision.
+pub const fn descriptor_version_supported(abi_version: u32) -> bool {
+    abi_version >= MIN_ABI_VERSION && abi_version <= ABI_VERSION
+}
+
+/// True when every tone byte is a known `TONE_*` value.
+pub fn valid_tones(tones: &[u8]) -> bool {
+    tones.iter().all(|tone| *tone <= TONE_MAX)
 }
 
 /// True when `id` is non-empty, within [`MAX_ID_LEN`] and uses only
@@ -211,9 +280,9 @@ pub fn valid_label(label: &[u8]) -> bool {
 pub fn valid_value(value: &[u8]) -> bool {
     !value.is_empty()
         && value.len() <= MAX_VALUE_LEN
-        && value.iter().all(|byte| {
-            byte.is_ascii_graphic() && *byte != b'=' && *byte != b'#'
-        })
+        && value
+            .iter()
+            .all(|byte| byte.is_ascii_graphic() && *byte != b'=' && *byte != b'#')
 }
 
 /// True when `path` starts with [`CONFIG_PATH_PREFIX`], is within
@@ -230,13 +299,35 @@ mod tests {
     use super::*;
 
     #[test]
-    fn layout_is_fixed_for_version_one() {
-        assert_eq!(core::mem::size_of::<OptionDesc>(), 48);
+    fn layout_is_fixed_per_version() {
+        assert_eq!(core::mem::size_of::<OptionDescV1>(), 48);
+        assert_eq!(core::mem::size_of::<OptionDesc>(), 56);
         assert_eq!(core::mem::size_of::<PluginDesc>(), 72);
         assert_eq!(core::mem::size_of::<PluginApiV1>(), 32);
+        assert_eq!(TABLE_VERSION, 1);
+        assert_eq!(ABI_VERSION, 2);
         assert!(table_matches(32, 1));
         assert!(!table_matches(32, 2));
         assert!(!table_matches(24, 1));
+        assert!(descriptor_version_supported(1));
+        assert!(descriptor_version_supported(2));
+        assert!(!descriptor_version_supported(0));
+        assert!(!descriptor_version_supported(3));
+        assert!(valid_tones(&[0, 1, 2, 3]));
+        assert!(!valid_tones(&[0, 4]));
+        let v1 = OptionDescV1 {
+            id: core::ptr::null(),
+            label: core::ptr::null(),
+            choices: core::ptr::null(),
+            choice_count: 2,
+            flags: OPTION_FLAG_NO_PERSIST,
+            config_key: core::ptr::null(),
+            choice_values: core::ptr::null(),
+        };
+        let widened = v1.widen();
+        assert_eq!(widened.choice_count, 2);
+        assert_eq!(widened.flags, OPTION_FLAG_NO_PERSIST);
+        assert!(widened.choice_tones.is_null());
         assert_eq!(API_SYMBOL_C.len(), API_SYMBOL.len() + 1);
         assert_eq!(&API_SYMBOL_C[..API_SYMBOL.len()], API_SYMBOL.as_bytes());
         assert_eq!(API_SYMBOL_C[API_SYMBOL.len()], 0);

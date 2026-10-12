@@ -3,7 +3,10 @@
 //! host-side proof of the contract; it is not an emulator or hardware run.
 
 use core::ffi::c_char;
-use deluxe_plugin_sdk::{abi, register_with, AtomicOptions, OptionSpec, PluginSpec, RegisterError};
+use deluxe_plugin_sdk::{
+    abi, negotiated_descriptor_version, register_with, AtomicOptions, OptionSpec, PluginSpec,
+    RegisterError, Tone,
+};
 use ssbu_online_deluxe_rewrite::plugin_api::{plugin_rows, Registry, RequestStatus};
 
 static HOST: Registry = Registry::new();
@@ -22,7 +25,7 @@ unsafe extern "C" fn host_build() -> *const c_char {
 
 static TABLE: abi::PluginApiV1 = abi::PluginApiV1 {
     struct_size: core::mem::size_of::<abi::PluginApiV1>() as u32,
-    abi_version: abi::ABI_VERSION,
+    abi_version: abi::TABLE_VERSION,
     register,
     host_status,
     host_build,
@@ -39,7 +42,7 @@ static SPEC: PluginSpec = PluginSpec::new(
     ],
 );
 
-static REPLAY: AtomicOptions<2> = AtomicOptions::new([0, 0]);
+static REPLAY: AtomicOptions<3> = AtomicOptions::new([0, 0, 2]);
 static REPLAY_SPEC: PluginSpec = PluginSpec {
     id: "replay",
     label: "Replay",
@@ -51,6 +54,8 @@ static REPLAY_SPEC: PluginSpec = PluginSpec {
             config_key: Some("record_enabled"),
             values: Some(&["off", "on"]),
             no_persist: false,
+            tones: Some(&[Tone::Neutral, Tone::Ok]),
+            read_only: false,
         },
         OptionSpec {
             id: "quality",
@@ -59,6 +64,18 @@ static REPLAY_SPEC: PluginSpec = PluginSpec {
             config_key: None,
             values: None,
             no_persist: false,
+            tones: None,
+            read_only: false,
+        },
+        OptionSpec {
+            id: "health",
+            label: "Health",
+            choices: &["Ok", "Degraded", "Failed"],
+            config_key: None,
+            values: None,
+            no_persist: true,
+            tones: Some(&[Tone::Ok, Tone::Warn, Tone::Error]),
+            read_only: true,
         },
     ],
     config_path: Some("sd:/ultimate/replay/config.ini"),
@@ -83,7 +100,21 @@ fn sdk_registration_reaches_the_host_registry_and_edits_round_trip() {
     assert_eq!(plugins[0].options[1].choices, vec!["A", "B", "C"]);
     assert!(plugins[0].options[2].read_only());
     assert_eq!(plugins[1].label, "Replay");
-    assert_eq!(plugin_rows(&plugins).len(), 5);
+    assert_eq!(plugin_rows(&plugins).len(), 6);
+    // Version 2 descriptor accepted: tones and the read-only status row arrive.
+    assert_eq!(
+        negotiated_descriptor_version(replay),
+        Some(abi::ABI_VERSION)
+    );
+    assert_eq!(plugins[1].options[0].tone_of(1), abi::TONE_OK);
+    assert!(plugins[1].options[2].read_only());
+    assert!(!plugins[1].options[2].persist);
+    let health = HOST.value(1, &plugins[1], 2);
+    assert_eq!(
+        (health.label.as_str(), health.tone),
+        ("Failed", abi::TONE_ERROR)
+    );
+    assert_eq!(HOST.step(1, 2, 1), None);
     assert_eq!(plugins[0].config_path, None);
     assert_eq!(
         plugins[1].config_path.as_deref(),
@@ -111,7 +142,8 @@ fn sdk_registration_reaches_the_host_registry_and_edits_round_trip() {
     assert!(HOST.take_writes().is_empty());
     assert_eq!(HOST.step(1, 0, 1).unwrap().requested, 1);
     assert_eq!(REPLAY.get(0), 1);
-    assert_eq!(HOST.value(1, &plugins[1], 0).label, "On");
+    let record = HOST.value(1, &plugins[1], 0);
+    assert_eq!((record.label.as_str(), record.tone), ("On", abi::TONE_OK));
     assert_eq!(HOST.step(1, 1, 1).unwrap().requested, 1);
     let writes = HOST.take_writes();
     assert_eq!(writes.len(), 2);

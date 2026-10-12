@@ -25,7 +25,21 @@ The rewrite is one NRO. Keep Training Modpack and SGPO coexistence: no
 `Layout::Draw`, FX hooks call `original!`, and `llultra` reads SGPO's word at
 `0x374812c` without patching it (`src/runtime/render_ultra.rs`).
 
-## Latest rewrite changes — 2026-10-12 (plugin registration API, host-tested)
+## Latest rewrite changes — 2026-10-12 (plugin value tones and read-only rows)
+
+Candidate `e59fc9a6bd266790` adds descriptor version 2 to the plugin API:
+an optional per-choice tone (neutral, green, yellow, red) that the host uses
+for the current value's text in both the vertical Plugins table and the
+in-match strip, and `OPTION_FLAG_READ_ONLY` for multi-choice status rows that
+Left/Right never edit and whose value simply follows `current`. The exported
+table and symbol are unchanged (table version 1), the host still accepts
+version 1 descriptors, and the Rust SDK falls back to version 1 when an older
+host answers the ABI error. Rendering outside the Plugins page is untouched.
+282 host tests plus the SDK round-trip pass with the usual Clippy, no-default,
+rustfmt and Skyline release gates. Emulator verification of the colours is
+recorded in VALIDATION.md; no hardware run of this candidate yet.
+
+## Earlier rewrite changes — 2026-10-12 (plugin registration API, host-tested)
 
 Candidate `068a1cf6f418349b` adds a public registration API so separately
 built Skyline NROs can add rows without ImGui code. This is a rewrite

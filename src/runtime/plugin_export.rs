@@ -9,9 +9,11 @@ use skyline::libc::c_char;
 use std::ffi::CString;
 use std::sync::OnceLock;
 
+// The table shape is version 1 and stays so; descriptor versions 1 and 2 are
+// both accepted by `register` (see `plugin_api::parse_descriptor`).
 static TABLE: abi::PluginApiV1 = abi::PluginApiV1 {
     struct_size: core::mem::size_of::<abi::PluginApiV1>() as u32,
-    abi_version: abi::ABI_VERSION,
+    abi_version: abi::TABLE_VERSION,
     register,
     host_status,
     host_build,

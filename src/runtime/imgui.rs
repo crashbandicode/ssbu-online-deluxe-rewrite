@@ -55,6 +55,7 @@ extern "C" {
     pub(super) fn igPopStyleColor(count: i32);
     pub(super) fn igTextUnformatted(text: *const c_char, end: *const c_char);
     pub(super) fn igPushTextWrapPos(wrap_local_pos_x: f32);
+    pub(super) fn igSameLine(offset_from_start_x: f32, spacing: f32);
     pub(super) fn igPopTextWrapPos();
     pub(super) fn igBeginTable(
         id: *const c_char,

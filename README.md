@@ -69,7 +69,12 @@ fork's room-ID path, but still needs an NSO test. See [native display](docs/NATI
 | Left / Right | Change the selected value |
 | Shoulder chord + Left / Right outside settings | Cycle the selected remote peer |
 | L+R + either ZL or ZR + Y | Toggle Streamer |
-| Plus or Minus held with the window chord | Open the debug view |
+| L+R (or ZL+ZR) + Plus or Minus | Open the debug view; again to hide it |
+
+The window commands fire when the whole combination is held, in any press
+order, and once per press: L+R+Down works whether the bumpers or the D-pad
+land first. Holding Plus or Minus while tapping Down with the chord also opens
+Debug, as before.
 
 The first controller operates the window. Input also reaches the game. If
 Elite's menu is open too, D-pad edits can affect both menus; close one before
@@ -111,7 +116,9 @@ them on the plugins page: a vertical table outside matches and the compact
 two-row strip during a ready match, with paging for long lists. Deluxe asks
 the plugin for the current value every frame and sends Left/Right as a
 request; the plugin decides whether it applies now, later, or not at all, and
-keeps its own saved settings. A plugin that declares its own `key=value` INI
+keeps its own saved settings. A plugin can colour its values (green, yellow,
+red) per choice and mark a row read-only, so a status such as `Health: Failed`
+shows in red on both layouts without being editable. A plugin that declares its own `key=value` INI
 path gets that file updated by Deluxe after each accepted menu edit, so the
 plugin only has to read it at startup. Deluxe's `config.ini` is unchanged. The ABI,
 Rust SDK and a demo NRO live under [`sdk/`](sdk/README.md). The page is
