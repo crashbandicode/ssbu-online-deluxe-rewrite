@@ -205,6 +205,7 @@ unsafe fn performance(
     if width.is_finite() && height.is_finite() && width > 0.0 && height > 0.0 {
         row("Output", &format!("{width:.0}x{height:.0}"));
     }
+    row("Backoff", &super::dispatcher_backoff::status_label());
     let mean = frames.average();
     let color = frame_color(mean);
     igPushStyleColor_Vec4(TEXT, color);

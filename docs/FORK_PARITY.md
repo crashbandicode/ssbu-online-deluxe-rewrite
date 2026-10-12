@@ -378,6 +378,7 @@ retained. Auto's target and the renderer's committed state are distinct.
 | Hardware overclocking | Deliberately excluded by user request | No clock management or nx_over dependency |
 | Plugin registration API / Plugins page | Added by this rewrite, not inherited from the fork; `src/plugin_api.rs`, `src/runtime/plugin_export.rs`, `sdk/` | Host tests, SDK round-trip, Eden `plugins-page-1012a` (registration, vertical edits, INI persistence) and Eden `plugins-match-1012b` (compact Settings/Plugins strips in a live match, in-match edit persisted); hardware still unverified |
 | Software FPS boost `+` | Diagnostic implementation only; normal play reports Unsupported | Native-window composition-speed control accelerated game time in a measured match. [Evidence](FPS_BOOST_INVESTIGATION.md); withheld from normal play |
+| Dispatcher backoff | Added by this rewrite, not inherited from the fork; `src/dispatcher_backoff.rs`, `src/runtime/dispatcher_backoff.rs`, one inline hook at `main+0x354ab48`, all profiles and scenes, MainThread only | Eden A/B/A under a 175% CPU quota: CSS LessLag 52 → 59 fps, 18% less CPU/frame; Vanilla/LLDoubles CPU saving at 60; live match unchanged. Hardware benefit pending the Switch test. Same fix ships standalone as `ssbu-dispatcher-backoff`; one owner per site |
 
 The renderer drains outstanding work before native buffer-count changes. It
 confirms count/index state before Active. Missing drain markers retain a safe

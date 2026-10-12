@@ -1310,6 +1310,54 @@ Report and raw captures: tangent evidence `css-budget/`. No code change; the
 hardware ABAB (LessLag, LLDoubles, Vanilla on one CSS visit; `lesslag_core`
 and `doubles_core` boots) is the decisive confirmation.
 
+### Character-select slowdown: call-level attribution and dispatcher backoff — 2026-10-12
+
+Astra xhigh traced the CSS frame on Eden with host `perf`, the dynarmic perf
+map, per-thread schedstat and a diagnostic probe build (worktree
+`work/css-trace-probe`, never deployed). Result (tangent evidence
+`css-budget/astra/CSS_SLOW_FRAME_ATTRIBUTION.md`):
+
+- The mod's own CSS paths are negligible (native handler 0.005 ms, banner
+  0.085 ms, scene-manager wrapper 0.136 ms per frame).
+- The main loop (`main+0x374b898`) waits through `0x354ccd0` on dependency
+  counter `0x5333160`. All 600/600 registrations on that counter resolve to
+  one job, `main+0x375e260`, an `nn::ui2d::Layout` animation update on
+  worker 1. The main thread waits 4.83 ms per CSS frame for it (8.25 ms under
+  the 175% quota) versus 0.91 ms (1.33 ms) in a live match.
+- While waiting, the main thread runs the task dispatcher `main+0x354a6d0`,
+  which polls six queues through `std::mutex` → `nn::os::LockMutex` →
+  SDK critical section: 1,313 of 1,350 state samples show all six queues
+  empty, one pending record and counter 1. The dispatcher uses its light
+  event only when the pending vector is empty, so it spins. The lock
+  Enter/Leave fast paths are 22% of all Eden samples unlimited and 27.8%
+  under quota; the lock word is free in 98% of samples (churn, not contention).
+- Intervention A/B/A on the same binary and boot (1 µs `SleepThread` about
+  once per 171 idle passes): CSS LessLag 175% 52.23 / 59.31 / 51.89 fps and
+  27.84 / 22.90 / 28.08 CPU ms/frame; Vanilla 59.32 / 60.10 / 59.85 and
+  26.90 / 23.04 / 26.27; LLDoubles 59.55 / 60.03 / 58.33 and 26.44 / 23.13 /
+  27.84; CSS LessLag unlimited 59.08 / 60.00 / 59.80; live match 175%
+  57.43 / 59.35 / 59.90 and 20.62 / 18.74 / 19.32. Main-core CPU fell
+  11.70 → 6.67 → 11.63 ms/frame while worker-1 CPU stayed 5.7–5.8 ms: the
+  gain removes polling, not UI work. Screenshots
+  `css-budget/astra/screenshots/{before,after}-css-lesslag-cpu175.png`
+  (54.1 → 59.4 fps, 27.2 → 23.3 CPU ms/frame).
+
+Implementation (this build): `src/dispatcher_backoff.rs` (pure policy, host
+tests) and `src/runtime/dispatcher_backoff.rs` (inline hook at
+`main+0x354ab48`, the `ldp x8, x9, [x24, #0xe0]` after the sixth empty probe).
+Install verifies all five original words (`a94e2708 eb09011f 54000d01
+f94003e0 9411f072`); a changed first word with the rest intact means another
+plugin owns the site (`External`). The hook sleeps only on `MainThread`, only
+when the enabled bit is set, all six queue sizes are zero, the pending vector
+`[d+0xe0, d+0xe8)` is non-empty with every record's counter still > 0, and
+the ready-resume vector `[d+0xf8, d+0x100)` is empty. Default policy: 16
+idle passes spin, then 5 µs doubling to 50 µs on every idle pass;
+`dispatcher_backoff.ini` overrides (`preset=measured` reproduces the Eden
+cadence, `cooldown_us` adds Astra's optional limiter). `DISABLE_BACKOFF`
+turns it off. Host gates: 293 tests, clippy host and Skyline with warnings
+denied, no-default build, rustfmt. Eden A/B of the production NRO and the
+Switch test are recorded below when run.
+
 ### Pinned release v0.2.1 — 2026-10-12 (deferred persistence on PENDING)
 
 Requested by the Training Modpack side: a `REQUEST_PENDING` answer no longer

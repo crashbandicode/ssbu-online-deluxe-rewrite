@@ -213,6 +213,7 @@ pub(super) fn start(version: &str) {
                 timing.poll();
                 super::presentation::poll();
                 super::fps_boost::publish();
+                super::dispatcher_backoff::publish();
                 super::pia_rtt::poll();
                 super::peer_observer::poll();
                 super::fighter_probe::poll();

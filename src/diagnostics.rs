@@ -181,6 +181,16 @@ pub enum Code {
     /// menu edit. `a` is plugin index in bits 0..15 and option index in bits
     /// 16..31. `b` is 1 on success, 0 on an I/O error.
     PluginPersisted = 101,
+    /// Dispatcher backoff install outcome. `a` is the result: 1 installed,
+    /// 2 another owner already patched the site, 3 site words differ from
+    /// 13.0.5, 4 disabled by flag. `b` packs the policy: `spin_passes` in
+    /// bits 0..15, `base_ns / 1000` in bits 16..31, `max_ns / 1000` in 32..47.
+    DispatcherBackoff = 102,
+    /// Periodic backoff counters from the diagnostics poll, written only when
+    /// they change. `a` is total idle passes seen at the hook site. `b` is
+    /// total sleeps in bits 0..47 and the last sleep length in microseconds
+    /// in bits 48..63. Not a per-frame record.
+    DispatcherBackoffStats = 103,
 }
 
 /// Game SetCrop observations recorded before further calls are forwarded only.

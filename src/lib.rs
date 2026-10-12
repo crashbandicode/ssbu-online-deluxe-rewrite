@@ -5,6 +5,7 @@ pub mod config;
 pub mod config_store;
 pub mod critical_probe;
 pub mod diagnostics;
+pub mod dispatcher_backoff;
 pub mod eff_cleanup;
 pub mod eff_sibling;
 pub mod eff_variant;

@@ -1,6 +1,7 @@
 mod acmd;
 mod api_trace;
 mod auto_driver;
+mod dispatcher_backoff;
 mod effect_context;
 mod effects;
 mod fighter_main;
@@ -188,6 +189,7 @@ pub fn main() {
         ("FX", effects::install as fn()),
         ("BUFFER", hooks::install_latency as fn()),
         ("PIA", pia_rtt::install as fn()),
+        ("BACKOFF", dispatcher_backoff::install as fn()),
     ] {
         if std::path::Path::new(DATA_DIR)
             .join(format!("DISABLE_{name}"))
@@ -195,6 +197,9 @@ pub fn main() {
         {
             record(Code::Compatibility, 2, name.as_bytes()[0] as u64);
             skyline::println!("[Deluxe] {} hooks disabled by diagnostic flag", name);
+            if name == "BACKOFF" {
+                dispatcher_backoff::note_disabled();
+            }
         } else {
             install();
         }
