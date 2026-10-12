@@ -1293,6 +1293,23 @@ and native CSS panes still see Down before the bumpers, a Down-first chord on
 character select can nudge the native profile row once before the window
 opens; the old gesture (bumpers first) avoids it.
 
+### DBI USB MTP installation of d773 — 2026-10-12 15:46Z
+
+Operator authorized ("deploy d773 to the switch"); the live DBI MTP mount
+implies Smash was closed. Preflight confirmed the installed rewrite was 9d08
+and backed up the nine plugins and six protected files. The transaction wrote
+`ultimate/ssbu_online_deluxe_rewrite/backups/pre-chord-tones-d773e7bfc5764ab7.nro`
+(9d08, readback-verified), staged and copy-replaced the NRO and read every
+file back: the rewrite is now
+`d773e7bfc5764ab795a1d35839adc2a3595b3d6fd45e815b44cd84567b8b2b17`
+(2453504 bytes, build 0.1.0-0922d28fd852-dirty-1791818952, module
+`df24e776b86a09a2f342b68e17fc26ea2d9238cd1e68b392ba776e123a2bf1e6`); the INI
+(`0617a94705ea8d2da3fff782161b5339f6a3880948a807894a01692bccd9c2d3`, the
+operator's latest), eight other plugins, plugin names and protected files are
+unchanged. Demo plugin not deployed. Evidence:
+`~/.local/share/ssbu-mod-backups/plugin-api-tangent-20261012/switch-mtp-d773/`.
+This accepts the transfer; the chord fix and tones are not yet observed on hardware.
+
 ### DBI USB MTP installation of 9d08 — 2026-10-12 14:00Z
 
 The operator authorized the install with Smash closed and DBI's USB MTP
