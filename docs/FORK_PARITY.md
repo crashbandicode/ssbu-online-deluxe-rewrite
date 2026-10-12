@@ -54,9 +54,12 @@ Settings, Performance and Debug rendering are untouched. New diagnostics 99
 Skyline Clippy with warnings denied, the no-default build, rustfmt and the
 optimized Skyline release build pass. The demo NRO builds and shows no
 undefined import of the host symbol. The export is present in the packaged
-ELF/NRO. No emulator or hardware run: page appearance, controller behaviour
-and real cross-NRO registration are unverified, and the replay recorder itself
-is not part of this work.
+ELF/NRO. Eden preview `plugins-page-1012a` (candidate `9d08a711b271e0ac`)
+then showed the separately built demo NRO registered on the Plugins page, the
+chord cycle including Plugins, Right/Left edits applied, and host persistence
+writing the demo's INI (details in VALIDATION.md). Not yet observed: the
+compact in-match strip for the Plugins page and any hardware run. The replay
+recorder itself is not part of this work.
 Evidence: `~/.local/share/ssbu-mod-backups/plugin-api-tangent-20261012/`.
 
 ## Earlier rewrite changes — 2026-10-10
@@ -357,7 +360,7 @@ retained. Auto's target and the renderer's committed state are distinct.
 | FX On/Off and scope | Added by this rewrite, not inherited from the fork | Named visual requests only; user-confirmed Palutena/Sephiroth and TM/SGPO coexistence on prior candidates; full expanded catalog not runtime-certified |
 | Reduced FX | Live visual-layer policy and guarded lighter asset siblings | Several visual checks passed; full-family and Off-like performance acceptance pending. Never silently converted to Off |
 | Hardware overclocking | Deliberately excluded by user request | No clock management or nx_over dependency |
-| Plugin registration API / Plugins page | Added by this rewrite, not inherited from the fork; `src/plugin_api.rs`, `src/runtime/plugin_export.rs`, `sdk/` | Host tests and SDK round-trip only; demo NRO builds; no emulator or hardware acceptance of the page or of live cross-NRO registration |
+| Plugin registration API / Plugins page | Added by this rewrite, not inherited from the fork; `src/plugin_api.rs`, `src/runtime/plugin_export.rs`, `sdk/` | Host tests, SDK round-trip, and Eden `plugins-page-1012a`: live cross-NRO registration, vertical page edits and host INI persistence observed; compact in-match strip and hardware still unverified |
 | Software FPS boost `+` | Diagnostic implementation only; normal play reports Unsupported | Native-window composition-speed control accelerated game time in a measured match. [Evidence](FPS_BOOST_INVESTIGATION.md); withheld from normal play |
 
 The renderer drains outstanding work before native buffer-count changes. It

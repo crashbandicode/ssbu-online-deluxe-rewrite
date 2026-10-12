@@ -1223,4 +1223,24 @@ path; `OptionDesc` 48 bytes, `PluginDesc` 72 bytes, diagnostic 101). Root
 gates rerun: 280 host tests plus the round-trip test, host/Skyline Clippy with
 warnings denied, no-default build, rustfmt and Skyline release pass. The
 repackaged candidate's hashes are in the tangent evidence directory's
-`artifacts/` manifests. Still no emulator or hardware run.
+`artifacts/` manifests.
+
+### Eden preview `plugins-page-1012a` (same day)
+
+Candidate `9d08a711b271e0ac` plus the demo NRO
+`8c45cd0238f460900f2b453360ba0fce362a28cf06ec5f95e2dcfbdefa3f6b43` were staged
+into the isolated Eden profile (three originals backed up, journal RESTORED
+afterwards; the owned unit exited with status 0). Observed on the main menu:
+the separately built demo registered and the Plugins page listed `Demo` with
+Enabled, Mode and the read-only Status row; the chord cycle ran Settings →
+Plugins → Performance → Hidden; Right on Enabled showed On and Down then Left
+on Mode showed C. Host persistence created
+`sd:/ultimate/deluxe_plugin_demo/config.ini` with `enabled=on` and then
+`mode=c`; events.log recorded code 100 (request Applied) followed by code 101
+(persisted). The boot-time code 99 record was lost to the 128-entry ring before
+the sink started; absence of 99 in a boot log is therefore not evidence either
+way. Not observed: the compact in-match strip for the Plugins page (no match
+was started; navigation entered the World of Light map and was abandoned to
+avoid touching that save) and any hardware run.
+Evidence: `~/.local/share/ssbu-mod-backups/plugin-api-tangent-20261012/`
+(`result.json`, `screenshots/plugins-page-1012a-*.png`, `run-evidence/plugins-page-1012a/`).
