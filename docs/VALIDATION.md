@@ -1305,8 +1305,13 @@ unchanged. Three regressions cover pending→applied-by-plugin (one write),
 pending→cancel (no write) and pending→applied-on-second-request (one write).
 286 host tests plus the SDK round-trip; host and Skyline Clippy with warnings
 denied; no-default build; rustfmt; Skyline release. Crate 0.2.1; ABI and SDK
-crates unchanged at 2.0.0. Tag `v0.2.1` identity: see the paragraph appended
-below once the clean build is packaged.
+crates unchanged at 2.0.0. Tag `v0.2.1` (commit aa8c33f) clean NRO: build
+`0.2.1-aa8c33ff469b-1791823438`, SHA-256
+`eb87feb1cbcbc2b2c4f4adbe15008d424def377fe2e1d854eaaf880c7ef69f88`,
+2453504 bytes, module `8e8e9491d0eddd5891357113cf68ca83b8f5fe0f1a82f6717eedc875f455977f`,
+ELF `d3e08612f7a6017c06d49e08bc7b35c0c938946a35f15bb333ce077d518d0b36`.
+Not installed on hardware (the Switch has d773). Package: tangent evidence
+`artifacts/eb87feb1cbcbc2b2/`.
 
 ### Pinned release v0.2.0 — 2026-10-12
 
