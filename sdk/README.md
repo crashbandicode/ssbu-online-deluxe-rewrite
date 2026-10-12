@@ -187,12 +187,20 @@ It is opt-in: without `config_path` nothing is ever written.
   (for example `off`/`on`). Null writes the decimal choice index (`0`, `1`, ...).
   Each token is 1 to 24 printable ASCII bytes with no whitespace, `=` or `#`.
   The Rust SDK requires exactly one token per choice.
-* **When it is written.** After a menu edit your `request` callback answers with
-  `REQUEST_APPLIED` or `REQUEST_PENDING`. The host rewrites the file on its own
-  background thread, never on the overlay thread. It replaces the option's
-  `key=value` line or appends one, keeps every other line (comments, unrelated
-  keys) and writes atomically, leaving a `.previous.ini` backup beside the
-  file. `REQUEST_REJECTED` and `REQUEST_UNAVAILABLE` write nothing.
+* **When it is written.** After a menu edit your `request` callback answers
+  `REQUEST_APPLIED`, the host rewrites the file on its own background thread,
+  never on the overlay thread. It replaces the option's `key=value` line or
+  appends one, keeps every other line (comments, unrelated keys) and writes
+  atomically, leaving a `.previous.ini` backup beside the file.
+  `REQUEST_REJECTED` and `REQUEST_UNAVAILABLE` write nothing.
+* **Pending defers the write (host 0.2.1).** A `REQUEST_PENDING` answer
+  persists nothing at the time of the edit. The host writes the value only
+  when it later observes `current` reporting the requested choice (checked
+  once per frame on the overlay thread, even while the Plugins page is
+  hidden), or when a later request on the same option returns
+  `REQUEST_APPLIED`. Stepping the row back to the live value cancels the
+  pending change and writes nothing. A plugin that defers in-match edits
+  therefore sees no host disk activity until it applies them.
 * **What is never written.** Read-only options (a single choice, or
   `OPTION_FLAG_READ_ONLY` / `OptionSpec::read_only`), and any option with
   `OPTION_FLAG_NO_PERSIST` in `OptionDesc::flags` (Rust:

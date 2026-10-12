@@ -1293,6 +1293,21 @@ and native CSS panes still see Down before the bumpers, a Down-first chord on
 character select can nudge the native profile row once before the window
 opens; the old gesture (bumpers first) avoids it.
 
+### Pinned release v0.2.1 — 2026-10-12 (deferred persistence on PENDING)
+
+Requested by the Training Modpack side: a `REQUEST_PENDING` answer no longer
+queues the INI write. The host persists only when it observes `current`
+equal to the pending choice (`Registry::reconcile_pending`, run once per
+overlay draw even with the page hidden, and in `value`), or when a later
+request on that option returns `REQUEST_APPLIED`; stepping a pending change
+back to the live value cancels it and writes nothing. APPLIED behaviour is
+unchanged. Three regressions cover pending→applied-by-plugin (one write),
+pending→cancel (no write) and pending→applied-on-second-request (one write).
+286 host tests plus the SDK round-trip; host and Skyline Clippy with warnings
+denied; no-default build; rustfmt; Skyline release. Crate 0.2.1; ABI and SDK
+crates unchanged at 2.0.0. Tag `v0.2.1` identity: see the paragraph appended
+below once the clean build is packaged.
+
 ### Pinned release v0.2.0 — 2026-10-12
 
 Tag `v0.2.0` (commit ae19c58, Forgejo `intpa/ssbu-online-deluxe-rewrite`) is

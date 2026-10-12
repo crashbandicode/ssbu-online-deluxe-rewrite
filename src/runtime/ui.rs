@@ -818,6 +818,7 @@ unsafe extern "C" fn draw() {
             config.input_buffer as i64 as u64,
         );
     }
+    crate::plugin_api::REGISTRY.reconcile_pending();
     if let Some(step) = crate::plugin_api::REGISTRY.take_last_step() {
         record(
             Code::PluginRequest,

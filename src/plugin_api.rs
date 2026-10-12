@@ -511,7 +511,10 @@ impl Registry {
         let pending = self.pending_for(plugin_index, option);
         let pending = match (pending, current) {
             (Some(wanted), Some(now)) if wanted == now => {
+                // The plugin has applied the pending change on its own; this
+                // is the moment it becomes worth persisting.
                 self.set_pending(plugin_index, option, None);
+                self.queue_persist(plugin_index, plugin, option, now);
                 false
             }
             (Some(_), _) => true,
@@ -545,21 +548,15 @@ impl Registry {
         let base = self.pending_for(plugin_index, option).unwrap_or(current);
         let requested = cycle_choice(base, spec.choices.len(), direction);
         let status = plugin.request(option, requested);
-        self.set_pending(
-            plugin_index,
-            option,
-            (status == RequestStatus::Pending).then_some(requested),
-        );
-        if let Some(path) = plugin.config_path.as_ref().filter(|_| {
-            spec.persist && matches!(status, RequestStatus::Applied | RequestStatus::Pending)
-        }) {
-            self.queue_write(PersistWrite {
-                plugin: plugin_index,
-                option,
-                path: path.clone(),
-                key: spec.config_key.clone(),
-                value: spec.persisted_value(requested),
-            });
+        // A pending request that merely returns to the live value is a
+        // cancellation: nothing stays pending and nothing is written. A
+        // pending change is persisted only once the plugin applies it (see
+        // `value` and `reconcile_pending`), so a plugin that defers in-match
+        // edits sees no disk activity until then. Applied writes at once.
+        let still_pending = status == RequestStatus::Pending && requested != current;
+        self.set_pending(plugin_index, option, still_pending.then_some(requested));
+        if status == RequestStatus::Applied {
+            self.queue_persist(plugin_index, &plugin, option, requested);
         }
         let result = StepResult {
             plugin: plugin_index,
@@ -576,6 +573,45 @@ impl Registry {
     /// The most recent step since the previous call, for diagnostics.
     pub fn take_last_step(&self) -> Option<StepResult> {
         self.last_step.lock().ok()?.take()
+    }
+
+    /// Queues the INI write for `choice` when the plugin persists this option.
+    fn queue_persist(&self, plugin_index: usize, plugin: &Plugin, option: usize, choice: usize) {
+        let Some(spec) = plugin.options.get(option) else {
+            return;
+        };
+        let Some(path) = plugin.config_path.as_ref().filter(|_| spec.persist) else {
+            return;
+        };
+        self.queue_write(PersistWrite {
+            plugin: plugin_index,
+            option,
+            path: path.clone(),
+            key: spec.config_key.clone(),
+            value: spec.persisted_value(choice),
+        });
+    }
+
+    /// Checks every pending request against the plugin's live value and
+    /// persists the ones that have been applied. The overlay calls this once
+    /// per draw, so a change a plugin applies at match end is written even
+    /// while the Plugins page is hidden. Callbacks run on the draw thread.
+    pub fn reconcile_pending(&self) {
+        let pending: Vec<PendingChoice> = match self.pending.lock() {
+            Ok(list) if list.is_empty() => return,
+            Ok(list) => list.clone(),
+            Err(_) => return,
+        };
+        let plugins = self.snapshot();
+        for entry in pending {
+            let Some(plugin) = plugins.get(entry.plugin) else {
+                continue;
+            };
+            if plugin.current(entry.option) == Some(entry.choice) {
+                self.set_pending(entry.plugin, entry.option, None);
+                self.queue_persist(entry.plugin, plugin, entry.option, entry.choice);
+            }
+        }
     }
 }
 
@@ -1320,21 +1356,137 @@ mod tests {
                     key: "quality".to_owned(),
                     value: "2".to_owned(),
                 },
-                PersistWrite {
-                    plugin: 2,
-                    option: 0,
-                    path: "sd:/ultimate/later/config.ini".to_owned(),
-                    key: "record_enabled".to_owned(),
-                    value: "on".to_owned(),
-                },
             ]
         );
+        // The pending plugin (2) wrote nothing yet: a PENDING answer defers
+        // persistence until the plugin's live value shows the change.
         assert!(registry.take_writes().is_empty());
+        registry.reconcile_pending();
+        assert!(registry.take_writes().is_empty());
+        PERSISTED_PENDING.values[0].store(1, Ordering::Relaxed);
+        registry.reconcile_pending();
+        assert_eq!(
+            registry.take_writes(),
+            vec![PersistWrite {
+                plugin: 2,
+                option: 0,
+                path: "sd:/ultimate/later/config.ini".to_owned(),
+                key: "record_enabled".to_owned(),
+                value: "on".to_owned(),
+            }]
+        );
+        // Satisfied once: no second write and nothing left pending.
+        registry.reconcile_pending();
+        assert!(registry.take_writes().is_empty());
+        assert!(!registry.value(2, &plugins[2], 0).pending);
         for fake in [&PERSISTED, &PERSISTED_PENDING, &PERSISTED_REJECTED] {
             for slot in &fake.values {
                 slot.store(0, Ordering::Relaxed);
             }
         }
+    }
+
+    static DEFER: FakePlugin = FakePlugin::new([0, 0, 0, 0], abi::REQUEST_PENDING);
+
+    fn deferring_registry() -> Registry {
+        let registry = Registry::new();
+        DEFER.answer.store(abi::REQUEST_PENDING, Ordering::Relaxed);
+        for slot in &DEFER.values {
+            slot.store(0, Ordering::Relaxed);
+        }
+        DEFER.requests.lock().unwrap().clear();
+        let holder = descriptor_with(
+            "capture",
+            "Capture",
+            &[
+                ("record", "Record", &["Off", "On"]),
+                ("quality", "Quality", &["Low", "Mid", "High"]),
+            ],
+            Some("sd:/ultimate/capture/config.ini"),
+            &[
+                Persist {
+                    values: Some(&["off", "on"]),
+                    ..Persist::default()
+                },
+                Persist::default(),
+            ],
+            &DEFER as *const FakePlugin as *mut c_void,
+            Some(fake_current),
+            Some(fake_request),
+        );
+        assert_eq!(unsafe { registry.register_raw(&holder.desc) }, 0);
+        registry
+    }
+
+    static DEFER_GATE: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn pending_then_applied_by_the_plugin_writes_the_applied_value_once() {
+        let _gate = DEFER_GATE.lock().unwrap();
+        let registry = deferring_registry();
+        let plugin = registry.snapshot()[0].clone();
+        let step = registry.step(0, 0, 1).unwrap();
+        assert_eq!((step.requested, step.status), (1, RequestStatus::Pending));
+        assert!(registry.value(0, &plugin, 0).pending);
+        // Mid-match: the plugin has not applied, so the host must not write.
+        registry.reconcile_pending();
+        assert!(registry.take_writes().is_empty());
+        // Match ends: the plugin flips its live value itself.
+        DEFER.values[0].store(1, Ordering::Relaxed);
+        registry.reconcile_pending();
+        let writes = registry.take_writes();
+        assert_eq!(writes.len(), 1);
+        assert_eq!(
+            (writes[0].key.as_str(), writes[0].value.as_str()),
+            ("record", "on")
+        );
+        assert!(!registry.value(0, &plugin, 0).pending);
+        registry.reconcile_pending();
+        assert!(registry.take_writes().is_empty());
+        assert_eq!(DEFER.requests.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn pending_then_cancelled_by_stepping_back_writes_nothing() {
+        let _gate = DEFER_GATE.lock().unwrap();
+        let registry = deferring_registry();
+        let plugin = registry.snapshot()[0].clone();
+        assert_eq!(registry.step(0, 0, 1).unwrap().requested, 1);
+        assert!(registry.value(0, &plugin, 0).pending);
+        let back = registry.step(0, 0, -1).unwrap();
+        assert_eq!((back.requested, back.status), (0, RequestStatus::Pending));
+        assert!(!registry.value(0, &plugin, 0).pending);
+        registry.reconcile_pending();
+        assert!(registry.take_writes().is_empty());
+        // The plugin was asked twice (1, then 0); the host wrote nothing.
+        assert_eq!(DEFER.requests.lock().unwrap().as_slice(), &[(0, 1), (0, 0)]);
+    }
+
+    #[test]
+    fn pending_then_applied_on_a_second_request_writes_once() {
+        let _gate = DEFER_GATE.lock().unwrap();
+        let registry = deferring_registry();
+        let plugin = registry.snapshot()[0].clone();
+        // Three-choice row: first press is deferred.
+        assert_eq!(
+            registry.step(0, 1, 1).unwrap().status,
+            RequestStatus::Pending
+        );
+        assert!(registry.take_writes().is_empty());
+        // The plugin now accepts immediately; the second press steps from the
+        // pending value (1) to 2 and applies.
+        DEFER.answer.store(abi::REQUEST_APPLIED, Ordering::Relaxed);
+        let step = registry.step(0, 1, 1).unwrap();
+        assert_eq!((step.requested, step.status), (2, RequestStatus::Applied));
+        let writes = registry.take_writes();
+        assert_eq!(writes.len(), 1);
+        assert_eq!(
+            (writes[0].key.as_str(), writes[0].value.as_str()),
+            ("quality", "2")
+        );
+        assert!(!registry.value(0, &plugin, 1).pending);
+        registry.reconcile_pending();
+        assert!(registry.take_writes().is_empty());
     }
 
     #[test]
