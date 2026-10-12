@@ -4,11 +4,11 @@ version = 4
 
 [[package]]
 name = "deluxe-plugin-abi"
-version = "1.0.0"
+version = "2.0.0"
 
 [[package]]
 name = "deluxe-plugin-sdk"
-version = "1.0.0"
+version = "2.0.0"
 dependencies = [
  "deluxe-plugin-abi",
  "skyline",
@@ -78,7 +78,7 @@ dependencies = [
 
 [[package]]
 name = "ssbu-online-deluxe-rewrite"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "deluxe-plugin-abi",
  "deluxe-plugin-sdk",

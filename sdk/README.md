@@ -11,6 +11,13 @@ version 1, under the unchanged symbol `ssbu_online_deluxe_plugin_api_v1`.
 descriptor version. An old host answers `REGISTER_ERR_ABI` to a version 2
 descriptor; the Rust SDK retries once with a version 1 descriptor.
 
+Pinned release: git tag `v0.2.0` on the Forgejo repository
+(`intpa/ssbu-online-deluxe-rewrite`) carries `deluxe-plugin-abi` 2.0.0 and
+`deluxe-plugin-sdk` 2.0.0 (descriptor version 2 with the version 1 fallback) and
+is the tree the pinned host NRO was built from; the NRO's SHA-256 and size are
+recorded in the tag message and in `docs/VALIDATION.md`. Consumers should
+clone that tag read-only and depend on the crates by path.
+
 Layout of this directory:
 
 | Path | Crate | Purpose |

@@ -539,7 +539,11 @@ impl Registry {
             return None;
         }
         let current = plugin.current(option)?;
-        let requested = cycle_choice(current, spec.choices.len(), direction);
+        // Step from an outstanding pending request rather than the live value,
+        // so a second Left/Right can take a pending change back instead of
+        // re-requesting the same choice.
+        let base = self.pending_for(plugin_index, option).unwrap_or(current);
+        let requested = cycle_choice(base, spec.choices.len(), direction);
         let status = plugin.request(option, requested);
         self.set_pending(
             plugin_index,
@@ -1165,6 +1169,14 @@ mod tests {
                 tone: abi::TONE_NEUTRAL,
             }
         );
+        // A second press steps from the pending choice, so Left takes it back
+        // to the live value and the row stops showing pending.
+        let back = registry.step(0, 0, -1).unwrap();
+        assert_eq!(back.requested, 1);
+        assert_eq!(back.status, RequestStatus::Pending);
+        assert!(!registry.value(0, &plugins[0], 0).pending);
+        assert_eq!(registry.step(0, 0, 1).unwrap().requested, 2);
+        assert!(registry.value(0, &plugins[0], 0).pending);
         PENDING.values[0].store(2, Ordering::Relaxed);
         assert_eq!(
             registry.value(0, &plugins[0], 0),
