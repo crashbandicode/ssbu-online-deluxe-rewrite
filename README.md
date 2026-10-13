@@ -324,13 +324,17 @@ sd:/ultimate/ssbu_online_deluxe_rewrite/
   events.log
   panic.log
   renderer-status.txt
+  hang-trace.log
   config.ini
   config.previous.ini
 ```
 
 Startup checkpoints show which hooks initialized. Events are bounded; status
 records requested and committed rendering state. Panic logs exist only when a
-panic was captured. An abrupt native crash may require Atmosphère's crash report
+panic was captured. `hang-trace.log` (0.3.2) is a 5 s heartbeat of this
+plugin's hook call counts, marking any hook that entered and never returned,
+with scene changes and first firings stamped by system tick; use it when the
+game freezes on a loading screen with no crash report. An abrupt native crash may require Atmosphère's crash report
 and the matching optimized ELF. See [debugging](docs/DEBUGGING.md).
 
 ## Build

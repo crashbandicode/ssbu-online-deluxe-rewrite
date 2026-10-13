@@ -177,6 +177,33 @@ from kind 62 and reports a `css_capture` section. Install log code 104 gives the
 hook mask (7 = all three) and which SDK symbols resolved; codes 12/13 mark
 character-select entry and exit (exit = one second without a CSS update).
 
+## Hang trace (0.3.2)
+
+`hang-trace.log` in the data directory is always on and costs one atomic
+increment per tracked hook call plus one short line every 5 s from the
+diagnostics thread. It exists to answer, after a loading-screen freeze, whether
+one of this plugin's hooks was mid-call and which liveness signals stopped.
+The previous boot is kept as `hang-trace.previous.log`; the file rotates at 2 MiB.
+
+- Header: build, `boot_tick` and `tick_hz`, so another plugin's log can be
+  aligned by system tick. `t=` on every line is seconds since `boot_tick`.
+- `[Heartbeat]` every 5 s: packed scene (`connection/status`), scene-ready
+  bit, character-select visit open, API trace active, then calls since boot for
+  `present` (tracked window), `backoff_pass` (idle hook entries),
+  `backoff_sleep`, the three `CAPTURE_CSS` hooks (`css_init`, `css_wait`,
+  `css_ui_job`), `fighter_load`/`fighter_unload` (`common` module chain),
+  `fighter_main` (per-fighter tick) and `cut_in`. A hook that entered and has
+  not returned shows `[ACTIVE xN age_ms=…]`; a growing age across heartbeats
+  means the game is blocked inside or under that hook. Count-only signals
+  never show ACTIVE.
+- `[HangTrace] first <hook>`: first call of each hook since the current scene
+  began, with its tick. Scene changes print `[HangTrace] scene a -> b` and
+  reset the first-firing marks.
+
+Zero-code bisection for a freeze: delete `CAPTURE_CSS` first (removes the three
+CSS hooks), then add `DISABLE_BACKOFF`, then the other `DISABLE_*` flags. The
+heartbeat keeps running with every family disabled.
+
 ## Eden test lifecycle on this Ubuntu host
 
 Use the test launcher instead of repeatedly opening the desktop shortcut:
