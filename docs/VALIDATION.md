@@ -1563,7 +1563,9 @@ Gates: 298 host tests, `cargo clippy --all-targets -- -D warnings`,
 `e930c8f34d1752bf24b1819cc8b86322abef3c2303ef50f3ef8544a5ae9d25f3`
 (2183168 B, module `047e3f9d…0575`), ELF `db3da70f…c2c9`; packaged ELF
 sections .text 1590848 / .data 176136 / .bss 122152, resident 2.23 MB (was
-3.99 MB). Not installed on hardware. This is a footprint change, not a
+3.99 MB). Forgejo release `v0.3.3` (id 357, tag on ab53b43) carries the clean
+NRO (asset 72, 2183168 B, download read back as e930c8f3…25f3) and
+`manifest.json` (asset 73). Not installed on hardware. This is a footprint change, not a
 proven fix: the next console boot with 0.3.3 and the companion plugin rolled
 back decides; the memory bisect is plugin removal, not Deluxe flags.
 
