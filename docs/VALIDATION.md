@@ -1525,6 +1525,43 @@ Debug view `Timing` row to say saved, quit to HOME, then pull
 `timing-<id>.csv` and `api-<id>.csv` (label `css`). Also compare LessLag
 against LLDoubles on the same CSS while moving (zero-code ring test).
 
+### 0.3.3 — API trace buffer allocated per capture, not resident — 2026-10-13
+
+Context: on the evening of 2026-10-13 the console (0.3.2 + Training Modpack
+r31 + the OBS companion's trace build) failed four boots before the title.
+Atmosphère reports `01791924547`, `01791926109`, `01791926153`, `01791926317`
+(tangent `hang-1013/boots-evening/crash/`) fault at address 0 in unrelated
+game threads: `BCATCacheStorage` inside `memset` (twice), `render dispatch`
+in `nnosBreak`, MainThread at `cross2_Release.nss+0x38b6804`. No plugin frame
+is on any crashing stack; Deluxe's thread is idle in each. Deluxe's own
+`hang-trace.previous.log` from one of those boots shows `present=0` and every
+counter at zero for 80 s with `ready=1`: the game never produced a frame while
+every Deluxe hook was installed and idle. Reading: allocations are failing in
+the game heap that Skyline plugins are loaded from, and the loaded set grew
+that day (modpack 2494464 → 3379200 B, companion 172032 → 212992 B).
+
+Deluxe's part, measured on the packaged ELFs (`readelf`-equivalent section
+sizes, tangent `artifacts/`):
+
+| Build | NRO | .text | .data | .bss | resident |
+|---|---|---|---|---|---|
+| 0.3.0 f22d | 2465792 | 1577024 | 470688 | 55864 | 2.10 MB |
+| 0.3.1 9511e8c0 | 2174976 | 1583120 | 175864 | 2218856 | 3.98 MB |
+| 0.3.2 73823f8f | 2183168 | 1590880 | 176136 | 2219288 | 3.99 MB |
+
+The jump is `render_trace::CAPACITY` = 65536 × 32 B moved into `.bss` in
+0.3.1 so a 30 s CSS capture never ends on capacity. 0.3.3 keeps the capacity
+but allocates the buffer in `Trace::begin` (diagnostics thread, never a hook)
+and frees it in `take_ready` after the CSV export; `observe` returns without
+writing when no buffer exists. No capture, hook, flag or row changed.
+
+Gates: 298 host tests, `cargo clippy --all-targets -- -D warnings`,
+`cargo skyline clippy -- -- -D warnings`, `cargo build --no-default-features`,
+`cargo fmt --check`, `cargo skyline build --release`. Package hashes are in
+the release record below once built. This is a footprint change, not a
+proven fix: the next console boot with 0.3.3 and the companion plugin rolled
+back decides; the memory bisect is plugin removal, not Deluxe flags.
+
 ### DBI USB MTP installation of f22d (0.3.0) — 2026-10-12 19:58Z
 
 `switch-mtp-f22d/deploy-f22d-mtp-1012.py` preflight 19:55:47Z (installed

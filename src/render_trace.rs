@@ -7,8 +7,9 @@ use std::{
         Mutex,
     },
 };
-/// 65536 × 32 B. The initial array is all zero bytes so it lives in `.bss`,
-/// not in the NRO file. At about 18 rows per frame this holds a 30 s capture.
+/// 65536 × 32 B, allocated from the heap only while a capture is armed (0.3.3;
+/// 0.3.1 and 0.3.2 kept it resident in `.bss`, about 2 MiB of the game's heap
+/// for the whole session). At about 18 rows per frame this holds a 30 s capture.
 pub const CAPACITY: usize = 65536;
 // 30 s at 60 frames and about 18 rows per frame must fit without a capacity finish.
 const _: () = assert!(CAPACITY >= 1800 * 18);
@@ -190,7 +191,9 @@ struct State {
     len: usize,
     phase: u8,
     reason: Finish,
-    events: [Event; CAPACITY],
+    /// Allocated by `begin()` on the diagnostics thread and released by
+    /// `take_ready()`, so an idle plugin does not keep 2 MiB of events resident.
+    events: Option<Box<[Event]>>,
 }
 pub struct Trace {
     state: Mutex<State>,
@@ -218,14 +221,8 @@ impl Trace {
                 len: 0,
                 phase: 0,
                 reason: Finish::Aborted,
-                // All-zero so the static stays in .bss; only `events[..len]` is read.
-                events: [Event {
-                    begin: 0,
-                    end: 0,
-                    kind: 0,
-                    index: 0,
-                    result: 0,
-                }; CAPACITY],
+                // No buffer until a capture is armed: the static stays a few words.
+                events: None,
             }),
             active: AtomicBool::new(false),
             epoch: AtomicU64::new(0),
@@ -241,6 +238,11 @@ impl Trace {
         };
         if state.phase != 0 {
             return false;
+        }
+        // Not a hooked call: `begin` runs on the diagnostics thread, so the one
+        // heap allocation per capture is allowed here.
+        if state.events.is_none() {
+            state.events = Some(vec![Event::default(); CAPACITY].into_boxed_slice());
         }
         state.id = id;
         state.first = 0;
@@ -270,7 +272,10 @@ impl Trace {
             state.first = event.begin;
         }
         let n = state.len;
-        state.events[n] = event;
+        match state.events.as_mut() {
+            Some(events) => events[n] = event,
+            None => return,
+        }
         state.len += 1;
         let reason = if event.end < event.begin {
             Some(Finish::ClockInvalid)
@@ -309,8 +314,14 @@ impl Trace {
             id: state.id,
             reason: state.reason,
             skipped: self.skipped.load(Ordering::Relaxed),
-            events: state.events[..state.len].to_vec(),
+            events: state
+                .events
+                .as_deref()
+                .map_or_else(Vec::new, |events| events[..state.len].to_vec()),
         };
+        // Give the 2 MiB back to the game heap until the next capture.
+        state.events = None;
+        state.len = 0;
         state.phase = 0;
         Some(snapshot)
     }

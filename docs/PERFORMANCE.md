@@ -302,8 +302,10 @@ Current source registers sequencing, resolution, LLDoubles, and live transitions
 together; see the registered-profile section.
 
 Each CAPTURE_TIMING request also writes api-<tick>.csv, a bounded capture using
-try_lock (4096 events in this build; 8192 later; 65536 zero-initialised events in
-`.bss` since 0.3.1 so a 30 s capture does not end on capacity). It records CPU
+try_lock (4096 events in this build; 8192 later; 65536 events since 0.3.1 so a
+30 s capture does not end on capacity; 0.3.1–0.3.2 kept that 2 MiB resident in
+`.bss`, 0.3.3 allocates it on the diagnostics thread when a capture is armed and
+frees it when the CSV is exported). It records CPU
 spans for present, acquire, the acquired texture's CPU wait, zero-timeout waits
 and (non-Vanilla modes only) dispatch flush. Analyze
 with python3 tools/analyze_render_trace.py /path/to/api-123.csv. The analyzer
