@@ -1638,6 +1638,8 @@ as e930c8f3…25f3 (0.3.3) before, saved to
 locally; copied under a temp name, renamed, read back as 6b22546e…5dfb;
 other plugins untouched (the Training Modpack on the card is now a
 2174976 B build, changed by its own agent). Runtime result pending.
+Forgejo release `v0.3.5` (id 359, tag on 08eedf1): NRO asset 76 (download
+read back as 6b22546e…5dfb), `manifest.json` asset 77.
 
 Caveat for the CSS capture: the SD writes now happen during the measured
 interval, from the diagnostics thread. Compare the next hardware CSS capture
