@@ -1557,8 +1557,13 @@ writing when no buffer exists. No capture, hook, flag or row changed.
 
 Gates: 298 host tests, `cargo clippy --all-targets -- -D warnings`,
 `cargo skyline clippy -- -- -D warnings`, `cargo build --no-default-features`,
-`cargo fmt --check`, `cargo skyline build --release`. Package hashes are in
-the release record below once built. This is a footprint change, not a
+`cargo fmt --check`, `cargo skyline build --release`. Clean package
+`artifacts/e930c8f34d1752bf/` in the tangent evidence: build
+`0.3.3-528137cdff51-1791927586`, NRO SHA-256
+`e930c8f34d1752bf24b1819cc8b86322abef3c2303ef50f3ef8544a5ae9d25f3`
+(2183168 B, module `047e3f9d…0575`), ELF `db3da70f…c2c9`; packaged ELF
+sections .text 1590848 / .data 176136 / .bss 122152, resident 2.23 MB (was
+3.99 MB). Not installed on hardware. This is a footprint change, not a
 proven fix: the next console boot with 0.3.3 and the companion plugin rolled
 back decides; the memory bisect is plugin removal, not Deluxe flags.
 
