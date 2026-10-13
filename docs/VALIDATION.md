@@ -1441,6 +1441,73 @@ Forgejo release `v0.3.1` (id 246, tag on ed8de66) carries the clean NRO
 (asset 68, 2174976 B, download read back as 9511e8c0…e840) and
 `manifest.json` (asset 69).
 
+Switch install of 0.3.1, 2026-10-13 11:48Z (operator: "ship 0.3.1 to the
+switch"): DBI MTP single-writer transaction `switch-mtp-9511/` in the tangent
+evidence, preflight on f22d, rollback archive
+`backups/pre-css-capture-9511e8c0f7946bd5.nro` read back as f22d, target read
+back as 9511e8c0…e840, other plugins and protected files unchanged; empty
+`CAPTURE_CSS` created. First boot: `install.log` code 104 `a=7 b=7` (all three
+hooks and both SDK symbols), code 102 `a=5` (gate opened on the first scene),
+codes 12/31/32 (CSS entry, capture armed, export complete).
+
+First hardware CSS capture (`css-budget/hand/hardware/controller-captures/switch-0.3.1-1013/`,
+API trace 33,075 events, 1,273 callbacks, elapsed, zero skipped; Local
+Wireless CSS because NSO demanded a system update; the hand moved ~3 s, held
+still ~11 s, then moved ~16 s). Astra's independent decode
+(`css-budget/hand/HARDWARE_CAPTURE_1013.md`, reproduces the repository
+analyzer exactly): still 48.3 fps (present cadence 20.69 ms) against moving
+38.8 fps (25.79 ms); of the 5.10 ms increase, the texture-ready sync wait
+(kind 3, after `nvnWindowAcquireTexture`) grows 3.99 ms and the main thread's
+wait on the UI barrier grows 0.84 ms. UI job 11.41 → 12.21 ms mean, p99
+11.92 → 15.70 ms; only 1 of 619 moving jobs exceeded 16.67 ms. Zero nested
+dependency waits inside the UI job (all 7,631 kind-66 rows are MainThread).
+Thread table: UI worker SDK priority 8, ideal core 1, mask 0x2; MainThread
+priority 16, ideal core 0, mask 0x1, so the backoff cannot donate core 1 time.
+Backoff: 227–241 sleeps per frame, 12.0–12.7 ms summed, peak 77 µs; job
+return → barrier return 32 µs. Surviving candidates: two-image image/sync
+coupling (dominant observed increment) and UI computation (attribution
+target); excluded: the `0x354ccd0` nested cleanup wait and any multi-ms
+completion pickup. The operator rejected LLDoubles as a trial or fallback; the
+next steps are a clean offline Smash-mode CSS control and a flag-gated
+per-owner attribution probe on two-image LessLag.
+
+### 0.3.2 — always-on hang trace for loading-screen freezes — 2026-10-13
+
+Context: with 0.3.1 and the operator's other plugins installed, the Training
+Modpack froze on a loading screen on the console (no crash report; the
+modpack's own log stopped after the fighter allocations) while the same stack
+entered Training on Eden. The modpack investigation asked this plugin for
+timestamped liveness lines it could align with its heartbeat. The two most
+recent Smash crash reports on the card (2026-10-12 20:20Z, 2026-10-13 11:31Z,
+both before 0.3.1) are `training_modpack` BRK aborts, not Deluxe.
+
+Build (commits 082a6dc code, 85a7563 docs, crate 0.3.2):
+
+- `src/hang_trace.rs` (pure, host-tested) and `src/runtime/hang_trace.rs`:
+  ten tracked hooks with lock-free call counters, in-flight counts and entry
+  ticks: `present` (tracked window), `backoff_pass`, `backoff_sleep` (around
+  `SleepThread`), `css_init` / `css_wait` / `css_ui_job` (around the
+  `CAPTURE_CSS` originals), `fighter_load` / `fighter_unload` (`common`
+  module chain), `fighter_main` (inline per-fighter tick body) and `cut_in`.
+  Hooks touch atomics only; the diagnostics thread writes
+  `hang-trace.log` (rotates at 2 MiB to `hang-trace.previous.log`): header
+  with `boot_tick` and `tick_hz`, `[Heartbeat]` every 5 s with
+  `[ACTIVE xN age_ms=…]` on any hook that entered and has not returned,
+  `[HangTrace] first <hook>` once per scene, `[HangTrace] scene a -> b` from
+  `auto_driver::store_scene`. Installed right after the version check so a
+  hang during hook installation still leaves the header.
+- Zero-code bisection order documented in `docs/DEBUGGING.md`: remove
+  `CAPTURE_CSS`, then `DISABLE_BACKOFF`, then the other `DISABLE_*` flags.
+
+Gates: 298 host tests (4 new), `cargo clippy --all-targets -- -D warnings`,
+`cargo skyline clippy -- -- -D warnings`, `cargo build --no-default-features`,
+`cargo fmt --check`, `cargo skyline build --release`. Clean package
+`artifacts/73823f8f67d6a3b2/` in the tangent evidence: build
+`0.3.2-85a756321310-1791911904`, NRO SHA-256
+`73823f8f67d6a3b2d3a0de35814042fa1ecea293fef01dae0828cbc1f6eefd8d`
+(2183168 B, module `63b8b5fb…a8fc`), ELF `54fe3aa1…2e8a`. Not installed on
+hardware (the Switch has 9511e8c0 / 0.3.1); not run on Eden.
+
 Switch procedure for the capture: put `CAPTURE_CSS` in the data directory,
 boot with manual LessLag and FX On, enter the character select, keep the
 hand still for ten seconds, move it continuously for twenty, wait for the
