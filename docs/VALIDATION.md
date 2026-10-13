@@ -1437,6 +1437,9 @@ Gates: 294 host tests, `cargo clippy --all-targets -- -D warnings`,
 `9511e8c0f7946bd50434d78f7607283a84f13d299dfe6e6e2aad88c77b43e840`
 (2174976 B, module `ca2cbd7e…8780`), ELF `55f94118…9608`.
 Not installed on hardware (the Switch has f22d / 0.3.0); not run on Eden.
+Forgejo release `v0.3.1` (id 246, tag on ed8de66) carries the clean NRO
+(asset 68, 2174976 B, download read back as 9511e8c0…e840) and
+`manifest.json` (asset 69).
 
 Switch procedure for the capture: put `CAPTURE_CSS` in the data directory,
 boot with manual LessLag and FX On, enter the character select, keep the
