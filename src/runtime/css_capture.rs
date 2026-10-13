@@ -8,6 +8,7 @@
 //! thread, 77 UI job span, 62/63 one read-only thread setup per thread. The
 //! per-frame backoff rows 60/61 come from `dispatcher_backoff::frame_rows`.
 //! A capture is armed automatically when the character select is entered.
+use super::hang_trace::{self, Hook};
 use super::{api_trace, memory, record, Code};
 use crate::render_trace::{
     core_info, dispatch_info, image_offset, pointer_halves, Event, KIND_DEPENDENCY_WAIT,
@@ -149,13 +150,18 @@ unsafe fn css_capture_init_worker(
             api_trace::thread_label(),
         );
     }
-    original!()(job, function, worker, priority)
+    hang_trace::enter(Hook::CssInit);
+    let result = original!()(job, function, worker, priority);
+    hang_trace::exit(Hook::CssInit);
+    result
 }
 
 #[skyline::hook(offset = WAIT_WORKER)]
 unsafe fn css_capture_wait_worker(slot: u32, counter: *mut u32) -> u64 {
     let begin = api_trace::start();
+    hang_trace::enter(Hook::CssWait);
     let result = original!()(slot, counter);
+    hang_trace::exit(Hook::CssWait);
     if begin != 0 {
         let thread = skyline::nn::os::GetCurrentThread() as usize;
         describe_thread(begin, thread);
@@ -173,7 +179,9 @@ unsafe fn css_capture_wait_worker(slot: u32, counter: *mut u32) -> u64 {
 #[skyline::hook(offset = UI_JOB)]
 unsafe fn css_capture_ui_job(object: *mut u8) -> u64 {
     let begin = api_trace::start();
+    hang_trace::enter(Hook::CssUiJob);
     let result = original!()(object);
+    hang_trace::exit(Hook::CssUiJob);
     if begin != 0 {
         let thread = skyline::nn::os::GetCurrentThread() as usize;
         describe_thread(begin, thread);
@@ -274,6 +282,11 @@ pub(super) fn note_css_frame() {
     if ready && super::timing::request_css() {
         ARMED_CAPTURES.fetch_add(1, Ordering::Relaxed);
     }
+}
+
+/// A character-select visit is open (an update ran within the last second).
+pub(super) fn in_css() -> bool {
+    IN_CSS.load(Ordering::Acquire)
 }
 
 /// Diagnostics thread, every 500 ms: close the visit one second after the

@@ -359,6 +359,7 @@ unsafe extern "C" fn queue_present(queue: Ptr, window: Ptr, index: i32) {
         super::resolution::on_present(window);
         super::fps_boost::on_present(tick);
         super::dispatcher_backoff::note_present(tick);
+        super::hang_trace::count(super::hang_trace::Hook::Present);
         if super::api_trace::active() {
             super::dispatcher_backoff::frame_rows(tick);
         }

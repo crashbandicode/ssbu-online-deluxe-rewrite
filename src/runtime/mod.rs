@@ -8,6 +8,7 @@ mod effects;
 mod fighter_main;
 mod fighter_probe;
 mod fps_boost;
+mod hang_trace;
 mod hooks;
 mod imgui;
 mod imgui_stats;
@@ -173,6 +174,8 @@ pub fn main() {
         );
         return;
     }
+    // Liveness log first: a hang during hook installation still leaves it.
+    hang_trace::install();
     // Scene entries are observed for FX scope only; no scene mutation, global
     // Layout::Draw, fighter-frame or Training input-delay hook. Native titles
     // are the CSS function hook, not Layout::Draw.

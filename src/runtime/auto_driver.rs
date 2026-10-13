@@ -65,6 +65,7 @@ pub(crate) fn connection() -> Connection {
 fn store_scene(connection: Connection, status: SceneStatus) {
     let packed = (connection as u8) | (status as u8) << 2;
     SCENE.store(packed, Ordering::Release);
+    super::hang_trace::note_scene(packed);
 }
 
 fn cleanup() -> (bool, u64) {

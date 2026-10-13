@@ -3,6 +3,7 @@
 //! The sixteen-word dump stays behind `PROBE_FIGHTER_MODULE`. The same load
 //! calls the logical Main installer. The export is recorded and never hooked.
 
+use super::hang_trace::{self, Hook};
 use super::{fighter_main, logging, memory, record, Code, DATA_DIR};
 use crate::fighter_probe::{self, LoadView, LOAD_MODULE_INTERNAL, SITE_OFFSET, WORD_COUNT};
 use crate::hook_chain::{plan_far_chain, EntryPlan};
@@ -202,10 +203,12 @@ unsafe extern "C" fn on_load(
         return u32::MAX;
     }
     let original: LoadFn = std::mem::transmute(trampoline);
+    hang_trace::enter(Hook::FighterLoad);
     let result = original(module, image, buffer, buffer_size, flag, check);
     if result == 0 {
         observe_load(module);
     }
+    hang_trace::exit(Hook::FighterLoad);
     result
 }
 
@@ -217,6 +220,7 @@ unsafe extern "C" fn on_unload(module: *mut Module) -> u32 {
         return u32::MAX;
     }
     let original: UnloadFn = std::mem::transmute(trampoline);
+    hang_trace::enter(Hook::FighterUnload);
     let result = original(module);
     if tracked {
         let current = snapshot();
@@ -226,6 +230,7 @@ unsafe extern "C" fn on_unload(module: *mut Module) -> u32 {
             fighter_main::on_common_unloaded(address);
         }
     }
+    hang_trace::exit(Hook::FighterUnload);
     result
 }
 

@@ -250,6 +250,7 @@ unsafe fn dispatcher_idle_pass(ctx: &InlineCtx) {
     if MAIN_THREAD_ONLY.load(Ordering::Relaxed) && !on_main_thread() {
         return;
     }
+    super::hang_trace::count(super::hang_trace::Hook::BackoffPass);
     let dispatcher = ctx.registers[24].x() as usize;
     let Some(index) = slot(dispatcher) else {
         return;
@@ -294,9 +295,11 @@ unsafe fn dispatcher_idle_pass(ctx: &InlineCtx) {
     FRAME_SLEEPS.fetch_add(1, Ordering::Relaxed);
     LAST_NS.store(nanoseconds, Ordering::Relaxed);
     let timed = super::api_trace::active();
+    super::hang_trace::enter_at(super::hang_trace::Hook::BackoffSleep, now);
     skyline::nn::os::SleepThread(skyline::nn::TimeSpan {
         nanoseconds: u64::from(nanoseconds),
     });
+    super::hang_trace::exit(super::hang_trace::Hook::BackoffSleep);
     if timed || cooldown != 0 {
         let end = skyline::nn::os::GetSystemTick() as u64;
         if cooldown != 0 {

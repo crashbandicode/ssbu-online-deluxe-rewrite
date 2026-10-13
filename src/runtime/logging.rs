@@ -218,6 +218,7 @@ pub(super) fn start(version: &str) {
                 super::peer_observer::poll();
                 super::fighter_probe::poll();
                 iteration += 1;
+                super::hang_trace::poll(iteration);
                 if iteration.is_multiple_of(10) {
                     super::nvn::write_status();
                     record(Code::Heartbeat, settings().effects as u64, iteration);

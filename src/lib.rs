@@ -34,6 +34,7 @@ pub mod build_info {
 }
 
 pub mod fighter_probe;
+pub mod hang_trace;
 pub mod perf_scaler;
 pub mod render_policy;
 pub mod render_trace;

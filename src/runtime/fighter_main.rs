@@ -6,6 +6,7 @@
 //! never function-hooked. `COUNT_FIGHTER_TICKS` keeps the same callback in
 //! count-only mode: aggregates only, no reports and no cut-in hook.
 
+use super::hang_trace::{self, Hook};
 use super::{logging, memory, nvn, record, Code, DATA_DIR};
 use crate::fighter_probe::{
     self, ArmPlan, HookView, TickLog, AGENT_BATTLE_OBJECT, AGENT_MODULE_ACCESSOR, FIGHTER_CATEGORY,
@@ -241,7 +242,12 @@ unsafe extern "C" fn on_fighter_main(ctx: &mut InlineCtx) {
     if !ARMED.load(Ordering::Acquire) {
         return;
     }
-    let this = ctx.registers[0].x();
+    hang_trace::enter(Hook::FighterMain);
+    fighter_main_body(ctx.registers[0].x());
+    hang_trace::exit(Hook::FighterMain);
+}
+
+unsafe fn fighter_main_body(this: u64) {
     let present = nvn::tracked_presents();
     match read_tick(this) {
         Ok(sample) => {
@@ -288,11 +294,17 @@ unsafe extern "C" fn on_cut_in(
     data: u64,
     priority: u32,
 ) {
+    hang_trace::enter(Hook::CutIn);
     let trampoline = CUT_IN_ORIGINAL.load(Ordering::Acquire);
     if trampoline != 0 {
         let original: CutInFn = std::mem::transmute(trampoline);
         original(manager, accessor, transactor, kind, data, priority);
     }
+    cut_in_body(accessor);
+    hang_trace::exit(Hook::CutIn);
+}
+
+unsafe fn cut_in_body(accessor: *mut c_void) {
     if COUNT_ONLY.load(Ordering::Acquire) || !ARMED.load(Ordering::Acquire) {
         return;
     }
