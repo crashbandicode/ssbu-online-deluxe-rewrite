@@ -1,6 +1,10 @@
 //! Opt-in spans around existing CPU calls. Zero clock reads while idle.
 use crate::render_trace::{Event, Trace};
 pub(super) static TRACE: Trace = Trace::new();
+/// One atomic load. Hooks that only aggregate while a capture runs ask this.
+pub(super) fn active() -> bool {
+    TRACE.active()
+}
 pub(super) fn start() -> u64 {
     if TRACE.active() {
         unsafe { skyline::nn::os::GetSystemTick() as u64 }
@@ -34,11 +38,8 @@ pub(super) unsafe fn mark_thread(kind: u8, index: i32) {
         result: thread_label(),
     });
 }
-fn thread_label() -> i32 {
+/// Hashed label of the calling SDK thread; the pure function is in `render_trace`.
+pub(super) fn thread_label() -> i32 {
     let thread = unsafe { skyline::nn::os::GetCurrentThread() as usize as u64 };
-    let mixed = thread
-        .wrapping_add(0x9E37_79B1_85EB_CA87)
-        .wrapping_mul(0x9E37_79B1_85EB_CA87)
-        .rotate_left(27);
-    (mixed as u32 & 0x7fff_ffff) as i32
+    crate::render_trace::thread_label(thread)
 }

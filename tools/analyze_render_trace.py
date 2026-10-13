@@ -42,7 +42,17 @@ KINDS = {
     36: "submit_incoming_handle",
     37: "menu_gpu_poll",
     38: "menu_gpu_fence",
+    60: "backoff_frame_sleep",
+    61: "backoff_frame_peak",
+    62: "thread_setup_pointer",
+    63: "thread_setup_info",
+    64: "ui_dispatch",
+    66: "dependency_wait",
+    77: "ui_job",
 }
+CSS_KINDS = (60, 61, 62, 63, 64, 66, 77)
+THREAD_HASH_MULTIPLIER = 0x9E3779B185EBCA87
+U64_MASK = 0xFFFFFFFFFFFFFFFF
 COLUMNS = ["event", "kind", "begin_tick", "end_tick", "index", "result"]
 FRAME_BUDGET_MS = 16.6667
 SPIKE_LIMITS = (
@@ -52,20 +62,20 @@ SPIKE_LIMITS = (
     ("gt_33_3333_ms", 33.3333),
 )
 # CPU wrappers. A completion inside one tick is a real zero, not a point marker.
-SPAN_KINDS = {1, 2, 3, 4, 5, 27}
-# Phase, HID, draw, submit, handle, and resize markers. Classified by kind.
+SPAN_KINDS = {1, 2, 3, 4, 5, 27, 66, 77}
+# Phase, HID, draw, submit, handle, resize, backoff, and thread markers. Classified by kind.
 POINT_KINDS = {
     6, 7, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 28,
-    29, 30, 31, 32, 33, 34, 35, 36, 37, 38,
+    29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 60, 61, 62, 63, 64,
 }
 SUMMARY = (
     "present_call_intervals are CPU-side guest present cadence from kind 1 begin ticks. "
-    "Kinds 1-5 and 27 are CPU API spans at any duration, including zero. "
+    "Kinds 1-5, 27, 66, and 77 are CPU API spans at any duration, including zero. "
     "They are not GPU completion or scanout."
 )
 POINT_NOTE = (
-    "Kinds 6, 7, 12-26, and 28-38 are point markers by kind. "
-    "Kinds 1-5 and 27 stay in span statistics even when the duration is zero. "
+    "Kinds 6, 7, 12-26, 28-38, and 60-64 are point markers by kind. "
+    "Kinds 1-5, 27, 66, and 77 stay in span statistics even when the duration is zero. "
     "Every one of those values is CPU API time, never GPU time or scanout."
 )
 UNKNOWN_RECORDING = (
@@ -78,6 +88,85 @@ if set(KINDS) != SPAN_KINDS | POINT_KINDS or not SPAN_KINDS.isdisjoint(POINT_KIN
 def pointer_from_halves(low, high):
     """Rebuild a guest u64 from the signed i32 halves stored in index and result."""
     return (low & 0xFFFFFFFF) | ((high & 0xFFFFFFFF) << 32)
+
+
+def thread_label(pointer):
+    """Hashed thread label: the pure function of a ThreadType pointer in src/render_trace.rs."""
+    mixed = ((pointer + THREAD_HASH_MULTIPLIER) & U64_MASK) * THREAD_HASH_MULTIPLIER & U64_MASK
+    rotated = ((mixed << 27) | (mixed >> 37)) & U64_MASK
+    return (rotated & 0xFFFFFFFF) & 0x7FFFFFFF
+
+
+def _distribution(values):
+    """Mean, p50, p99, and max of raw sample values (not milliseconds)."""
+    return {"mean": sum(values) / len(values), "p50": percentile(values, .5),
+            "p99": percentile(values, .99), "max": max(values)}
+
+
+def css_capture_report(events, stats, hz):
+    """Character-select diagnostics for kinds 60-64, 66, 77. None when none are present."""
+    by_kind = {kind: [e for e in events if e["kind"] == kind] for kind in CSS_KINDS}
+    if not any(by_kind.values()):
+        return None
+
+    def span_ms(group):
+        return [(e["end_tick"] - e["begin_tick"]) * 1000 / hz for e in group]
+
+    report = {}
+    waits, jobs = by_kind[66], by_kind[77]
+    job_labels = {e["result"] for e in jobs}
+    grouped = {}
+    for event in waits:
+        grouped.setdefault(event["index"], []).append(event)
+    report["dependency_wait_by_counter"] = {
+        (f"0x{offset:x}" if offset >= 0 else str(offset)): {
+            **stats(span_ms(group)),
+            "thread_labels": sorted({e["result"] for e in group}),
+        }
+        for offset, group in sorted(grouped.items())
+    }
+    report["ui_job"] = (
+        {**stats(span_ms(jobs)), "thread_labels": sorted(job_labels)} if jobs else None
+    )
+    report["nested_waits"] = sum(e["result"] in job_labels for e in waits)
+    sleeps, peaks = by_kind[60], by_kind[61]
+    backoff = {}
+    if sleeps:
+        backoff["sleeps"] = _distribution([e["index"] for e in sleeps])
+        backoff["sleep_us"] = _distribution([e["result"] for e in sleeps])
+    if peaks:
+        backoff["peak_sleep_us_max"] = max(e["index"] for e in peaks)
+    report["backoff_per_frame"] = backoff
+    threads = []
+    for position, event in enumerate(events):
+        if event["kind"] != 62:
+            continue
+        pointer = pointer_from_halves(event["index"], event["result"])
+        info = events[position + 1] if position + 1 < len(events) else None
+        if info is not None and (
+            info["kind"] != 63 or info["begin_tick"] != event["begin_tick"]
+        ):
+            info = None
+        core_info = None
+        if info is not None and info["result"] != -1:
+            core_info = info["result"] & 0xFFFFFFFF
+        threads.append({
+            "pointer": f"0x{pointer:016x}",
+            "label": thread_label(pointer),
+            "priority": info["index"] if info is not None else None,
+            "core_info": core_info,
+            "ideal_core": core_info & 0xFF if core_info is not None else None,
+            "affinity_mask": core_info >> 8 if core_info is not None else None,
+        })
+    report["threads"] = threads
+    dispatch = by_kind[64]
+    report["ui_dispatch"] = {
+        "count": len(dispatch),
+        "worker_priority_pairs": sorted({
+            (e["index"] & 0xFF, (e["index"] >> 8) & 0xFF) for e in dispatch
+        }),
+    }
+    return report
 
 
 def interval_acceptance(intervals_ms):
@@ -270,7 +359,8 @@ def analyze(text):
         present_ms = [v * 1000 / hz for v in intervals]
         present_intervals = stats(present_ms)
         present_intervals.update(interval_acceptance(present_ms))
-    return {
+    css_capture = css_capture_report(events, stats, hz)
+    result = {
         "metric": "cpu_api_spans", "engine": metadata["engine"],
         "build": metadata["build"], "id": metadata["id"], "label": metadata["label"],
         "event_count": len(events), "skipped": skipped, "spans": spans,
@@ -294,9 +384,20 @@ def analyze(text):
                   "command bytes were overwritten.",
                   "Kind 38 result is the slot fenced after the host menu submit returned, "
                   "or -1 when both slots were still pending.",
+                  "Kinds 60-61 are per-present dispatcher backoff samples: sleep count and summed "
+                  "microseconds, then longest single sleep in microseconds and idle streaks started.",
+                  "Kinds 62-63 are one-shot thread setup rows: pointer halves, then priority and packed "
+                  "core info. Kind 62 pointers hash to the thread labels in kinds 12-17, 64, 66, and 77.",
+                  "Kind 64 is a UI job dispatcher registration: worker in the low byte of index, "
+                  "queue priority in the next byte, result is the registering thread label.",
+                  "Kinds 66 and 77 are wall-time spans: the dependency wait on main+0x354ccd0 "
+                  "(index is the counter offset from the text base) and the UI job on its worker.",
                   POINT_NOTE],
         "not_measured": ["GPU execution", "displayed frames", "input-to-photon latency", "scanout"],
     }
+    if css_capture is not None:
+        result["css_capture"] = css_capture
+    return result
 
 
 def main():

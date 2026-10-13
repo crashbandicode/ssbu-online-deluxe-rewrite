@@ -358,6 +358,10 @@ unsafe extern "C" fn queue_present(queue: Ptr, window: Ptr, index: i32) {
     if tracked_window(window) {
         super::resolution::on_present(window);
         super::fps_boost::on_present(tick);
+        super::dispatcher_backoff::note_present(tick);
+        if super::api_trace::active() {
+            super::dispatcher_backoff::frame_rows(tick);
+        }
     }
     PRESENT_TICK.store(tick, Ordering::Relaxed);
     let n = PRESENTS.fetch_add(1, Ordering::Relaxed) + 1;

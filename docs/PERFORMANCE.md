@@ -120,11 +120,14 @@ The callback traces below do not measure or confirm the six-frame native baselin
 
 ## Available now: raw callback capture
 
-An opt-in capture records ten guest-clock seconds of the existing ImGui render
-callback, including callback sequence, raw system ticks, sampled HID buttons,
-requested FX mode/scope and effective suppression state. It adds no game hook.
-Storage is a fixed 1024-sample array; the callback uses `try_lock`, with explicit
-skipped counts. Recording stops before the background logger exports a CSV.
+An opt-in capture records thirty guest-clock seconds (ten before 0.3.1) of the
+existing ImGui render callback, including callback sequence, raw system ticks,
+sampled HID buttons, requested FX mode/scope and effective suppression state.
+It adds no game hook. Storage is a fixed 2048-sample array (1024 before 0.3.1);
+the callback uses `try_lock`, with explicit skipped counts. Recording stops
+before the background logger exports a CSV. Since 0.3.1 the `CAPTURE_CSS` boot
+flag arms the same capture automatically on character-select entry (label
+`css`) and adds the read-only dispatcher/UI rows described in the README.
 No per-sample file write, allocation, or blocking lock occurs in the callback.
 
 From Settings, use the existing debug shortcut (hold L+R and Plus or Minus, tap
@@ -299,7 +302,8 @@ Current source registers sequencing, resolution, LLDoubles, and live transitions
 together; see the registered-profile section.
 
 Each CAPTURE_TIMING request also writes api-<tick>.csv, a bounded capture using
-try_lock (4096 events in this build; 8192 in the current source). It records CPU
+try_lock (4096 events in this build; 8192 later; 65536 zero-initialised events in
+`.bss` since 0.3.1 so a 30 s capture does not end on capacity). It records CPU
 spans for present, acquire, the acquired texture's CPU wait, zero-timeout waits
 and (non-Vanilla modes only) dispatch flush. Analyze
 with python3 tools/analyze_render_trace.py /path/to/api-123.csv. The analyzer

@@ -1,6 +1,7 @@
 mod acmd;
 mod api_trace;
 mod auto_driver;
+mod css_capture;
 mod dispatcher_backoff;
 mod effect_context;
 mod effects;
@@ -204,6 +205,8 @@ pub fn main() {
             install();
         }
     }
+    // After the renderer family verified the dispatcher sites it shares.
+    css_capture::install();
     resolution::install();
     fighter_probe::install();
     peer_observer::install();

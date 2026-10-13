@@ -160,6 +160,23 @@ present; zero is meaningful. Kind 12 is the selected value before the game's
 modulo-three instruction. These are CPU-side observations, not displayed frames
 or input-to-photon measurements.
 
+With the `CAPTURE_CSS` boot flag (0.3.1) the trace also carries: kind 60
+(index = dispatcher-backoff sleeps since the previous tracked present, result =
+their summed actual microseconds), 61 (index = longest single sleep in µs,
+result = idle streaks started), 62 (SDK `ThreadType` pointer halves, once per
+thread per capture), 63 (index = `nn::os::GetThreadPriority`, result = ideal
+core in the low byte and the affinity mask above it; -1 when the SDK symbol did
+not resolve), 64 (UI aggregate child registered: index = worker | priority << 8,
+result = thread label), 66 (span of a `main+0x354ccd0` dependency wait on any
+thread; index = awaited counter's offset from the text base, `0x5333160` being
+the UI barrier; result = thread label) and 77 (span of the UI job
+`main+0x375e260` on its worker; result = thread label). A kind 66 row whose
+label equals the kind 77 label is a wait nested inside the UI job. The label is
+the same pure hash for every kind; `tools/analyze_render_trace.py` recomputes it
+from kind 62 and reports a `css_capture` section. Install log code 104 gives the
+hook mask (7 = all three) and which SDK symbols resolved; codes 12/13 mark
+character-select entry and exit (exit = one second without a CSS update).
+
 ## Eden test lifecycle on this Ubuntu host
 
 Use the test launcher instead of repeatedly opening the desktop shortcut:

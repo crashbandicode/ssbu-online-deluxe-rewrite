@@ -9,6 +9,10 @@
 //! This file only reads the dispatcher and sleeps. Layout facts come from the
 //! 13.0.5 source audit in the tangent evidence (`css-budget/astra`,
 //! `CSS_SLOW_FRAME_ATTRIBUTION.md` "Production contract").
+//!
+//! 0.3.1 adds an eligibility gate (no sleep before a scene hook has fired and
+//! while the tracked window is not presenting) and per-frame sleep aggregates
+//! for the CSS capture (`css-budget/hand/CSS_CAPTURE_CONTRACT.md`).
 
 use super::{memory, record, Code};
 use crate::dispatcher_backoff::{decide, Policy, Snapshot, Streak};
@@ -52,9 +56,28 @@ const THREAD_NAME_POINTER: usize = 0x1a0;
 const MAIN_THREAD_NAME: &[u8] = b"MainThread\0";
 const SLOTS: usize = 8;
 
+/// A tracked present older than this means the renderer is not in its steady
+/// loop (startup, window re-creation, scene teardown): no sleep until it is.
+const PRESENT_STALE_TICKS: u64 = crate::timing::TICK_HZ / 4;
+
 static INSTALLED: AtomicBool = AtomicBool::new(false);
 /// 0 unknown, 1 installed, 2 external owner, 3 words differ, 4 disabled.
 static OUTCOME: AtomicU8 = AtomicU8::new(0);
+/// Eligibility gate (0.3.1). Both must hold before the first sleep: a scene
+/// hook has fired since boot (the game is past its initialization and on a
+/// real scene), and the tracked window presented within the last 250 ms.
+/// Startup, the logo/movie/title sequence and a stalled renderer never sleep.
+static SCENE_SEEN: AtomicBool = AtomicBool::new(false);
+static LAST_PRESENT_TICK: AtomicU64 = AtomicU64::new(0);
+/// Latched the first time the gate passed; shown as `Armed` until then.
+static ELIGIBLE: AtomicBool = AtomicBool::new(false);
+static GATED_SKIPS: AtomicU64 = AtomicU64::new(0);
+/// Per-frame aggregates for the CSS capture, swapped out at each tracked
+/// present. Sleep ticks are measured only while a finite API trace is active.
+static FRAME_SLEEPS: AtomicU64 = AtomicU64::new(0);
+static FRAME_SLEEP_TICKS: AtomicU64 = AtomicU64::new(0);
+static FRAME_MAX_SLEEP_TICKS: AtomicU64 = AtomicU64::new(0);
+static FRAME_STREAKS: AtomicU64 = AtomicU64::new(0);
 static SPIN_PASSES: AtomicU32 = AtomicU32::new(Policy::DEFAULT.spin_passes);
 static EVERY_PASSES: AtomicU32 = AtomicU32::new(Policy::DEFAULT.every_passes);
 static BASE_NS: AtomicU32 = AtomicU32::new(Policy::DEFAULT.base_ns);
@@ -246,25 +269,69 @@ unsafe fn dispatcher_idle_pass(ctx: &InlineCtx) {
     );
     if streak.idle_passes == 1 {
         IDLE_PASSES.fetch_add(1, Ordering::Relaxed);
+        FRAME_STREAKS.fetch_add(1, Ordering::Relaxed);
     }
     let Ok(nanoseconds) = decision else {
         return;
     };
+    // The clock is read only on passes that would sleep.
+    let now = skyline::nn::os::GetSystemTick() as u64;
+    if !SCENE_SEEN.load(Ordering::Relaxed)
+        || now.wrapping_sub(LAST_PRESENT_TICK.load(Ordering::Relaxed)) > PRESENT_STALE_TICKS
+    {
+        GATED_SKIPS.fetch_add(1, Ordering::Relaxed);
+        return;
+    }
+    if !ELIGIBLE.swap(true, Ordering::AcqRel) {
+        record(Code::DispatcherBackoff, 5, now);
+    }
     let cooldown = COOLDOWN_TICKS.load(Ordering::Relaxed);
-    if cooldown != 0 {
-        let now = skyline::nn::os::GetSystemTick() as u64;
-        if now.wrapping_sub(LAST_SLEEP_END.load(Ordering::Relaxed)) < cooldown {
-            COOLDOWN_SKIPS.fetch_add(1, Ordering::Relaxed);
-            return;
-        }
+    if cooldown != 0 && now.wrapping_sub(LAST_SLEEP_END.load(Ordering::Relaxed)) < cooldown {
+        COOLDOWN_SKIPS.fetch_add(1, Ordering::Relaxed);
+        return;
     }
     SLEEPS.fetch_add(1, Ordering::Relaxed);
+    FRAME_SLEEPS.fetch_add(1, Ordering::Relaxed);
     LAST_NS.store(nanoseconds, Ordering::Relaxed);
+    let timed = super::api_trace::active();
     skyline::nn::os::SleepThread(skyline::nn::TimeSpan {
         nanoseconds: u64::from(nanoseconds),
     });
-    if cooldown != 0 {
-        LAST_SLEEP_END.store(skyline::nn::os::GetSystemTick() as u64, Ordering::Relaxed);
+    if timed || cooldown != 0 {
+        let end = skyline::nn::os::GetSystemTick() as u64;
+        if cooldown != 0 {
+            LAST_SLEEP_END.store(end, Ordering::Relaxed);
+        }
+        if timed {
+            let slept = end.wrapping_sub(now);
+            FRAME_SLEEP_TICKS.fetch_add(slept, Ordering::Relaxed);
+            FRAME_MAX_SLEEP_TICKS.fetch_max(slept, Ordering::Relaxed);
+        }
+    }
+}
+
+/// Any scene hook fired: the game is past initialization. Called by
+/// `auto_driver::set_scene` on every scene observation, including unchanged ones.
+pub(super) fn note_scene() {
+    SCENE_SEEN.store(true, Ordering::Relaxed);
+}
+
+/// The tracked NVN window presented. Called from the present wrapper.
+pub(super) fn note_present(tick: u64) {
+    LAST_PRESENT_TICK.store(tick, Ordering::Relaxed);
+}
+
+/// Present wrapper, only while a finite API trace is active: emit the two
+/// per-frame backoff rows and start the next frame's aggregates.
+pub(super) fn frame_rows(tick: u64) {
+    let sleeps = FRAME_SLEEPS.swap(0, Ordering::Relaxed);
+    let sleep_ticks = FRAME_SLEEP_TICKS.swap(0, Ordering::Relaxed);
+    let max_sleep = FRAME_MAX_SLEEP_TICKS.swap(0, Ordering::Relaxed);
+    let streaks = FRAME_STREAKS.swap(0, Ordering::Relaxed);
+    for event in
+        crate::render_trace::backoff_frame_events(tick, sleeps, sleep_ticks, max_sleep, streaks)
+    {
+        super::api_trace::TRACE.observe(event);
     }
 }
 
@@ -350,6 +417,7 @@ pub(super) fn publish() {
 
 pub(super) fn status_label() -> String {
     match OUTCOME.load(Ordering::Acquire) {
+        1 if !ELIGIBLE.load(Ordering::Acquire) => "Armed".to_string(),
         1 => crate::dispatcher_backoff::status_label(
             true,
             Some(RATE.load(Ordering::Relaxed)),

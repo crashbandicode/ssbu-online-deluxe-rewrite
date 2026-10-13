@@ -1066,7 +1066,8 @@ unsafe extern "C" fn draw() {
                 if show_remote {
                     row("Ping detail", ping.detail);
                 }
-                row("Capture", "L+R+Up (10 s)");
+                row("Capture", "L+R+Up (30 s)");
+                row("CSS capture", &super::css_capture::status_label());
                 igEndTable();
             }
             if let Some(lines) = compact_lines.as_ref() {

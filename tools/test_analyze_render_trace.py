@@ -1,6 +1,6 @@
 import unittest
 from pathlib import Path
-from analyze_render_trace import analyze, pointer_from_halves
+from analyze_render_trace import analyze, pointer_from_halves, thread_label
 
 HEADER = """# schema=1
 # metric=cpu_api_spans
@@ -193,6 +193,90 @@ class RenderTraceTest(unittest.TestCase):
         self.assertIn("longest_run_gt_16_6667", result["present_call_intervals"])
         self.assertIn("excess_ms_above_16_6667", result["present_call_intervals"])
         self.assertIn("scanout", result["not_measured"])
+
+    def _css_rows(self):
+        label = thread_label(0x1000)
+        counter = 0x5333160
+        rows = [
+            "1,100,200,0,-1",
+            "60,300,300,2,4000",
+            "60,400,400,4,6000",
+            "61,300,300,3000,1",
+            "62,500,500,4096,0",
+            "63,500,500,5,3843",
+            "62,600,600,0,0",
+            "63,600,600,-1,-1",
+            "64,700,700,261,%d" % label,
+            "64,710,710,261,%d" % label,
+            "64,720,720,2,%d" % label,
+            "66,800,1600,%d,%d" % (counter, label),
+            "66,900,1700,%d,12345" % counter,
+            "66,900,1000,-1,12345",
+            "77,800,2600,-1,%d" % label,
+            "1,192000100,192000200,1,-1",
+        ]
+        return "\n".join(f"{n},{row}" for n, row in enumerate(rows)), len(rows)
+
+    def test_thread_label_matches_the_formula(self):
+        def formula(pointer):
+            mask = (1 << 64) - 1
+            mixed = ((pointer + 0x9E3779B185EBCA87) & mask) * 0x9E3779B185EBCA87 & mask
+            mixed = ((mixed << 27) | (mixed >> 37)) & mask
+            return (mixed & 0xFFFFFFFF) & 0x7FFFFFFF
+        self.assertEqual(thread_label(0), 137139250)
+        self.assertEqual(thread_label(0x1000), 199847157)
+        for pointer in (0, 0x1000, 0xFFFFFFFFFFFFFFFF, 0x7100ABCDEF00):
+            self.assertEqual(thread_label(pointer), formula(pointer))
+            self.assertGreaterEqual(thread_label(pointer), 0)
+
+    def test_css_kinds_classify_as_spans_and_points(self):
+        rows, count = self._css_rows()
+        result = analyze(self._trace(rows, count))
+        for name in ("dependency_wait", "ui_job"):
+            self.assertIn(name, result["spans"])
+            self.assertNotIn(name, result["point_samples"])
+        for name in ("backoff_frame_sleep", "backoff_frame_peak", "thread_setup_pointer",
+                     "thread_setup_info", "ui_dispatch"):
+            self.assertIn(name, result["point_samples"])
+            self.assertNotIn(name, result["spans"])
+        self.assertEqual(result["spans"]["dependency_wait"]["count"], 3)
+        self.assertEqual(result["spans"]["ui_job"]["count"], 1)
+        self.assertEqual(result["point_samples"]["thread_setup_pointer"]["count"], 2)
+        self.assertIn("60-64", result["notes"][-1])
+
+    def test_css_capture_section(self):
+        rows, count = self._css_rows()
+        css = analyze(self._trace(rows, count))["css_capture"]
+        label = thread_label(0x1000)
+        waits = css["dependency_wait_by_counter"]
+        self.assertEqual(sorted(waits), ["-1", "0x5333160"])
+        ui_wait = waits["0x5333160"]
+        self.assertEqual(ui_wait["count"], 2)
+        self.assertEqual(ui_wait["thread_labels"], sorted([label, 12345]))
+        self.assertAlmostEqual(ui_wait["max_ms"], 800 * 1000 / 19200000)
+        self.assertEqual(waits["-1"]["thread_labels"], [12345])
+        self.assertEqual(css["ui_job"]["count"], 1)
+        self.assertEqual(css["ui_job"]["thread_labels"], [label])
+        self.assertAlmostEqual(css["ui_job"]["mean_ms"], 1800 * 1000 / 19200000)
+        self.assertEqual(css["nested_waits"], 1)
+        backoff = css["backoff_per_frame"]
+        self.assertEqual(backoff["sleeps"]["mean"], 3)
+        self.assertEqual(backoff["sleeps"]["max"], 4)
+        self.assertEqual(backoff["sleep_us"]["p50"], 5000)
+        self.assertEqual(backoff["sleep_us"]["max"], 6000)
+        self.assertEqual(backoff["peak_sleep_us_max"], 3000)
+        self.assertEqual(css["threads"], [
+            {"pointer": "0x0000000000001000", "label": label, "priority": 5,
+             "core_info": 3843, "ideal_core": 3, "affinity_mask": 0x0F},
+            {"pointer": "0x0000000000000000", "label": thread_label(0), "priority": -1,
+             "core_info": None, "ideal_core": None, "affinity_mask": None},
+        ])
+        self.assertEqual(css["ui_dispatch"]["count"], 3)
+        self.assertEqual(css["ui_dispatch"]["worker_priority_pairs"], [(2, 0), (5, 1)])
+
+    def test_css_capture_is_absent_on_an_old_trace(self):
+        rows = "0,1,100,200,0,-1\n1,18,300,300,0,3\n2,1,192000100,192000200,1,-1"
+        self.assertNotIn("css_capture", analyze(self._trace(rows, 3)))
 
     def _trace(self, rows, count):
         header = HEADER.replace("# event_count=3", f"# event_count={count}")

@@ -16,6 +16,9 @@ use std::{
 
 static CAPTURE: Capture = Capture::new();
 static REQUESTED: AtomicBool = AtomicBool::new(false);
+static CSS_REQUESTED: AtomicBool = AtomicBool::new(false);
+/// Wall-clock abort margin after the guest-clock duration.
+const ABORT_SECONDS: u64 = crate::timing::DURATION_SECONDS + 10;
 static CALLBACK: AtomicU64 = AtomicU64::new(0);
 static STATUS: AtomicU8 = AtomicU8::new(PHASE_IDLE);
 static VIEW: AtomicU8 = AtomicU8::new(0);
@@ -29,6 +32,16 @@ pub(super) fn request() {
     if !controller_request_busy(STATUS.load(Ordering::Acquire)) {
         REQUESTED.store(true, Ordering::Release);
     }
+}
+
+/// Character-select entry with the CSS capture hooks live. Returns whether the
+/// request was taken; a running recording or export ignores it.
+pub(super) fn request_css() -> bool {
+    if controller_request_busy(STATUS.load(Ordering::Acquire)) || REQUESTED.load(Ordering::Acquire)
+    {
+        return false;
+    }
+    !CSS_REQUESTED.swap(true, Ordering::AcqRel)
 }
 
 pub(super) fn status() -> &'static str {
@@ -101,8 +114,9 @@ fn effective_engine() -> &'static str {
 impl Service {
     /// Called only by the existing background sink, once every 500 ms.
     pub(super) fn poll(&mut self) {
+        super::css_capture::poll();
         if let Some((label, started, engine)) = &self.current {
-            if started.elapsed().as_secs() >= 30 {
+            if started.elapsed().as_secs() >= ABORT_SECONDS {
                 CAPTURE.finish();
                 super::api_trace::TRACE.finish();
             }
@@ -154,7 +168,10 @@ impl Service {
             return;
         }
         let label = if REQUESTED.swap(false, Ordering::AcqRel) {
+            CSS_REQUESTED.store(false, Ordering::Release);
             Some("controller".to_owned())
+        } else if CSS_REQUESTED.swap(false, Ordering::AcqRel) {
+            Some("css".to_owned())
         } else {
             match read_request() {
                 Ok(value) => {

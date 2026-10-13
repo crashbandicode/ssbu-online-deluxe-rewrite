@@ -156,6 +156,8 @@ pub(crate) fn set_scene(
     next_status: Option<SceneStatus>,
     source: u64,
 ) {
+    // Every scene hook, changed or not, proves the game is past initialization.
+    super::dispatcher_backoff::note_scene();
     let (previous_connection, previous_status) = scene_pair();
     let connection = next_connection.unwrap_or(previous_connection);
     let status = next_status.unwrap_or(previous_status);

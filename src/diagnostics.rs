@@ -185,12 +185,19 @@ pub enum Code {
     /// 2 another owner already patched the site, 3 site words differ from
     /// 13.0.5, 4 disabled by flag. `b` packs the policy: `spin_passes` in
     /// bits 0..15, `base_ns / 1000` in bits 16..31, `max_ns / 1000` in 32..47.
+    /// `a` = 5 is written once when the eligibility gate first passed (a scene
+    /// hook has fired and the tracked window is presenting); `b` is that tick.
     DispatcherBackoff = 102,
     /// Periodic backoff counters from the diagnostics poll, written only when
     /// they change. `a` is total idle passes seen at the hook site. `b` is
     /// total sleeps in bits 0..47 and the last sleep length in microseconds
     /// in bits 48..63. Not a per-frame record.
     DispatcherBackoffStats = 103,
+    /// CSS capture startup. `a` is the installed hook mask: bit 0 dispatcher
+    /// registration, bit 1 dependency wait, bit 2 UI job (7 = arming). `b`
+    /// bit 0 is the `CAPTURE_CSS` flag, bit 1 `GetThreadPriority` resolved,
+    /// bit 2 `GetThreadCoreMask` resolved. Both zero: flag absent, no hooks.
+    CssCapture = 104,
 }
 
 /// Game SetCrop observations recorded before further calls are forwarded only.
@@ -348,6 +355,9 @@ mod tests {
         assert_eq!(Code::PluginRegistered as u16, 99);
         assert_eq!(Code::PluginRequest as u16, 100);
         assert_eq!(Code::PluginPersisted as u16, 101);
+        assert_eq!(Code::DispatcherBackoff as u16, 102);
+        assert_eq!(Code::DispatcherBackoffStats as u16, 103);
+        assert_eq!(Code::CssCapture as u16, 104);
         let rect = crop_rect_event(4, 0, 0, 1024, 576);
         assert_eq!(rect.0, crop_rect_word(0, 0, 1024, 576));
         assert_eq!(rect.1, 4);

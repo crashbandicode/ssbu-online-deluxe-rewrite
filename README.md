@@ -210,6 +210,30 @@ fix ships alone as the
 plugin; exactly one of the two installs the hook, whichever loads first, and
 the other reports `External`.
 
+Since 0.3.1 the hook also has an eligibility gate: it never sleeps before one
+of the scene hooks has fired (main menu, Quickplay, Arena, local wireless,
+stage setup or the character select), and never while the tracked window has
+not presented for 250 ms. Boot, the logo/movie/title sequence and a stalled
+renderer therefore run the game's original loop. The Backoff row reads
+`Armed` until the gate first passes; install log code 102 with `a=5` marks
+that moment. If the scene hooks fail their own checks the gate stays closed.
+
+### Character-select capture (opt-in)
+
+To locate the remaining hardware character-select cost, create an empty file
+`sd:/ultimate/ssbu_online_deluxe_rewrite/CAPTURE_CSS` before boot. The build
+then installs three extra read-only hooks (dispatcher job registration,
+dependency wait, the UI layout job) and arms a 30 s timing capture
+automatically each time the character select is entered: leave the hand still
+for the first ten seconds, then move it continuously. The `api-<tick>.csv`
+gains per-frame backoff sleep totals (kinds 60/61), one read-only priority and
+core-mask row per thread (62/63), the UI job's dispatch (64), every dependency
+wait with its counter and thread (66) and the UI job span (77). Nothing is
+changed: no priority, affinity, clock or task order. Without the flag none of
+these hooks exist. The Debug view's `CSS capture` row shows the state, and
+`tools/analyze_render_trace.py` prints a `css_capture` section. The manual
+L+R+Up capture also lasts 30 s now.
+
 ## Configuration
 
 Settings are created at:

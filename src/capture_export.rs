@@ -17,7 +17,7 @@ pub(crate) const EXPORT_BUFFER_BYTES: usize = 64 * 1024;
 
 pub(crate) fn status_label(phase: u8) -> &'static str {
     match phase {
-        PHASE_CAPTURING => "Capturing (10 s)",
+        PHASE_CAPTURING => "Capturing (30 s)",
         PHASE_SAVED => "CSV saved",
         PHASE_EXPORT_ERROR => "Export error",
         PHASE_EXPORTING => "Exporting CSV",
@@ -371,7 +371,7 @@ mod tests {
         assert!(!controller_request_busy(PHASE_SAVED));
         assert!(!controller_request_busy(PHASE_EXPORT_ERROR));
         assert_eq!(status_label(PHASE_EXPORTING), "Exporting CSV");
-        assert_eq!(status_label(PHASE_CAPTURING), "Capturing (10 s)");
+        assert_eq!(status_label(PHASE_CAPTURING), "Capturing (30 s)");
         assert_eq!(status_label(PHASE_SAVED), "CSV saved");
         assert_eq!(status_label(PHASE_IDLE), "Idle");
     }

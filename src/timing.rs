@@ -8,8 +8,11 @@ use std::{
 };
 
 pub const TICK_HZ: u64 = 19_200_000;
-pub const DURATION_TICKS: u64 = 10 * TICK_HZ;
-pub const CAPACITY: usize = 1024;
+/// 30 s: ten seconds idle, then twenty of movement, for the CSS capture.
+pub const DURATION_TICKS: u64 = 30 * TICK_HZ;
+pub const DURATION_SECONDS: u64 = DURATION_TICKS / TICK_HZ;
+/// 60 render callbacks per second for the whole duration, with headroom.
+pub const CAPACITY: usize = 2048;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Sample {
@@ -22,11 +25,14 @@ pub struct Sample {
     pub overlay_view: u8,
 }
 
+/// `Aborted` is the first variant on purpose: it is the initial `reason` of
+/// the static capture buffers, and an all-zero initializer keeps the 2 MiB API
+/// trace in `.bss` instead of the NRO file.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Finish {
+    Aborted,
     Elapsed,
     Capacity,
-    Aborted,
     ClockInvalid,
 }
 
@@ -282,9 +288,11 @@ mod tests {
 
     #[test]
     fn bounds_and_bad_clocks_produce_explicit_incomplete_results() {
+        assert_eq!(DURATION_SECONDS, 30);
+        assert!(CAPACITY as u64 > DURATION_SECONDS * 60);
         let capture = Capture::new();
         capture.begin(1);
-        for n in 0..2048 {
+        for n in 0..(2 * CAPACITY as u64) {
             capture.observe(s(n, n));
         }
         let snapshot = capture.take_ready().unwrap();
@@ -325,7 +333,7 @@ mod tests {
         write_csv(&mut bytes, &snapshot, "build", "test", "Vanilla").unwrap();
         let csv = String::from_utf8(bytes).unwrap();
         assert!(csv.contains("# metric=render_callback\n"));
-        assert!(csv.contains("0,2,100,0,0,0,0,0\n1,3,192000100,0,0,0,0,0\n"));
+        assert!(csv.contains("0,2,100,0,0,0,0,0\n1,3,576000100,0,0,0,0,0\n"));
         assert!(csv.ends_with("# complete=1\n"));
         assert!(write_csv(Vec::new(), &snapshot, "bad\nbuild", "test", "Vanilla").is_err());
     }
