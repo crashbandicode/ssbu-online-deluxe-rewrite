@@ -1583,7 +1583,13 @@ process. 0.3.4 reserves the buffer with `Vec::try_reserve_exact` and makes
 `Trace::begin` return false when that fails; `timing::Service::poll` already
 treats a false `begin` as "timing capture could not be armed" (status line,
 both captures finished and drained), so the game continues without a CSV.
-Allocation still happens only on the diagnostics thread.
+Allocation still happens only on the diagnostics thread. Gates as for 0.3.3
+(298 host tests, host and Skyline Clippy with warnings denied, no-default
+build, fmt, Skyline release). Package `artifacts/f514bfe81f142541/`: build
+`0.3.4-f1d570ccb074-1791929407`, NRO SHA-256
+`f514bfe81f142541e5211bc2a9302581fc0d162159d111d5ebd56df41a2042de`
+(2183168 B, module `88c1ecdb…3d81`), ELF `fb75fa44…9acb`, sections
+unchanged from 0.3.3 (.bss 122152, resident 2.23 MB).
 
 This is a footprint change, not a
 proven fix: the next console boot with 0.3.3 and the companion plugin rolled
