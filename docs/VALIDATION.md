@@ -1589,7 +1589,10 @@ build, fmt, Skyline release). Package `artifacts/f514bfe81f142541/`: build
 `0.3.4-f1d570ccb074-1791929407`, NRO SHA-256
 `f514bfe81f142541e5211bc2a9302581fc0d162159d111d5ebd56df41a2042de`
 (2183168 B, module `88c1ecdb…3d81`), ELF `fb75fa44…9acb`, sections
-unchanged from 0.3.3 (.bss 122152, resident 2.23 MB).
+unchanged from 0.3.3 (.bss 122152, resident 2.23 MB). Forgejo release
+`v0.3.4` (id 358, tag on 40edc90): NRO asset 74 (download read back as
+f514bfe8…42de), `manifest.json` asset 75. Not installed on hardware (the
+Switch has 0.3.3).
 
 This is a footprint change, not a
 proven fix: the next console boot with 0.3.3 and the companion plugin rolled
