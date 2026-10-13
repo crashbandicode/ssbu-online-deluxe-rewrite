@@ -1620,6 +1620,25 @@ buffer as a memory question altogether:
   reach 1307376 B; fat LTO changes nothing with `codegen-units = 1`). `"s"`
   was chosen to keep loop codegen in hooked paths.
 
+Gates: 300 host tests (4 trace tests rewritten, 2 new), host and Skyline
+Clippy with warnings denied, no-default build, fmt, Skyline release. Package
+`artifacts/6b22546e0a057901/`: build `0.3.5-ee936bc148d5-1791930600`, NRO
+SHA-256 `6b22546e0a0579011f37c3ff3780e7a9f9955226195424ff02665ad142a65dfb`
+(2002944 B, module `04397ac6…380a`), ELF `be8a3ca5…4c50`; sections `.text`
+1401296 / `.rodata` 342848 / `.data` 179360 / `.bss` 286128 (two 4096-row
+chunks), idle resident 2.21 MB (0.3.4: 2.23 MB; 0.3.2: 3.99 MB). A running
+capture adds about 190 KB of heap (one-chunk scratch plus the 64 KiB file
+buffer) where 0.3.3/0.3.4 added 2 MiB plus a 2 MiB copy at export.
+
+Switch install of 0.3.5, 2026-10-13 ~23:25Z (operator: "test and ship",
+"sd card is connected via usb, copy over when done"): hekate USB mass
+storage, tangent `switch-ums-6b22/deployment.json`. Installed NRO read back
+as e930c8f3…25f3 (0.3.3) before, saved to
+`backups/pre-stream-trace-6b22546e0a057901.nro` on the card (verified) and
+locally; copied under a temp name, renamed, read back as 6b22546e…5dfb;
+other plugins untouched (the Training Modpack on the card is now a
+2174976 B build, changed by its own agent). Runtime result pending.
+
 Caveat for the CSS capture: the SD writes now happen during the measured
 interval, from the diagnostics thread. Compare the next hardware CSS capture
 against `switch-0.3.1-1013` before trusting a movement-penalty number from it.
