@@ -1652,7 +1652,12 @@ Performance table shows them as a `Memory` row (`used/total MiB, free`).
 No hook changed; the UI path makes no system call. Because the same call
 works under Eden, the console and the emulator can now be compared for
 headroom at title, character select, Training and the moment a boot fails.
-Host tests cover the field formatting and MiB label (301 tests).
+Host tests cover the field formatting and MiB label (301 tests). Gates as
+for 0.3.5. Package `artifacts/792d88778925c0e6/`: build
+`0.3.6-c45b2f91b4ee-1791935605`, NRO SHA-256
+`792d88778925c0e6963cf5bead29b1158f73f1b535c59948ae20fef93938c5e4`
+(2002944 B, module `18fe2ed2…7101`), ELF `9dbc04b1…b5b4`; sections `.text`
+1402016 / `.data` 179368 / `.bss` 286160 (resident 2.21 MB, unchanged).
 
 Caveat for the CSS capture: the SD writes now happen during the measured
 interval, from the diagnostics thread. Compare the next hardware CSS capture
