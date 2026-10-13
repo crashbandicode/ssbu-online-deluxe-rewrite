@@ -1658,6 +1658,9 @@ for 0.3.5. Package `artifacts/792d88778925c0e6/`: build
 `792d88778925c0e6963cf5bead29b1158f73f1b535c59948ae20fef93938c5e4`
 (2002944 B, module `18fe2ed2…7101`), ELF `9dbc04b1…b5b4`; sections `.text`
 1402016 / `.data` 179368 / `.bss` 286160 (resident 2.21 MB, unchanged).
+Forgejo release `v0.3.6` (id 360, tag on ec2847f): NRO asset 78 (download
+read back as 792d8877…c5e4), `manifest.json` asset 79. Not installed on
+hardware (the Switch has 0.3.5).
 
 Caveat for the CSS capture: the SD writes now happen during the measured
 interval, from the diagnostics thread. Compare the next hardware CSS capture
