@@ -188,7 +188,13 @@ The previous boot is kept as `hang-trace.previous.log`; the file rotates at 2 Mi
 - Header: build, `boot_tick` and `tick_hz`, so another plugin's log can be
   aligned by system tick. `t=` on every line is seconds since `boot_tick`.
 - `[Heartbeat]` every 5 s: packed scene (`connection/status`), scene-ready
-  bit, character-select visit open, API trace active, then calls since boot for
+  bit, character-select visit open, API trace active, then (0.3.6) the
+  kernel's memory accounting for the game process in bytes: `mem_used`,
+  `mem_total`, `mem_free` and `heap_region` from `svcGetInfo` (used covers
+  code, heap, stacks, every Skyline plugin and GPU-backed buffers; the same
+  call works on Eden, so console and emulator headroom compare directly; the
+  Debug view's Performance table shows the same numbers as a `Memory` row),
+  then calls since boot for
   `present` (tracked window), `backoff_pass` (idle hook entries),
   `backoff_sleep`, the three `CAPTURE_CSS` hooks (`css_init`, `css_wait`,
   `css_ui_job`), `fighter_load`/`fighter_unload` (`common` module chain),

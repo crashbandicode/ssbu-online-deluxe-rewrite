@@ -1641,6 +1641,19 @@ other plugins untouched (the Training Modpack on the card is now a
 Forgejo release `v0.3.5` (id 359, tag on 08eedf1): NRO asset 76 (download
 read back as 6b22546e…5dfb), `manifest.json` asset 77.
 
+0.3.6 (operator: "Yes build the memory probe") adds the measurement the
+memory investigation lacked: every hang-trace heartbeat carries the kernel's
+accounting for the game process, `mem_used`, `mem_total`, `mem_free` and
+`heap_region` in bytes, read with `svcGetInfo` (TotalMemorySize,
+UsedMemorySize, HeapRegionSize on the current process; inline assembly beside
+the existing `QueryMemory` in `runtime/memory.rs`). The diagnostics thread
+refreshes the three values every 500 ms into atomics; the Debug view's
+Performance table shows them as a `Memory` row (`used/total MiB, free`).
+No hook changed; the UI path makes no system call. Because the same call
+works under Eden, the console and the emulator can now be compared for
+headroom at title, character select, Training and the moment a boot fails.
+Host tests cover the field formatting and MiB label (301 tests).
+
 Caveat for the CSS capture: the SD writes now happen during the measured
 interval, from the diagnostics thread. Compare the next hardware CSS capture
 against `switch-0.3.1-1013` before trusting a movement-penalty number from it.

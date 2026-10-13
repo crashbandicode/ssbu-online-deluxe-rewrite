@@ -44,6 +44,46 @@ pub struct Liveness {
     pub trace_active: bool,
 }
 
+/// Process memory from the kernel (0.3.6): bytes the process has been granted,
+/// bytes in use (code, heap, stacks, every plugin, GPU-backed buffers) and the
+/// heap region size. The same numbers on the console and on Eden, so the two
+/// can be compared directly.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Memory {
+    pub used: u64,
+    pub total: u64,
+    pub heap: u64,
+}
+
+const MIB: f64 = 1024.0 * 1024.0;
+
+/// Heartbeat fields, in bytes so scripts need no unit parsing.
+pub fn memory_fields(memory: Option<Memory>) -> String {
+    match memory {
+        Some(m) => format!(
+            " mem_used={} mem_total={} mem_free={} heap_region={}",
+            m.used,
+            m.total,
+            m.total.saturating_sub(m.used),
+            m.heap
+        ),
+        None => " mem=unavailable".to_string(),
+    }
+}
+
+/// Overlay row: used / total MiB and what is left.
+pub fn memory_label(memory: Option<Memory>) -> String {
+    match memory {
+        Some(m) => format!(
+            "{:.1}/{:.1} MiB, free {:.1}",
+            m.used as f64 / MIB,
+            m.total as f64 / MIB,
+            m.total.saturating_sub(m.used) as f64 / MIB
+        ),
+        None => "Unavailable".to_string(),
+    }
+}
+
 /// Seconds since `boot` with millisecond precision; ticks before boot read 0.
 pub fn seconds(tick: u64, boot: u64) -> String {
     let ticks = tick.saturating_sub(boot);
@@ -68,16 +108,18 @@ pub fn heartbeat_line(
     now: u64,
     boot: u64,
     live: Liveness,
+    memory: Option<Memory>,
     samples: &[HookSample; HOOK_COUNT],
 ) -> String {
     let mut line = format!(
-        "[Heartbeat] t={} tick={:#x} scene={} ready={} css={} trace={}",
+        "[Heartbeat] t={} tick={:#x} scene={} ready={} css={} trace={}{}",
         seconds(now, boot),
         now,
         scene_label(live.scene),
         u8::from(live.ready),
         u8::from(live.in_css),
         u8::from(live.trace_active),
+        memory_fields(memory),
     );
     for (name, sample) in HOOK_NAMES.iter().zip(samples) {
         line.push_str(&format!(" {name}={}", sample.calls));
@@ -114,7 +156,7 @@ pub fn scene_line(previous: u8, next: u8, now: u64, boot: u64) -> String {
 
 pub fn header(build: &str, boot: u64) -> String {
     format!(
-        "build={build}\nboot_tick={boot:#x} tick_hz={TICK_HZ}\n# [Heartbeat] every 5 s: t = seconds since boot_tick; each hook shows calls since boot and, while a call has entered and not returned, [ACTIVE xN age_ms]\n# [HangTrace] first <hook>: first call of that hook since the current scene began\n# present/backoff_pass/fighter_main are count-only liveness signals\n"
+        "build={build}\nboot_tick={boot:#x} tick_hz={TICK_HZ}\n# [Heartbeat] every 5 s: t = seconds since boot_tick; mem_used/mem_total/mem_free/heap_region are the kernel's bytes for this process (svcGetInfo); each hook shows calls since boot and, while a call has entered and not returned, [ACTIVE xN age_ms]\n# [HangTrace] first <hook>: first call of that hook since the current scene began\n# present/backoff_pass/fighter_main are count-only liveness signals\n"
     )
 }
 
@@ -147,6 +189,11 @@ mod tests {
             entry_tick: TICK_HZ,
             first_tick: TICK_HZ,
         };
+        let memory = Memory {
+            used: 3_000 * 1024 * 1024,
+            total: 3_286 * 1024 * 1024,
+            heap: 2_048 * 1024 * 1024,
+        };
         let line = heartbeat_line(
             TICK_HZ * 3,
             TICK_HZ,
@@ -156,13 +203,35 @@ mod tests {
                 in_css: false,
                 trace_active: false,
             },
+            Some(memory),
             &samples,
         );
         assert!(line.starts_with("[Heartbeat] t=2.000 tick=0x"));
-        assert!(line.contains(" scene=local/inactive ready=1 css=0 trace=0 present=1200 "));
+        assert!(line.contains(
+            " scene=local/inactive ready=1 css=0 trace=0 mem_used=3145728000 mem_total=3445620736 mem_free=299892736 heap_region=2147483648 present=1200 "
+        ));
         assert!(line.contains(" css_wait=9[ACTIVE x2 age_ms=2000] "));
         assert!(!line.contains("present=1200["));
         assert_eq!(line.matches("ACTIVE").count(), 1);
+        let without = heartbeat_line(TICK_HZ * 3, TICK_HZ, Liveness::default(), None, &samples);
+        assert!(without.contains(" trace=0 mem=unavailable present=1200 "));
+    }
+
+    #[test]
+    fn memory_label_reports_mib_and_saturates() {
+        let memory = Memory {
+            used: 3_000 * 1024 * 1024 + 512 * 1024,
+            total: 3_286 * 1024 * 1024,
+            heap: 0,
+        };
+        assert_eq!(memory_label(Some(memory)), "3000.5/3286.0 MiB, free 285.5");
+        assert_eq!(memory_label(None), "Unavailable");
+        let over = Memory {
+            used: 10,
+            total: 5,
+            heap: 0,
+        };
+        assert!(memory_fields(Some(over)).contains(" mem_free=0 "));
     }
 
     #[test]

@@ -50,6 +50,38 @@ unsafe fn permitted(address: usize, size: usize, required: u32) -> bool {
             .is_some_and(|mapped_end| end as u64 <= mapped_end)
 }
 
+/// `svcGetInfo` on the current process: w1 info type, x2 handle, x3 sub id;
+/// result in w0, value in x1. Read-only; nothing is mapped or changed.
+unsafe fn get_info(info_type: u32, sub_id: u64) -> Option<u64> {
+    const CURRENT_PROCESS: u64 = 0xFFFF_8001;
+    let result: u64;
+    let value: u64;
+    core::arch::asm!(
+        "svc 0x29",
+        lateout("x0") result,
+        inout("x1") u64::from(info_type) => value,
+        in("x2") CURRENT_PROCESS,
+        in("x3") sub_id,
+        clobber_abi("C"),
+        options(nostack),
+    );
+    (result as u32 == 0).then_some(value)
+}
+
+/// Process memory as the kernel accounts it: total pool granted, bytes in use
+/// (code, heap, stacks, every plugin, GPU-backed buffers) and the heap region
+/// size. Three system calls; the diagnostics thread reads it every 500 ms.
+pub(super) fn memory_snapshot() -> Option<crate::hang_trace::Memory> {
+    // 6 TotalMemorySize, 7 UsedMemorySize, 5 HeapRegionSize.
+    unsafe {
+        Some(crate::hang_trace::Memory {
+            total: get_info(6, 0)?,
+            used: get_info(7, 0)?,
+            heap: get_info(5, 0)?,
+        })
+    }
+}
+
 /// Readable mapping that contains `address`, as `(base, size)`.
 pub(super) unsafe fn region(address: usize) -> Option<(usize, usize)> {
     if address < 0x10000 {

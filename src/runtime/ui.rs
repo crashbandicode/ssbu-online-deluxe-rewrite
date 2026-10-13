@@ -206,6 +206,10 @@ unsafe fn performance(
         row("Output", &format!("{width:.0}x{height:.0}"));
     }
     row("Backoff", &super::dispatcher_backoff::status_label());
+    row(
+        "Memory",
+        &crate::hang_trace::memory_label(super::hang_trace::memory()),
+    );
     let mean = frames.average();
     let color = frame_color(mean);
     igPushStyleColor_Vec4(TEXT, color);

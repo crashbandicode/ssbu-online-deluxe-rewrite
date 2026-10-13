@@ -9,7 +9,7 @@
 
 use super::{logging, DATA_DIR};
 use crate::hang_trace::{
-    first_line, header, heartbeat_line, scene_line, HookSample, Liveness, HOOK_COUNT,
+    first_line, header, heartbeat_line, scene_line, HookSample, Liveness, Memory, HOOK_COUNT,
 };
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
@@ -76,6 +76,34 @@ static WRITTEN_SCENE: AtomicU8 = AtomicU8::new(0);
 static SCENE_CHANGES: AtomicU64 = AtomicU64::new(0);
 static WRITTEN_CHANGES: AtomicU64 = AtomicU64::new(0);
 static LOG: Mutex<Option<File>> = Mutex::new(None);
+/// Latest kernel memory numbers, refreshed every poll for the overlay row.
+static MEM_USED: AtomicU64 = AtomicU64::new(0);
+static MEM_TOTAL: AtomicU64 = AtomicU64::new(0);
+static MEM_HEAP: AtomicU64 = AtomicU64::new(0);
+static MEM_VALID: AtomicBool = AtomicBool::new(false);
+
+fn refresh_memory() -> Option<Memory> {
+    let memory = super::memory::memory_snapshot();
+    match memory {
+        Some(m) => {
+            MEM_USED.store(m.used, Ordering::Relaxed);
+            MEM_TOTAL.store(m.total, Ordering::Relaxed);
+            MEM_HEAP.store(m.heap, Ordering::Relaxed);
+            MEM_VALID.store(true, Ordering::Release);
+        }
+        None => MEM_VALID.store(false, Ordering::Release),
+    }
+    memory
+}
+
+/// Overlay: the most recent poll's numbers, no system call on the UI path.
+pub(super) fn memory() -> Option<Memory> {
+    MEM_VALID.load(Ordering::Acquire).then(|| Memory {
+        used: MEM_USED.load(Ordering::Relaxed),
+        total: MEM_TOTAL.load(Ordering::Relaxed),
+        heap: MEM_HEAP.load(Ordering::Relaxed),
+    })
+}
 
 fn tick() -> u64 {
     unsafe { skyline::nn::os::GetSystemTick() as u64 }
@@ -193,6 +221,7 @@ pub(super) fn poll(iteration: u64) {
     };
     let boot = BOOT_TICK.load(Ordering::Relaxed);
     let now = tick();
+    let memory = refresh_memory();
     let changes = SCENE_CHANGES.load(Ordering::Acquire);
     let scene = SCENE.load(Ordering::Acquire);
     if changes != WRITTEN_CHANGES.load(Ordering::Relaxed) {
@@ -219,7 +248,7 @@ pub(super) fn poll(iteration: u64) {
             in_css: super::css_capture::in_css(),
             trace_active: super::api_trace::active(),
         };
-        let _ = write_line(file, &heartbeat_line(now, boot, live, &samples));
+        let _ = write_line(file, &heartbeat_line(now, boot, live, memory, &samples));
         if file
             .metadata()
             .map(|m| m.len() >= MAX_BYTES)
