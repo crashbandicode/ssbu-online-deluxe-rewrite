@@ -1511,6 +1511,13 @@ Forgejo release `v0.3.2` (id 356, tag on 022a7d0) carries the clean NRO
 (asset 70, 2183168 B, download read back as 73823f8f…fd8d) and
 `manifest.json` (asset 71).
 
+Switch install of 0.3.2, 2026-10-13 17:26Z (operator: "ship 0.3.2 to the
+switch"): DBI MTP transaction `switch-mtp-7382/` in the tangent evidence,
+preflight on 9511e8c0, rollback archive
+`backups/pre-hang-trace-73823f8f67d6a3b2.nro` read back as 9511e8c0, target
+read back as 73823f8f…fd8d, other plugins and protected files unchanged.
+`CAPTURE_CSS` left in place. Runtime result pending.
+
 Switch procedure for the capture: put `CAPTURE_CSS` in the data directory,
 boot with manual LessLag and FX On, enter the character select, keep the
 hand still for ten seconds, move it continuously for twenty, wait for the
