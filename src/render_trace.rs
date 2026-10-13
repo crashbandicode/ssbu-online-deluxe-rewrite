@@ -240,9 +240,16 @@ impl Trace {
             return false;
         }
         // Not a hooked call: `begin` runs on the diagnostics thread, so the one
-        // heap allocation per capture is allowed here.
+        // heap allocation per capture is allowed here. It is fallible on purpose:
+        // on a game heap that cannot spare 2 MiB the capture is refused (the
+        // caller reports "could not be armed") instead of aborting the process.
         if state.events.is_none() {
-            state.events = Some(vec![Event::default(); CAPACITY].into_boxed_slice());
+            let mut events = Vec::new();
+            if events.try_reserve_exact(CAPACITY).is_err() {
+                return false;
+            }
+            events.resize(CAPACITY, Event::default());
+            state.events = Some(events.into_boxed_slice());
         }
         state.id = id;
         state.first = 0;

@@ -1574,7 +1574,18 @@ because DBI's server drops long or overwriting STORs). Installed NRO read
 back as 73823f8f…fd8d (0.3.2) before, saved to
 `backups/pre-trace-heap-e930c8f34d1752bf.nro` on the card (verified) and
 locally; target read back as e930c8f3…25f3 after; the other nine plugins
-unchanged. Runtime result pending. This is a footprint change, not a
+unchanged. Runtime result pending.
+
+0.3.4 (same evening, operator question "won't doing the dump crash it once
+activated?"): in 0.3.3 the per-capture allocation used `vec!`, so arming a
+capture on a game heap that could not spare 2 MiB would have aborted the
+process. 0.3.4 reserves the buffer with `Vec::try_reserve_exact` and makes
+`Trace::begin` return false when that fails; `timing::Service::poll` already
+treats a false `begin` as "timing capture could not be armed" (status line,
+both captures finished and drained), so the game continues without a CSV.
+Allocation still happens only on the diagnostics thread.
+
+This is a footprint change, not a
 proven fix: the next console boot with 0.3.3 and the companion plugin rolled
 back decides; the memory bisect is plugin removal, not Deluxe flags.
 
