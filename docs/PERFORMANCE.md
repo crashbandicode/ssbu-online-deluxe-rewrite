@@ -301,11 +301,15 @@ The later `lesslag` and `llultra` modes on that line of work added sequencing.
 Current source registers sequencing, resolution, LLDoubles, and live transitions
 together; see the registered-profile section.
 
-Each CAPTURE_TIMING request also writes api-<tick>.csv, a bounded capture using
-try_lock (4096 events in this build; 8192 later; 65536 events since 0.3.1 so a
-30 s capture does not end on capacity; 0.3.1–0.3.2 kept that 2 MiB resident in
-`.bss`, 0.3.3 allocates it on the diagnostics thread when a capture is armed and
-frees it when the CSV is exported). It records CPU
+Each CAPTURE_TIMING request also writes api-<tick>.csv, a capture using
+try_lock (4096 events in this build; 8192 later; 65536 resident events in
+0.3.1–0.3.4; since 0.3.5 the rows are packed to 20 B and streamed: hooks fill
+one of two 4096-row chunks, 160 KiB in `.bss`, and the diagnostics thread
+drains the other into the open CSV every 500 ms, so the capture is bounded by
+the 30 s duration, not by memory. The CSV header is written when the capture
+arms and `engine`, `reason`, `skipped` and `event_count` move to the footer;
+`skipped` now also counts rows lost when a chunk filled before its drain, so
+a non-zero value still means "not an A/B trace"). It records CPU
 spans for present, acquire, the acquired texture's CPU wait, zero-timeout waits
 and (non-Vanilla modes only) dispatch flush. Analyze
 with python3 tools/analyze_render_trace.py /path/to/api-123.csv. The analyzer

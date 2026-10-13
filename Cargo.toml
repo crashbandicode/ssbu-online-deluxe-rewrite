@@ -1,6 +1,6 @@
 [package]
 name = "ssbu-online-deluxe-rewrite"
-version = "0.3.4"
+version = "0.3.5"
 edition = "2021"
 publish = false
 build = "build.rs"
@@ -34,7 +34,10 @@ panic = "abort"
 
 [profile.release]
 panic = "abort"
-opt-level = 3
+# "s" since 0.3.5: .text 1590896 -> 1399936 B (-12%) with no .bss change; "z"
+# would save another 93 KB but trims loop codegen in hooked paths. Fat LTO
+# measured identical to thin with codegen-units = 1.
+opt-level = "s"
 debug = 2
 strip = false
 lto = "thin"

@@ -7,12 +7,12 @@ use std::{
         Mutex,
     },
 };
-/// 65536 × 32 B, allocated from the heap only while a capture is armed (0.3.3;
-/// 0.3.1 and 0.3.2 kept it resident in `.bss`, about 2 MiB of the game's heap
-/// for the whole session). At about 18 rows per frame this holds a 30 s capture.
-pub const CAPACITY: usize = 65536;
-// 30 s at 60 frames and about 18 rows per frame must fit without a capacity finish.
-const _: () = assert!(CAPACITY >= 1800 * 18);
+/// Rows per drain chunk. Two chunks are the whole resident cost of the trace:
+/// 2 × 4096 × 20 B = 160 KiB of `.bss`. At the ~1,100 rows/s measured on the
+/// hardware CSS capture a chunk holds about 3.7 s; the diagnostics thread drains
+/// every 500 ms, so the capture length is bounded by `DURATION_TICKS`, not by
+/// memory (0.3.1–0.3.4 held all 65536 × 32 B rows until the end).
+pub const CHUNK: usize = 4096;
 pub const KIND_INDEX: u8 = 12;
 pub const KIND_PRESENT_ENTRY: u8 = 13;
 pub const KIND_LATE_FLUSH: u8 = 14;
@@ -185,15 +185,38 @@ pub struct Event {
     /// -1 when no trustworthy result exists.
     pub result: i32,
 }
+/// Stored row: ticks relative to the capture start and the span length, both
+/// 32-bit (a 30 s capture is 576 M ticks), so a row is 20 B instead of 32.
+#[derive(Clone, Copy)]
+#[repr(C)]
+struct Packed {
+    begin: u32,
+    span: u32,
+    index: i32,
+    result: i32,
+    kind: u8,
+}
+const PACKED_ZERO: Packed = Packed {
+    begin: 0,
+    span: 0,
+    index: 0,
+    result: 0,
+    kind: 0,
+};
+struct Chunk {
+    len: usize,
+    rows: [Packed; CHUNK],
+}
 struct State {
     id: u64,
     first: u64,
-    len: usize,
+    /// Rows accepted since `begin`, drained or not.
+    total: usize,
     phase: u8,
     reason: Finish,
-    /// Allocated by `begin()` on the diagnostics thread and released by
-    /// `take_ready()`, so an idle plugin does not keep 2 MiB of events resident.
-    events: Option<Box<[Event]>>,
+    /// Index of the chunk hooks write into; the other one is being drained.
+    active: usize,
+    chunks: [Chunk; 2],
 }
 pub struct Trace {
     state: Mutex<State>,
@@ -201,6 +224,16 @@ pub struct Trace {
     epoch: AtomicU64,
     skipped: AtomicU64,
 }
+/// Identity and counts of a finished capture. Its rows were handed out by
+/// `drain` while it ran; nothing is copied at the end.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Summary {
+    pub id: u64,
+    pub reason: Finish,
+    pub skipped: u64,
+    pub event_count: usize,
+}
+/// A whole capture in memory: only tests and the single-shot `write_csv` use it.
 pub struct Snapshot {
     pub id: u64,
     pub reason: Finish,
@@ -218,11 +251,21 @@ impl Trace {
             state: Mutex::new(State {
                 id: 0,
                 first: 0,
-                len: 0,
+                total: 0,
                 phase: 0,
                 reason: Finish::Aborted,
-                // No buffer until a capture is armed: the static stays a few words.
-                events: None,
+                active: 0,
+                // All zero so the static lives in `.bss`.
+                chunks: [
+                    Chunk {
+                        len: 0,
+                        rows: [PACKED_ZERO; CHUNK],
+                    },
+                    Chunk {
+                        len: 0,
+                        rows: [PACKED_ZERO; CHUNK],
+                    },
+                ],
             }),
             active: AtomicBool::new(false),
             epoch: AtomicU64::new(0),
@@ -239,21 +282,12 @@ impl Trace {
         if state.phase != 0 {
             return false;
         }
-        // Not a hooked call: `begin` runs on the diagnostics thread, so the one
-        // heap allocation per capture is allowed here. It is fallible on purpose:
-        // on a game heap that cannot spare 2 MiB the capture is refused (the
-        // caller reports "could not be armed") instead of aborting the process.
-        if state.events.is_none() {
-            let mut events = Vec::new();
-            if events.try_reserve_exact(CAPACITY).is_err() {
-                return false;
-            }
-            events.resize(CAPACITY, Event::default());
-            state.events = Some(events.into_boxed_slice());
-        }
         state.id = id;
         state.first = 0;
-        state.len = 0;
+        state.total = 0;
+        state.active = 0;
+        state.chunks[0].len = 0;
+        state.chunks[1].len = 0;
         state.phase = 1;
         self.skipped.store(0, Ordering::Relaxed);
         self.epoch.fetch_add(1, Ordering::Release);
@@ -275,21 +309,40 @@ impl Trace {
         {
             return;
         }
-        if state.len == 0 {
+        if state.total == 0 {
             state.first = event.begin;
         }
-        let n = state.len;
-        match state.events.as_mut() {
-            Some(events) => events[n] = event,
-            None => return,
+        // A full chunk hands over to the other one only once that has been
+        // drained; until then the row is counted as skipped, never blocked on.
+        if state.chunks[state.active].len == CHUNK {
+            let other = state.active ^ 1;
+            if state.chunks[other].len != 0 {
+                self.skipped.fetch_add(1, Ordering::Relaxed);
+                return;
+            }
+            state.active = other;
         }
-        state.len += 1;
-        let reason = if event.end < event.begin {
+        let rel_begin = event.begin - state.id;
+        let span = event.end.wrapping_sub(event.begin);
+        let clock_invalid = event.end < event.begin
+            || rel_begin > u64::from(u32::MAX)
+            || span > u64::from(u32::MAX);
+        let packed = Packed {
+            begin: u32::try_from(rel_begin).unwrap_or(u32::MAX),
+            span: u32::try_from(span).unwrap_or(u32::MAX),
+            index: event.index,
+            result: event.result,
+            kind: event.kind,
+        };
+        let active = state.active;
+        let n = state.chunks[active].len;
+        state.chunks[active].rows[n] = packed;
+        state.chunks[active].len = n + 1;
+        state.total += 1;
+        let reason = if clock_invalid {
             Some(Finish::ClockInvalid)
         } else if event.end.saturating_sub(state.first) >= DURATION_TICKS {
             Some(Finish::Elapsed)
-        } else if state.len == CAPACITY {
-            Some(Finish::Capacity)
         } else {
             None
         };
@@ -309,7 +362,30 @@ impl Trace {
             self.active.store(false, Ordering::Release);
         }
     }
-    pub fn take_ready(&self) -> Option<Snapshot> {
+    /// Diagnostics thread only. Appends finished rows to `out` in capture
+    /// order: the chunk hooks are not writing, then, once the capture has
+    /// finished, the active chunk as well. The lock is held for the copy only;
+    /// a hook that collides with it counts as skipped instead of waiting.
+    /// Returns the number of rows moved.
+    pub fn drain(&self, out: &mut Vec<Event>) -> usize {
+        let Ok(mut state) = self.state.lock() else {
+            return 0;
+        };
+        if state.phase == 0 {
+            return 0;
+        }
+        let id = state.id;
+        let inactive = state.active ^ 1;
+        let mut moved = take_chunk(&mut state.chunks[inactive], id, out);
+        if state.phase == 2 {
+            let active = state.active;
+            moved += take_chunk(&mut state.chunks[active], id, out);
+        }
+        moved
+    }
+    /// The finished capture's identity and counts. Call `drain` first: rows
+    /// still in the chunks are discarded here.
+    pub fn take_ready(&self) -> Option<Summary> {
         if self.active() {
             return None;
         }
@@ -317,21 +393,34 @@ impl Trace {
         if state.phase != 2 {
             return None;
         }
-        let snapshot = Snapshot {
+        let summary = Summary {
             id: state.id,
             reason: state.reason,
             skipped: self.skipped.load(Ordering::Relaxed),
-            events: state
-                .events
-                .as_deref()
-                .map_or_else(Vec::new, |events| events[..state.len].to_vec()),
+            event_count: state.total,
         };
-        // Give the 2 MiB back to the game heap until the next capture.
-        state.events = None;
-        state.len = 0;
+        state.chunks[0].len = 0;
+        state.chunks[1].len = 0;
+        state.active = 0;
+        state.total = 0;
         state.phase = 0;
-        Some(snapshot)
+        Some(summary)
     }
+}
+fn take_chunk(chunk: &mut Chunk, id: u64, out: &mut Vec<Event>) -> usize {
+    let len = chunk.len;
+    out.extend(chunk.rows[..len].iter().map(|row| {
+        let begin = id + u64::from(row.begin);
+        Event {
+            begin,
+            end: begin + u64::from(row.span),
+            kind: row.kind,
+            index: row.index,
+            result: row.result,
+        }
+    }));
+    chunk.len = 0;
+    len
 }
 pub const fn pointer_halves(pointer: u64) -> (i32, i32) {
     (pointer as u32 as i32, (pointer >> 32) as u32 as i32)
@@ -472,6 +561,50 @@ pub const fn resize_event(tick: u64, count: u64) -> Event {
     }
 }
 
+fn single_line(values: &[&str]) -> io::Result<()> {
+    if values.iter().any(|v| v.contains(['\r', '\n'])) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "multiline API trace metadata",
+        ));
+    }
+    Ok(())
+}
+/// The CSV is streamed: header at arm time, rows as chunks drain, footer when
+/// the capture finishes. `tools/analyze_render_trace.py` reads `# key=value`
+/// lines anywhere and requires `# complete=1` last, so engine, reason, skipped
+/// and event_count move to the footer where they are known.
+pub fn write_csv_header(mut out: impl Write, id: u64, build: &str, label: &str) -> io::Result<()> {
+    single_line(&[build, label])?;
+    writeln!(
+        out,
+        "# schema=1\n# metric=cpu_api_spans\n# tick_hz={TICK_HZ}\n# id={id}\n# build={build}\n# label={label}"
+    )?;
+    writeln!(out, "event,kind,begin_tick,end_tick,index,result")
+}
+/// `next` is the running row number across chunks.
+pub fn write_csv_rows(mut out: impl Write, next: &mut usize, events: &[Event]) -> io::Result<()> {
+    for event in events {
+        writeln!(
+            out,
+            "{},{},{},{},{},{}",
+            *next, event.kind, event.begin, event.end, event.index, event.result
+        )?;
+        *next += 1;
+    }
+    Ok(())
+}
+pub fn write_csv_footer(mut out: impl Write, engine: &str, summary: &Summary) -> io::Result<()> {
+    single_line(&[engine])?;
+    writeln!(
+        out,
+        "# engine={engine}\n# reason={}\n# skipped={}\n# event_count={}\n# complete=1",
+        summary.reason.label(),
+        summary.skipped,
+        summary.event_count
+    )
+}
+/// Whole capture in one call (tests and tools); same bytes as the streamed form.
 pub fn write_csv(
     mut out: impl Write,
     data: &Snapshot,
@@ -479,78 +612,109 @@ pub fn write_csv(
     label: &str,
     engine: &str,
 ) -> io::Result<()> {
-    if [build, label, engine]
-        .iter()
-        .any(|v| v.contains(['\r', '\n']))
-    {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "multiline API trace metadata",
-        ));
-    }
-    writeln!(out, "# schema=1\n# metric=cpu_api_spans\n# tick_hz={TICK_HZ}\n# id={}\n# build={build}\n# label={label}\n# engine={engine}\n# reason={}\n# skipped={}\n# event_count={}",
-        data.id,data.reason.label(),data.skipped,data.events.len())?;
-    writeln!(out, "event,kind,begin_tick,end_tick,index,result")?;
-    for (n, event) in data.events.iter().enumerate() {
-        writeln!(
-            out,
-            "{n},{},{},{},{},{}",
-            event.kind, event.begin, event.end, event.index, event.result
-        )?;
-    }
-    writeln!(out, "# complete=1")
+    write_csv_header(&mut out, data.id, build, label)?;
+    let mut next = 0;
+    write_csv_rows(&mut out, &mut next, &data.events)?;
+    write_csv_footer(
+        &mut out,
+        engine,
+        &Summary {
+            id: data.id,
+            reason: data.reason,
+            skipped: data.skipped,
+            event_count: data.events.len(),
+        },
+    )
 }
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn drained(trace: &Trace) -> Vec<Event> {
+        let mut out = Vec::new();
+        trace.drain(&mut out);
+        out
+    }
     #[test]
     fn nested_spans_remain_valid_and_finish_at_duration() {
-        // 2 MiB of events: keep the test trace off the test thread's stack.
+        // 160 KiB of rows: keep the test trace off the test thread's stack.
         static TRACE: Trace = Trace::new();
         let trace = &TRACE;
         assert!(trace.begin(1));
         assert!(!trace.begin(12));
-        trace.observe(Event {
-            begin: 20,
-            end: 30,
-            kind: 1,
-            ..Event::default()
-        });
-        trace.observe(Event {
-            begin: 10,
-            end: 40,
-            kind: 5,
-            ..Event::default()
-        });
-        trace.observe(Event {
-            begin: DURATION_TICKS,
-            end: DURATION_TICKS + 20,
-            kind: 1,
-            ..Event::default()
-        });
+        let rows = [
+            Event {
+                begin: 20,
+                end: 30,
+                kind: 1,
+                ..Event::default()
+            },
+            Event {
+                begin: 10,
+                end: 40,
+                kind: 5,
+                index: -7,
+                result: 3,
+            },
+            Event {
+                begin: DURATION_TICKS,
+                end: DURATION_TICKS + 20,
+                kind: 1,
+                ..Event::default()
+            },
+        ];
+        for row in rows {
+            trace.observe(row);
+        }
+        // Rows come back exactly, in order, once the capture has finished.
+        assert_eq!(drained(trace), rows.to_vec());
         let data = trace.take_ready().unwrap();
         assert_eq!(
-            (data.id, data.reason, data.events.len()),
-            (1, Finish::Elapsed, 3)
+            data,
+            Summary {
+                id: 1,
+                reason: Finish::Elapsed,
+                skipped: 0,
+                event_count: 3
+            }
         );
         assert!(trace.begin(12));
     }
     #[test]
-    fn capacity_abort_contention_and_invalid_time_are_explicit() {
-        // 2 MiB of events: keep the test trace off the test thread's stack.
+    fn chunks_hand_over_only_after_a_drain_and_count_the_overflow() {
+        // 160 KiB of rows: keep the test trace off the test thread's stack.
         static TRACE: Trace = Trace::new();
         let trace = &TRACE;
         trace.begin(0);
         let guard = trace.state.lock().unwrap();
         trace.observe(Event::default());
         drop(guard);
-        for _ in 0..CAPACITY + 1 {
-            trace.observe(Event::default());
+        for n in 0..2 * CHUNK + 1 {
+            trace.observe(Event {
+                begin: n as u64,
+                end: n as u64,
+                ..Event::default()
+            });
         }
+        // Both chunks full and nothing drained: one row lost, counted.
+        let mut out = Vec::new();
+        assert_eq!(trace.drain(&mut out), CHUNK);
+        assert_eq!(out.len(), CHUNK);
+        assert_eq!((out[0].begin, out[CHUNK - 1].begin), (0, CHUNK as u64 - 1));
+        // The drained chunk is free again, so the next row hands over to it.
+        trace.observe(Event {
+            begin: 2 * CHUNK as u64 + 5,
+            end: 2 * CHUNK as u64 + 5,
+            ..Event::default()
+        });
+        trace.finish();
+        out.clear();
+        assert_eq!(trace.drain(&mut out), CHUNK + 1);
+        assert_eq!(out[0].begin, CHUNK as u64);
+        assert_eq!(out[CHUNK].begin, 2 * CHUNK as u64 + 5);
         let data = trace.take_ready().unwrap();
         assert_eq!(
-            (data.reason, data.events.len(), data.skipped),
-            (Finish::Capacity, CAPACITY, 1)
+            (data.reason, data.event_count, data.skipped),
+            (Finish::Aborted, 2 * CHUNK + 1, 2)
         );
         trace.begin(2);
         trace.observe(Event {
@@ -564,6 +728,80 @@ mod tests {
         assert_eq!(trace.take_ready().unwrap().reason, Finish::Aborted);
     }
     #[test]
+    fn packed_rows_keep_absolute_ticks_and_reject_impossible_spans() {
+        static TRACE: Trace = Trace::new();
+        let trace = &TRACE;
+        let id = 0x0629_a32f_64f8u64;
+        assert!(trace.begin(id));
+        let late = Event {
+            begin: id + 29 * TICK_HZ,
+            end: id + 29 * TICK_HZ + 123_456,
+            kind: 3,
+            index: i32::MIN,
+            result: i32::MAX,
+        };
+        trace.observe(late);
+        trace.finish();
+        assert_eq!(drained(trace), vec![late]);
+        trace.take_ready().unwrap();
+        assert!(trace.begin(id));
+        trace.observe(Event {
+            begin: id + 1,
+            end: id + 1 + u64::from(u32::MAX) + 1,
+            ..Event::default()
+        });
+        assert_eq!(trace.take_ready().unwrap().reason, Finish::ClockInvalid);
+    }
+    #[test]
+    fn streamed_csv_matches_the_single_shot_form() {
+        let events = vec![
+            Event {
+                begin: 100,
+                end: 150,
+                kind: 1,
+                index: 2,
+                result: 0,
+            },
+            Event {
+                begin: 160,
+                end: 160,
+                kind: 60,
+                index: -1,
+                result: 7,
+            },
+        ];
+        let snapshot = Snapshot {
+            id: 99,
+            reason: Finish::Elapsed,
+            skipped: 1,
+            events: events.clone(),
+        };
+        let mut single = Vec::new();
+        write_csv(&mut single, &snapshot, "b1", "css", "LessLag").unwrap();
+        let mut streamed = Vec::new();
+        write_csv_header(&mut streamed, 99, "b1", "css").unwrap();
+        let mut next = 0;
+        write_csv_rows(&mut streamed, &mut next, &events[..1]).unwrap();
+        write_csv_rows(&mut streamed, &mut next, &events[1..]).unwrap();
+        write_csv_footer(
+            &mut streamed,
+            "LessLag",
+            &Summary {
+                id: 99,
+                reason: Finish::Elapsed,
+                skipped: 1,
+                event_count: 2,
+            },
+        )
+        .unwrap();
+        assert_eq!(single, streamed);
+        let text = String::from_utf8(single).unwrap();
+        assert!(text.starts_with("# schema=1\n# metric=cpu_api_spans\n# tick_hz="));
+        assert!(text.contains("\nevent,kind,begin_tick,end_tick,index,result\n0,1,100,150,2,0\n1,60,160,160,-1,7\n# engine=LessLag\n# reason=elapsed\n# skipped=1\n# event_count=2\n"));
+        assert!(text.ends_with("# complete=1\n"));
+        assert!(write_csv_header(&mut Vec::new(), 1, "b\n1", "css").is_err());
+    }
+    #[test]
     fn present_return_keeps_a_real_zero_and_an_unmatched_present() {
         assert_eq!(outstanding_after_present(1), 0);
         assert_eq!(outstanding_after_present(0), -1);
@@ -575,7 +813,7 @@ mod tests {
         let (low, high) = pointer_halves(pointer);
         assert_eq!(pointer_from_halves(low, high), pointer);
         assert_eq!(pointer_from_halves(-1, -1), u64::MAX);
-        // 2 MiB of events: keep the test trace off the test thread's stack.
+        // 160 KiB of rows: keep the test trace off the test thread's stack.
         static TRACE: Trace = Trace::new();
         let trace = &TRACE;
         assert!(trace.begin(7));
@@ -588,12 +826,10 @@ mod tests {
         });
         assert!(trace.take_ready().is_none());
         trace.finish();
+        let rows = drained(trace);
         let data = trace.take_ready().unwrap();
-        assert_eq!((data.reason, data.events.len()), (Finish::Aborted, 1));
-        assert_eq!(
-            pointer_from_halves(data.events[0].index, data.events[0].result),
-            pointer
-        );
+        assert_eq!((data.reason, rows.len()), (Finish::Aborted, 1));
+        assert_eq!(pointer_from_halves(rows[0].index, rows[0].result), pointer);
     }
     #[test]
     fn resize_stays_its_own_point_sample() {
@@ -619,14 +855,15 @@ mod tests {
         for kind in kinds {
             assert!(!older.contains(&kind));
         }
-        // 2 MiB of events: keep the test trace off the test thread's stack.
+        // 160 KiB of rows: keep the test trace off the test thread's stack.
         static TRACE: Trace = Trace::new();
         let trace = &TRACE;
         assert!(trace.begin(8));
         trace.observe(resize);
         assert!(trace.take_ready().is_none());
         trace.finish();
-        assert_eq!(trace.take_ready().unwrap().events.len(), 1);
+        assert_eq!(drained(trace), vec![resize]);
+        assert_eq!(trace.take_ready().unwrap().event_count, 1);
     }
 
     #[test]

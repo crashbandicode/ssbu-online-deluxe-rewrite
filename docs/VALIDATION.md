@@ -1594,6 +1594,36 @@ unchanged from 0.3.3 (.bss 122152, resident 2.23 MB). Forgejo release
 f514bfe8…42de), `manifest.json` asset 75. Not installed on hardware (the
 Switch has 0.3.3).
 
+0.3.5 (operator: "I'd do all of those, test and ship") removes the capture
+buffer as a memory question altogether:
+
+- Rows are packed to 20 B (begin and span relative to the capture start, both
+  32-bit; a 30 s capture is 576 M ticks) and reconstructed to absolute ticks
+  on export, so the CSV columns are unchanged.
+- Hooks fill one of two 4096-row chunks (`render_trace::CHUNK`, 160 KiB in
+  `.bss`, the whole resident cost); the diagnostics thread drains the other
+  into the already-open `api-<id>.csv` every 500 ms. A chunk hands over only
+  after the other was drained; rows that arrive while both are full are
+  counted in `skipped`, never blocked on. Capture length is bounded by the
+  30 s duration, no longer by capacity (`Finish::Capacity` stays for old CSVs).
+- Nothing is copied at the end: `take_ready` returns a `Summary` (id, reason,
+  skipped, event_count); the file gets its footer, flush and sync. The header
+  is written when the capture arms, so a full card or name clash refuses the
+  capture up front ("timing capture could not open …").
+- CSV layout: `# engine`, `# reason`, `# skipped`, `# event_count` move from
+  the header to the footer before `# complete=1`. `tools/analyze_render_trace.py`
+  already reads metadata lines anywhere and only requires the final line, so
+  it needs no change; a host test checks the streamed bytes equal the
+  single-shot `write_csv`.
+- Release profile `opt-level = "s"` (measured in a worktree on this commit's
+  parent: `.text` 1590896 → 1399936 B, NRO 2183168 → 1998848 B; `"z"` would
+  reach 1307376 B; fat LTO changes nothing with `codegen-units = 1`). `"s"`
+  was chosen to keep loop codegen in hooked paths.
+
+Caveat for the CSS capture: the SD writes now happen during the measured
+interval, from the diagnostics thread. Compare the next hardware CSS capture
+against `switch-0.3.1-1013` before trusting a movement-penalty number from it.
+
 This is a footprint change, not a
 proven fix: the next console boot with 0.3.3 and the companion plugin rolled
 back decides; the memory bisect is plugin removal, not Deluxe flags.

@@ -3,12 +3,12 @@
 use super::{effects_off, record, settings, Code, DATA_DIR};
 use crate::capture_export::{
     controller_request_busy, create_export_file, export_ready_csvs, status_label, write_buffered,
-    PHASE_CAPTURING, PHASE_EXPORT_ERROR, PHASE_IDLE,
+    EXPORT_BUFFER_BYTES, PHASE_CAPTURING, PHASE_EXPORT_ERROR, PHASE_IDLE,
 };
 use crate::timing::{Capture, Sample};
 use std::{
     fs::{self, File},
-    io::{self, Read, Write},
+    io::{self, BufWriter, Read, Write},
     path::Path,
     sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering},
     time::Instant,
@@ -65,11 +65,24 @@ pub(super) fn observe(buttons: u64) {
     });
 }
 
+/// One capture in progress. The API trace CSV is open from arm to finish and
+/// receives rows every poll; only the small timing capture is exported at the end.
+struct Running {
+    label: String,
+    started: Instant,
+    engine: &'static str,
+    api: Option<BufWriter<File>>,
+    api_error: Option<io::Error>,
+    next_row: usize,
+}
+
 #[derive(Default)]
 pub(super) struct Service {
-    current: Option<(String, Instant, &'static str)>,
+    current: Option<Running>,
     callback_ready: Option<crate::timing::Snapshot>,
-    api_ready: Option<crate::render_trace::Snapshot>,
+    api_ready: Option<crate::render_trace::Summary>,
+    /// Drain scratch, one chunk; allocated once, on this thread.
+    scratch: Vec<crate::render_trace::Event>,
     request_error_reported: bool,
 }
 
@@ -115,10 +128,23 @@ impl Service {
     /// Called only by the existing background sink, once every 500 ms.
     pub(super) fn poll(&mut self) {
         super::css_capture::poll();
-        if let Some((label, started, engine)) = &self.current {
-            if started.elapsed().as_secs() >= ABORT_SECONDS {
+        if let Some(run) = self.current.as_mut() {
+            if run.started.elapsed().as_secs() >= ABORT_SECONDS {
                 CAPTURE.finish();
                 super::api_trace::TRACE.finish();
+            }
+            // Stream the rows the hooks have produced since the last poll. A
+            // write failure ends the file; the export reports it at the end.
+            self.scratch.clear();
+            if super::api_trace::TRACE.drain(&mut self.scratch) > 0 {
+                if let Some(out) = run.api.as_mut() {
+                    if let Err(error) =
+                        crate::render_trace::write_csv_rows(out, &mut run.next_row, &self.scratch)
+                    {
+                        run.api_error = Some(error);
+                        run.api = None;
+                    }
+                }
             }
             if self.callback_ready.is_none() {
                 self.callback_ready = CAPTURE.take_ready();
@@ -127,19 +153,21 @@ impl Service {
                 self.api_ready = super::api_trace::TRACE.take_ready();
             }
             if let (Some(snapshot), Some(api)) = (&self.callback_ready, &self.api_ready) {
-                let engine = if *engine == effective_engine() {
-                    *engine
+                let engine = if run.engine == effective_engine() {
+                    run.engine
                 } else {
                     "Mixed"
                 };
+                let label = run.label.as_str();
                 let path = Path::new(DATA_DIR).join(format!("timing-{}.csv", snapshot.id));
-                let api_path = Path::new(DATA_DIR).join(format!("api-{}.csv", api.id));
                 let exporting = format!(
                     "exporting {} {}; metric=render_callback",
                     snapshot.id, label
                 );
                 let saved = format!("saved {}", path.display());
                 let build = crate::build_info::BUILD_ID;
+                let mut api_file = run.api.take();
+                let mut api_error = run.api_error.take();
                 let result = export_ready_csvs(
                     &STATUS,
                     &exporting,
@@ -153,10 +181,15 @@ impl Service {
                         file.sync_all()
                     },
                     || -> io::Result<()> {
-                        let file = create_export_file(&api_path)?;
-                        let file = write_buffered(file, |out| {
-                            crate::render_trace::write_csv(out, api, build, label, engine)
-                        })?;
+                        if let Some(error) = api_error.take() {
+                            return Err(error);
+                        }
+                        let Some(mut out) = api_file.take() else {
+                            return Err(io::Error::other("api trace file already closed"));
+                        };
+                        crate::render_trace::write_csv_footer(&mut out, engine, api)?;
+                        out.flush()?;
+                        let file = out.into_inner().map_err(|error| error.into_error())?;
                         file.sync_all()
                     },
                 );
@@ -192,22 +225,55 @@ impl Service {
             let id = unsafe { skyline::nn::os::GetSystemTick() as u64 };
             // Complete control-file I/O before starting the measured interval.
             let _ = write_status(&format!("capturing {id} {label}; metric=render_callback"));
-            if CAPTURE.begin(id) && super::api_trace::TRACE.begin(id) {
-                self.current = Some((label, Instant::now(), effective_engine()));
-                record(Code::TimingStarted, id, 0);
-                record(
-                    Code::MenuOrder,
+            // The API trace file is opened and headed before the hooks start
+            // producing rows, so a full SD card or a name clash refuses the
+            // capture here instead of losing it at the end.
+            let api_path = Path::new(DATA_DIR).join(format!("api-{id}.csv"));
+            let api = create_export_file(&api_path).and_then(|file| {
+                let mut out = BufWriter::with_capacity(EXPORT_BUFFER_BYTES, file);
+                crate::render_trace::write_csv_header(
+                    &mut out,
                     id,
-                    u64::from(super::overlay_host::embedded()),
-                );
-                STATUS.store(PHASE_CAPTURING, Ordering::Release);
-            } else {
-                CAPTURE.finish();
-                super::api_trace::TRACE.finish();
-                let _ = CAPTURE.take_ready();
-                let _ = super::api_trace::TRACE.take_ready();
-                STATUS.store(PHASE_EXPORT_ERROR, Ordering::Release);
-                let _ = write_status("timing capture could not be armed");
+                    crate::build_info::BUILD_ID,
+                    &label,
+                )?;
+                Ok(out)
+            });
+            match api {
+                Ok(out) if CAPTURE.begin(id) && super::api_trace::TRACE.begin(id) => {
+                    if self.scratch.capacity() == 0 {
+                        self.scratch.reserve(crate::render_trace::CHUNK);
+                    }
+                    self.current = Some(Running {
+                        label,
+                        started: Instant::now(),
+                        engine: effective_engine(),
+                        api: Some(out),
+                        api_error: None,
+                        next_row: 0,
+                    });
+                    record(Code::TimingStarted, id, 0);
+                    record(
+                        Code::MenuOrder,
+                        id,
+                        u64::from(super::overlay_host::embedded()),
+                    );
+                    STATUS.store(PHASE_CAPTURING, Ordering::Release);
+                }
+                outcome => {
+                    CAPTURE.finish();
+                    super::api_trace::TRACE.finish();
+                    let _ = CAPTURE.take_ready();
+                    let _ = super::api_trace::TRACE.take_ready();
+                    STATUS.store(PHASE_EXPORT_ERROR, Ordering::Release);
+                    let _ = match outcome {
+                        Err(error) => write_status(&format!(
+                            "timing capture could not open {}: {error}",
+                            api_path.display()
+                        )),
+                        Ok(_) => write_status("timing capture could not be armed"),
+                    };
+                }
             }
         }
     }

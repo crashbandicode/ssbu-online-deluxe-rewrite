@@ -26,8 +26,9 @@ pub struct Sample {
 }
 
 /// `Aborted` is the first variant on purpose: it is the initial `reason` of
-/// the static capture buffers, and an all-zero initializer keeps the 2 MiB API
-/// trace in `.bss` instead of the NRO file.
+/// the static capture buffers, and an all-zero initializer keeps them in
+/// `.bss` instead of the NRO file. `Capacity` no longer occurs (the API trace
+/// streams since 0.3.5) but stays for decoding older CSVs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Finish {
     Aborted,
