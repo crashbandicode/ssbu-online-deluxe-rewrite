@@ -1380,6 +1380,71 @@ production hook reproduces the diagnostic gain and exceeds it on the CSS
 in-match compact Performance strip does not show the Backoff row; the
 vertical table does.
 
+### 0.3.1 — character-select capture and backoff eligibility gate — 2026-10-13
+
+Hardware result of 0.3.0 (operator, manual LessLag, FX On): CSS idle 58–60 fps
+(was 48–50) but 46 fps while the cursor hand moves, with the default ramp and
+with `preset=measured`; 60 in a live match; a clean two-image boot reproduces
+46 (`css-budget/hand/hardware/clean-boot/renderer-status.txt`: active 2, index
+masks 0x3, generation 1). Astra xhigh (`css-budget/hand/CSS_HAND_ATTRIBUTION.md`)
+could not reproduce the hand drop on Eden (60 moving in every configuration)
+and attributed the menu's weight to one serial UI traversal job on pool-0
+worker 1 (core 1, kernel priority 36): 1,765 Layout, 19,201 transform and
+about 14,200 enabled-binding entries per frame against 426 / 3,610 / 967 in a
+fight, already while idle. Hover adds at most 20 bindings, no storage read
+burst, no observed nested cleanup wait, sync waits near zero. Open hardware
+discriminators: the conditional cleanup wait at `main+0x37a2b24`, asset loads,
+two-image fence reuse, completion pickup. Rejected: another timer preset,
+earlier dispatch or a split wait, `all_threads=1` as default, CPU boost.
+Prescription: `CSS_CAPTURE_CONTRACT.md`, implemented here.
+
+Build (commit 00660a3, crate 0.3.1):
+
+- Eligibility gate in `src/runtime/dispatcher_backoff.rs`: a sleep requires
+  `SCENE_SEEN` (any `auto_driver::set_scene` call, i.e. a scene hook fired)
+  and a tracked present within 250 ms (`nvn::queue_present`). Before that the
+  Backoff row reads `Armed`; code 102 `a=5` is written once when the gate
+  first passes. The clock is read only on passes that would sleep. Astra's
+  boot audit showed the hook sleeping before the title with two pending
+  records on Eden; this keeps startup and a stalled renderer on the original
+  loop. It does not claim to fix the `main+0x37432cc` initialization fault,
+  which is original game code after `nn::prepo::Initialize`.
+- `CAPTURE_CSS` boot flag → `src/runtime/css_capture.rs`: three hooks on the
+  five-word 13.0.5 fingerprints of `0x3549720` (dispatcher registration),
+  `0x354ccd0` (dependency wait) and `0x375e260` (UI job), installed after the
+  renderer family verified the shared sites; `nn::os::GetThreadPriority` and
+  `GetThreadCoreMask` resolved through `nn::ro::LookupSymbol` (never linked,
+  never set). CSS entry (native banner `0x1a12f60` hook) records code 12 and
+  arms a 30 s capture labelled `css`; exit (one second without a CSS update)
+  records code 13. Rows: 60/61 per-frame sleep count, summed and peak actual
+  sleep µs, idle streaks; 62/63 thread pointer, priority, ideal core and
+  affinity mask once per thread per capture; 64 UI child dispatch (worker,
+  queue priority, thread); 66 every dependency wait with the counter's image
+  offset and thread label; 77 UI job span. Code 104 reports the hook mask.
+- Timing capture 30 s, 2048 samples; API trace 65536 events. The static
+  initializer is now all zero (`Finish::Aborted` first) so both buffers live
+  in `.bss`: the NRO is 2174976 B against 2465792 B for 0.3.0.
+- `tools/analyze_render_trace.py` decodes the kinds and adds a `css_capture`
+  section (waits by counter, UI job stats, nested waits on the UI thread,
+  per-frame backoff distribution, thread table, dispatch pairs); 24 Python
+  tests.
+
+Gates: 294 host tests, `cargo clippy --all-targets -- -D warnings`,
+`cargo skyline clippy -- -- -D warnings`, `cargo build --no-default-features`,
+`cargo fmt --check`, `cargo skyline build --release`. Clean package
+`artifacts/9511e8c0f7946bd5/` in the tangent evidence: build
+`0.3.1-00660a3d63cc-1791859184`, NRO SHA-256
+`9511e8c0f7946bd50434d78f7607283a84f13d299dfe6e6e2aad88c77b43e840`
+(2174976 B, module `ca2cbd7e…8780`), ELF `55f94118…9608`.
+Not installed on hardware (the Switch has f22d / 0.3.0); not run on Eden.
+
+Switch procedure for the capture: put `CAPTURE_CSS` in the data directory,
+boot with manual LessLag and FX On, enter the character select, keep the
+hand still for ten seconds, move it continuously for twenty, wait for the
+Debug view `Timing` row to say saved, quit to HOME, then pull
+`timing-<id>.csv` and `api-<id>.csv` (label `css`). Also compare LessLag
+against LLDoubles on the same CSS while moving (zero-code ring test).
+
 ### DBI USB MTP installation of f22d (0.3.0) — 2026-10-12 19:58Z
 
 `switch-mtp-f22d/deploy-f22d-mtp-1012.py` preflight 19:55:47Z (installed
