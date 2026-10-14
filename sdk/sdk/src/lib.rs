@@ -137,10 +137,15 @@ pub struct PluginSpec {
     /// Own `key=value` INI the host should update after menu edits (`sd:/...`,
     /// at most [`abi::MAX_PATH_LEN`] bytes). `None` = no host persistence.
     pub config_path: Option<&'static str>,
+    /// Ask for a page of the window cycle titled with [`Self::label`] instead
+    /// of a group on the shared Plugins page (descriptor version 3). A host
+    /// that predates version 3 shows the rows on the shared page instead.
+    pub own_page: bool,
 }
 
 impl PluginSpec {
-    /// A plugin with no host persistence (`config_path` is `None`).
+    /// A plugin with no host persistence (`config_path` is `None`) on the
+    /// shared Plugins page.
     pub const fn new(
         id: &'static str,
         label: &'static str,
@@ -151,6 +156,7 @@ impl PluginSpec {
             label,
             options,
             config_path: None,
+            own_page: false,
         }
     }
 }
@@ -297,6 +303,35 @@ fn lookup_host() -> Option<&'static abi::PluginApiV1> {
     None
 }
 
+/// The host's scene context as `abi::ONLINE_CONTEXT_*` bits (0.5.0 hosts),
+/// or `None` when no host exports it. Cheap: the symbol is resolved once and
+/// each call reads atomics on the host side. Always `None` off-console.
+pub fn host_online_context() -> Option<u32> {
+    static ENTRY: OnceLock<Option<abi::OnlineContextFn>> = OnceLock::new();
+    let entry = (*ENTRY.get_or_init(lookup_online_context))?;
+    // SAFETY: the symbol is the host's exported `OnlineContextFn` by contract.
+    Some(unsafe { entry() })
+}
+
+#[cfg(target_os = "switch")]
+fn lookup_online_context() -> Option<abi::OnlineContextFn> {
+    let mut address = 0usize;
+    // SAFETY: `ONLINE_SYMBOL_C` is NUL-terminated and `address` is a valid out slot.
+    unsafe {
+        skyline::nn::ro::LookupSymbol(&mut address, abi::ONLINE_SYMBOL_C.as_ptr());
+    }
+    if address == 0 {
+        return None;
+    }
+    // SAFETY: the symbol is the host's exported `OnlineContextFn` by contract.
+    Some(unsafe { std::mem::transmute::<usize, abi::OnlineContextFn>(address) })
+}
+
+#[cfg(not(target_os = "switch"))]
+fn lookup_online_context() -> Option<abi::OnlineContextFn> {
+    None
+}
+
 /// Looks up the host and registers `spec` with `handler`.
 ///
 /// The spec is checked locally first, so misuse is reported as
@@ -384,7 +419,11 @@ pub unsafe fn register_with<H: PluginHandler>(
         label: strings.label.as_ptr(),
         options: option_descs.as_ptr(),
         option_count: option_descs.len() as u32,
-        flags: 0,
+        flags: if spec.own_page {
+            abi::PLUGIN_FLAG_OWN_PAGE
+        } else {
+            0
+        },
         user: user.cast::<c_void>(),
         current: Some(current_tramp::<H>),
         request: Some(request_tramp::<H>),
@@ -397,14 +436,25 @@ pub unsafe fn register_with<H: PluginHandler>(
     // caller guarantees `api.register` follows the ABI.
     let mut result = unsafe { (api.register)(&desc) };
     let mut accepted = abi::ABI_VERSION;
-    if result == abi::REGISTER_ERR_ABI {
+    // A host before 0.5.0 answers REGISTER_ERR_ABI to version 3. Retry as
+    // version 2 (same rows, no own page, old option limit), then as version 1.
+    if result == abi::REGISTER_ERR_ABI && spec.options.len() <= abi::MAX_OPTIONS_V2 {
+        desc.abi_version = 2;
+        desc.flags = 0;
+        // SAFETY: same contract as the first call; the handler box is still
+        // ours because the host refused the version 3 descriptor.
+        result = unsafe { (api.register)(&desc) };
+        accepted = 2;
+    }
+    if result == abi::REGISTER_ERR_ABI && spec.options.len() <= abi::MAX_OPTIONS_V2 {
         let v1_options = v1_option_descs(&strings, spec);
         desc.abi_version = 1;
+        desc.flags = 0;
         desc.options = v1_options.as_ptr().cast();
         desc.option_count = v1_options.len() as u32;
         // SAFETY: same contract as the first call. `v1_options` and `strings`
         // stay alive until this call returns. The handler box is still ours
-        // because the host refused the version 2 descriptor.
+        // because the host refused the earlier descriptors.
         result = unsafe { (api.register)(&desc) };
         accepted = 1;
     }
@@ -729,6 +779,7 @@ mod tests {
         static RESULT: Cell<i32> = const { Cell::new(0) };
         static CALLS: Cell<u32> = const { Cell::new(0) };
         static REJECT_V2: Cell<bool> = const { Cell::new(false) };
+        static REJECT_V3: Cell<bool> = const { Cell::new(false) };
         static VERSIONS: RefCell<Vec<u32>> = const { RefCell::new(Vec::new()) };
     }
 
@@ -822,7 +873,12 @@ mod tests {
             request: desc.request,
         };
         SEEN.with(|slot| *slot.borrow_mut() = Some(seen));
-        if REJECT_V2.with(Cell::get) && desc.abi_version == abi::ABI_VERSION {
+        // REJECT_V2: a version 1 host (refuses every newer descriptor).
+        // REJECT_V3: a version 2 host (refuses only the current descriptor).
+        if REJECT_V2.with(Cell::get) && desc.abi_version >= 2 {
+            return abi::REGISTER_ERR_ABI;
+        }
+        if REJECT_V3.with(Cell::get) && desc.abi_version == abi::ABI_VERSION {
             return abi::REGISTER_ERR_ABI;
         }
         RESULT.with(Cell::get)
@@ -851,6 +907,7 @@ mod tests {
         CALLS.with(|cell| cell.set(0));
         SEEN.with(|slot| *slot.borrow_mut() = None);
         REJECT_V2.with(|cell| cell.set(false));
+        REJECT_V3.with(|cell| cell.set(false));
         VERSIONS.with(|slot| slot.borrow_mut().clear());
     }
 
@@ -912,6 +969,7 @@ mod tests {
         label: "Demo",
         options: &PERSIST_OPTIONS,
         config_path: Some("sd:/ultimate/demo/config.ini"),
+        own_page: false,
     };
 
     /// Scriptable handler. Shared state lets the test observe calls after the
@@ -1094,6 +1152,7 @@ mod tests {
         );
         let with_path = |config_path| PluginSpec {
             config_path: Some(config_path),
+            own_page: false,
             ..PluginSpec::new("demo", "Demo", &GOOD_OPTIONS)
         };
         let specs = [
@@ -1315,7 +1374,8 @@ mod tests {
     #[test]
     fn limits_accept_exact_maxima() {
         static CHOICES: [&str; abi::MAX_CHOICES] = ["c"; abi::MAX_CHOICES];
-        static OPTIONS: [OptionSpec; abi::MAX_OPTIONS] = [
+        // The version 2 maximum; version 3 hosts accept up to MAX_OPTIONS.
+        static OPTIONS: [OptionSpec; abi::MAX_OPTIONS_V2] = [
             OptionSpec::new("o0", "012345678901234567890123", &CHOICES),
             OptionSpec::new("o1", "x", &CHOICES),
             OptionSpec::new("o2", "x", &CHOICES),
@@ -1336,8 +1396,25 @@ mod tests {
         let result = unsafe { register_with(&table, &spec, Probe(state)) };
         assert_eq!(result, Ok(Handle(3)));
         let seen = seen();
-        assert_eq!(seen.options.len(), abi::MAX_OPTIONS);
+        assert_eq!(seen.options.len(), abi::MAX_OPTIONS_V2);
         assert_eq!(seen.options[0].choices.len(), abi::MAX_CHOICES);
+    }
+
+    #[test]
+    fn own_page_sets_the_version_3_flag_and_clears_it_on_the_fallback() {
+        static OPTIONS: [OptionSpec; 1] = [OptionSpec::new("o", "O", &["A", "B"])];
+        let spec = PluginSpec {
+            own_page: true,
+            ..PluginSpec::new("paged", "Paged", &OPTIONS)
+        };
+        reset(4);
+        let table = fake_table(abi::TABLE_VERSION);
+        let state = Arc::new(State::default());
+        let result = unsafe { register_with(&table, &spec, Probe(state.clone())) };
+        assert_eq!(result, Ok(Handle(4)));
+        let seen = seen();
+        assert_eq!(seen.abi_version, abi::ABI_VERSION);
+        assert_eq!(seen.flags, abi::PLUGIN_FLAG_OWN_PAGE);
     }
 
     #[test]
@@ -1386,10 +1463,10 @@ mod tests {
             let state = Arc::new(State::default());
             let result = unsafe { register_with(&table, &SPEC, Probe(state.clone())) };
             assert_eq!(result, Err(expected), "code {code}");
-            let expected_calls = if code == abi::REGISTER_ERR_ABI { 2 } else { 1 };
+            let expected_calls = if code == abi::REGISTER_ERR_ABI { 3 } else { 1 };
             assert_eq!(calls(), expected_calls, "code {code}");
             if code == abi::REGISTER_ERR_ABI {
-                assert_eq!(versions(), vec![abi::ABI_VERSION, 1]);
+                assert_eq!(versions(), vec![abi::ABI_VERSION, 2, 1]);
             }
             assert_eq!(
                 Arc::strong_count(&state),
@@ -1466,7 +1543,8 @@ mod tests {
             Some(abi::ABI_VERSION)
         );
         let seen = seen();
-        assert_eq!(seen.abi_version, 2);
+        assert_eq!(seen.abi_version, abi::ABI_VERSION);
+        assert_eq!(seen.flags, 0);
         assert_eq!(
             seen.options[0].tones.as_deref(),
             Some(&[abi::TONE_NEUTRAL, abi::TONE_OK][..])
@@ -1526,15 +1604,65 @@ mod tests {
     }
 
     #[test]
-    fn abi_error_retries_once_with_a_v1_descriptor() {
+    fn a_version_2_host_gets_the_version_2_retry_without_the_page_flag() {
+        static OPTIONS: [OptionSpec; 1] = [OptionSpec::new("o", "O", &["A", "B"])];
+        let spec = PluginSpec {
+            own_page: true,
+            ..PluginSpec::new("paged", "Paged", &OPTIONS)
+        };
+        reset(23);
+        REJECT_V3.with(|cell| cell.set(true));
+        let table = fake_table(abi::TABLE_VERSION);
+        let state = Arc::new(State::default());
+        let result = unsafe { register_with(&table, &spec, Probe(state.clone())) };
+        assert_eq!(result, Ok(Handle(23)));
+        assert_eq!(calls(), 2);
+        assert_eq!(versions(), vec![abi::ABI_VERSION, 2]);
+        assert_eq!(negotiated_descriptor_version(Handle(23)), Some(2));
+        let seen = seen();
+        assert_eq!(seen.abi_version, 2);
+        // The own-page bit would be refused by a version 2 host.
+        assert_eq!(seen.flags, 0);
+        assert_eq!(seen.options.len(), 1);
+        assert_eq!(Arc::strong_count(&state), 2);
+    }
+
+    #[test]
+    fn too_many_options_for_an_old_host_are_not_retried() {
+        static CHOICES: [&str; 2] = ["A", "B"];
+        static OPTIONS: [OptionSpec; 9] = [
+            OptionSpec::new("o0", "x", &CHOICES),
+            OptionSpec::new("o1", "x", &CHOICES),
+            OptionSpec::new("o2", "x", &CHOICES),
+            OptionSpec::new("o3", "x", &CHOICES),
+            OptionSpec::new("o4", "x", &CHOICES),
+            OptionSpec::new("o5", "x", &CHOICES),
+            OptionSpec::new("o6", "x", &CHOICES),
+            OptionSpec::new("o7", "x", &CHOICES),
+            OptionSpec::new("o8", "x", &CHOICES),
+        ];
+        let spec = PluginSpec::new("wide", "Wide", &OPTIONS);
+        reset(24);
+        REJECT_V3.with(|cell| cell.set(true));
+        let table = fake_table(abi::TABLE_VERSION);
+        let state = Arc::new(State::default());
+        let result = unsafe { register_with(&table, &spec, Probe(state.clone())) };
+        // Nine options need a version 3 host; the old host's refusal stands.
+        assert_eq!(result, Err(RegisterError::Abi));
+        assert_eq!(calls(), 1);
+        assert_eq!(Arc::strong_count(&state), 1);
+    }
+
+    #[test]
+    fn abi_error_retries_with_a_v1_descriptor() {
         reset(22);
         REJECT_V2.with(|cell| cell.set(true));
         let table = fake_table(abi::TABLE_VERSION);
         let state = Arc::new(State::default());
         let result = unsafe { register_with(&table, &TONE_SPEC, Probe(state.clone())) };
         assert_eq!(result, Ok(Handle(22)));
-        assert_eq!(calls(), 2);
-        assert_eq!(versions(), vec![abi::ABI_VERSION, 1]);
+        assert_eq!(calls(), 3);
+        assert_eq!(versions(), vec![abi::ABI_VERSION, 2, 1]);
         assert_eq!(negotiated_descriptor_version(Handle(22)), Some(1));
         let seen = seen();
         assert_eq!(seen.abi_version, 1);
@@ -1572,8 +1700,8 @@ mod tests {
         let state = Arc::new(State::default());
         let result = unsafe { register_with(&table, &TONE_SPEC, Probe(state.clone())) };
         assert_eq!(result, Err(RegisterError::Abi));
-        assert_eq!(calls(), 2);
-        assert_eq!(versions(), vec![abi::ABI_VERSION, 1]);
+        assert_eq!(calls(), 3);
+        assert_eq!(versions(), vec![abi::ABI_VERSION, 2, 1]);
         assert_eq!(Arc::strong_count(&state), 1);
         // The refused attempts stored a version 1 view; nothing was recorded.
         assert_eq!(seen().abi_version, 1);

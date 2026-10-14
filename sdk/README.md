@@ -4,19 +4,28 @@ A separately built Skyline NRO can add rows to the Online Deluxe menu without
 shipping any UI code. The plugin describes its options, the host draws them and
 asks the plugin to change them. The plugin owns its behavior and its saved state.
 
-Descriptor version is 2: `OptionDesc` is 56 bytes and may carry per-choice tones
-and a read-only flag. The exported host table is still `PluginApiV1` at table
-version 1, under the unchanged symbol `ssbu_online_deluxe_plugin_api_v1`.
-`table_matches` compares the table against that table version, not against the
-descriptor version. An old host answers `REGISTER_ERR_ABI` to a version 2
-descriptor; the Rust SDK retries once with a version 1 descriptor.
+Descriptor version is 3 (Deluxe 0.5.0): the `OptionDesc` and `PluginDesc`
+layouts are those of version 2 (56 and 72 bytes; per-choice tones and a
+read-only flag), plus the plugin flag `PLUGIN_FLAG_OWN_PAGE` (a page of the
+window cycle titled with the plugin label instead of a group on the shared
+Plugins page) and an option limit of 32 instead of 8. The exported host table
+is still `PluginApiV1` at table version 1, under the unchanged symbol
+`ssbu_online_deluxe_plugin_api_v1`; `table_matches` compares the table against
+that table version, not against the descriptor version. A second export,
+`ssbu_online_deluxe_online_context_v1` (`extern "C" fn() -> u32`), returns the
+host's scene context as `ONLINE_CONTEXT_READY | ONLINE | MATCH | TRAINING`
+bits; the SDK wraps it as `host_online_context()`, `None` on older hosts. An
+old host answers `REGISTER_ERR_ABI` to a version 3 descriptor; the Rust SDK
+retries with version 2 (flag cleared) and then version 1 while the spec has at
+most 8 options.
 
-Pinned release: git tag `v0.2.0` on the Forgejo repository
+Pinned releases: git tag `v0.2.0` on the Forgejo repository
 (`intpa/ssbu-online-deluxe-rewrite`) carries `deluxe-plugin-abi` 2.0.0 and
-`deluxe-plugin-sdk` 2.0.0 (descriptor version 2 with the version 1 fallback) and
-is the tree the pinned host NRO was built from; the NRO's SHA-256 and size are
-recorded in the tag message and in `docs/VALIDATION.md`. Consumers should
-clone that tag read-only and depend on the crates by path.
+`deluxe-plugin-sdk` 2.0.0 (descriptor version 2); the 0.5.0 tag carries 3.0.0
+(descriptor version 3). Each tag is the tree the matching host NRO was built
+from; the NRO's SHA-256 and size are recorded in `docs/VALIDATION.md`.
+Consumers depend on the crates by git tag (cargo finds the package by name
+anywhere in the repository) or clone the tag and depend by path.
 
 Layout of this directory:
 
@@ -37,7 +46,13 @@ is in [docs/PLUGINS.md](../docs/PLUGINS.md); this file is the reference.
 
 * The Plugins page joins the window chord cycle (L+R or ZL+ZR, then D-pad
   Down) as **settings → plugins → performance → hidden**. It is skipped while
-  no plugin has registered, so users without plugins see no change.
+  no plugin has rows on it, so users without plugins see no change.
+* A plugin registered with `PLUGIN_FLAG_OWN_PAGE` (Rust: `own_page: true`,
+  descriptor version 3) is not grouped on the shared page: it gets its own
+  page in the cycle, after the shared page and before Performance, titled
+  with the plugin label; its rows keep their own labels in the in-match strip
+  and the page indicator reads `<Label> p/N`. Several own pages follow each
+  other in registration order.
 * Outside a match: a vertical table with a header row per plugin and one row
   per option. Up/Down selects a row (the selection wraps), Left/Right asks the
   plugin for the previous or next choice. Lists longer than ten rows are
@@ -97,7 +112,9 @@ Keep labels short. The strip is narrow and labels are limited to 24 bytes.
   across plugins; option ids are unique within a plugin. Labels (plugin, option
   and choice) are display text: non-empty UTF-8, at most 24 bytes, no control
   characters.
-* **Limits.** At most 16 plugins per host, 8 options per plugin, 16 choices per
+* **Limits.** At most 16 plugins per host, 32 options per plugin with a
+  version 3 descriptor (8 for versions 1 and 2 and on every host before
+  0.5.0), 16 choices per
   option. Every plugin needs at least one option and every option at least one
   choice.
 * **Strings are copied.** The host copies every string during `register`. The
@@ -140,13 +157,14 @@ Keep labels short. The strip is narrow and labels are limited to 24 bytes.
   cannot be shown. `host_build()` returns a NUL-terminated build
   string valid for the life of the process.
 
-## Descriptor version 2 and the version 1 fallback
+## Descriptor versions and fallbacks
 
 `PluginDesc` itself is still 72 bytes. Its `abi_version` selects the layout of
 `options`:
 
 | `abi_version` | Row type | Size | What it carries |
 | --- | --- | --- | --- |
+| 3 | `OptionDesc` | 56 | same rows as 2; `PluginDesc::flags` may carry `PLUGIN_FLAG_OWN_PAGE`; 32 options |
 | 2 | `OptionDesc` | 56 | `choice_tones` and `OPTION_FLAG_READ_ONLY` |
 | 1 | `OptionDescV1` | 48 | the same fields without tones |
 
@@ -155,16 +173,21 @@ bytes, its `abi_version` field is table version 1, and the symbol is still
 `ssbu_online_deluxe_plugin_api_v1`. A plugin built against the old table keeps
 resolving the same symbol.
 
-A host built before descriptor version 2 returns `REGISTER_ERR_ABI` for a
-version 2 descriptor. The Rust SDK then retries **once** with `abi_version = 1`,
-an array of `OptionDescV1`, no tone pointer, and the read-only bit cleared
-(a version 1 host rejects unknown flag bits). `user` and the callbacks stay the
-same pointer. Only the final result leaks or drops the handler.
-`negotiated_descriptor_version(handle)` is `Some(2)` when the first descriptor
-was accepted and `Some(1)` when the retry was. Other languages should do that
-same one retry themselves. Tones and read-only rows need a version 2 host; on
-the fallback the row is still registered, just without colour and without the
-read-only flag (a single-choice row is still read-only on every host).
+A host built before descriptor version 3 returns `REGISTER_ERR_ABI` for a
+version 3 descriptor. The Rust SDK then retries with `abi_version = 2` and
+`PluginDesc::flags = 0` (the own-page bit is unknown to that host), and if that
+is refused too, with `abi_version = 1`, an array of `OptionDescV1`, no tone
+pointer, and the read-only bit cleared (a version 1 host rejects unknown flag
+bits). Both retries happen only while the spec has at most 8 options; a wider
+spec needs a version 3 host and the refusal stands. `user` and the callbacks
+stay the same pointer. Only the final result leaks or drops the handler.
+`negotiated_descriptor_version(handle)` reports which descriptor was accepted
+(`Some(3)`, `Some(2)` or `Some(1)`). Other languages should do the same
+retries themselves. An own page needs a version 3 host; on the fallback the
+rows are still registered, on the shared Plugins page. Tones and read-only
+rows need a version 2 or later host; on the version 1 fallback the row is
+still registered, just without colour and without the read-only flag (a
+single-choice row is still read-only on every host).
 
 `choice_tones` is null for neutral text, or `choice_count` bytes, each
 `TONE_NEUTRAL` (0), `TONE_OK` (1), `TONE_WARN` (2) or `TONE_ERROR` (3). The Rust
@@ -172,6 +195,26 @@ SDK rejects a `tones` slice whose length is not `choices.len()` as
 `RegisterError::Invalid` before it calls the host. Tones were verified in
 Eden on 2026-10-12 (`docs/VALIDATION.md`, "Plugin value tones"); hardware
 behaviour is not yet observed.
+
+## Online context (optional, 0.5.0 hosts)
+
+A plugin whose behaviour should differ online can share Deluxe's scene
+tracker instead of hooking the game's scene sites itself (two plugins hooking
+the same sites collide). The host exports
+`ssbu_online_deluxe_online_context_v1`, an `extern "C" fn() -> u32` that reads
+atomics and returns:
+
+| Bit | Meaning |
+| --- | --- |
+| `ONLINE_CONTEXT_READY` (1) | the scene hooks are installed |
+| `ONLINE_CONTEXT_ONLINE` (2) | Quickplay, Arena or local wireless, or the online-latency hook reached the current match |
+| `ONLINE_CONTEXT_MATCH` (4) | a Singles or Doubles stage is loaded |
+| `ONLINE_CONTEXT_TRAINING` (8) | the scene is Training (also the Quickplay waiting room) |
+
+The Rust SDK wraps it as `deluxe_plugin_sdk::host_online_context() ->
+Option<u32>`; `None` means no host or a host older than 0.5.0. Resolve it once
+(the SDK caches the lookup) and read it when you need it; it is safe to call
+from any thread.
 
 ## Host persistence (optional)
 

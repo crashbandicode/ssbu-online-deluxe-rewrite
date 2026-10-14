@@ -621,17 +621,27 @@ fn compact_performance_lines(
     }
 }
 
-/// Compact Plugins page: one page of `Label:Value` fields containing the
-/// selection, then the page indicator and the same timing line Settings uses.
+/// Label of the plugin whose own page is `page`, when it exists.
+fn page_plugin_label(registry: &crate::plugin_api::Registry, page: usize) -> Option<String> {
+    let plugins = registry.snapshot();
+    crate::plugin_api::page_plugins(&plugins)
+        .get(page)
+        .map(|index| plugins[*index].label.clone())
+}
+
+/// Compact Plugins page (or one plugin's own page when `page` is set): one
+/// page of `Label:Value` fields containing the selection, then the page
+/// indicator and the same timing line Settings uses.
 fn compact_plugin_lines(
     registry: &crate::plugin_api::Registry,
     selected: usize,
     frames: &FrameTimes,
+    page: Option<usize>,
 ) -> CompactLines {
-    use crate::plugin_api::{compact_label, compact_line, compact_page, plugin_rows, COMPACT_PAGE};
+    use crate::plugin_api::{compact_label, compact_line, compact_page, rows_for, COMPACT_PAGE};
     let plugins = registry.snapshot();
-    let rows = plugin_rows(&plugins);
-    let (start, end, page, pages) = compact_page(selected, rows.len(), COMPACT_PAGE);
+    let rows = rows_for(&plugins, page);
+    let (start, end, page_index, pages) = compact_page(selected, rows.len(), COMPACT_PAGE);
     let fields: Vec<_> = rows[start..end]
         .iter()
         .enumerate()
@@ -639,15 +649,23 @@ fn compact_plugin_lines(
             let plugin = &plugins[row.plugin];
             let option = &plugin.options[row.option];
             (
-                compact_label(&plugin.label, &option.label, plugin.options.len()),
+                if page.is_some() {
+                    // The page is titled with the plugin; fields keep their own labels.
+                    option.label.clone()
+                } else {
+                    compact_label(&plugin.label, &option.label, plugin.options.len())
+                },
                 registry.value(row.plugin, plugin, row.option),
                 start + offset == selected,
             )
         })
         .collect();
+    let title = page
+        .and_then(|page| page_plugin_label(registry, page))
+        .unwrap_or_else(|| "Plugins".to_owned());
     let (timing, _) = timing_line(frames);
     let (first, first_segments) = if fields.is_empty() {
-        ("Plugins: none registered".to_owned(), None)
+        (format!("{title}: none registered"), None)
     } else {
         (
             compact_line(&fields),
@@ -656,22 +674,28 @@ fn compact_plugin_lines(
     };
     CompactLines {
         first,
-        second: format!("Plugins {page}/{pages}   {timing}"),
+        second: format!("{title} {page_index}/{pages}   {timing}"),
         first_color: None,
         second_color: None,
         first_segments,
     }
 }
 
-/// Vertical Plugins page: a header row per plugin, then its option rows. Long
-/// lists are clipped to a window around the selection with `...` markers.
-unsafe fn draw_plugins_vertical(registry: &crate::plugin_api::Registry, selected: usize, sx: f32) {
-    use crate::plugin_api::{plugin_rows, vertical_window, VERTICAL_WINDOW};
+/// Vertical Plugins page: a header row per plugin, then its option rows (an
+/// own page has no header: the window title names the plugin). Long lists
+/// are clipped to a window around the selection with `...` markers.
+unsafe fn draw_plugins_vertical(
+    registry: &crate::plugin_api::Registry,
+    selected: usize,
+    sx: f32,
+    page: Option<usize>,
+) {
+    use crate::plugin_api::{rows_for, vertical_window, VERTICAL_WINDOW};
     if !begin_table(b"deluxe_plugins\0", 150.0 * sx) {
         return;
     }
     let plugins = registry.snapshot();
-    let rows = plugin_rows(&plugins);
+    let rows = rows_for(&plugins, page);
     if rows.is_empty() {
         row("Plugins", "none registered");
         igEndTable();
@@ -684,7 +708,7 @@ unsafe fn draw_plugins_vertical(registry: &crate::plugin_api::Registry, selected
     let mut previous_plugin = usize::MAX;
     for (index, entry) in rows.iter().enumerate().take(end).skip(start) {
         let plugin = &plugins[entry.plugin];
-        if entry.plugin != previous_plugin {
+        if page.is_none() && entry.plugin != previous_plugin {
             row(&plugin.label, "");
             previous_plugin = entry.plugin;
         }
@@ -886,9 +910,10 @@ unsafe extern "C" fn draw() {
         let info_view = match view {
             View::Debug => crate::menu::InfoView::Debug,
             View::Performance => crate::menu::InfoView::Performance,
-            View::Plugins => crate::menu::InfoView::Plugins,
+            View::Plugins | View::PluginPage => crate::menu::InfoView::Plugins,
             View::Settings | View::Hidden => crate::menu::InfoView::Settings,
         };
+        let own_page = (view == View::PluginPage).then_some(ui.controls.page);
         let compact_strip = crate::menu::compact_strip(shape, info_view);
         let window_width = crate::menu::pane_width(shape, info_view);
         let configured = window_width * sx;
@@ -926,10 +951,11 @@ unsafe extern "C" fn draw() {
                     show_remote,
                     &ping,
                 )),
-                View::Plugins => Some(compact_plugin_lines(
+                View::Plugins | View::PluginPage => Some(compact_plugin_lines(
                     &crate::plugin_api::REGISTRY,
                     ui.controls.plugin_row,
                     &ui.frames,
+                    own_page,
                 )),
                 View::Hidden | View::Debug => None,
             }
@@ -968,17 +994,23 @@ unsafe extern "C" fn draw() {
             })
             .unwrap_or(16.0 * sy);
         igPushFont(std::ptr::null_mut(), font_size);
-        let title = if compact_strip {
-            c"##deluxe_match_strip"
-        } else {
-            c"Player Info"
+        // An own page is titled with its plugin's label. The `##` suffix keeps
+        // ImGui's window identity stable across plugins with the same label.
+        let page_title = own_page
+            .filter(|_| !compact_strip)
+            .and_then(|page| page_plugin_label(&crate::plugin_api::REGISTRY, page))
+            .and_then(|label| std::ffi::CString::new(format!("{label}##deluxe_plugin_page")).ok());
+        let title: *const std::ffi::c_char = match &page_title {
+            Some(title) => title.as_ptr(),
+            None if compact_strip => c"##deluxe_match_strip".as_ptr(),
+            None => c"Player Info".as_ptr(),
         };
         let flags = if compact_strip {
             WINDOW_FLAGS | NO_TITLE_BAR
         } else {
             WINDOW_FLAGS
         };
-        if igBegin(title.as_ptr(), std::ptr::null_mut(), flags) {
+        if igBegin(title, std::ptr::null_mut(), flags) {
             if view == View::Settings {
                 let ping_color = ping.color.map(|color| Vec4 {
                     x: color.r,
@@ -992,8 +1024,13 @@ unsafe extern "C" fn draw() {
                     }
                 }
             }
-            if view == View::Plugins && !compact_strip {
-                draw_plugins_vertical(&crate::plugin_api::REGISTRY, ui.controls.plugin_row, sx);
+            if matches!(view, View::Plugins | View::PluginPage) && !compact_strip {
+                draw_plugins_vertical(
+                    &crate::plugin_api::REGISTRY,
+                    ui.controls.plugin_row,
+                    sx,
+                    own_page,
+                );
             }
             if view == View::Debug && begin_table(b"deluxe_debug\0", 100.0 * sx) {
                 row(
@@ -1077,7 +1114,7 @@ unsafe extern "C" fn draw() {
             }
             if let Some(lines) = compact_lines.as_ref() {
                 draw_compact_lines(lines);
-            } else if view != View::Plugins {
+            } else if !matches!(view, View::Plugins | View::PluginPage) {
                 let quiet_ping = crate::pia_rtt::PresentedPing {
                     opponent: String::new(),
                     performance: None,

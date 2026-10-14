@@ -79,6 +79,9 @@ static REPLAY_SPEC: PluginSpec = PluginSpec {
         },
     ],
     config_path: Some("sd:/ultimate/replay/config.ini"),
+    // The second plugin asks for its own page: the shared page keeps only the
+    // first plugin's rows and the page list holds the second.
+    own_page: true,
 };
 
 #[test]
@@ -100,8 +103,23 @@ fn sdk_registration_reaches_the_host_registry_and_edits_round_trip() {
     assert_eq!(plugins[0].options[1].choices, vec!["A", "B", "C"]);
     assert!(plugins[0].options[2].read_only());
     assert_eq!(plugins[1].label, "Replay");
-    assert_eq!(plugin_rows(&plugins).len(), 6);
-    // Version 2 descriptor accepted: tones and the read-only status row arrive.
+    // The shared page holds the demo rows only; Replay has its own page.
+    assert!(!plugins[0].own_page);
+    assert!(plugins[1].own_page);
+    assert_eq!(plugin_rows(&plugins).len(), 3);
+    assert_eq!(
+        ssbu_online_deluxe_rewrite::plugin_api::page_plugins(&plugins),
+        vec![1]
+    );
+    assert_eq!(
+        ssbu_online_deluxe_rewrite::plugin_api::rows_for(&plugins, Some(0)).len(),
+        3
+    );
+    assert_eq!(
+        ssbu_online_deluxe_rewrite::plugin_api::rows_for(&plugins, Some(1)).len(),
+        0
+    );
+    // Version 3 descriptor accepted: tones, the read-only status row and the page flag arrive.
     assert_eq!(
         negotiated_descriptor_version(replay),
         Some(abi::ABI_VERSION)

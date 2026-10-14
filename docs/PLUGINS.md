@@ -46,6 +46,7 @@ your NRO still loads when Deluxe is not installed.
            read_only: false,
        }],
        config_path: Some("sd:/ultimate/my_plugin/config.ini"), // … into this file
+       own_page: false,  // true = a page of the window cycle titled "Record"
    };
 
    struct Handler;
@@ -69,7 +70,16 @@ your NRO still loads when Deluxe is not installed.
    }
    ```
 
-That is the whole integration. `request` is a request, not a command: return
+That is the whole integration. A plugin with many rows (one per fighter, say)
+sets `own_page: true` and gets its own page in the window cycle, titled with
+its label and visited after the shared Plugins page; up to 32 options fit
+(Deluxe 0.5.0, descriptor version 3; older hosts show the rows on the shared
+page and accept 8). A plugin that scopes its behaviour to online play reads
+`deluxe_plugin_sdk::host_online_context()` instead of hooking the game's
+scene sites itself: it returns the host's ready / online / match / training
+bits, or `None` when Deluxe is absent or older than 0.5.0.
+
+`request` is a request, not a command: return
 `Pending` to apply a change later (the row shows `(pending)` until `current`
 reports it), `Rejected` or `Unavailable` to refuse. A read-only option (or one
 with a single choice) is a status row; give its choices tones to show

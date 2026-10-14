@@ -26,20 +26,36 @@ pub enum View {
     Debug,
     /// Appended after Debug so recorded view numbers of older builds hold.
     Plugins,
+    /// One plugin's own page (`PLUGIN_FLAG_OWN_PAGE`, 0.5.0); `Overlay::page`
+    /// says which. Appended after Plugins for the same reason.
+    PluginPage,
 }
 
-/// Chord + Down walks Hidden → Settings → Plugins → Performance → Hidden.
-/// Plugins is skipped while no plugin has registered. Plus/Minus held with
-/// the chord opens Debug from Settings or Plugins and keeps Debug open while
-/// it stays held; Debug then continues to Performance on a plain chord.
-pub fn next_view(view: View, debug_modifier: bool, plugins_available: bool) -> View {
+/// Chord + Down walks Hidden → Settings → Plugins → each own page →
+/// Performance → Hidden. The shared Plugins page is skipped while no plugin
+/// has rows on it, and the own pages are the `page_count` plugins that asked
+/// for one (`page` is the current index). Plus/Minus held with the chord
+/// opens Debug from Settings, Plugins or an own page and keeps Debug open
+/// while it stays held; Debug then continues to Performance on a plain chord.
+/// Returns the next view and own-page index.
+pub fn next_view(
+    view: View,
+    page: usize,
+    debug_modifier: bool,
+    shared_available: bool,
+    page_count: usize,
+) -> (View, usize) {
     match (view, debug_modifier) {
-        (View::Hidden, _) => View::Settings,
-        (View::Settings | View::Plugins, true) => View::Debug,
-        (View::Debug, true) => View::Debug,
-        (View::Settings, false) if plugins_available => View::Plugins,
-        (View::Settings | View::Plugins | View::Debug, _) => View::Performance,
-        (View::Performance, _) => View::Hidden,
+        (View::Hidden, _) => (View::Settings, 0),
+        (View::Settings | View::Plugins | View::PluginPage, true) => (View::Debug, page),
+        (View::Debug, true) => (View::Debug, page),
+        (View::Settings, false) if shared_available => (View::Plugins, 0),
+        (View::Settings | View::Plugins, false) if page_count > 0 => (View::PluginPage, 0),
+        (View::PluginPage, false) if page + 1 < page_count => (View::PluginPage, page + 1),
+        (View::Settings | View::Plugins | View::PluginPage | View::Debug, _) => {
+            (View::Performance, 0)
+        }
+        (View::Performance, _) => (View::Hidden, 0),
     }
 }
 
@@ -90,8 +106,12 @@ impl CommandLatch {
 pub struct Overlay {
     pub view: View,
     pub menu: Menu,
-    /// Selected flattened row on the Plugins page (`plugin_api::plugin_rows`).
+    /// Selected flattened row on the Plugins page or the current own page
+    /// (`plugin_api::rows_for`); reset when the view changes.
     pub plugin_row: usize,
+    /// Which own page is shown while `view == View::PluginPage`
+    /// (index into `plugin_api::page_plugins`).
+    pub page: usize,
     previous_buttons: u64,
     latch: CommandLatch,
 }
@@ -169,13 +189,24 @@ impl Overlay {
         let chord = shoulders || triggers;
         let command = self.latch.sample(buttons);
         if let Some(command) = command {
-            self.view = match command {
+            let previous = (self.view, self.page);
+            (self.view, self.page) = match command {
                 Command::Cycle { debug_modifier } => {
-                    next_view(self.view, debug_modifier, plugins.count() > 0)
+                    let snapshot = plugins.snapshot();
+                    next_view(
+                        self.view,
+                        self.page,
+                        debug_modifier,
+                        !crate::plugin_api::plugin_rows(&snapshot).is_empty(),
+                        crate::plugin_api::page_plugins(&snapshot).len(),
+                    )
                 }
-                Command::Debug if self.view == View::Debug => View::Hidden,
-                Command::Debug => View::Debug,
+                Command::Debug if self.view == View::Debug => (View::Hidden, 0),
+                Command::Debug => (View::Debug, self.page),
             };
+            if (self.view, self.page) != previous {
+                self.plugin_row = 0;
+            }
             self.menu.open = self.view == View::Settings;
             if self.menu.open {
                 let gate = crate::menu::row_gate(
@@ -188,9 +219,10 @@ impl Overlay {
             }
             return false;
         }
-        if self.view == View::Plugins {
+        if matches!(self.view, View::Plugins | View::PluginPage) {
             // Plugin rows never touch `Config`; the plugin owns the change.
-            let rows = crate::plugin_api::plugin_rows(&plugins.snapshot());
+            let page = (self.view == View::PluginPage).then_some(self.page);
+            let rows = crate::plugin_api::rows_for(&plugins.snapshot(), page);
             if rows.is_empty() {
                 return false;
             }
@@ -466,18 +498,64 @@ mod tests {
     #[test]
     fn plugins_view_enters_the_cycle_only_after_a_registration() {
         for debug in [false, true] {
-            assert_eq!(next_view(View::Hidden, debug, false), View::Settings);
-            assert_eq!(next_view(View::Hidden, debug, true), View::Settings);
-            assert_eq!(next_view(View::Performance, debug, true), View::Hidden);
+            assert_eq!(
+                next_view(View::Hidden, 0, debug, false, 0),
+                (View::Settings, 0)
+            );
+            assert_eq!(
+                next_view(View::Hidden, 0, debug, true, 2),
+                (View::Settings, 0)
+            );
+            assert_eq!(
+                next_view(View::Performance, 0, debug, true, 2),
+                (View::Hidden, 0)
+            );
         }
-        assert_eq!(next_view(View::Debug, false, true), View::Performance);
-        assert_eq!(next_view(View::Debug, true, true), View::Debug);
-        assert_eq!(next_view(View::Settings, false, false), View::Performance);
-        assert_eq!(next_view(View::Settings, false, true), View::Plugins);
-        assert_eq!(next_view(View::Settings, true, true), View::Debug);
-        assert_eq!(next_view(View::Plugins, false, true), View::Performance);
-        assert_eq!(next_view(View::Plugins, true, true), View::Debug);
+        assert_eq!(
+            next_view(View::Debug, 1, false, true, 2),
+            (View::Performance, 0)
+        );
+        assert_eq!(next_view(View::Debug, 1, true, true, 2), (View::Debug, 1));
+        assert_eq!(
+            next_view(View::Settings, 0, false, false, 0),
+            (View::Performance, 0)
+        );
+        assert_eq!(
+            next_view(View::Settings, 0, false, true, 0),
+            (View::Plugins, 0)
+        );
+        assert_eq!(
+            next_view(View::Settings, 0, true, true, 0),
+            (View::Debug, 0)
+        );
+        // Own pages follow the shared page, or Settings when nothing is shared.
+        assert_eq!(
+            next_view(View::Settings, 0, false, false, 2),
+            (View::PluginPage, 0)
+        );
+        assert_eq!(
+            next_view(View::Plugins, 0, false, true, 2),
+            (View::PluginPage, 0)
+        );
+        assert_eq!(
+            next_view(View::PluginPage, 0, false, true, 2),
+            (View::PluginPage, 1)
+        );
+        assert_eq!(
+            next_view(View::PluginPage, 1, false, true, 2),
+            (View::Performance, 0)
+        );
+        assert_eq!(
+            next_view(View::Plugins, 0, false, true, 0),
+            (View::Performance, 0)
+        );
+        assert_eq!(
+            next_view(View::PluginPage, 1, true, true, 2),
+            (View::Debug, 1)
+        );
+        assert_eq!(next_view(View::Plugins, 0, true, true, 0), (View::Debug, 0));
         assert_eq!(View::Plugins as u8, 4);
+        assert_eq!(View::PluginPage as u8, 5);
         assert_eq!(View::Debug as u8, 3);
     }
 

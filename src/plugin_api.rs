@@ -65,6 +65,9 @@ pub struct Plugin {
     pub options: Vec<PluginOption>,
     /// The plugin's own INI the host updates after menu edits, when set.
     pub config_path: Option<String>,
+    /// Drawn on its own page of the window cycle (descriptor version 3,
+    /// `PLUGIN_FLAG_OWN_PAGE`) instead of on the shared Plugins page.
+    pub own_page: bool,
     user: usize,
     current: abi::CurrentFn,
     request: abi::RequestFn,
@@ -239,6 +242,7 @@ pub struct ParsedPlugin {
     pub label: String,
     pub options: Vec<PluginOption>,
     pub config_path: Option<String>,
+    pub own_page: bool,
     pub user: usize,
     pub current: abi::CurrentFn,
     pub request: abi::RequestFn,
@@ -259,9 +263,17 @@ pub unsafe fn parse_descriptor(desc: *const abi::PluginDesc) -> Result<ParsedPlu
     {
         return Err(abi::REGISTER_ERR_ABI);
     }
-    if desc.flags != 0 {
+    // Version 3 introduced the first plugin flag; older descriptors must keep
+    // the reserved word at zero, as every host before 0.5.0 required.
+    let allowed_plugin_flags = if desc.abi_version >= 3 {
+        abi::PLUGIN_FLAG_OWN_PAGE
+    } else {
+        0
+    };
+    if desc.flags & !allowed_plugin_flags != 0 {
         return Err(abi::REGISTER_ERR_INVALID);
     }
+    let own_page = desc.flags & abi::PLUGIN_FLAG_OWN_PAGE != 0;
     let (Some(current), Some(request)) = (desc.current, desc.request) else {
         return Err(abi::REGISTER_ERR_CALLBACKS);
     };
@@ -277,7 +289,12 @@ pub unsafe fn parse_descriptor(desc: *const abi::PluginDesc) -> Result<ParsedPlu
         )?)
     };
     let option_count = desc.option_count as usize;
-    if option_count == 0 || option_count > abi::MAX_OPTIONS {
+    let max_options = if desc.abi_version >= 3 {
+        abi::MAX_OPTIONS
+    } else {
+        abi::MAX_OPTIONS_V2
+    };
+    if option_count == 0 || option_count > max_options {
         return Err(abi::REGISTER_ERR_INVALID);
     }
     if desc.options.is_null() {
@@ -375,6 +392,7 @@ pub unsafe fn parse_descriptor(desc: *const abi::PluginDesc) -> Result<ParsedPlu
         label,
         options,
         config_path,
+        own_page,
         user: desc.user as usize,
         current,
         request,
@@ -458,6 +476,7 @@ impl Registry {
             label: parsed.label,
             options: parsed.options,
             config_path: parsed.config_path,
+            own_page: parsed.own_page,
             user: parsed.user,
             current: parsed.current,
             request: parsed.request,
@@ -631,14 +650,52 @@ pub struct PluginRow {
     pub option: usize,
 }
 
+/// Rows of the shared Plugins page: every plugin that did not ask for its own
+/// page, in registration order.
 pub fn plugin_rows(plugins: &[Arc<Plugin>]) -> Vec<PluginRow> {
     plugins
         .iter()
         .enumerate()
+        .filter(|(_, entry)| !entry.own_page)
         .flat_map(|(plugin, entry)| {
             (0..entry.options.len()).map(move |option| PluginRow { plugin, option })
         })
         .collect()
+}
+
+/// Indices of the plugins that asked for their own page, in registration
+/// order: the window cycle visits them after the shared Plugins page.
+pub fn page_plugins(plugins: &[Arc<Plugin>]) -> Vec<usize> {
+    plugins
+        .iter()
+        .enumerate()
+        .filter(|(_, entry)| entry.own_page)
+        .map(|(index, _)| index)
+        .collect()
+}
+
+/// Rows of one plugin's own page.
+pub fn plugin_page_rows(plugins: &[Arc<Plugin>], plugin: usize) -> Vec<PluginRow> {
+    plugins
+        .get(plugin)
+        .map(|entry| {
+            (0..entry.options.len())
+                .map(|option| PluginRow { plugin, option })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Rows the selection moves over for a view: the shared page, or one plugin's
+/// page (`page` indexes [`page_plugins`]).
+pub fn rows_for(plugins: &[Arc<Plugin>], page: Option<usize>) -> Vec<PluginRow> {
+    match page {
+        None => plugin_rows(plugins),
+        Some(page) => page_plugins(plugins)
+            .get(page)
+            .map(|plugin| plugin_page_rows(plugins, *plugin))
+            .unwrap_or_default(),
+    }
 }
 
 /// Steps to the adjacent row, wrapping. An empty list keeps zero.
@@ -1039,11 +1096,20 @@ mod tests {
             abi::REGISTER_ERR_ABI
         );
         holder.desc.struct_size = core::mem::size_of::<abi::PluginDesc>() as u32;
-        holder.desc.flags = 1;
+        // Unknown plugin flag bits are invalid in every version; the own-page
+        // bit exists only from version 3.
+        holder.desc.flags = 2;
         assert_eq!(
             unsafe { registry.register_raw(&holder.desc) },
             abi::REGISTER_ERR_INVALID
         );
+        holder.desc.flags = abi::PLUGIN_FLAG_OWN_PAGE;
+        holder.desc.abi_version = 2;
+        assert_eq!(
+            unsafe { registry.register_raw(&holder.desc) },
+            abi::REGISTER_ERR_INVALID
+        );
+        holder.desc.abi_version = abi::ABI_VERSION;
         holder.desc.flags = 0;
         holder.desc.request = None;
         assert_eq!(
@@ -1599,9 +1665,10 @@ mod tests {
             Some(fake_current),
             Some(fake_request),
         );
-        assert_eq!(holder.desc.abi_version, 2);
+        assert_eq!(holder.desc.abi_version, abi::ABI_VERSION);
         assert_eq!(unsafe { registry.register_raw(&holder.desc) }, 0);
         let plugin = registry.snapshot()[0].clone();
+        assert!(!plugin.own_page);
         assert_eq!(plugin.options[0].tone_of(1), abi::TONE_OK);
         assert_eq!(plugin.options[0].tone_of(0), abi::TONE_NEUTRAL);
         assert_eq!(plugin.options[2].tone_of(1), abi::TONE_NEUTRAL);
@@ -1703,7 +1770,7 @@ mod tests {
             abi::REGISTER_ERR_INVALID
         );
         // Unknown descriptor versions are refused as ABI errors.
-        flagged.desc.abi_version = 3;
+        flagged.desc.abi_version = abi::ABI_VERSION + 1;
         assert_eq!(
             unsafe { registry.register_raw(&flagged.desc) },
             abi::REGISTER_ERR_ABI

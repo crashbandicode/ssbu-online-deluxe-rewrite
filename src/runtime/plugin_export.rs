@@ -94,6 +94,33 @@ pub(super) fn flush_persistence() {
     }
 }
 
+/// Exported entry named by `deluxe_plugin_abi::ONLINE_SYMBOL` (0.5.0): the
+/// host's scene context as `ONLINE_CONTEXT_*` bits, so a plugin that scopes
+/// its behaviour to online play can share Deluxe's tracker instead of
+/// hooking the same scene sites.
+///
+/// # Safety
+/// Plain C entry with no arguments; reads atomics only.
+#[no_mangle]
+pub unsafe extern "C" fn ssbu_online_deluxe_online_context_v1() -> u32 {
+    let scene = super::auto_driver::snapshot();
+    let mut bits = 0;
+    if scene.ready {
+        bits |= abi::ONLINE_CONTEXT_READY;
+    }
+    if super::auto_driver::fx_online() {
+        bits |= abi::ONLINE_CONTEXT_ONLINE;
+    }
+    match scene.status {
+        crate::auto_policy::SceneStatus::Singles | crate::auto_policy::SceneStatus::Doubles => {
+            bits |= abi::ONLINE_CONTEXT_MATCH;
+        }
+        crate::auto_policy::SceneStatus::Training => bits |= abi::ONLINE_CONTEXT_TRAINING,
+        crate::auto_policy::SceneStatus::Inactive => {}
+    }
+    bits
+}
+
 unsafe extern "C" fn host_status() -> u32 {
     if super::ui::installed() {
         abi::HOST_STATUS_MENU_ACTIVE

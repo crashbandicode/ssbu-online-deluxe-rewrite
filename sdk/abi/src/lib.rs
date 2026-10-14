@@ -49,9 +49,10 @@
 use core::ffi::{c_char, c_void};
 
 /// Descriptor revision carried in [`PluginDesc::abi_version`]. Version 2 adds
-/// [`OptionDesc::choice_tones`] and [`OPTION_FLAG_READ_ONLY`]; the host also
-/// accepts version 1 descriptors ([`OptionDescV1`] layout).
-pub const ABI_VERSION: u32 = 2;
+/// [`OptionDesc::choice_tones`] and [`OPTION_FLAG_READ_ONLY`]; version 3 keeps
+/// the same layouts and adds [`PLUGIN_FLAG_OWN_PAGE`] and the larger
+/// [`MAX_OPTIONS`]. The host also accepts version 1 and 2 descriptors.
+pub const ABI_VERSION: u32 = 3;
 /// Oldest descriptor revision the host accepts.
 pub const MIN_ABI_VERSION: u32 = 1;
 /// Revision carried in [`PluginApiV1::abi_version`]. The exported table shape
@@ -66,8 +67,13 @@ pub const API_SYMBOL_C: &[u8] = b"ssbu_online_deluxe_plugin_api_v1\0";
 
 /// Most plugins one host accepts.
 pub const MAX_PLUGINS: usize = 16;
-/// Most options one plugin may declare.
-pub const MAX_OPTIONS: usize = 8;
+/// Most options one plugin may declare with a version 3 descriptor (one row
+/// per fighter fits). Hosts read descriptor versions 1 and 2 against
+/// [`MAX_OPTIONS_V2`].
+pub const MAX_OPTIONS: usize = 32;
+/// Option limit for descriptor versions 1 and 2, and for every host that
+/// predates version 3.
+pub const MAX_OPTIONS_V2: usize = 8;
 /// Most choices one option may declare. One choice makes a read-only status row.
 pub const MAX_CHOICES: usize = 16;
 /// Longest `id` in bytes, excluding the terminator. Lowercase ASCII, digits, `_`.
@@ -80,6 +86,31 @@ pub const MAX_VALUE_LEN: usize = 24;
 pub const MAX_PATH_LEN: usize = 255;
 /// Required prefix of `config_path`.
 pub const CONFIG_PATH_PREFIX: &str = "sd:/";
+
+/// `PluginDesc::flags` (version 3): draw this plugin on its own page in the
+/// window cycle (settings → plugins → each own page → performance), titled
+/// with the plugin label, instead of as a group on the shared Plugins page.
+/// Hosts before version 3 reject any non-zero `PluginDesc::flags`, so the
+/// SDK clears it when it retries with an older descriptor.
+pub const PLUGIN_FLAG_OWN_PAGE: u32 = 1 << 0;
+
+/// Exported host function name (0.5.0): `extern "C" fn() -> u32` returning
+/// `ONLINE_CONTEXT_*` bits from the host's scene tracker. Resolve it with
+/// `nn::ro::LookupSymbol`; a missing symbol means an older host.
+pub const ONLINE_SYMBOL: &str = "ssbu_online_deluxe_online_context_v1";
+/// NUL-terminated form of [`ONLINE_SYMBOL`].
+pub const ONLINE_SYMBOL_C: &[u8] = b"ssbu_online_deluxe_online_context_v1\0";
+/// Signature of the exported [`ONLINE_SYMBOL`].
+pub type OnlineContextFn = unsafe extern "C" fn() -> u32;
+/// Online context bit: the host's scene hooks are installed and ready.
+pub const ONLINE_CONTEXT_READY: u32 = 1 << 0;
+/// Online context bit: the scene is online (Quickplay, Arena or local
+/// wireless, or the game's online-latency hook reached the current match).
+pub const ONLINE_CONTEXT_ONLINE: u32 = 1 << 1;
+/// Online context bit: a Singles or Doubles stage is loaded.
+pub const ONLINE_CONTEXT_MATCH: u32 = 1 << 2;
+/// Online context bit: the scene is Training (also the Quickplay waiting room).
+pub const ONLINE_CONTEXT_TRAINING: u32 = 1 << 3;
 
 /// `OptionDesc::flags`: never write this option even when the plugin persists.
 pub const OPTION_FLAG_NO_PERSIST: u32 = 1 << 0;
@@ -211,7 +242,8 @@ pub struct PluginDesc {
     pub label: *const c_char,
     pub options: *const OptionDesc,
     pub option_count: u32,
-    /// Reserved for `PLUGIN_FLAG_*` bits; must be zero in version 1.
+    /// `PLUGIN_FLAG_*` bits (version 3: [`PLUGIN_FLAG_OWN_PAGE`]); must be
+    /// zero in versions 1 and 2.
     pub flags: u32,
     /// Opaque pointer handed back to every callback.
     pub user: *mut c_void,
@@ -305,14 +337,26 @@ mod tests {
         assert_eq!(core::mem::size_of::<PluginDesc>(), 72);
         assert_eq!(core::mem::size_of::<PluginApiV1>(), 32);
         assert_eq!(TABLE_VERSION, 1);
-        assert_eq!(ABI_VERSION, 2);
+        assert_eq!(ABI_VERSION, 3);
+        assert_eq!((MAX_OPTIONS, MAX_OPTIONS_V2), (32, 8));
+        assert_eq!(PLUGIN_FLAG_OWN_PAGE, 1);
         assert!(table_matches(32, 1));
         assert!(!table_matches(32, 2));
         assert!(!table_matches(24, 1));
         assert!(descriptor_version_supported(1));
         assert!(descriptor_version_supported(2));
+        assert!(descriptor_version_supported(3));
         assert!(!descriptor_version_supported(0));
-        assert!(!descriptor_version_supported(3));
+        assert!(!descriptor_version_supported(4));
+        assert_eq!(ONLINE_SYMBOL_C.len(), ONLINE_SYMBOL.len() + 1);
+        assert_eq!(ONLINE_SYMBOL_C[ONLINE_SYMBOL.len()], 0);
+        assert_eq!(
+            ONLINE_CONTEXT_READY
+                | ONLINE_CONTEXT_ONLINE
+                | ONLINE_CONTEXT_MATCH
+                | ONLINE_CONTEXT_TRAINING,
+            0b1111
+        );
         assert!(valid_tones(&[0, 1, 2, 3]));
         assert!(!valid_tones(&[0, 4]));
         let v1 = OptionDescV1 {

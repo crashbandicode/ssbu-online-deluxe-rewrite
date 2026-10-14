@@ -144,6 +144,7 @@ mod switch {
             },
         ],
         config_path: Some(CONFIG_PATH),
+        own_page: false,
     };
 
     struct DemoHandler;
