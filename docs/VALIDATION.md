@@ -1659,8 +1659,18 @@ for 0.3.5. Package `artifacts/792d88778925c0e6/`: build
 (2002944 B, module `18fe2ed2…7101`), ELF `9dbc04b1…b5b4`; sections `.text`
 1402016 / `.data` 179368 / `.bss` 286160 (resident 2.21 MB, unchanged).
 Forgejo release `v0.3.6` (id 360, tag on ec2847f): NRO asset 78 (download
-read back as 792d8877…c5e4), `manifest.json` asset 79. Not installed on
-hardware (the Switch has 0.3.5).
+read back as 792d8877…c5e4), `manifest.json` asset 79.
+
+Switch install of 0.3.6, 2026-10-14 ~00:40Z (operator: "ship 0.3.6 to the
+switch"): hekate USB mass storage, tangent `switch-ums-792d/deployment.json`.
+Installed NRO read back as 6b22546e…5dfb (0.3.5) before, saved to
+`backups/pre-memory-probe-792d88778925c0e6.nro` on the card (verified) and
+locally; copied under a temp name, renamed, read back as 792d8877…c5e4. The
+plugin set on the card at that moment: ARCropolis 2076672, css_preserve,
+nro_hook, param_hook 53248 each, gamepad overlay 151552, OBS companion
+126976 (down from 212992), Deluxe 2002944, Training Modpack 1769472 (down
+from 3379200), stage pack 1351680, imgui 1282048. Runtime result pending:
+the first boot's heartbeats give the first `mem_used`/`mem_total` numbers.
 
 Caveat for the CSS capture: the SD writes now happen during the measured
 interval, from the diagnostics thread. Compare the next hardware CSS capture
