@@ -292,6 +292,12 @@ pub fn profile_row_label(
     }
     if auto_profile {
         auto_choice_label(requested).to_owned()
+    } else if requested == RenderMode::Vanilla && selected != RenderMode::Vanilla {
+        // Cleanup hold: after a match, Training or the Smash menu the renderer
+        // stays on Vanilla until a newer explicit selection or the next match.
+        // Show what is live, marked, instead of the saved choice (2026-10-14
+        // hardware report: banner said LessLag while the renderer ran Vanilla).
+        "Vanilla*".to_owned()
     } else {
         selected.label().to_owned()
     }
@@ -636,17 +642,27 @@ mod tests {
             profile_row_label(true, true, RenderMode::Vanilla, RenderMode::LessLagDoubles),
             "Auto:LLDbl"
         );
+        // Manual mode with a Vanilla request is the cleanup hold: the label
+        // follows the live renderer, marked, not the saved choice.
         assert_eq!(
             profile_row_label(false, true, RenderMode::LessLagDoubles, RenderMode::Vanilla),
-            "LLDoubles"
+            "Vanilla*"
         );
         assert_eq!(
             profile_row_label(false, true, RenderMode::LessLag, RenderMode::Vanilla),
-            "LessLag"
+            "Vanilla*"
         );
         assert_eq!(
             profile_row_label(false, true, RenderMode::LessLagUltra, RenderMode::Vanilla),
-            "LLUltra"
+            "Vanilla*"
+        );
+        assert_eq!(
+            profile_row_label(false, true, RenderMode::LessLag, RenderMode::LessLag),
+            "LessLag"
+        );
+        assert_eq!(
+            profile_row_label(false, true, RenderMode::Vanilla, RenderMode::Vanilla),
+            "Vanilla"
         );
         assert_eq!(
             profile_row_label(false, true, RenderMode::Vanilla, RenderMode::LessLagDoubles),

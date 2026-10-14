@@ -2011,6 +2011,46 @@ the kind-3 texture wait and the > 20 ms share with
 `switch-mtp-038/before-logs/` (0.3.7 LessLag windows 41–52 fps, B 30 fps).
 If it does not help, revert b044752 and reinstall 0.3.9 from the rollback.
 
+**Hardware verdict, 2026-10-14 14:37Z: the candidate does not help, and it
+is reverted (commit c0fa483) and off the card.** The console booted the
+candidate (`switch-mtp-poll/boot-logs-1437/`, build
+`0.3.9-b04475229832-1791982758`, 1110 s, `mem_used` 2.66 GB) and recorded
+four CSS captures. The event log (`AutoRequest` code 74, `ProfileTransition`
+code 46) dates them: capture 298481440895 at 81 s is genuine two-image
+LessLag with the poll running, the operator still (0–11 s) then moving the
+hand (12–30 s); 304026704152 at 370 s is LessLag after two Vanilla↔LessLag
+re-selections; 312302874387 at 801 s is Vanilla under the cleanup hold
+(`req=0 sel=3 hold=1` at 775.6 s); 313596223198 at 868 s starts under the
+hold and commits LessLag at 877.7 s when the profile was re-selected.
+Numbers (`RESULTS-hw.md`, `compare.py`):
+
+| Capture | Live policy | Still: fps / > 20 ms / texture wait | Sweep: fps / > 20 ms / texture wait mean / p95 | Poll rows / results |
+|---|---|---|---|---|
+| 298481440895 | LessLag + poll | 59.4 / 1.0 % / 2.35 ms | **49.9 / 20.2 % / 4.56 / 16.4 ms** | 1593 / all 0 |
+| 304026704152 | LessLag + poll | 50.6 / 18.5 % / 4.22 ms | 48.9 / 19.7 % / 5.72 / 16.8 ms | 1483 / all 0 |
+| 312302874387 | Vanilla (hold), no input | 59.3 / 0.8 % / 1.70 ms | 58.5 / 0.4 % (no input) / 3.40 / 12.1 ms | 1590 / all 0 |
+| 313596223198 | Vanilla → LessLag at 9.5 s | 52.6 / 4.9 % / 5.85 ms | 58.6 / 1.9 % / 4.59 / 10.7 ms | 1690 / 1688×0, 2×2 |
+
+The poll returned ALREADY_SIGNALED in every LessLag frame (the sync it
+checks is already complete in a two-image ring), so running it changes
+nothing: the directional-input penalty is unchanged from the 0.3.7 captures
+(LessLag windows 41–52 fps) and the texture-ready fence tail is still 16 ms.
+Astra's rank-1 discriminator is therefore answered: removing the poll is
+**not** what makes the fence miss. The remaining candidates from that list
+are the hidden-overlay control, the `DISABLE_LESSLAG_FIELDS` discriminator
+and frame/sync identities on the NVN wrappers. The card was returned to the
+released 0.3.9 NRO at 14:39Z (`switch-mtp-poll-revert/deployment.json`
+`installed_verified`; the candidate is archived as
+`backups/candidate-render-poll-021a03dee556fdc4.nro`).
+
+Display defect found by the operator on this boot: the native CSS banner
+read "You: LessLag | 3" while the renderer ran Vanilla with three textures
+under the cleanup hold (the menu's Engine row showed Vanilla). Manual mode
+labelled the saved profile regardless of the live request. Fixed in
+`auto_policy::profile_row_label`: a manual selection whose request is Vanilla
+(only the cleanup hold produces that) is shown as `Vanilla*` in the banner,
+the arena lines and the settings row; tests updated. Not yet on the card.
+
 ### DBI USB MTP installation of f22d (0.3.0) — 2026-10-12 19:58Z
 
 `switch-mtp-f22d/deploy-f22d-mtp-1012.py` preflight 19:55:47Z (installed
