@@ -2423,6 +2423,21 @@ by `d9dd7df2…`, `libssbu_fx_control.nro` added; rollback archive under
 now ignored). Flags `CAPTURE_CSS` + `CAPTURE_MATCH` remain. Console run of
 0.5.0 + FX Control not yet performed.
 
+Eden GIF campaign for the FX Control README, 2026-10-14 21:27Z onward, on
+the release NROs (Training, Scope All, 6 s clips per state): two Eden
+instances died at the Training → character-select transition. Run 1
+(22:49Z, after 48 clips): host SIGBUS with memory pinned at the 8 GB cgroup
+cap, no guest panic logged. Run 2 (~23:30Z, after 66 clips): **guest abort**
+— `SetTerminateResult 2001-0114` (kernel `InvalidHandle`) from
+`nn::os::LockMutex` inside the game's model-update routine (`main+0x3ab5c4`)
+called from `deluxe_rewrite_post_scene`, i.e. the LessLag render-opts path
+that relocates the model update into the post-scene hook, while fighter NROs
+were unloading. Evidence: evidence root `fx-gifs-1014/run-2/GUEST-PANIC.md`
+and `guest-panic.txt`. Intermittent (the same transition succeeded many
+times earlier that day); not reproduced on purpose; no fix made or tested.
+The same render path is on the console in 0.5.0 (unchanged since 0.3.x).
+Run 3 uses a 14 GB cap to separate host memory pressure from the race.
+
 ### DBI USB MTP installation of f22d (0.3.0) — 2026-10-12 19:58Z
 
 `switch-mtp-f22d/deploy-f22d-mtp-1012.py` preflight 19:55:47Z (installed
