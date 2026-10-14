@@ -8,8 +8,8 @@ No hardware overclocking is implemented.
 
 Publication routing (updated October 14): `origin` is Forgejo
 (`git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite`) and is
-authoritative; this repository remains private. `github` is a second,
-downstream remote that is not pushed automatically. Nothing is pushed without
+authoritative and public. `github` is a second, downstream remote that is not
+pushed automatically. Nothing is pushed without
 the operator's explicit permission. On October 9 origin still pointed at GitHub;
 that is no longer true.
 

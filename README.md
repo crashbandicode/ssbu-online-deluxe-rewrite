@@ -1,6 +1,6 @@
 # Online Deluxe rewrite
 
-A private Rust/Skyline reconstruction for **Super Smash Bros. Ultimate 13.0.5**,
+A Rust/Skyline reconstruction of Online Deluxe for **Super Smash Bros. Ultimate 13.0.5**,
 delivered as **one NRO**: rendering profiles that cut input latency, a global
 Player Info window, the native character-select status line, network display
 and scoped character-FX controls. No overclocking.

@@ -85,8 +85,8 @@ Smash-closed/transfer-ready confirmation before further device access.
    The peer clarified that the remaining report concerns 400–450 FPS mods.
    That optional reproduction is deferred until after operator Switch tests.
 8. Reconcile docs, preserve optimized symbols and source, then publish accepted
-   work to the authoritative private Forgejo repository when authorized and update
-   the private release. As of 2026-10-14 `origin` is Forgejo
+   work to the authoritative Forgejo repository when authorized and update
+   the release. As of 2026-10-14 `origin` is Forgejo
    (`git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite`); `github` is a
    second, downstream remote that is not pushed automatically. Do not assume
    release metadata is included in Git sync. Ship only
