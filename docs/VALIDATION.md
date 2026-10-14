@@ -1729,6 +1729,8 @@ both begin `build=0.3.2-85a75632…`, newest crash report 21:18Z on 2026-10-13),
 so 0.3.3, 0.3.5 and 0.3.6 never ran on hardware either. Runtime result pending:
 the first boot decides the 256 KiB stack (heartbeats continuing in
 `hang-trace.log`) and gives the first `mem_used` numbers of the trimmed build.
+Forgejo release `v0.3.7` (id 363, tag on d41ad35): NRO asset 80 (download
+read back as 8562746a…07ea), `manifest.json` asset 81.
 
 Caveat for the CSS capture: the SD writes now happen during the measured
 interval, from the diagnostics thread. Compare the next hardware CSS capture
