@@ -22,6 +22,8 @@ static CSS_REQUESTED: AtomicBool = AtomicBool::new(false);
 static MATCH_REQUESTED: AtomicU8 = AtomicU8::new(0);
 /// The scene left the stage: a running match capture ends at the next poll.
 static MATCH_ENDED: AtomicBool = AtomicBool::new(false);
+/// A match capture is recording or exporting (read per CSS frame).
+static MATCH_ACTIVE: AtomicBool = AtomicBool::new(false);
 /// Wall-clock abort margin after the guest-clock duration.
 const ABORT_MARGIN_SECONDS: u64 = 10;
 static CALLBACK: AtomicU64 = AtomicU64::new(0);
@@ -49,19 +51,22 @@ pub(super) fn request_css() -> bool {
     !CSS_REQUESTED.swap(true, Ordering::AcqRel)
 }
 
-/// Stage entry with `CAPTURE_MATCH` present (scene hook thread). The request
-/// is kept until the poll consumes it; a running non-match capture is ended
-/// first so the match starts within a poll or two. Returns whether it was new.
+/// Stage load with `CAPTURE_MATCH` present (game thread). The request is kept
+/// until the poll consumes it; a running capture of any kind is ended first
+/// so the new match starts within a poll or two. Returns whether it was new.
 pub(super) fn request_match(status: SceneStatus) -> bool {
-    MATCH_ENDED.store(false, Ordering::Release);
     MATCH_REQUESTED.swap(status as u8 + 1, Ordering::AcqRel) == 0
 }
 
-/// The scene left the stage. Ends a running match capture at the next poll
+/// The game left the stage. Ends a running match capture at the next poll
 /// and withdraws a match request that was never armed.
 pub(super) fn end_match() {
     MATCH_REQUESTED.store(0, Ordering::Release);
     MATCH_ENDED.store(true, Ordering::Release);
+}
+
+pub(super) fn match_active() -> bool {
+    MATCH_ACTIVE.load(Ordering::Acquire)
 }
 
 pub(super) fn status() -> &'static str {
@@ -244,10 +249,16 @@ impl Service {
                 CAPTURE.finish();
                 super::api_trace::TRACE.finish();
             }
-            if run.is_match && MATCH_ENDED.swap(false, Ordering::AcqRel) {
-                CAPTURE.finish_with(Finish::SceneEnd);
-                super::api_trace::TRACE.finish_with(Finish::SceneEnd);
-            } else if !run.is_match && MATCH_REQUESTED.load(Ordering::Acquire) != 0 {
+            let next_match_pending = MATCH_REQUESTED.load(Ordering::Acquire) != 0;
+            if run.is_match {
+                // The game left the stage, or another stage loaded without a
+                // visible exit: this capture ends and the next one arms once
+                // the export is done.
+                if MATCH_ENDED.swap(false, Ordering::AcqRel) || next_match_pending {
+                    CAPTURE.finish_with(Finish::SceneEnd);
+                    super::api_trace::TRACE.finish_with(Finish::SceneEnd);
+                }
+            } else if next_match_pending {
                 // A match started under a 30 s capture: end that one now so
                 // the match capture can arm once its export is done.
                 CAPTURE.finish();
@@ -306,6 +317,7 @@ impl Service {
                 );
                 record(Code::TimingFinished, summary.id, u64::from(result.is_ok()));
                 self.current = None;
+                MATCH_ACTIVE.store(false, Ordering::Release);
                 self.callback_ready = None;
                 self.api_ready = None;
             }
@@ -386,6 +398,12 @@ impl Service {
                         timing: Stream::new(timing),
                         api: Stream::new(api),
                     });
+                    if is_match {
+                        // An end that arrived before this arm belongs to the
+                        // previous stage; the new stage is live now.
+                        MATCH_ENDED.store(false, Ordering::Release);
+                        MATCH_ACTIVE.store(true, Ordering::Release);
+                    }
                     record(Code::TimingStarted, id, u64::from(is_match));
                     record(
                         Code::MenuOrder,

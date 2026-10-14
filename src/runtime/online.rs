@@ -30,6 +30,7 @@ pub(super) fn ready() -> bool {
 }
 
 pub(super) fn observe_css_scene() {
+    super::match_capture::note_css();
     if !ready() {
         return;
     }
@@ -107,6 +108,7 @@ unsafe fn deluxe_rewrite_stage_setup(ctx: &InlineCtx) {
     let status =
         auto_policy::classify_stage(stage_id, is_training_mode(), get_fighter_entry_count());
     auto_driver::set_scene(None, Some(status), STAGE_SETUP as u64);
+    super::match_capture::note_stage(status);
 }
 
 pub(super) fn install() {

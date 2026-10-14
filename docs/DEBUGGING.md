@@ -180,11 +180,15 @@ from kind 62 and reports a `css_capture` section. Install log code 104 gives the
 hook mask (7 = all three) and which SDK symbols resolved; codes 12/13 mark
 character-select entry and exit (exit = one second without a CSS update).
 
-With the `CAPTURE_MATCH` boot flag the same capture pair is armed when the
-scene enters a stage (the stage-setup hook classifies Singles, Doubles or
-Training; label `match_singles`, `match_doubles` or `match_training`) and
-ended when the scene returns to Inactive at the results screen (`# reason=
-scene_end`), with a ten-minute ceiling (`elapsed`). Both CSVs stream from the
+With the `CAPTURE_MATCH` boot flag the same capture pair is armed on every
+stage load (the stage-setup hook classifies Singles, Doubles or Training;
+label `match_singles`, `match_doubles` or `match_training`) and ended when
+the game leaves the stage: the scene status returns to Inactive (results,
+main menu) or the character-select update runs (the Training CSS keeps the
+Training status, so this is what ends a Training capture; code 106 `a=2`
+`b=0xC55`). The footer says `# reason=scene_end`; the ten-minute ceiling
+gives `elapsed`. A stage that loads while a match capture is still running
+ends it the same way and arms the next. Both CSVs stream from the
 diagnostics thread, which polls every 250 ms while a capture runs; the trace
 chunks pack `begin` relative to a per-chunk base, so a long capture keeps the
 20-byte row. A 30 s capture still running when a match starts is ended
