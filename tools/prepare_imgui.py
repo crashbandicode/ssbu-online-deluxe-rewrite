@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Place the imgui-smash archive at target/native/imgui.
 
-The default action clones the pinned public commit, checks out its pinned
-submodule, applies the committed patch, and builds with the pinned devkit
-image. --upstream uses a local checkout instead of the network. --source
-installs a local archive only when it matches the recorded pin.
+The default action clones the pinned commit of the pinned repository (the
+Forgejo fork's deluxe branch since 0.3.8; upstream plus a local patch
+before), checks out its pinned submodule, applies the committed patch when
+the pin names one, and builds with the pinned devkit image. --upstream uses
+a local checkout instead of the network. --source installs a local archive
+only when it matches the recorded pin.
 
 Patch generation is not this tool. The Docker user is the current uid and gid.
 """
@@ -20,7 +22,6 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PATCH_REL = Path("patches/imgui-smash/renderer-bb47.patch")
 PIN_REL = Path("patches/imgui-smash/archive-pin.json")
 PRELOAD_REL = Path("patches/imgui-smash/deterministic-archive.cmake")
 DEFAULT_DEST = ROOT / "target" / "native" / "imgui"
@@ -43,14 +44,22 @@ def sha256_of(path: Path) -> str:
     return digest.hexdigest()
 
 
+def pinned_patch(pin: dict) -> Path | None:
+    """The patch the pin applies on top of its commit, or None when the
+    pinned commit already contains every change (the fork)."""
+    relative = pin["source"].get("patch")
+    return ROOT / relative if relative else None
+
+
 def load_pin() -> dict:
     path = ROOT / PIN_REL
     pin = json.loads(path.read_text(encoding="utf-8"))
-    patch = ROOT / PATCH_REL
-    recorded = pin["source"]["patch_sha256"]
-    actual = sha256_of(patch)
-    if actual != recorded:
-        raise SystemExit(f"patch digest {actual} does not match recorded {recorded}")
+    patch = pinned_patch(pin)
+    if patch is not None:
+        recorded = pin["source"]["patch_sha256"]
+        actual = sha256_of(patch)
+        if actual != recorded:
+            raise SystemExit(f"patch digest {actual} does not match recorded {recorded}")
     return pin
 
 
@@ -131,17 +140,18 @@ def ignore_upstream(upstream: Path):
     return ignore
 
 
-def prepare_work(upstream: Path) -> Path:
+def prepare_work(upstream: Path, patch: Path | None = None) -> Path:
     reject_upstream_inside_work(upstream)
     remove_work_tree()
     shutil.copytree(upstream, WORK_TREE, ignore=ignore_upstream(upstream))
-    applied = run(
-        ["/usr/bin/git", "apply", "--whitespace=nowarn", str(ROOT / PATCH_REL)],
-        60,
-        cwd=WORK_TREE,
-    )
-    if applied.returncode != 0:
-        raise SystemExit(applied.stderr.strip() or "git apply failed")
+    if patch is not None:
+        applied = run(
+            ["/usr/bin/git", "apply", "--whitespace=nowarn", str(patch)],
+            60,
+            cwd=WORK_TREE,
+        )
+        if applied.returncode != 0:
+            raise SystemExit(applied.stderr.strip() or "git apply failed")
     shutil.copyfile(ROOT / PRELOAD_REL, WORK_TREE / "deterministic-archive.cmake")
     return WORK_TREE
 
@@ -203,9 +213,10 @@ def write_provenance(dest_dir: Path, pin: dict, origin: str, archive_sha: str, a
         "origin": origin,
         "sha256": archive_sha,
         "size": archive_size,
+        "imgui_smash_repo": pin["source"]["repo"],
         "imgui_smash_commit": pin["source"]["commit"],
         "submodule_commit": pin["source"]["submodule_commit"],
-        "patch_sha256": pin["source"]["patch_sha256"],
+        "patch_sha256": pin["source"].get("patch_sha256"),
         "image": IMAGE,
         "docker_user": docker_user(),
         "deterministic_archive": pin["deterministic_archive"],
@@ -248,7 +259,7 @@ def build_from_source(upstream: Path | None, dest_dir: Path, pin: dict, force: b
         raise SystemExit("refusing to build while the archive pin is not ready")
     source_tree = upstream if upstream is not None else ensure_upstream(pin)
     require_identity(source_tree, pin)
-    work = prepare_work(source_tree)
+    work = prepare_work(source_tree, pinned_patch(pin))
     configure = run(docker_argv(work, False), 600)
     sys.stdout.write(configure.stdout)
     sys.stderr.write(configure.stderr)

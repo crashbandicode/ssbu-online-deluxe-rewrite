@@ -1732,6 +1732,52 @@ the first boot decides the 256 KiB stack (heartbeats continuing in
 Forgejo release `v0.3.7` (id 363, tag on d41ad35): NRO asset 80 (download
 read back as 8562746a…07ea), `manifest.json` asset 81.
 
+Hardware result, 2026-10-14 (operator, verbatim: "so everything boots and
+seems to work now"): the console booted with 0.3.7 and the current plugin
+set, the first boot since the 0.3.2 build, so this is the first hardware run
+of 0.3.3–0.3.7 together, including the 256 KiB diagnostics stack. Heartbeat
+continuity and the first `mem_used` numbers are to be read from the card's
+`hang-trace.log` at the next connection.
+
+0.3.8 (operator: "fork imgui to forgejo and look for ways to save there next
+and replace the standalone with our fork after testing it", then "ship it
+when it's done and when the imgui agent is done") moves the ImGui backend to
+the Forgejo fork `intpa/imgui-smash` (private; `main` = upstream `bb47b205`,
+branch `deluxe` = renderer correction + companion crate + memory trims, head
+`7f0e47c`; details and the deferred-trim table in `docs/IMGUI_DEPENDENCY.md`
+and tangent `imgui-fork-1014/REPORT.md`). Archive 17,181,302 → 13,851,556 B
+(`8a06be16…`); `archive-pin.json` points at the fork and applies no patch
+(`prepare_imgui.py` keeps the patch step optional; `tools/test_prepare_imgui.py`
+updated). Deluxe's own code is unchanged; the embedded backend loses the demo
+and metrics windows, the debug tools and two unused fonts. Sections `.text`
+1402336 → 1179744, `.rodata` 343120 → 225200, `.data` 69912 → 48864, `.bss`
+138672 → 131568; resident image 1.95 → 1.59 MB. The standalone companion
+built from the same fork commit is 888,832 B (was 1,282,048;
+`a3f794b2d2af15d5f2c2868f22e81c865702524160640864604731b7afe6775d`), with the
+same export set, the `1.92.7 WIP (19263)` tag and `text_offset == 0`, so the
+external-host detection is unchanged.
+
+Eden acceptance, 2026-10-14 (isolated profile, private display `:2`, Astra
+low driver `imgui-fork-eden-driver-1014`, evidence `imgui-fork-1014/eden-test/`):
+
+- External (trimmed standalone + Elite, `ext-1-shots/`): `install.log`
+  `overlay_host_external_chain` → `overlay_host_external_ready`; Deluxe Debug
+  view, settings view and FrameTime graph render cleanly on the main menu and
+  the character select; Elite's `L+R+Up` menu lists its 11 stages cleanly;
+  60 fps, CSS 59.85; no crash, no assert, settings unchanged.
+- Embedded (no standalone, `emb-2-shots/`): `overlay_host_bootstrap_hooked`
+  → `overlay_host_ready`; Debug and settings views clean; CSS 59.99 fps.
+- Reversed order (standalone renamed `libzz_imgui_smash.nro` so it sorts
+  after Deluxe, plus Elite, `rev-3-shots/`): `overlay_host_external_ready`
+  again; Debug view, Elite's stage list and the CSS Debug view clean;
+  CSS 60.01 fps; no crash or freeze.
+
+The isolated profile's plugin set was restored exactly afterwards
+(`eden-test/staging-journal.json`, `restore_verified`).
+
+Gates: 303 host tests, host and Skyline Clippy with warnings denied,
+no-default build, fmt, `tools/test_prepare_imgui.py`, Skyline release.
+
 Caveat for the CSS capture: the SD writes now happen during the measured
 interval, from the diagnostics thread. Compare the next hardware CSS capture
 against `switch-0.3.1-1013` before trusting a movement-penalty number from it.

@@ -1,8 +1,8 @@
 {
   "status": "ready",
-  "sha256": "6c9591cc9f140ca6ce2efee2cdcaa0d8278b43319ea497b3f2434ce19d09ccca",
-  "size": 17181302,
-  "note": "Two clean builds of the compact patch produced this archive byte for byte. Member mtime, uid, and gid are zero.",
+  "sha256": "8a06be16dbfd50d10bac81ee5bdd2ffa9cd3472773151cc45f1c2101541f8f7c",
+  "size": 13851556,
+  "note": "Built from the Forgejo fork's deluxe branch: renderer correction plus memory trims (demo windows and debug tools disabled, unused default fonts dropped). Two clean builds produced this archive byte for byte. Member mtime, uid, and gid are zero. The previous pin (upstream bb47b205 + renderer-bb47.patch) was 6c9591cc9f140ca6ce2efee2cdcaa0d8278b43319ea497b3f2434ce19d09ccca, 17181302 bytes.",
   "deterministic_archive": {
     "cmake": "3.31.6",
     "observed_link_rule": "aarch64-none-elf-gcc-ar qcD <archive> <objects>; aarch64-none-elf-gcc-ranlib -D <archive>",
@@ -12,14 +12,19 @@
     "preload": "patches/imgui-smash/deterministic-archive.cmake"
   },
   "source": {
-    "repo": "https://github.com/Coolsonickirby/imgui-smash",
-    "commit": "bb47b205ed0be2fb864269ee2d37fc886b81221e",
+    "repo": "https://git.syntaxbyexample.com/intpa/imgui-smash",
+    "branch": "deluxe",
+    "commit": "7f0e47c4a1699a714254798bf79041b1f2e49196",
+    "upstream_repo": "https://github.com/Coolsonickirby/imgui-smash",
+    "upstream_commit": "bb47b205ed0be2fb864269ee2d37fc886b81221e",
     "submodule_repo": "https://github.com/ocornut/imgui",
     "submodule_path": "imgui-smash/extern/imgui",
     "submodule_commit": "2b415e642b002f4312ac02f6bfa955960f8bd3b6",
-    "license": "GPL-2.0 text is imgui-smash/LICENSE in the upstream tree",
-    "patch": "patches/imgui-smash/renderer-bb47.patch",
-    "patch_sha256": "4e138e351334732670ca250c859e44b53e1fa54eb59e447f2385281063b2871d"
+    "license": "GPL-2.0 text is imgui-smash/LICENSE in the fork tree",
+    "patch": null,
+    "patch_sha256": null,
+    "historical_patch": "patches/imgui-smash/renderer-bb47.patch",
+    "historical_patch_sha256": "4e138e351334732670ca250c859e44b53e1fa54eb59e447f2385281063b2871d"
   },
   "image": "devkitpro/devkita64@sha256:1fc388c3a0d34bd2045a6dadcb1020e069d5f876a187fd705de14b4440c00282",
   "container_paths": {

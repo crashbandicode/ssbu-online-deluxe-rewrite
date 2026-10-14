@@ -15,9 +15,12 @@ from pathlib import Path
 CANDIDATE = Path(__file__).resolve().parents[1]
 TOOL = CANDIDATE / "tools" / "prepare_imgui.py"
 PATCH = CANDIDATE / "patches" / "imgui-smash" / "renderer-bb47.patch"
+# The historical patch stays in the tree for provenance; the pin no longer applies it.
 EXPECTED_PATCH = "4e138e351334732670ca250c859e44b53e1fa54eb59e447f2385281063b2871d"
-EXPECTED_ARCHIVE = "6c9591cc9f140ca6ce2efee2cdcaa0d8278b43319ea497b3f2434ce19d09ccca"
-EXPECTED_SIZE = 17181302
+EXPECTED_ARCHIVE = "8a06be16dbfd50d10bac81ee5bdd2ffa9cd3472773151cc45f1c2101541f8f7c"
+EXPECTED_SIZE = 13851556
+EXPECTED_REPO = "https://git.syntaxbyexample.com/intpa/imgui-smash"
+EXPECTED_COMMIT = "7f0e47c4a1699a714254798bf79041b1f2e49196"
 
 
 def sha256_of(path: Path) -> str:
@@ -49,11 +52,15 @@ def main() -> int:
     pin = module.load_pin()
     if pin["status"] != "ready" or pin["sha256"] != EXPECTED_ARCHIVE or pin["size"] != EXPECTED_SIZE:
         raise SystemExit("pin is not the clean archive")
+    if module.pinned_patch(pin) is not None:
+        raise SystemExit("the fork pin must not apply a patch")
+    if pin["source"]["historical_patch_sha256"] != EXPECTED_PATCH:
+        raise SystemExit("pin lost the historical patch digest")
     commands = module.clone_commands(module.UPSTREAM_CACHE, pin)
     joined = " ".join(" ".join(argv) for argv in commands)
-    if "https://github.com/Coolsonickirby/imgui-smash" not in joined:
-        raise SystemExit("clone command lost the upstream URL")
-    if "bb47b205ed0be2fb864269ee2d37fc886b81221e" not in joined or "submodule update --init" not in joined:
+    if EXPECTED_REPO not in joined:
+        raise SystemExit("clone command lost the fork URL")
+    if EXPECTED_COMMIT not in joined or "submodule update --init" not in joined:
         raise SystemExit("clone command lost the pinned checkout")
     with tempfile.TemporaryDirectory() as temporary:
         sample = Path(temporary) / "sample.a"
@@ -134,8 +141,10 @@ def main() -> int:
         provenance = json.loads((install_dest / "provenance.json").read_text(encoding="utf-8"))
         if provenance["origin"] != "local-source" or provenance["sha256"] != digest:
             raise SystemExit("provenance origin or digest is wrong")
-        if provenance["patch_sha256"] != EXPECTED_PATCH or "qcD" not in provenance["deterministic_archive"]["cmake_cxx_archive_create"]:
-            raise SystemExit("provenance lost the source pin or deterministic rule")
+        if provenance["patch_sha256"] is not None or provenance["imgui_smash_commit"] != EXPECTED_COMMIT:
+            raise SystemExit("provenance lost the source pin")
+        if provenance["imgui_smash_repo"] != EXPECTED_REPO or "qcD" not in provenance["deterministic_archive"]["cmake_cxx_archive_create"]:
+            raise SystemExit("provenance lost the repository or deterministic rule")
         real = cached / "libimgui_smash.a"
         repair = Path(temporary) / "repair"
         repair.mkdir()

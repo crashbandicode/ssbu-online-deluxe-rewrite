@@ -10,23 +10,52 @@ the overlay is available in every scene.
 
 ## Pinned artifact and sources
 
-The backend is built from public source with a local renderer patch.
-The compiled archive stays in the ignored `target/native/imgui/` directory.
+Since 0.3.8 the backend is built from the operator's Forgejo fork, whose
+`deluxe` branch carries the former local renderer patch as a commit plus the
+memory trims below. The compiled archive stays in the ignored
+`target/native/imgui/` directory.
 
 | Item | Value |
 |---|---|
-| Static archive | `libimgui_smash.a`, 17,181,302 bytes |
-| SHA-256 | `6c9591cc9f140ca6ce2efee2cdcaa0d8278b43319ea497b3f2434ce19d09ccca` |
-| Public source | `Coolsonickirby/imgui-smash` at `bb47b205ed0be2fb864269ee2d37fc886b81221e` |
-| ImGui submodule | `2b415e642b002f4312ac02f6bfa955960f8bd3b6` |
-| Local patch | `patches/imgui-smash/renderer-bb47.patch` |
-| Patch SHA-256 | `4e138e351334732670ca250c859e44b53e1fa54eb59e447f2385281063b2871d` |
+| Static archive | `libimgui_smash.a`, 13,851,556 bytes |
+| SHA-256 | `8a06be16dbfd50d10bac81ee5bdd2ffa9cd3472773151cc45f1c2101541f8f7c` |
+| Source | `https://git.syntaxbyexample.com/intpa/imgui-smash`, branch `deluxe`, commit `7f0e47c4a1699a714254798bf79041b1f2e49196` |
+| Upstream | `Coolsonickirby/imgui-smash` at `bb47b205ed0be2fb864269ee2d37fc886b81221e` (fork `main`) |
+| ImGui submodule | `2b415e642b002f4312ac02f6bfa955960f8bd3b6` (unchanged) |
+| Historical patch | `patches/imgui-smash/renderer-bb47.patch` (`4e138e35…`), now fork commit `ae77450`; no longer applied by the tool |
 
-The patch prevents overlapping ImGui frames and gives each in-flight overlay
-submission its own command, control, geometry and uniform storage. Eight slots
-are reused only after a nonblocking fence check reports completion. If all slots
-are busy, that overlay draw is skipped. Exhausted command memory uses a bounded
-reserve to finish and discard the unsubmitted draw safely.
+Previous pin (0.3.0–0.3.7): archive `6c9591cc9f140ca6ce2efee2cdcaa0d8278b43319ea497b3f2434ce19d09ccca`,
+17,181,302 bytes, built from upstream `bb47b205` plus the local patch.
+
+The renderer correction prevents overlapping ImGui frames and gives each
+in-flight overlay submission its own command, control, geometry and uniform
+storage. Eight slots are reused only after a nonblocking fence check reports
+completion. If all slots are busy, that overlay draw is skipped. Exhausted
+command memory uses a bounded reserve to finish and discard the unsubmitted
+draw safely.
+
+### Fork branch `deluxe` (2026-10-14)
+
+| Commit | Change |
+|---|---|
+| `ae77450` | Renderer correction (the former `renderer-bb47.patch`, applied verbatim) |
+| `8ef779e` | Crate root replaced with the standalone companion crate (drops `imgui-api`, prefixes the bootstrap hook, links a pinned archive); reproduces archive `6c9591cc` and the installed standalone NRO `9a9e575c` byte for byte |
+| `b923d90` | `IMGUI_DISABLE_DEMO_WINDOWS`; the ShowDemoWindow link removed; `imgui_show_demo_window_wrapper` stays exported as an empty function |
+| `ef98524` | `IMGUI_DISABLE_DEBUG_TOOLS`; `igDebugLog`, `igDebugLogV`, `igShowFontSelector`, `igDebugTextEncoding`, `igDebugFlashStyleColor` kept as no-ops so the `ig*` set is unchanged |
+| `5ec9928` | ProggyClean/ProggyForever default fonts dropped (the displayed font, JetBrains Mono NL 18 px, is unchanged) |
+| `384b095`, `7f0e47c` | Companion crate pinned to archive `8a06be16`; archive linked `kind = "static"` with `ImGui::GetCurrentContext` so `cimgui.o` stays out of the standalone |
+
+None of the disable macros changes a struct in `imgui.h` or `imgui_internal.h`,
+so contexts stay compatible across old and new builds and the external-host
+checks below still hold (`1.92.7 WIP (19263)` tag, `imgui_setup_context_export`
+and `imgui_smash_add_on_draw_frame_wrapper` in text at the same addresses,
+`text_offset == 0`, identical export set). Standalone companion built from
+`7f0e47c`: `libimgui_smash.nro` 888,832 bytes (was 1,282,048), SHA-256
+`a3f794b2d2af15d5f2c2868f22e81c865702524160640864604731b7afe6775d`, mapped
+image 921,600 bytes (was 1,323,008). Deferred trims with their measured
+costs (draw-slot budgets ≈ 3.75 MiB of pool memory, `ClearTexData()` 256 KiB,
+R8 atlas 384 KiB, gc-sections for the Skyline link) are listed in the tangent
+evidence `imgui-fork-1014/REPORT.md`.
 
 ## Preparing the archive
 
@@ -51,7 +80,8 @@ An already-built archive must match the same digest:
 /usr/bin/python3 tools/test_prepare_imgui.py
 ```
 
-The script applies the checked-in patch, builds from a clean source copy and
+The script clones the pinned commit of the pinned repository (applying a
+patch only if the pin names one), builds from a clean source copy and
 verifies the result before installing the archive, sidecar digest and
 `provenance.json`. Deterministic `ar qcD` and `ranlib -D` rules produced
 identical archives in two clean builds. An existing verified archive skips

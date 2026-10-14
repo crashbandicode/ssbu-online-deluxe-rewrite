@@ -212,7 +212,7 @@ vsync, render opts). It is not part of the rewrite crate.
 | `libssbu_pia_manager` NRO | Separate plugin. Its `0x45` beacon is what other clients read as `is_modded`. Stealth patches that binary (`net/pia/manager_stealth.rs`) |
 | `libnx_over.nro` plus `sd:/atmosphere/contents/00FF0000A11CE0FF` | Console overclock. Missing service shows error 70 (`render/mod.rs:54-66`) |
 | `ssbusync_*` symbols | `mark_arena_mode_for_ssbusync` (`net/mod.rs:330-334`) and the per-frame enforcer (`:358-361`) |
-| imgui-smash | Fork loads it through `imgui-api`. The rewrite now statically links an archive built from pinned public `Coolsonickirby/imgui-smash` source at `bb47b205ed0be2fb864269ee2d37fc886b81221e` with the checked-in renderer patch. A compatible standalone host is reused when present; external setups need the matching corrected host. Source/build and Eden acceptance details are in `docs/IMGUI_DEPENDENCY.md` |
+| imgui-smash | Fork loads it through `imgui-api`. The rewrite now statically links an archive built from the operator's Forgejo fork `intpa/imgui-smash` (branch `deluxe`, upstream `Coolsonickirby/imgui-smash` at `bb47b205…` plus the renderer correction and memory trims). A compatible standalone host is reused when present; external setups need the matching corrected host. Source/build and Eden acceptance details are in `docs/IMGUI_DEPENDENCY.md` |
 
 The rows above describe what the original fork called. This crate implements
 the sync and peer-manager behavior in its own source and does not link
