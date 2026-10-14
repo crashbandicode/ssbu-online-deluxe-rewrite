@@ -307,6 +307,13 @@ Match class (`net/mod.rs`, all installed at `:374-390`):
   `0x1887b1c` / `0x18881f0`. Local wireless: `0x1bd45e0` stores `OnlineLocal`
   and does not become Quickplay.
 - Main menu `0x235aaa0` resets to Offline unless status is already Quickplay.
+  The rewrite reset unconditionally until 0.4.1, which lost the connection
+  when background matchmaking passed through the main menu (console
+  2026-10-14: Quickplay hook 72 s, main menu 308 s, match 422 s classified
+  offline). Since 0.4.2 it matches the fork and adds what the fork lacked: a
+  Singles/Doubles stage that runs five seconds under a menu-set Quickplay
+  without the online-latency hook is demoted to Offline
+  (`auto_policy::main_menu_connection`, `offline_match_due`, code 107).
 - Stage setup `0x25d9288`: training or stage 311 is Training; more than two
   fighters is Doubles; result stages 310 and 354 clear the match.
 - If a singles/doubles match is still Offline, the fork prints

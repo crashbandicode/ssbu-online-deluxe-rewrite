@@ -208,6 +208,12 @@ pub enum Code {
     /// ended early for a starting match (`b` = its id). `TimingStarted` `b` = 1
     /// marks the match capture itself.
     MatchCapture = 106,
+    /// Scene connection hold. `a=1`: main-menu entry kept a live Quickplay
+    /// (`b` = hook address). `a=2`: a Singles/Doubles stage ran the deadline
+    /// under Quickplay without the online-latency hook and was demoted to
+    /// Offline (`b` = ticks since the stage load); the matching `AutoContext`
+    /// row carries source `0x0ff11e`.
+    SceneHold = 107,
 }
 
 /// Game SetCrop observations recorded before further calls are forwarded only.
@@ -370,6 +376,7 @@ mod tests {
         assert_eq!(Code::CssCapture as u16, 104);
         assert_eq!(Code::EarlyPresent as u16, 105);
         assert_eq!(Code::MatchCapture as u16, 106);
+        assert_eq!(Code::SceneHold as u16, 107);
         let rect = crop_rect_event(4, 0, 0, 1024, 576);
         assert_eq!(rect.0, crop_rect_word(0, 0, 1024, 576));
         assert_eq!(rect.1, 4);

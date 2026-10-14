@@ -219,6 +219,44 @@ pub fn mode_for(profile: Profile) -> RenderMode {
 /// Auto uses the scene table. Inactive always requests the menu profile.
 /// Manual keeps the saved mode in menus, matches, and Training. That Training
 /// path is an accepted diagnostic choice; Auto still requests Vanilla there.
+/// Main-menu entry resets the connection unless Quickplay is live. Smash's
+/// background matchmaking returns to the main menu while the search continues
+/// and runs internal transitions through it, and the match that follows starts
+/// from there: on the console (2026-10-14, b044752 session) the Quickplay hook
+/// fired at 72 s, the main menu at 308 s, and the match at 422 s was then
+/// classified offline. The fork kept Quickplay for the same reason; the
+/// rewrite's unconditional reset was the gap. A Quickplay that turns out stale
+/// is demoted by [`offline_match_due`].
+pub const fn main_menu_connection(previous: Connection) -> Connection {
+    match previous {
+        Connection::Quickplay => Connection::Quickplay,
+        _ => Connection::Offline,
+    }
+}
+
+/// Ticks after a Singles/Doubles stage load by which the online-latency hook
+/// has fired on every console match recorded (3.1–3.3 s); five seconds leaves
+/// room for a slow start.
+pub const OFFLINE_CHECK_TICKS: u64 = 5 * 19_200_000;
+
+/// A Singles/Doubles stage under a menu-set Quickplay connection whose
+/// online-latency hook has not fired by the deadline is an offline match (the
+/// menu hook also fires on some offline menus, and Quickplay now survives the
+/// main menu): the connection is demoted to Offline. `armed_tick` 0 is idle.
+pub fn offline_match_due(
+    connection: Connection,
+    status: SceneStatus,
+    marked_online: bool,
+    armed_tick: u64,
+    now: u64,
+) -> bool {
+    armed_tick != 0
+        && connection == Connection::Quickplay
+        && matches!(status, SceneStatus::Singles | SceneStatus::Doubles)
+        && !marked_online
+        && now.wrapping_sub(armed_tick) >= OFFLINE_CHECK_TICKS
+}
+
 /// After a real match or Training ends, manual requests Vanilla until the next
 /// match or a newer explicit selection. A guard failure returns the saved mode
 /// and does not apply Auto.
@@ -352,6 +390,71 @@ mod tests {
             status,
             marked_online: false,
         }
+    }
+
+    #[test]
+    fn the_main_menu_keeps_quickplay_and_a_stale_quickplay_is_demoted_by_the_deadline() {
+        assert_eq!(
+            main_menu_connection(Connection::Quickplay),
+            Connection::Quickplay
+        );
+        for previous in [Connection::Offline, Connection::Local, Connection::Arena] {
+            assert_eq!(main_menu_connection(previous), Connection::Offline);
+        }
+        let armed = 1_000_000u64;
+        let due = armed + OFFLINE_CHECK_TICKS;
+        // Idle, too early, marked online, not a match, or not Quickplay: nothing.
+        assert!(!offline_match_due(
+            Connection::Quickplay,
+            SceneStatus::Singles,
+            false,
+            0,
+            due
+        ));
+        assert!(!offline_match_due(
+            Connection::Quickplay,
+            SceneStatus::Singles,
+            false,
+            armed,
+            due - 1
+        ));
+        assert!(!offline_match_due(
+            Connection::Quickplay,
+            SceneStatus::Singles,
+            true,
+            armed,
+            due
+        ));
+        assert!(!offline_match_due(
+            Connection::Quickplay,
+            SceneStatus::Training,
+            false,
+            armed,
+            due
+        ));
+        assert!(!offline_match_due(
+            Connection::Arena,
+            SceneStatus::Singles,
+            false,
+            armed,
+            due
+        ));
+        // The real case: Quickplay from a menu, a match with no latency hook.
+        assert!(offline_match_due(
+            Connection::Quickplay,
+            SceneStatus::Singles,
+            false,
+            armed,
+            due
+        ));
+        assert!(offline_match_due(
+            Connection::Quickplay,
+            SceneStatus::Doubles,
+            false,
+            armed,
+            due + 7
+        ));
+        assert_eq!(OFFLINE_CHECK_TICKS, 96_000_000);
     }
 
     #[test]

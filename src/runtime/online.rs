@@ -1,8 +1,10 @@
 //! Source-verified 13.0.5 scene entries from the preserved Quickplay fork.
-//! Only tracks context; never changes a scene or network state. Unlike the fork,
-//! main-menu entry ALWAYS resets the connection, including after Quickplay.
-//! An unreadable stage context is ignored. Offline matches are not relabeled
-//! Quickplay.
+//! Only tracks context; never changes a scene or network state. Main-menu
+//! entry resets the connection unless Quickplay is live (0.4.2; background
+//! matchmaking passes through the main menu and the match starts from there,
+//! see `auto_policy::main_menu_connection`); a Quickplay that turns out stale
+//! is demoted five seconds into a match without the online-latency hook.
+//! An unreadable stage context is ignored.
 use super::{auto_driver, hooks::preflight, record, Code};
 use crate::auto_policy::{self, Connection, SceneStatus};
 use skyline::hooks::InlineCtx;
@@ -49,11 +51,7 @@ fn reject_stage() {
 #[skyline::hook(offset = 0x235aaa0, inline)]
 unsafe fn deluxe_rewrite_main_menu(_: &InlineCtx) {
     super::native_banner::drop_scene();
-    auto_driver::set_scene(
-        Some(Connection::Offline),
-        Some(SceneStatus::Inactive),
-        0x235aaa0,
-    );
+    auto_driver::note_main_menu(0x235aaa0);
 }
 
 #[skyline::hook(offset = 0x22da160, inline)]

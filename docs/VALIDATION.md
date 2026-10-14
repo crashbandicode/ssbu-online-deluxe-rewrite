@@ -2279,6 +2279,54 @@ with the NRO and manifest, download readback verified. Card 17:32Z:
 verified only at install: the runtime delta from the console-verified 0.4.0 is
 the three fixes above; the operator plays it next.
 
+### 0.4.2 — 2026-10-14: why the scene hooks "missed" the online entry
+
+Operator: "we should find why the hooks miss the entry." The events of the
+b044752 session (`switch-mtp-match/boot-logs-1611/data/events.previous.log`,
+code 73 `AutoContext` with the source hook) answer it:
+
+| t (s) | context | source |
+|---|---|---|
+| 72.6 | quickplay / inactive | `0x22da160` (Online → Smash menu) |
+| 307.8 | offline / inactive | `0x235aaa0` (main menu) |
+| 406.8 | offline / training (waiting room) | `0x25d9288` (stage setup) |
+| 422.6 | offline / singles (the match) | `0x25d9288` |
+| 425.9 | — | `0x16ccab8` online-latency hook (code 30) |
+| 860.4 | quickplay / inactive | `0x22da160` |
+| 877.7 | quickplay / training | `0x25d9288` |
+
+The Quickplay hook fires. The main-menu hook then reset the connection while
+matchmaking continued in the background, and the waiting room and the match
+started from the main menu without passing the Quickplay hook again. The fork
+kept Quickplay across the main menu for exactly this reason (its comment: the
+internal matchmaking transitions trigger this hook briefly); the rewrite
+reset unconditionally. Secondary facts: the latency hook fires 3.1–3.3 s
+after the stage load on every console match recorded; the Eden runs show
+`0x22da160` firing on an offline menu (Games & More → Training produced
+`quickplay/training`), so Quickplay from the menu hook alone is not proof of
+an online match; the events ring (128 entries, 500 ms flush) drops rows in
+stage-load bursts, so the 16:40Z session's missing menu rows are not evidence
+of the hooks not firing.
+
+Fix (this release): `auto_policy::main_menu_connection` keeps Quickplay on
+main-menu entry (anything else resets to Offline; code 107 `a=1`), and a
+Singles/Doubles stage that runs five seconds under a menu-set Quickplay
+without the online-latency hook is demoted to Offline by the diagnostics poll
+(`offline_match_due`, `OFFLINE_CHECK_TICKS`; code 107 `a=2`, context source
+`0x0ff11e`). Auto therefore runs online matches as online from the stage load
+(the 0.4.1 latency-mark fallback remains for the first match of a session that
+somehow never passed the menu hook) and corrects a stale Quickplay five
+seconds into an offline match instead of never. Manual profiles unaffected.
+Gates: 309 host tests, host and Skyline Clippy with warnings denied,
+no-default build, rustfmt. Package: PACKAGE_PLACEHOLDER.
+
+Repository history: at the operator's request the `HANDOFF.md` file was
+purged from every commit, tag and branch (`git filter-branch --index-filter
+… --prune-empty --tag-name-filter cat -- --all`; bundle backup of the
+pre-rewrite repository in the evidence root), and `AGENTS.md` no longer asks
+for a handoff file in the repository. Every tag was re-pointed to its
+rewritten commit; the Forgejo releases keep their assets.
+
 ### DBI USB MTP installation of f22d (0.3.0) — 2026-10-12 19:58Z
 
 `switch-mtp-f22d/deploy-f22d-mtp-1012.py` preflight 19:55:47Z (installed

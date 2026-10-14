@@ -11,6 +11,10 @@ static READY: AtomicBool = AtomicBool::new(false);
 /// Latency-hook reachability for FX only. It does not classify a match.
 static MATCH_MARKED: AtomicBool = AtomicBool::new(false);
 static CLEANUP: AtomicU64 = AtomicU64::new(0);
+/// Tick of the Singles/Doubles stage load under a menu-set Quickplay; 0 idle.
+static OFFLINE_CHECK: AtomicU64 = AtomicU64::new(0);
+/// Pseudo-source of the demotion in the context log (not a hook address).
+const OFFLINE_CHECK_SOURCE: u64 = 0x0ff_11e;
 static SELECTION_GENERATION: AtomicU64 = AtomicU64::new(0);
 static LAST_CONTEXT: AtomicU64 = AtomicU64::new(u64::MAX);
 static LAST_REQUEST: AtomicU64 = AtomicU64::new(u64::MAX);
@@ -48,10 +52,57 @@ pub(crate) fn mark_match() {
         return;
     }
     let previous = MATCH_MARKED.swap(true, Ordering::AcqRel);
+    // The match is online: the stale-Quickplay check has its answer.
+    OFFLINE_CHECK.store(0, Ordering::Release);
     if !previous && !connection().is_online() {
         record(Code::FxOnlineContext, 1, 0x16ccab8);
         let _ = current_request();
     }
+}
+
+/// Main-menu entry (`0x235aaa0`). Quickplay survives it: background
+/// matchmaking passes through the main menu and starts the match from there.
+/// Any other connection resets to Offline. Code 107 `a=1` records a kept
+/// Quickplay.
+pub(crate) fn note_main_menu(source: u64) {
+    let (connection, _) = scene_pair();
+    let next = auto_policy::main_menu_connection(connection);
+    if next == connection && connection == Connection::Quickplay {
+        record(Code::SceneHold, 1, source);
+        set_scene(None, Some(SceneStatus::Inactive), source);
+    } else {
+        set_scene(Some(next), Some(SceneStatus::Inactive), source);
+    }
+}
+
+/// Diagnostics thread, every 500 ms: a Singles/Doubles stage that has run
+/// five seconds under a menu-set Quickplay without the online-latency hook is
+/// an offline match; demote the connection so Auto stops treating it as
+/// online. Code 107 `a=2`, context source `0x0ff11e`.
+pub(crate) fn poll() {
+    let armed = OFFLINE_CHECK.load(Ordering::Acquire);
+    if armed == 0 {
+        return;
+    }
+    let (connection, status) = scene_pair();
+    let now = unsafe { skyline::nn::os::GetSystemTick() as u64 };
+    if !auto_policy::offline_match_due(
+        connection,
+        status,
+        MATCH_MARKED.load(Ordering::Acquire),
+        armed,
+        now,
+    ) {
+        if !matches!(status, SceneStatus::Singles | SceneStatus::Doubles)
+            || connection != Connection::Quickplay
+        {
+            OFFLINE_CHECK.store(0, Ordering::Release);
+        }
+        return;
+    }
+    OFFLINE_CHECK.store(0, Ordering::Release);
+    record(Code::SceneHold, 2, now.wrapping_sub(armed));
+    set_scene(Some(Connection::Offline), None, OFFLINE_CHECK_SOURCE);
 }
 
 fn scene_pair() -> (Connection, SceneStatus) {
@@ -175,6 +226,21 @@ pub(crate) fn set_scene(
     }
     if connection == previous_connection && status == previous_status {
         return;
+    }
+    // A match stage under a menu-set Quickplay starts the stale check; any
+    // other status ends it.
+    if matches!(status, SceneStatus::Singles | SceneStatus::Doubles)
+        && connection == Connection::Quickplay
+        && !MATCH_MARKED.load(Ordering::Acquire)
+    {
+        if status != previous_status {
+            OFFLINE_CHECK.store(
+                unsafe { skyline::nn::os::GetSystemTick() as u64 }.max(1),
+                Ordering::Release,
+            );
+        }
+    } else {
+        OFFLINE_CHECK.store(0, Ordering::Release);
     }
     if status != previous_status {
         let (active, generation) = cleanup();
