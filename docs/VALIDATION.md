@@ -1952,6 +1952,65 @@ This is a footprint change, not a
 proven fix: the next console boot with 0.3.3 and the companion plugin rolled
 back decides; the memory bisect is plugin removal, not Deluxe flags.
 
+### LessLag render-poll candidate — 2026-10-14 (commit b044752, no version, no toggle)
+
+Operator: "implement and test the fix Astra proposed for the fps drops",
+then "build it without the version, prove it works in Eden and switch then
+tag a new version once validated. no toggle, it either works or it doesn't
+and will become the standard if it does or ripped out if it doesn't help".
+`render_policy::skip_wait` now skips the game's timeout-zero render poll at
+main+0x387029c only for LLUltra and the Doubles shapes; two-image LessLag
+(and LessLagCore) run the original poll like Vanilla. `PROBE_RENDER_POLL`
+still forces the poll for the policies that skip it. 304 host tests, host
+and Skyline Clippy with warnings denied, no-default build, rustfmt, Skyline
+release. Package `artifacts/021a03dee556fdc4/`: build
+`0.3.9-b04475229832-1791982758`, NRO SHA-256
+`021a03dee556fdc45bece92ab320c0f7e94f08d8449facfe421d2b7489015164`
+(1531904 B). Crate version stays 0.3.9; no tag, no release.
+
+Eden A/B (tangent `css-budget/render-poll-ab-1014/`: `PROTOCOL.md`,
+`SUMMARY.md`, `RESULTS.md`, `compare.py`, `arms.json`, `captures/`,
+`shots-*/`): isolated profile, embedded host, Deluxe alone, FX On, overlay
+hidden, private display `:2`, Astra low drivers; Eden's systemd unit under
+`CPUQuota` 175 % then 120 % with a 5 ms period; one 30 s `CAPTURE_TIMING`
+window per arm, 10 s still then a 20 s left-stick sweep, on the
+Training-mode character select with LessLag live (two textures confirmed in
+`renderer-status.txt`). Findings:
+
+- At 175 % neither build dips (0.3.0's backoff removed the CPU waste the
+  earlier campaign measured there). At 120 % both dip: callback intervals
+  over 20 ms were 8.7 % (A1, 0.3.9), 2.8 % (B1, candidate), 3.5 % (A2,
+  0.3.9), 4.6 % (B2, candidate); cadence 55.8 / 58.5 / 58.1 / 57.7 fps.
+  The candidate sits inside the reference spread: **no regression, no
+  measurable gain on Eden**.
+- The poll costs 0.001 ms per frame and returned ALREADY_SIGNALED in 5,276
+  of 5,277 frames; Eden's texture-ready wait is 0.03 ms in every arm, so the
+  emulator never reaches the fence stall the change targets (hardware
+  Vanilla returned TIMEOUT from the same poll in 8–62 % of frames).
+  The decision is the console's.
+- Side finding: the regular Smash character select runs **Vanilla** after
+  any Singles/Doubles/Training-classified scene until the profile is
+  re-selected (`auto_policy::transition_cleanup` cleanup hold; the Smash
+  submenu classifies as Doubles before the CSS, so a fresh boot → Smash →
+  CSS is Vanilla as well). Hardware capture D matched this. LessLag CSS
+  observations therefore come from re-selected or Training CSS visits.
+
+Switch install of the candidate, 2026-10-14 13:49Z (operator: "prove it
+works in Eden and switch"): DBI USB MTP, `switch-mtp-poll/deploy-poll-mtp-1014.py`
+(`preflight.json` 13:49:38Z, `deployment.json` `installed_verified`
+13:49:56Z). Deluxe read back as 8c20799f…6cca (0.3.9) before, saved to
+`backups/pre-render-poll-021a03dee556fdc4.nro`, replaced by copy from a
+staged read-back, read back as 021a03de…5164; standalone, other plugins,
+config.ini and hekate_ipl.ini unchanged. The card's `hang-trace.log` and
+`install.log` still end with the 0.3.7 boot, so the next console boot is
+the first for 0.3.8, 0.3.9 and this candidate together. Hardware test:
+LessLag on the Training CSS (Games & More → Training → start → Quit
+Training → CSS) and on the regular CSS after re-selecting LessLag;
+`CAPTURE_CSS` is still on the card, so each CSS visit records 30 s; compare
+the kind-3 texture wait and the > 20 ms share with
+`switch-mtp-038/before-logs/` (0.3.7 LessLag windows 41–52 fps, B 30 fps).
+If it does not help, revert b044752 and reinstall 0.3.9 from the rollback.
+
 ### DBI USB MTP installation of f22d (0.3.0) — 2026-10-12 19:58Z
 
 `switch-mtp-f22d/deploy-f22d-mtp-1012.py` preflight 19:55:47Z (installed
