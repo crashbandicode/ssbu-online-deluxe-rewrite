@@ -1,8 +1,11 @@
+2026-10-14: this file describes the October 9–10 live-session state (bundles 8328cc88/4c19). The current release is 0.4.2; see docs/STATUS.md and docs/VALIDATION.md.
+
 # Resume and test plan
 
-Read [STATUS.md](STATUS.md), [VALIDATION.md](VALIDATION.md) and the latest entry
-in root [HANDOFF.md](../HANDOFF.md) before touching a live process. The handoff
-owns the current sockets, deadlines, worktrees and staging journals; older
+Read [STATUS.md](STATUS.md), [VALIDATION.md](VALIDATION.md) and the latest entries
+of docs/VALIDATION.md and `git log` before touching a live process. At the time
+of writing a root handoff file owned the current sockets, deadlines, worktrees
+and staging journals; it no longer exists in the repository. Older
 run names in scripts are not live-session discovery.
 
 ## Current acceptance work
@@ -17,10 +20,12 @@ views are captured and parent-reviewed in that evidence root's screenshots/:
 `hud-content-fit-1010a-performance-inmatch.png`. Use file:/// Markdown targets;
 bare absolute-path links caused the earlier portal error. Run/worker resources
 are closed, the fresh profile journal is RESTORED, and original bytes rehash
-against backups. Read parent-closeout.json and current HANDOFF for final primary
+against backups. Read parent-closeout.json and the operator's evidence-root handoff
+(outside the repository) for final primary
 watcher closure. The operator subsequently approved these images;8328 is now installed
-over DBI FTP, with final SHA readback at14:09Z on October10. Follow the newest HANDOFF
-and hud-content-fit-20261010/switch-ftp/deployment.json (installed_verified).
+over DBI FTP, with final SHA readback at14:09Z on October10. At that time the newest
+handoff and hud-content-fit-20261010/switch-ftp/deployment.json (installed_verified)
+were the sources.
 Latest INI/other plugins/HOC/boot files preserved; old4c19 locally/on-SD backed up.
 FTP is closed and the operator may play. switch-ftp/SWITCH_CHECKLIST.md has the
 ordered HUD/coexistence, export and peer checks. Wait for results; require fresh
@@ -38,7 +43,7 @@ with Smash closed:4c19 was installed and SHA-readback verified October9 at22:32Z
 The current INI is LessLag/input3/FX Off/all/Stealth Off; preserve its latest bytes.
 Previous5c72 is backed up locally and on SD; eight other plugins and HOC/boot files
 were preserved. Host MTP is released; no gameplay run has been claimed. See the
-menu-peer-fix-20261009/switch-mtp receipts and latest handoff. Obtain fresh
+menu-peer-fix-20261009/switch-mtp receipts and the evidence-root handoff. Obtain fresh
 Smash-closed/transfer-ready confirmation before further device access.
 
 1. The isolated four-idle-Game-&-Watch absent/enabled/absent check is complete
@@ -81,9 +86,10 @@ Smash-closed/transfer-ready confirmation before further device access.
    That optional reproduction is deferred until after operator Switch tests.
 8. Reconcile docs, preserve optimized symbols and source, then publish accepted
    work to the authoritative private Forgejo repository when authorized and update
-   the private release. GitHub receives automatic fast-forward-only Git sync;
-   this checkout's origin still points to GitHub and must be reconciled before
-   publication. Do not assume release metadata is included in Git sync. Ship only
+   the private release. As of 2026-10-14 `origin` is Forgejo
+   (`git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite`); `github` is a
+   second, downstream remote that is not pushed automatically. Do not assume
+   release metadata is included in Git sync. Ship only
    the reviewed rewrite NRO after
    confirming Smash is closed; read and preserve the Switch's latest INI.
 
@@ -114,7 +120,8 @@ has not isolated the intermittent cause. All FTP connections are closed; obtain
 fresh readiness before a later transfer and preserve the newer Vanilla/input3 INI.
 Diagnostic-only candidates are not deployment targets.
 The EFF transformer is unchanged from its earlier 22-test/five-stock-asset
-acceptance. Consult the handoff for exact artifacts and current process ownership.
+acceptance. Consult the operator's evidence-root handoff for exact artifacts and
+current process ownership.
 
 The blue Special Zoom check is complete without a reproducible lag spike on
 this machine. Preserve its appearance; the diagnostic request probe did not
@@ -132,7 +139,7 @@ Use the current CLI handoff:
 
 Use explicit isolated profiles, finite runtime and memory limits, and the exact
 socket in the launch receipt. The user authorized two-hour sessions; set
-`-Runtime 7200` explicitly so the launcher's short default does not
+`-Runtime 7200` (external launcher parameter) explicitly so the launcher's short default does not
 interrupt a test series. Retain memory/no-swap caps and hang watchdogs.
 Background mode is supported. Skip the intro.
 Keep one emulator and no concurrent heavy builds for performance comparisons.
@@ -162,7 +169,7 @@ loaded and matching logs ending at unload-hook installation. The primary's exact
 Skyline binary/stack reconstruction proves a zero-extended negative literal
 offset, matching the faulting read address. Previous same-build hooks completed;
 an existing absolute-jump stub is the likely address-sensitive trigger. Read
-the durable hook-crash report linked in HANDOFF.md. The narrow validated-stub
+the durable hook-crash report linked from the evidence-root handoff. The narrow validated-stub
 chain path and synchronous pre-hook capture are installed. Initial operator
 success was followed by another crash. Read-only diagnostics are preserved in
 `hook-chain-retry-20261009/FINDINGS.md` under the local backup root. Rewrite logs
@@ -180,7 +187,7 @@ paused and fresh rewrite startup; capture and restoration are complete. Injectio
 is enabled again;03 and04 aftermath collections are complete. FPS graph/shared
 NVN audit completed (worker stopped): graph drawing follows startup, shared hooks
 and an acquire-return ABI question require actual-chain verification, not speculative
-changes for this early launch error. See HANDOFF.md and the durable audit. Do not
+changes for this early launch error. See the evidence-root handoff and the durable audit. Do not
 rerun/overwrite snapshots01–04 or repeat the completed restore.
 New after04 reports01791567103/PID166 and01791567116/PID169 show SDK UserBreak,
 result0, UserExceptionHandler+0x2a8 and only four stock modules. SaltyNX core/NX-FPS
@@ -192,8 +199,8 @@ Exact SDK analysis now proves the zero result is written by the default user-
 exception callback before a secondary abort. Original exception data lies outside
 the retained dumps; a future instrumented0x340-byte UserExceptionInfo capture is
 the missing evidence, rather than another uninstrumented replay. See the durable
-BYPASS_CRASH_AUDIT.md linked in HANDOFF.md.
-The separate export-fix worker's current ownership is in HANDOFF.md; older stopped
+BYPASS_CRASH_AUDIT.md linked from the evidence-root handoff.
+The separate export-fix worker's ownership was recorded in that handoff; older stopped
 audit wrappers are not live work. Preserve all distinct failure evidence.
 
 Kirby charged hammer connecting with Pac-Man on Battlefield also dips during
@@ -206,7 +213,7 @@ request. Use foreground DBI FTP at the confirmed endpoint, not the old USB mount
 Official SaltyNX 2.1.2 is installed with all 15 files readback verified and HOC
 hashes unchanged. The operator confirmed SaltyNX is working and the duplicate
 listing is resolved. The old 1.8.1 module backup is outside the contents directory.
-See HANDOFF.md for the transaction receipt, rollback and current process owners.
+See the evidence-root handoff for the transaction receipt, rollback and process owners.
 
 NSO arena display/filtering, actual VPN/high-RTT play and the first-generation
 Switch's effect-specific dips remain distinct checks. Local LDN and emulator

@@ -9,7 +9,7 @@ May-14 source and skyline-smash bed642e. This is source review, not runtime evid
 | Native effect installation dereferenced target before checking mapping | QueryMemory guard and HookRejected; skip that hook |
 | Flip commands have two effect names before joint | Independently filter slots 1/2, retain joint/rest; host regression |
 | Lua Int/Hash type normalization unnecessary | Preserve incoming kind and metadata |
-| Quickplay can temporarily pass main-menu init | Clear there; re-arm from the already-known online delay-setup site |
+| (2026-10-05; superseded by the 0.4.2 Quickplay hold) Quickplay can temporarily pass main-menu init | Clear there; re-arm from the already-known online delay-setup site |
 | DISABLE_BUFFER must not disable the FX online marker | Shared hook installed once for either purpose; separate buffer-write flag |
 | Tracker unavailable could look like a broken toggle | Visible status plus diagnostic Compatibility record |
 
@@ -23,5 +23,4 @@ take priority. This is documented policy, not exact peer parity. Reduced is pend
 The full review is retained locally with the audit artifacts; no peer code is added
 as a runtime dependency by this review.
 
-Online context has source evidence but needs the actual transition matrix in
-NEXT_SESSION.md. The old c1706bbe runtime acceptance does not validate new hooks.
+Online context has source evidence but needs the actual transition matrix. The old c1706bbe runtime acceptance does not validate new hooks.

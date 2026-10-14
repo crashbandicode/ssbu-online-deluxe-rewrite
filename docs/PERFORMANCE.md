@@ -36,7 +36,7 @@ change drains before commit. A transition does not reinstall hooks.
 | Profile | Active textures | Index | Live flush when committed | Render opts | Resolution / dynamic resolution |
 | --- | --- | --- | --- | --- | --- |
 | Vanilla | 3 | TwoBehind | original once, fields off | No | 1080p, off |
-| LessLag | 2 | OneBehind | original once, LessLag fields | Yes | console 1080p on; emulator 1080p off |
+| LessLag | 2 | OneBehind | original once, LessLag fields; since 0.4.0 presents the acquired image at the flush that submits it (`render_policy::present_at_flush`) and skips the game's later present of that index | Yes | console 1080p on; emulator 1080p off |
 | LLUltra | 2 | Immediate | original three times, fields off, early flush | Yes | console 576p on; emulator 1080p off |
 | LLDoubles | 3 | OneBehind | original once, LessLag fields | Yes | 1080p on, both platforms |
 
@@ -51,8 +51,10 @@ shared by all four hooks. The queue lock and its +0x20 header byte follow the
 game's own dispatcher rather than the archive's offset bug. LLUltra's pre-present
 flush runs from an entry hook on 0x38701e0, guarded by the saved caller address,
 owner alias and virtual flush target; SGPO's 0x374812c neighborhood is not patched.
-With any other non-Vanilla mode, an empty DUMP_ULTRA_ROUTE file installs that
-entry hook as an observer only; it never flushes or changes the mode.
+The 0x38701e0 entry hook is installed in every mode and only flushes when
+Immediate (LLUltra) is committed; in any other mode it counts the entry and
+returns without flushing or changing the mode. There is no separate
+observer flag (`src/runtime/render_ultra.rs`, `renderer.rs` `install`).
 
 The LessLag path reads the gate byte at `+0x1d18` and the dispatch index at
 `+0x1d20`, then writes `+0x1d30` and `+0x1d28` when the gate is nonzero.
@@ -308,7 +310,8 @@ try_lock (4096 events in this build; 8192 later; 65536 resident events in
 0.3.1–0.3.4; since 0.3.5 the rows are packed to 20 B and streamed: hooks fill
 one of two chunks (4096 rows in 0.3.5–0.3.6, 2048 rows = 80 KiB in `.bss`
 since 0.3.7), and the diagnostics thread
-drains the other into the open CSV every 500 ms, so the capture is bounded by
+drains the other into the open CSV every 250 ms while a capture runs (500 ms
+otherwise), so the capture is bounded by
 the 30 s duration, not by memory. The CSV header is written when the capture
 arms and `engine`, `reason`, `skipped` and `event_count` move to the footer;
 `skipped` now also counts rows lost when a chunk filled before its drain, so

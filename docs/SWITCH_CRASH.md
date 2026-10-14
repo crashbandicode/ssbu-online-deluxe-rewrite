@@ -148,8 +148,10 @@ current maximum buffer count must be Free. A reduction while an excluded slot
 is still queued/acquired violates that check. This explains what the assertion
 tests, not yet why the original host's transition failed to drain every owner.
 The original host is closed source; neither disabling an assertion nor setting
-Vanilla is a root-cause fix. The rewrite's measured modes currently select the
-active texture count during window initialization and do not switch it live.
+Vanilla is a root-cause fix. As of 2026-10-06, the rewrite's measured modes
+select the active texture count during window initialization and do not switch
+it live (live guarded texture-count transitions exist now; see
+[PERFORMANCE.md](PERFORMANCE.md)).
 
 Saved logs, configurations and screenshots:
     /home/intpa/.local/share/ssbu-mod-backups/custom-eden-switch-20261006-0316/

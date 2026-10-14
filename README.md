@@ -9,6 +9,45 @@ The preserved fork and predecessor references are described in
 [reference/README.md](reference/README.md). See the [parity ledger](docs/FORK_PARITY.md)
 for deliberate differences and unfinished features.
 
+**Current release: 0.4.2** (tags `v0.4.0`–`v0.4.2`; every release carries the
+NRO and its manifest). 0.4.0 made two-image LessLag present at the flush,
+which removed the character-select stall on the console, added the `Vanilla*`
+banner label and the opt-in match capture; 0.4.1 made native character-select
+edits require ZL, dropped the opponent from the banner when they decline a
+rematch, and let Auto recognise a match the scene hooks missed; 0.4.2 keeps
+Quickplay across the main menu. Details and evidence are in
+[validation](docs/VALIDATION.md).
+
+## Screenshots
+
+Captured on 2026-10-14 in Eden (GIF-recording build, isolated test profile)
+with the 0.4.2 NRO; the game renders at 1280×720 in these runs. Details for
+each view are in [Controls](#controls) and [Debugging](docs/DEBUGGING.md).
+
+| | |
+| --- | --- |
+| ![Settings window on the main menu](docs/media/settings-view.png) <br> The Player Info window (Settings view) on the main menu. | ![Debug view](docs/media/debug-view.png) <br> The Debug view: build, renderer, FX tracker, capture rows. |
+| ![Settings window close-up](docs/media/settings-window.png) <br> Settings rows: Name, Interface, NetLatency, NetProfile, Status, FX, Stealth, Streamer, FPS++, then the live Resolution, DRS, Backoff, Memory and FPS rows. | ![Debug window close-up](docs/media/debug-window.png) <br> Debug rows, including `Timing`, `Capture L+R+Up (30 s)`, `CSS capture` and `Match capture`. |
+| ![Training character select with the native status line](docs/media/training-css.png) <br> The native status line at the top of the character select: `You: LessLag \| Auto` (profile and input buffer). | ![Debug view during Training](docs/media/debug-training.png) <br> Training with the Debug view open: `Match capture: Armed; 1 capture(s)` and `Timing: Capturing` while the match capture streams. |
+
+![Cycling the overlay views](docs/media/overlay-cycle.gif)
+
+Cycling the overlay with L+R+Down (Settings, Performance, hidden) and opening
+Debug with L+R+Plus.
+
+![Editing settings in the window](docs/media/settings-edit.gif)
+
+Editing in the Settings window: Up/Down selects the row, Left/Right changes
+NetProfile and NetLatency.
+
+![Training with the Player Info window](docs/media/training-strip.gif)
+
+A few seconds of Training with the Player Info window on the right.
+
+| | |
+| --- | --- |
+| ![Regular character select after Training](docs/media/smash-css-after-training.png) <br> The regular character select entered after a Training session: the status line still reads `LessLag \| Auto`, because the game's training flag is still set there and the scene stays classified Training. The `Vanilla*` hold applies after a Singles or Doubles match. | ![Streamer on](docs/media/streamer-on.png) <br> Streamer on in the Settings window at the main menu; the NetProfile row reads `Vanilla*` because the cleanup hold is running Vanilla for the manual LessLag selection. |
+
 ## Install
 
 Close Smash before replacing files. Copy the rewrite NRO to:
@@ -130,13 +169,28 @@ covered by host tests; emulator and hardware behaviour are not yet verified.
 **Auto is the default.** It uses Vanilla in menus, offline matches and Training;
 online singles use LessLag on console or LLUltra on emulator; online matches with
 more than two fighters use LLDoubles. Local wireless counts as online here.
+The online context comes from the game's scene entries: main-menu entry keeps
+a live Quickplay (background matchmaking passes through the main menu, 0.4.2),
+a Quickplay that reaches a match without the online-latency hook is demoted
+to Offline five seconds in, and a match the online-latency hook reaches while
+the scene hooks still say Offline counts as online (0.4.1).
 
 | Profile | Active textures | Presentation policy | Console resolution / DRS | Emulator resolution / DRS |
 | --- | --- | --- | --- | --- |
 | Vanilla | 3 | TwoBehind | 1080p / off | 1080p / off |
-| LessLag | 2 | OneBehind | 1080p / on | 1080p / off |
+| LessLag | 2 | OneBehind, presents at the flush (0.4.0) | 1080p / on | 1080p / off |
 | LLUltra | 2 | Immediate, earlier flush | 576p / on | 1080p / off |
 | LLDoubles | 3 | OneBehind | 1080p / on | 1080p / on |
+
+Since 0.4.0 two-image LessLag presents the acquired image at the end of the
+flush that submits it and skips the game's later present of that index. The
+console trace behind it: the game presented a frame only after running the
+next frame's whole CPU update, 13.7 ms after submitting it, and in a two-image
+ring a present after the vsync costs the next acquire a full vsync. On the
+console the character-select hand sweep went from 49.9 fps with 20 % of frames
+over 20 ms to 59.85 fps with 1.3 %; online matches run at 59.7–59.9 fps.
+`renderer-status.txt` counts `early_presents`, `early_present_skips` and
+`early_present_mismatches`; a mismatch is event log code 105.
 
 DRS is dynamic resolution scaling during supported expensive visual events.
 The resolution row reports the applied internal level, not just a requested
@@ -216,7 +270,7 @@ of the scene hooks has fired (main menu, Quickplay, Arena, local wireless,
 stage setup or the character select), and never while the tracked window has
 not presented for 250 ms. Boot, the logo/movie/title sequence and a stalled
 renderer therefore run the game's original loop. The Backoff row reads
-`Armed` until the gate first passes; install log code 102 with `a=5` marks
+`Armed` until the gate first passes; event log code 102 with `a=5` marks
 that moment. If the scene hooks fail their own checks the gate stays closed.
 
 ### Character-select capture (opt-in)
@@ -300,8 +354,10 @@ ImGui windows with manual LessLag/LLDoubles. Native text remains visible.
 Removing the load can restore the windows. The cause is under investigation.
 
 The following **24 response trials belong to `b19b7d94ae136e55`**; newer
-display/effect builds do not inherit a new timing measurement. Each cell contains
-three trials at the specified injection phase.
+display/effect builds do not inherit a new timing measurement, and the LessLag
+render path changed in 0.4.0 (present at the flush) after these were taken, so
+the LessLag row describes the earlier path. Each cell contains three trials at
+the specified injection phase.
 
 | Profile | Normal injection phase, three trials | Later injection phase, three trials |
 | --- | --- | --- |

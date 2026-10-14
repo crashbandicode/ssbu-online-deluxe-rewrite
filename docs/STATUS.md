@@ -6,10 +6,12 @@ console online singles, LLUltra for emulator online singles, and LLDoubles for
 online matches with more than two fighters. Platform is an explicit INI setting.
 No hardware overclocking is implemented.
 
-Publication routing (October9): Forgejo at `git.syntaxbyexample.com` is now
-authoritative; this repository remains private. GitHub is an automatically synced
-downstream. Local origin still points to GitHub and needs explicit reconciliation
-before the next authorized publication; no remote or release change is made here.
+Publication routing (updated October 14): `origin` is Forgejo
+(`git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite`) and is
+authoritative; this repository remains private. `github` is a second,
+downstream remote that is not pushed automatically. Nothing is pushed without
+the operator's explicit permission. On October 9 origin still pointed at GitHub;
+that is no longer true.
 
 | Feature | Implementation | Runtime evidence / remaining check |
 | --- | --- | --- |
@@ -32,8 +34,20 @@ before the next authorized publication; no remote or release change is made here
 | FX scope | Online-only default; all for offline+online tests | c0 Training Gigaflare retains full effects for On/Off/Reduced with online-only scope; df48 Local Wireless exit resets Offline and a targeted Roy effect is restored in subsequent regular VS. Direct NSO routes remain untested |
 | Reduced FX | Live visual layer filtering and guarded lighter asset siblings; never silently mapped to Off | Visual request/cleanup checks cover most targeted families on recorded candidates. Corrected small-Flare/smash and full/dry Inkling down-smash requests passed; grounded triggered counter passed on c0; forward-smash trace2 remains open; Off-like frame-time benefit remains unverified. [Acceptance method](FX_PERFORMANCE_METHOD.md) |
 | Software FPS boost | Implemented only as an explicitly gated diagnostic; normal menu reports Unsupported | Measured acceleration of the match timer in Eden, so it is withheld from normal play. [Investigation](FPS_BOOST_INVESTIGATION.md) |
+| Present-at-flush | Two-image LessLag presents the acquired image at the flush that submits it and skips the game's later present of that index (0.4.0; `render_policy::present_at_flush`) | Console-verified. Counters in renderer-status.txt, mismatches in code 105. [Validation](VALIDATION.md) |
+| Match capture | Opt-in `CAPTURE_MATCH` boot flag: streamed timing and API CSVs for a whole match, ended by `scene_end` (0.4.0; `src/runtime/match_capture.rs`) | Shipped in 0.4.0; results in [VALIDATION.md](VALIDATION.md). [Debugging](DEBUGGING.md) |
+| Quickplay hold and stale demotion | Main-menu entry keeps a live Quickplay; a Quickplay with no online-latency hook five seconds into a Singles/Doubles stage is demoted to Offline (0.4.2; `auto_policy::main_menu_connection`, `offline_match_due`) | Host-verified; see VALIDATION.md for console results |
+| ZL-gated native edits | Native pane D-pad edits need ZL held (0.4.1; `src/overlay.rs`); added after 23 unintended saves on the console | Host-verified; see VALIDATION.md for console results |
 
-## Current candidates and acceptance limits
+## Current: 0.4.2 (ddea22d)
+
+Releases v0.4.0 to v0.4.2 are on Forgejo. Switch installs and console results
+are tracked in [VALIDATION.md](VALIDATION.md), whose latest entries cover
+0.4.0 to 0.4.2.
+
+## Historical candidates (October 8–10)
+
+The candidates below were current on the dates shown and are kept as a record.
 
 Latest local screenshot-review candidate: `8328cc88123bd432`, following operator
 feedback on f1ce's accepted two-row layout. Compact Settings/Performance backgrounds
@@ -143,7 +157,7 @@ the rewrite/SaltyNX from that symptom. Both the paused and restored-enabled pair
 passed, so injection state alone has not isolated it. Source audit finds FPS graphs sample/draw after startup;
 the lower-level NVN hooks overlap, with a return-ABI question requiring separate
 actual-chain verification. Neither is proven to cause the recorded early failure.
-Evidence and rollback are in HANDOFF.md.
+Evidence and rollback are in docs/VALIDATION.md and the operator's evidence root (the repository no longer carries a handoff file).
 
 System maintenance on October 9 preserved HOC 2.5.1 and its settings, installed
 DBI 912 English for foreground transfers, and installed official SaltyNX 2.1.2

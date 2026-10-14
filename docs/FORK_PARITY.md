@@ -25,7 +25,30 @@ The rewrite is one NRO. Keep Training Modpack and SGPO coexistence: no
 `Layout::Draw`, FX hooks call `original!`, and `llultra` reads SGPO's word at
 `0x374812c` without patching it (`src/runtime/render_ultra.rs`).
 
-## Latest rewrite changes — 2026-10-12 (plugin value tones and read-only rows)
+## Rewrite changes 0.3.0–0.4.2 (2026-10-13/14)
+
+All are rewrite extensions or fixes with no fork counterpart. Per-release
+evidence is in [VALIDATION.md](VALIDATION.md).
+
+- Two-image LessLag present-at-flush (0.4.0): the acquired image is presented
+  at the flush that submits it and the game's later present of that index is
+  skipped (`render_policy::present_at_flush`; `early_presents`,
+  `early_present_skips` and `early_present_mismatches` in renderer-status.txt;
+  code 105 records mismatches).
+- `Vanilla*` banner label under the cleanup hold (0.4.0).
+- Opt-in `CAPTURE_MATCH` match capture (0.4.0): streamed timing and API CSVs
+  for a whole match, ended by `scene_end` (`src/runtime/match_capture.rs`,
+  code 106).
+- ZL-gated native D-pad edits (0.4.1, `src/overlay.rs`).
+- An unbound station leave retires the only confirmed peer (0.4.1,
+  `peer_transport::retire_only_confirmed`).
+- `Scene::marked_online` for Auto (0.4.1): a stage the online-latency hook
+  reached counts as online.
+- Main menu keeps a live Quickplay, and a stale Quickplay is demoted five
+  seconds into an offline Singles/Doubles stage (0.4.2,
+  `auto_policy::main_menu_connection`, `offline_match_due`, code 107).
+
+## Earlier rewrite changes — 2026-10-12 (plugin value tones and read-only rows)
 
 Candidate `e59fc9a6bd266790` adds descriptor version 2 to the plugin API:
 an optional per-choice tone (neutral, green, yellow, red) that the host uses
@@ -318,7 +341,10 @@ Match class (`net/mod.rs`, all installed at `:374-390`):
   fighters is Doubles; result stages 310 and 354 clear the match.
 - If a singles/doubles match is still Offline, the fork prints
   `UNTRACKED ONLINE MATCH DETECTED, ASSUMING QUICKPLAY` and forces Quickplay
-  (`:223-231`). The rewrite does not do this.
+  (`:223-231`). The rewrite does not rewrite the stored connection. Since 0.4.1
+  Auto and FX treat a stage the online-latency hook reached as online
+  (`Scene::marked_online`, `effective_connection`), and since 0.4.2 main-menu
+  entry keeps a live Quickplay.
 - LDN host forces the CSS pane count to 2 once (`0x1a26200`, `:155-166`).
 - LDN initialize/scan hooks only count networks (`net/ldn/mod.rs:41-42`).
 - CSS `0x1a12f60` writes the native banner when online and the 300-frame
@@ -360,7 +386,7 @@ retained. Auto's target and the renderer's committed state are distinct.
 
 | Fork behavior | Rewrite | Evidence / remaining boundary |
 | --- | --- | --- |
-| Vanilla, LessLag, LLUltra | One installed hook set, live guarded transitions, confirmed native buffer counts; Less/Ultra include render sequencing | Historical `ed5d12f8` linked matches and transitions; final combined result below |
+| Vanilla, LessLag, LLUltra | One installed hook set, live guarded transitions, confirmed native buffer counts; Less/Ultra include render sequencing; two-image LessLag presents at the flush since 0.4.0 (`present_at_flush`) | Historical `ed5d12f8` linked matches and transitions; final combined result below |
 | LLDoubles | Three textures, OneBehind, render sequencing and render-finished bypass; no Ultra early flush | b19 four-fighter linked match completed through results/CSS; A-only G&W fix versus clean B |
 | Auto / match / menu policy | Console online singles LessLag, emulator singles LLUltra, online >2 fighters LLDoubles; menus/offline/Training Vanilla | Training/menu Vanilla, b19 linked doubles LLDoubles, d9 linked singles LLUltra and cleanup Vanilla passed |
 | Manual profiles | Saved and menu-selectable, including during play; match cleanup requests Vanilla until the next match or a new explicit choice | Deliberate extension beyond the fork's connected-match edit restriction |
@@ -372,12 +398,12 @@ retained. Auto's target and the renderer's committed state are distinct.
 | Stealth | Default On; suppress owned beacon and custom payload, retain receive; latched per connection, menu changes persist and show reconnect notice | Host-tested; Off interoperability and pending-On behavior observed on `410ac1f7`; fresh-On d9 suppressed its beacon with zero custom writes; saved Off stayed pending until reconnect |
 | Peer cycling | Bounded station selection using one identity snapshot for name/interface/settings/ping | 9e9 cycled two remote identities correctly in a three-station lobby; no three-station match completed |
 | Streamer | Menu and fork chord; hides all remote rows and ping, persists to INI | d9 exact menu-saved INI reload and menu/chord privacy passed |
-| Connection / match classification | Quickplay, Arena and Local stay distinct; fighter count classifies doubles; Training/result-stage rules retained | Stage/context guards required; does not guess an offline match is Quickplay |
+| Connection / match classification | Quickplay, Arena and Local stay distinct; fighter count classifies doubles; Training/result-stage rules retained | Stage/context guards required; does not rewrite the stored connection. Since 0.4.1 Auto and FX treat a stage the online-latency hook reached as online (`Scene::marked_online`); since 0.4.2 main-menu entry keeps a live Quickplay |
 | Resolution and DRS | Committed profile plus explicit platform table; guarded resolution function/register/crop path | Console-policy Eden full-Gigaflare scaling and restoration passed for Less/Ultra/Doubles; Vanilla stays off; b19 title fullscreen-crop reset fixed |
 | Cut-in and Sephiroth Gigaflare scaler | Bounded visual resolution reports driven by guarded fighter Main and cut-in sites | Two approximate callback-count gates and Gigaflare trigger passed; Luigi Up-B cut-in scaling/restoration passed |
 | Player Info / performance view | Global ImGui table; connected-only remote column; right in Training/online lobbies, left in ordinary matches | 9e9 remote visibility passed offline/connected/disconnected; a9c right-side Training window confirmed; lobby check pending |
 | Standalone ImGui | Reuse compatible host, embedded fallback otherwise | Embedded and both standalone load orders tested previously; Elite coexistence observed |
-| Native CSS / Arena / LDN text | Fork CSS and arena display paths reinstated alongside the global window | CSS retains selected values after window closure; Streamer restores original styles. Arena uses the selected peer, not the full station list; NSO test pending. LDN lobby network count and native D-pad buffer editing are implemented; 9e9 Auto-to-0 edit observed. [Details](NATIVE_DISPLAY.md) |
+| Native CSS / Arena / LDN text | Fork CSS and arena display paths reinstated alongside the global window | CSS retains selected values after window closure; Streamer restores original styles. Arena uses the selected peer, not the full station list; NSO test pending. LDN lobby network count and native D-pad buffer editing (ZL held, 0.4.1) are implemented; 9e9 Auto-to-0 edit observed. [Details](NATIVE_DISPLAY.md) |
 | 300-frame native-banner grace / LDN two-pane force | Not copied | Scene generations and validated pane identities replace retained unguarded pointers; no forced controller slots |
 | SsbuSync arena marker | Not needed by the in-tree backend | Legacy host exports trigger a best-effort overlap refusal; do not install both stacks |
 | FX On/Off and scope | Added by this rewrite, not inherited from the fork | Named visual requests only; user-confirmed Palutena/Sephiroth and TM/SGPO coexistence on prior candidates; full expanded catalog not runtime-certified |
@@ -395,8 +421,10 @@ reinstall hooks and never patch SGPO's `0x374812c` neighborhood.
 ## Deliberate differences
 
 - Manual modes remain usable in Training for measurements. Auto uses Vanilla
-  there. Main-menu entry clears stale connection context, and unknown offline
-  matches are not relabeled Quickplay.
+  there. Main-menu entry clears stale connection context unless Quickplay is
+  live (0.4.2). Unknown offline matches are not relabeled Quickplay in the
+  stored connection; since 0.4.1 Auto and FX treat a stage the online-latency
+  hook reached as online (`Scene::marked_online`, `effective_connection`).
 - Platform is an explicit INI setting, hidden from the current menu. A nonstandard
   emulator address layout cannot silently choose console defaults.
 - RTT warmup uses initialized samples, avoiding the original manager's unwritten
@@ -450,8 +478,8 @@ Historical `c0e9a625eb44a735` passed the checks named in the header. Its new eve
 were diagnostics only. A fresh single-instance capture confirmed the LessLag field
 stores ran while the window was visible. At that checkpoint, reproducing the
 concurrent-run failure remained pending; c0 was not a behavior fix. Later renderer
-evidence is in [IMGUI_DEPENDENCY.md](IMGUI_DEPENDENCY.md); the current local candidate
-and its remaining acceptance are recorded above.
+evidence is in [IMGUI_DEPENDENCY.md](IMGUI_DEPENDENCY.md). The latest entries
+(0.4.0–0.4.2) are in [VALIDATION.md](VALIDATION.md).
 
 b99 (`b99f087cf8ef0a9c`) was installed on the Switch at that checkpoint. On Eden it completed one
 two-local-station Final Destination match, Game & Watch versus Sephiroth.

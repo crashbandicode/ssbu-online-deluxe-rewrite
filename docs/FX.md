@@ -26,7 +26,12 @@ Install or merge it while Eden is closed. Preserve other existing INI settings;
 restore the default online-only scope after offline testing.
 
 Online context uses the preserved 13.0.5 fork's Quickplay, background matchmaking,
-arena and local-wireless scene entries, with an unconditional reset at main menu.
+arena and local-wireless scene entries. Main-menu entry resets the connection to
+Offline unless Quickplay is live, because background matchmaking passes through
+the main menu. Since 0.4.2 a Quickplay with no online-latency hook five seconds
+into a Singles/Doubles stage is demoted to Offline
+(`auto_policy::main_menu_connection`, `offline_match_due`). `fx_online()` also
+counts the latency-hook mark, so a stage that hook reached is online for FX.
 Offline Training is excluded. The online input-delay setup hook positively refreshes
 match context after transient matchmaking menus, independently of buffer editing.
 All scene and match-marker preflights must succeed or online-only

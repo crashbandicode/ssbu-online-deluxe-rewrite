@@ -11,6 +11,13 @@ Streamer restores the original title, font, colors and background. Turning it
 off restores the status display. Font sizes are absolute, not multiplied by the
 current size, so repeated edits do not enlarge the text.
 
+![Training character select with the native status line](media/training-css.png)
+
+The native status line on the Training character select, Eden 2026-10-14 with
+0.4.2: `You: LessLag | Auto` is the selected profile and input buffer. The
+opponent line appears only with a connected station. The window itself and
+Streamer on are shown in [README](../README.md#screenshots).
+
 ## Reused fork code paths
 
 Source reference: `MSFS-RyZe/ssbu-online-deluxe-quickplay-13.0.5`, commit
@@ -40,8 +47,11 @@ not change simulation, networking, rendering policy or input handling.
 
 ## Differences and limits
 
-- The window remains the settings editor. The fork's additional native-only
-  D-pad editing and LDN lobby network-count replacement are not ported.
+- The window remains the settings editor. The fork's native D-pad edits are
+  ported (`overlay.rs` `poll_with`, `menu.rs` `apply_native_edges`) and have
+  required ZL held since 0.4.1, because the D-pad also moves the game's own
+  cursor. The LDN scan count is captured (`runtime/native_banner.rs`
+  `store_scan_count`).
 - CSS status is available offline too. Offline screens omit the opponent line.
 - Arena currently displays the selected remote peer, rather than the fork's
   complete station list. Its room-ID path, style and positioning are implemented

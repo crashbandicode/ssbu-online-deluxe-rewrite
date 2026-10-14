@@ -14,6 +14,10 @@ The 24-trial result is tied to `b19b7d94ae136e55`. The shipping candidate
 text and compact Auto labels); its render/input/transport algorithms are unchanged.
 Its linked-match and menu regressions passed, but no response trials were repeated
 on that exact binary. Keep this distinction when citing the measurements.
+`d9acd03611e1d1d6` was the shipping candidate on 2026-10-07. Since 0.4.0,
+two-image LessLag presents the acquired image at the flush that submits it
+(`render_policy::present_at_flush`). The LessLag frame counts below come from
+the earlier path, and no response trials have been taken on the new one.
 
 ## Measurement boundaries
 

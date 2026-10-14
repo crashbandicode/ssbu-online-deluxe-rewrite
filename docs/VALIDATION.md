@@ -213,7 +213,7 @@ The expanded candidate adds qualified actor/move tables, ten ACMD request varian
 both effect-name slots for flips, preserved projectile/hitbox cues, and online-only
 INI scope (all for testing). Host tests: 32 passed; Clippy all-targets with
 -D warnings and no-default-features build passed. Skyline build and exact final
-bundle are recorded in HANDOFF.md. This candidate has no live acceptance yet.
+bundle are recorded in the operator's evidence-root handoff (outside the repository). This candidate has no live acceptance yet.
 
 Fable 5.1 xhigh reviewed context/stack ABIs and scope registration. Primary addressed
 the review findings: preserve information-bearing cue names, guard install reads,
@@ -275,7 +275,7 @@ were restored. Capture files measure CPU observations, not displayed frames.
 Final host review found and fixed escaped-newline test fixtures so invalid renderer
 values and duplicate keys actually exercise their intended parser branches.
 All-target Clippy with -D warnings and no-default-features build passed afterward.
-The latest package and any subsequent runtime check are recorded in HANDOFF.md.
+The latest package and any subsequent runtime check are recorded in the operator's evidence-root handoff (outside the repository).
 
 The saved original Switch stack was tested separately and restored afterward;
 its Eden pre-match stall is documented in SWITCH_CRASH.md. That test did not load
@@ -2318,7 +2318,29 @@ without the online-latency hook is demoted to Offline by the diagnostics poll
 somehow never passed the menu hook) and corrects a stale Quickplay five
 seconds into an offline match instead of never. Manual profiles unaffected.
 Gates: 309 host tests, host and Skyline Clippy with warnings denied,
-no-default build, rustfmt. Package: PACKAGE_PLACEHOLDER.
+no-default build, rustfmt. Tag `v0.4.2` on ddea22d (rewritten history),
+build `0.4.2-ddea22d1d814-1792000378`, NRO
+`87322eefca507870593c1ffbcdf70b5452a342bc1cf543b9ce43a692cad9c7e0`
+(1,531,904 B), package `artifacts/87322eefca507870/`; Forgejo release 372
+with the NRO and manifest, download readback verified. Card 17:54Z:
+`switch-mtp-042/deploy-042-mtp-1014.py`, 3408557f → 87322eef, rollback
+`backups/pre-0.4.2-87322eefca507870.nro`, flags and config unchanged.
+Host-verified only at install; the console verdict on the Quickplay hold
+comes from the next online session (`AutoContext` rows with sources
+`0x235aaa0` and `0x0ff11e`, code 107).
+
+Eden evidence from the documentation-media run (0.4.2 NRO, GIF build,
+`docs-media-1014/`, events decoded by source): `0x22da160` fired at 162.7 s
+on the offline path Games & More (connection quickplay with no network),
+the Training stage followed at 227.7 s, and the main-menu hook at 437.9 s
+and 542.8 s kept Quickplay (code 107 `a=1`) while the status went Inactive
+and the cleanup hold engaged (`AutoRequest` hold bit, request Vanilla). The
+regular Smash character select entered after the Training session was
+classified Training by the CSS update (494.4 s): `is_training_mode()` still
+reads true there, so the hold lifted and the banner read `LessLag | Auto`;
+the Settings window at the main menu afterwards read `Vanilla*`. No
+Singles/Doubles stage ran, so the stale-Quickplay demotion was not
+exercised. Screenshots and GIFs from this run are in `docs/media/`.
 
 Repository history: at the operator's request the `HANDOFF.md` file was
 purged from every commit, tag and branch (`git filter-branch --index-filter

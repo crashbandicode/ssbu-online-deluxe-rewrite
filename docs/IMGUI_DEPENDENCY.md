@@ -217,8 +217,9 @@ then, so it sees the same context the draw calls use. Otherwise it returns
   one menu at a time. Elite's stage restriction is NSO-only; offline stages
   remaining unrestricted is expected.
 - On the October9 Switch build, the operator reports that Deluxe Debug's
-  `L+R+Up` capture shortcut also opens Elite. Deluxe shows `Capturing (10 s)`,
-  so both respond. The collected files show recording completed, with a complete
+  `L+R+Up` capture shortcut also opens Elite. Deluxe showed `Capturing (10 s)`
+  (the capture has been 30 s since 0.3.1 and the label now reads `Capturing`),
+  so both responded. The collected files show recording completed, with a complete
   callback CSV and truncated API CSV; the source audit identified per-fragment
   flush-requesting writes in export. Avoid repeated chord presses during collection.
   The shortcut overlap does not establish the export cause or explain the launch

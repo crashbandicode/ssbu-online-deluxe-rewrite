@@ -1,5 +1,13 @@
 # Diagnosing crashes
 
+![The Debug view of the Player Info window](media/debug-window.png)
+
+The Debug view (L+R+Plus): build id, renderer, FX tracker and request rows,
+`Timing`, `Capture L+R+Up (30 s)`, `CSS capture` and `Match capture`, then the
+live resolution, DRS, backoff, memory and frame-time rows. Captured in Eden on
+2026-10-14 with 0.4.2; the whole-screen version and the view during Training
+are in [README](../README.md#screenshots).
+
 Keep the exact dist/<NRO-hash-prefix>/ bundle for every installed build.
 Packaging checks matching NRO/ELF executable bytes, saves both SHA-256 hashes,
 the NRO module ID, compiler identity, complete source and native dependency provenance.
@@ -24,7 +32,9 @@ Under sd:/ultimate/ssbu_online_deluxe_rewrite/:
 - api-<tick>.csv: paired CPU spans around render APIs. These are not GPU or display
   times. Analyze with tools/analyze_render_trace.py.
 - renderer-status.txt: actual active mode, texture counts/index masks and cumulative
-  hook counters. Values are independent observations, not an atomic frame snapshot.
+  hook counters, including `early_presents`, `early_present_skips` and
+  `early_present_mismatches` for the two-image present-at-flush path (0.4.0).
+  Values are independent observations, not an atomic frame snapshot.
 - presentation-history.txt: bounded VI probe results, only when the boot flag
   DUMP_PRESENTATION_HISTORY is present. No usable presented timestamps were obtained
   in the tested stock Eden startup window. Remove the flag for ordinary tests.
@@ -57,13 +67,15 @@ The script verifies bundle hashes and optional module ID, then uses LLVM/binutil
 Use the faulting plugin's base/ELF, not the game's main-module base.
 
 For controlled bisection, create empty DISABLE_MENU, DISABLE_FX, DISABLE_BUFFER,
-DISABLE_RENDERER or DISABLE_PIA files
+DISABLE_RENDERER, DISABLE_PIA, DISABLE_NATIVE or DISABLE_BACKOFF files
 in the data directory and restart. They skip the corresponding hook family.
 DISABLE_BUFFER disables input-buffer writes; the shared setup observer can remain
 installed for FX scope. DISABLE_FX skips FX requests and scene tracking.
 DISABLE_RENDERER skips experimental rendering text patches regardless of the INI
 request; actual mode stays Vanilla. DISABLE_PIA skips RTT and prevents the
-optional peer observer from installing. All five flags together, with
+optional peer observer from installing. DISABLE_NATIVE skips the native banner
+hook. DISABLE_BACKOFF skips the dispatcher idle backoff (code 102 `a` = 4).
+All seven flags together, with
 DUMP_PRESENTATION_HISTORY absent, skip those hook families while retaining logging.
 Remove the disable flags to re-enable their hook families.
 These differ from FX On, which keeps passthrough hooks installed.
@@ -82,7 +94,7 @@ These differ from FX On, which keeps passthrough hooks installed.
 | 18 / 19 | Accepted title pane / unsupported CSS pane or mapping |
 | 20 | Sampled pane field: 1/2 chain pointers, 3–5 name bytes, 6 text buffer, 7 capacity/length, 8 font sizes |
 | 21 / 22 | Global overlay entry / exit, sampled every 300 frames |
-| 23 | View change: 0 hidden, 1 settings, 2 performance, 3 debug |
+| 23 | View change: 0 hidden, 1 settings, 2 performance, 3 debug, 4 plugins |
 | 24 | Config saved: generation / effective FX mode |
 | 25 | Overlay health: backend ready / bootstrap-call count |
 | 26 | Embedded backend initialization complete |
@@ -98,8 +110,19 @@ These differ from FX On, which keeps passthrough hooks installed.
 | 41–45 | Opt-in read-only outgoing packet/header diagnostics; never packet writes |
 | 46 / 47 | Render-policy transition / refused transition or invalid post-setter count |
 | 64 / 65 | Sampled station-map reachability flags / mixed source ID |
+| 98 | Overlay command edge: a = HID button mask; b = previous view, resulting view, Npad id, style flags and command-edge flags (bit 0 Down, bit 1 Plus/Minus). Style 0 means no device |
+| 99 | Plugin registered: a = handle (negative `REGISTER_ERR_*` code on error), b = accepted option count |
+| 100 | Plugins-page Left/Right edge: a = plugin index (bits 0–15) and option index (16–31); b = requested choice (0–15) and the plugin's `REQUEST_*` answer (16–23) |
+| 101 | Plugin INI persisted after a menu edit: a = plugin and option index as in 100; b = 1 success, 0 I/O error |
+| 102 | Dispatcher backoff install: a = 1 installed, 2 other owner patched the site, 3 site words differ from 13.0.5, 4 disabled by flag, 5 eligibility gate first passed (b = tick); otherwise b packs the policy (`spin_passes`, `base_ns / 1000`, `max_ns / 1000`) |
+| 103 | Dispatcher backoff counters, written only when they change: a = idle passes, b = sleeps (bits 0–47) and last sleep in µs (48–63) |
+| 104 | CSS capture startup: a = hook mask (bit 0 dispatcher registration, 1 dependency wait, 2 UI job; 7 = arming); b bit 0 `CAPTURE_CSS` flag, bit 1 `GetThreadPriority` resolved, bit 2 `GetThreadCoreMask` resolved |
+| 105 | Early present mismatch (two-image present-at-flush): a = 2 when the game then presented a different index than the early one, b = the game's index |
+| 106 | `CAPTURE_MATCH`: a = 0 startup (b = flag present), 1 stage entered (b = scene status), 2 stage left (b = previous status), 3 a running 30 s capture ended for a starting match (b = its id) |
+| 107 | Scene connection hold: a = 1 main-menu entry kept a live Quickplay (b = hook address); a = 2 a Singles/Doubles stage under Quickplay without the online-latency hook was demoted to Offline (b = ticks since the stage load; the matching code 73 AutoContext row carries source `0x0ff11e`) |
 
-Codes 12/13 and 18–20 describe historical CSS builds; they are no longer emitted.
+Codes 18–20 describe historical CSS builds; they are no longer emitted.
+Codes 12/13 mark character-select entry and exit (exit = one second without a CSS update).
 No game-owned pane or font is modified by the global window.
 
 If the menu does not appear, inspect overlay_host_* install phases and code 25.
@@ -176,7 +199,7 @@ the UI barrier; result = thread label) and 77 (span of the UI job
 `main+0x375e260` on its worker; result = thread label). A kind 66 row whose
 label equals the kind 77 label is a wait nested inside the UI job. The label is
 the same pure hash for every kind; `tools/analyze_render_trace.py` recomputes it
-from kind 62 and reports a `css_capture` section. Install log code 104 gives the
+from kind 62 and reports a `css_capture` section. Event log code 104 gives the
 hook mask (7 = all three) and which SDK symbols resolved; codes 12/13 mark
 character-select entry and exit (exit = one second without a CSS update).
 
@@ -192,11 +215,12 @@ ends it the same way and arms the next. Both CSVs stream from the
 diagnostics thread, which polls every 250 ms while a capture runs; the trace
 chunks pack `begin` relative to a per-chunk base, so a long capture keeps the
 20-byte row. A 30 s capture still running when a match starts is ended
-(install log code 106 `a=3`) and the match capture arms once its export is
+(event log code 106 `a=3`) and the match capture arms once its export is
 done. `CAPTURE_MATCH` also installs the three `CAPTURE_CSS` hooks (rows
 62–66 and 77) without arming on character-select entry; put both flags on
 the card for both captures. Code 106: `a=0` startup (`b` = flag present),
-`a=1` stage entered (`b` = status), `a=2` stage left (`b` = previous status).
+`a=1` stage entered (`b` = status), `a=2` stage left (`b` = previous status),
+`a=3` a running 30 s capture ended for a starting match (`b` = its id).
 The Debug view's `Match capture` row shows the counts. `tools/analyze_timing.py`
 accepts `scene_end`. Nothing in the hot path changes: no hook does I/O, and
 the rows are the ones the CSS capture already records.
