@@ -1923,7 +1923,26 @@ build `0.3.9-4fd77a238f9e-1791980278`, NRO SHA-256
 (1531904 B, module `8910f609…628b`), ELF `871d513f…d2fe`;
 `imgui-provenance.json` records fork commit `c185303` and the `09b296a0`
 archive. Fork branch `deluxe` (head `77cdab7`) and tag `deluxe-0.3.9` are
-pushed to Forgejo.
+pushed to Forgejo; fork release `deluxe-0.3.9` (id 366) carries
+`libimgui_smash.nro` (asset 88, read back as 946de84f…d50e) and
+`libimgui_smash.a` (asset 89, read back as 09b296a0…2731).
+
+Switch install of 0.3.9 plus the new standalone, 2026-10-14 12:41Z (same
+order): DBI USB MTP, two-target transaction
+`switch-mtp-039/deploy-039-mtp-1014.py` (preflight 12:41:22Z backed up every
+plugin and the protected files; `deployment.json` `installed_verified`
+12:41:56Z, 27 device commands, all exited). Deluxe read back as
+c247bd37…7222 (0.3.8) before, saved to
+`backups/pre-draw-slots-8c20799f3974f45b.nro`, replaced by copy from a
+staged read-back, read back as 8c20799f…6cca; `libimgui_smash.nro` read back
+as a3f794b2…775d before, saved to
+`backups/pre-draw-slots-standalone-a3f794b2d2af15d5.nro`, replaced, read
+back as 946de84f…d50e (888832 B). Plugin names, every other plugin, config.ini
+and hekate_ipl.ini unchanged. Runtime result on hardware pending (the 0.3.8
+install of 10:36Z had not booted yet either; the card's `hang-trace.log`
+still ended with the 0.3.7 boot). Forgejo release `v0.3.9` (id 367, tag on
+01132f5): NRO asset 90 (download read back as 8c20799f…6cca),
+`manifest.json` asset 91.
 
 Caveat for the CSS capture: the SD writes now happen during the measured
 interval, from the diagnostics thread. Compare the next hardware CSS capture
