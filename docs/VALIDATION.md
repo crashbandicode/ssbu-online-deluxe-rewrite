@@ -2180,6 +2180,52 @@ unchanged. Rollback chain on the card: 4e4f2044 → aa214ec2
 test: play matches with the flag; each stage load writes a `match_*` pair,
 pull them with the CSS captures. No version tag until the console verdict.
 
+### Console verdict and 0.4.0 — 2026-10-14 16:40Z
+
+First boot of 4e4f2044 (16:11Z, config had drifted to Auto/Vanilla/2 during
+the b044752 session via 23 menu saves the operator did not make) crashed on
+MainThread in the game's `StandardAllocator::Initialize` during a scene
+transition at t≈33–38 s, memory unmapped, no Deluxe frame in the chain,
+Deluxe idle (`switch-mtp-match/boot-logs-1611/CRASH-1611.md`). Config
+restored to manual LessLag, 3 frames, streamer off (readback verified);
+the second boot ran 743 s with two online matches and did not crash.
+Operator: "it booted, felt buttery smooth. fps reflected it too… this was
+def a good version so I would ship it after confirming in the logs."
+
+Hardware captures (`switch-mtp-match/boot-logs-1640/`, build 210f83f, same
+console as `switch-mtp-poll/boot-logs-1437/`):
+
+| capture | scene / engine | fps | p99 ms | > 20 ms |
+|---|---|---|---|---|
+| b044752 day, css sweep (reference) | CSS LessLag + poll | 49.9 | 33 | 20.2 % |
+| 482801144422 css, sweep 10–30 s (1,169 directional samples) | CSS LessLag | **59.85** | **20.2** | **1.3 %** |
+| 482801144422 css, still 0–10 s | CSS LessLag | 60.00 | 16.8 | 0.0 % |
+| 484909232936 match_singles, 148 s | online match, LessLag | 59.66 | 16.9 | 0.4 % |
+| 489614260886 match_singles, 263 s | online match, LessLag | 59.88 | 16.8 | 0.2 % |
+| 484546224171 / 489237967027 match_training, 17 s each | Training incl. load | 53.3 / 53.4 | 83 / 80 | 5.3 / 5.1 % |
+| 488410188899 css (cleanup hold, re-selected mid-capture) | CSS Vanilla → LessLag | 52.7 | 83 | 5.7 % |
+
+Texture-wait p95 on the LessLag CSS sweep fell from 16.4 ms to 2.95 ms;
+every LessLag frame shows the early present (result 2) and the skipped game
+present (result 1), 0 mismatches (no code 105). The match frames over 20 ms
+are the stage load at the start of each capture (max 249 / 139 ms). The
+Training captures are 17 s long and dominated by the load. The second CSS
+capture ran under the cleanup hold (Vanilla, 270 native presents) until the
+profile was re-selected mid-capture, so it is not a LessLag measurement; it
+confirms the `Vanilla*` state exists on the console after a match. The
+`Mixed` engine label on the match captures was the export reading the
+engine after the results-screen cleanup hold, fixed by sampling the engine
+per poll (this release). Peak memory 2.50 GB of 3.44 GB.
+
+Open items from this boot: the opponent window stays after the opponent
+declines a rematch (operator report; `peer_transport::frame_from` keeps
+`Selection::Station` while the observer view still says known); the scene
+connection stayed `offline` through two online matches although the latency
+hook fired (code 30), so Auto would have classified them offline Singles.
+
+Release 0.4.0: present-at-flush (8687eee), `Vanilla*` banner (4f8bcfb),
+match capture (aa7ae78, 210f83f), engine label fix. Package: PACKAGE_PLACEHOLDER.
+
 ### DBI USB MTP installation of f22d (0.3.0) — 2026-10-12 19:58Z
 
 `switch-mtp-f22d/deploy-f22d-mtp-1012.py` preflight 19:55:47Z (installed

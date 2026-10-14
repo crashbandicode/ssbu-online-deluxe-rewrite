@@ -150,6 +150,8 @@ struct Running {
     label: String,
     started: Instant,
     engine: &'static str,
+    /// The effective engine differed from `engine` at some poll while recording.
+    engine_changed: bool,
     is_match: bool,
     abort_seconds: u64,
     timing: Stream,
@@ -284,11 +286,17 @@ impl Service {
             if self.api_ready.is_none() {
                 self.api_ready = super::api_trace::TRACE.take_ready();
             }
+            // The engine is sampled every poll while recording, so a profile
+            // change after the capture finished (the cleanup hold at a match's
+            // results screen) does not relabel a single-engine capture Mixed.
+            if CAPTURE.active() && run.engine != effective_engine() {
+                run.engine_changed = true;
+            }
             if let (Some(summary), Some(api)) = (self.callback_ready, self.api_ready) {
-                let engine = if run.engine == effective_engine() {
-                    run.engine
-                } else {
+                let engine = if run.engine_changed {
                     "Mixed"
+                } else {
+                    run.engine
                 };
                 let label = run.label.as_str();
                 let path = Path::new(DATA_DIR).join(format!("timing-{}.csv", summary.id));
@@ -392,6 +400,7 @@ impl Service {
                         label,
                         started: Instant::now(),
                         engine: effective_engine(),
+                        engine_changed: false,
                         is_match,
                         abort_seconds: duration_ticks / crate::timing::TICK_HZ
                             + ABORT_MARGIN_SECONDS,
