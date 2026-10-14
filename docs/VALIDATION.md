@@ -2269,7 +2269,15 @@ usb. I'll keep playing and when an fps drop occurs I will let you know."
   plain D-pad. Overlay tests updated; README controls table.
 
 Gates: 308 host tests, host and Skyline Clippy with warnings denied,
-no-default build, rustfmt. Package: PACKAGE_PLACEHOLDER.
+no-default build, rustfmt. Tag `v0.4.1` on a466c1a, build
+`0.4.1-a466c1a2662c-1791998997`, NRO
+`3408557fb5925e7df3999683d7ca69a2873caded53033cbed1f3baff1f9cea37`
+(1,531,904 B), package `artifacts/3408557fb5925e7d/`; Forgejo release 371
+with the NRO and manifest, download readback verified. Card 17:32Z:
+`switch-mtp-041/deploy-041-mtp-1014.py`, 04c3008d → 3408557f, rollback
+`backups/pre-0.4.1-3408557fb5925e7d.nro`, flags and config unchanged. Host
+verified only at install: the runtime delta from the console-verified 0.4.0 is
+the three fixes above; the operator plays it next.
 
 ### DBI USB MTP installation of f22d (0.3.0) — 2026-10-12 19:58Z
 
