@@ -2359,6 +2359,56 @@ pre-rewrite repository in the evidence root), and `AGENTS.md` no longer asks
 for a handoff file in the repository. Every tag was re-pointed to its
 rewritten commit; the Forgejo releases keep their assets.
 
+### 0.5.0 — 2026-10-14: character FX split into `ssbu-fx-control`; plugin own pages
+
+Operator: "project out the fx mods into their own repo … a plugin that users
+can use to toggle effects on or off or reduced in its own window … an option
+for each character as well as an 'all' option … make the menu a little
+leaner for deluxe." Decisions: rows only for covered fighters plus All;
+Reduced only where a variant exists; repo `intpa/ssbu-fx-control`; the menu
+API stays in Deluxe (imgui-smash stays a renderer).
+
+Deluxe side (commits f3fe436, f571a30, 40d2234, f9c294d, 0213533, b0ca667):
+plugin API descriptor version 3 (`PLUGIN_FLAG_OWN_PAGE`, 32 options, export
+`ssbu_online_deluxe_online_context_v1`, SDK 3.0.0 with v3→v2→v1 retries);
+the scene tracker became the `SCENE` hook family (`DISABLE_SCENE`) instead of
+installing from the FX family; timing CSV schema 2 without FX columns; then
+the FX feature removed (14 source files, `host/eff-variant`, the family
+generator, the FX policy JSON, five FX docs, the FX row, seven Debug rows,
+FX event codes; 12,707 lines; code 30 renamed `OnlineContext`,
+`auto_driver::context_online`); `effects` / `effects_scope` INI keys are
+accepted and ignored. 280 host tests, 25 SDK + 2 ABI tests, 26 analyzer
+tests, clippy host + Skyline, no-default build, Skyline release build. The NRO
+is 1,462,272 B (0.4.2: 1,531,904 B).
+
+Plugin side (`intpa/ssbu-fx-control` main ad1ac6c): verbatim import of the
+FX sources from Deluxe f3fe436, then a per-fighter decision (move → fighter
+type → compile-time name-prefix map), own INI with a 2 s quiet-period writer
+thread, own events/install logs with Deluxe's code numbers, online scope from
+Deluxe's export or the plugin's own latency + stage hooks when Deluxe is
+absent (never both; Scope Online never applies when no signal exists). 61 host
+tests + 18 EFF-variant tests, all gates. NRO `e5cf868a…` (581,632 B, build
+`0.1.0-3e7d0ecb6828-1792010538`).
+
+Eden combined run, 2026-10-14 20:55–21:20Z (GIF build, isolated profile, both
+NROs staged, Astra low driver `fx-split-eden-driver-1014`, evidence
+`fx-split-1014/`): Deluxe 0.5.0 `8b1c936f…` + FX Control `e5cf868a…`. The
+window cycle ran Settings → **FX Control** (own page, titled with the plugin
+label; `01-fx-page.png`) → Performance; the page listed Scope, All, the 14
+fighters and `EFF variants: Ready`; Deluxe's Settings had no FX row
+(`02-deluxe-settings.png`). FX Control's install log: `online_source=Host`
+(Deluxe's export), config created with defaults, 22 hooks installed. Scope
+set to All through the page and persisted (`fx-config-after-scope.ini`).
+Training with Sephiroth, Gigaflare charged and released under On, Off and
+Reduced (`gif-fx-sephiroth-gigaflare-{on,off,reduced}.gif`, 73 frames each,
+0 dropped): On shows the large white/yellow/purple burst, Off has no burst
+but keeps hit sparks, fire and the launch trail, Reduced keeps the purple
+crescents and flames with less white washout; damage identical (49.3 %, 8
+hits) in all three. Editing one fighter made the All row read `Unavailable`
+(by design: mixed rows); All = Off then All = On restored every row
+(`fx-config-final.ini`). 59.98–60.01 fps, no crash or dialog. Not yet on the
+console.
+
 ### DBI USB MTP installation of f22d (0.3.0) — 2026-10-12 19:58Z
 
 `switch-mtp-f22d/deploy-f22d-mtp-1012.py` preflight 19:55:47Z (installed

@@ -37,9 +37,9 @@ that is no longer true.
 | Quickplay hold and stale demotion | Main-menu entry keeps a stored Quickplay; a Quickplay with no online-latency hook five seconds into a Singles/Doubles stage is demoted to Offline (0.4.2; `auto_policy::main_menu_connection`, `offline_match_due`) | Host-verified; see VALIDATION.md for console results |
 | ZL-gated native edits | Native pane D-pad edits need ZL held (0.4.1; `src/overlay.rs`); added after 23 unintended saves on the console | Host-verified; see VALIDATION.md for console results |
 
-## Current: 0.4.2 (ddea22d)
+## Current: 0.5.0
 
-Releases v0.4.0 to v0.4.2 are on Forgejo. Switch installs and console results
+Releases v0.4.0 to v0.5.0 are on Forgejo; character FX is the separate ssbu-fx-control plugin since 0.5.0. Switch installs and console results
 are tracked in [VALIDATION.md](VALIDATION.md), whose latest entries cover
 0.4.0 to 0.4.2.
 
