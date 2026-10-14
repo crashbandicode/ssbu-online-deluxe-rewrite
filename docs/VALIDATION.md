@@ -1711,7 +1711,24 @@ Gates: 303 host tests (two new), host and Skyline Clippy with warnings
 denied, no-default build, fmt, Skyline release. Sections `.text` 1402336 /
 `.rodata` 343136 / `.data` 69912 / `.bss` 138672, resident image 1.95 MB
 (0.3.6: 2.21 MB); with the thread stack the steady-state cost drops by about
-2.0 MB, more than the whole 0.3.1 regression. Package: see below.
+2.0 MB, more than the whole 0.3.1 regression. Package
+`artifacts/8562746a292942cf/`: build `0.3.7-61d022bdc3db-1791945438`, NRO
+SHA-256 `8562746a292942cf23df19f9e6781cc37b623dda305337161b730e14813707ea`
+(1896448 B, module `c4beb790…d5f7`), ELF `55b8208c…cf9f0`.
+
+Switch install of 0.3.7, 2026-10-14 02:38Z (operator: "do all of them, test
+and ship"; the card was still mounted over hekate USB mass storage from the
+0.3.6 install): tangent `switch-ums-8562/deployment.json`. Installed NRO read
+back as 792d8877…c5e4 (0.3.6) before, saved to
+`backups/pre-runtime-trim-8562746a292942cf.nro` on the card (verified) and
+locally; copied under a temp name, renamed, read back as 8562746a…07ea
+(1896448 B). Other plugins untouched. Deluxe's log files as they were before
+the install are in `switch-ums-8562/before-logs/`; they show the console has
+not booted Smash since the 0.3.2 build (`hang-trace.log` and `install.log`
+both begin `build=0.3.2-85a75632…`, newest crash report 21:18Z on 2026-10-13),
+so 0.3.3, 0.3.5 and 0.3.6 never ran on hardware either. Runtime result pending:
+the first boot decides the 256 KiB stack (heartbeats continuing in
+`hang-trace.log`) and gives the first `mem_used` numbers of the trimmed build.
 
 Caveat for the CSS capture: the SD writes now happen during the measured
 interval, from the diagnostics thread. Compare the next hardware CSS capture
