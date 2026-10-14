@@ -2,8 +2,11 @@
 
 Hold **L+R** or **ZL+ZR**, then tap **D-pad Down** to cycle
 **settings → performance → hidden**. When a separately installed plugin NRO has
-registered options, a **plugins** page sits between settings and performance
-(see [Plugins](PLUGINS.md)). The small Player Info window works in menus,
+registered options, a **plugins** page sits between settings and performance,
+and a plugin with its own page (since 0.5.0) follows it (see [Plugins](PLUGINS.md)).
+With the separate [FX Control](https://git.syntaxbyexample.com/intpa/ssbu-fx-control)
+plugin installed, its **FX Control** page appears in that cycle; character FX
+is no longer a Deluxe row. The small Player Info window works in menus,
 character select and matches. It moves to the right in Training and connected
 lobbies, keeping the pause controls visible, and stays left in regular matches.
 
@@ -15,8 +18,8 @@ fork's room-ID path, but still needs an NSO test. See [native display](NATIVE_DI
 
 | Control | Action |
 | --- | --- |
-| L+R (or ZL+ZR) + Down | Cycle settings → (plugins) → performance → hidden |
-| Up / Down | Select Peer, NetLatency, NetProfile, FX, FPS++, Stealth or Streamer (or a plugin row on the plugins page) |
+| L+R (or ZL+ZR) + Down | Cycle settings → (plugins) → (own plugin pages) → performance → hidden |
+| Up / Down | Select Peer, NetLatency, NetProfile, Stealth, Streamer or FPS++ (or a plugin row on a plugin page) |
 | Left / Right | Change the selected value |
 | Shoulder chord + Left / Right outside settings | Cycle the selected remote peer |
 | ZL + Left / Right or Up / Down on an online character select or arena pane, window closed | Edit the input buffer or the profile on the native status (since 0.4.1 the D-pad alone only moves the hand) |
@@ -45,13 +48,6 @@ second; the game's next relevant buffer hook applies the selected value.
 **NetProfile** selects the rendering profile or Auto; see
 [Rendering profiles](RENDERING.md). A manual selection that the post-match
 cleanup hold is running as Vanilla reads `Vanilla*`.
-
-**FX** **On / Off / Reduced** affects newly requested, named character effects.
-Existing effects expire naturally. **On** is the default. **Reduced** keeps
-recognizable cues while removing selected extra layers; supported asset variants
-keep fewer particle emitters. Unsupported effects retain their original visuals.
-This is visual coverage, not a claim that every move now runs faster.
-See [effect coverage, dependencies and exclusions](FX.md).
 
 **Stealth** defaults to **On** and suppresses this mod's recognition beacon and
 custom settings payload. Its value is latched for the connection. A change

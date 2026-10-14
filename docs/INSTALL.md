@@ -16,8 +16,19 @@ itself (`src/render_policy.rs`, `src/runtime/resolution.rs`,
 `src/peer_transport.rs`, `src/runtime/pia_rtt.rs`). Leave out the old Online
 Deluxe, SsbuSync, and PIA-manager plugins: if SsbuSync exports are already
 present, the rewrite skips its hooks (`src/runtime/mod.rs` `legacy_host_present`).
-Replace overlapping latency or character-FX plugins. Keep dependencies needed by
-other installed mods. Training Modpack and the gamepad overlay remain separate mods.
+Replace overlapping latency plugins. Keep dependencies needed by other installed
+mods. Training Modpack and the gamepad overlay remain separate mods.
+
+## Character FX (separate, optional)
+
+Since 0.5.0 Deluxe has no character-FX hooks. On, Off and Reduced effects are
+the separate [FX Control](https://git.syntaxbyexample.com/intpa/ssbu-fx-control)
+plugin, installed as its own NRO in the same plugin directory. It is optional:
+without it, every effect is the game's original. With it, its FX Control page
+appears in Deluxe's window cycle and it uses Deluxe's online tracking. Its
+settings are `sd:/ultimate/ssbu_fx_control/config.ini`; Deluxe ignores the old
+`effects` and `effects_scope` keys (see [Configuration](CONFIGURATION.md)).
+Replace any other character-FX plugin rather than running two.
 
 ## ImGui host
 
@@ -53,4 +64,5 @@ path. Set `platform=emulator` in `config.ini` on Eden (see
 Keep the previous NRO. The deployment scripts used for the operator's card
 archive the replaced file under
 `sd:/ultimate/ssbu_online_deluxe_rewrite/backups/` before each install; copying
-it back over the plugin path restores the earlier build.
+it back over the plugin path restores the earlier build. A Deluxe older than
+0.5.0 has its own FX hooks again; remove FX Control before rolling back to one.

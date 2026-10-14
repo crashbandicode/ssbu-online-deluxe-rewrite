@@ -862,7 +862,7 @@ action pose. The absent/enabled/absent idle benchmark was still running.
 
 ## 833c Explosive Flame measurements
 
-[Thirty measured trials plus six warmups](FX_EMULATOR_RESULTS.md) completed across
+[Thirty measured trials plus six warmups](https://git.syntaxbyexample.com/intpa/ssbu-fx-control/src/branch/main/docs/FX_EMULATOR_RESULTS.md) completed across
 LessLag/LLUltra and On/Off/Reduced at 1×. No repeatable On-over-Off cost was
 established; Reduced's performance benefit remains unverified. Raw evidence is
 preserved with hashes outside Git. Paused screenshots are excluded from timing.
@@ -986,7 +986,7 @@ Paused screenshots explain the low sampled FPS shown in some images.
 - 54 Palutena callback windows completed: 18 excluded warmups and 36 measured
   trials, Vanilla/LessLag/LLUltra crossed with On/Off/Reduced and hit/whiff.
   No consistent On-specific penalty or Reduced performance benefit established.
-  [Full method, results and limits](FX_EMULATOR_RESULTS.md).
+  [Full method, results and limits](https://git.syntaxbyexample.com/intpa/ssbu-fx-control/src/branch/main/docs/FX_EMULATOR_RESULTS.md).
 - All accepted API slices cover the guest-input-anchored move plus margin.
   API traces retain capacity termination; only callback traces cover all ten
   seconds. Fable independently verified hit raw files, not the whiff matrix.

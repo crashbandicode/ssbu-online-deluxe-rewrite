@@ -53,7 +53,7 @@ Smash-closed/transfer-ready confirmation before further device access.
 2. Right-side placement in Training and connected CSS/stage selection, left-side
    placement in ordinary matches, and removal of the opponent column after
    disconnect passed the recorded Eden checks. Console acceptance is pending.
-3. Finish the remaining Reduced branches in the [runtime matrix](FX_RUNTIME_MATRIX.md):
+3. Finish the remaining Reduced branches in the [runtime matrix](https://git.syntaxbyexample.com/intpa/ssbu-fx-control/src/branch/main/docs/FX_RUNTIME_MATRIX.md):
    Inkling forward-smash trace2 and the unobserved minor branches. Grounded
    triggered Sephiroth counter On/Reduced/On passed on c0; aerial/opposite-facing
    variants were not separately captured. Small-Flare,
@@ -62,7 +62,7 @@ Smash-closed/transfer-ready confirmation before further device access.
    On/Reduced/On restoration, protected cues and cleanup. Do not label an
    unchanged fallback as implemented reduction.
 4. Run matched On/Off/Reduced comparisons under both LessLag and LLUltra using
-   [the FX performance method](FX_PERFORMANCE_METHOD.md). The goal is Off-like
+   [the FX performance method](https://git.syntaxbyexample.com/intpa/ssbu-fx-control/src/branch/main/docs/FX_PERFORMANCE_METHOD.md). The goal is Off-like
    spike stability with recognizable cues. A thinner visual is not acceptance.
 5. Validate the compact renderer correction on Switch after the final Eden
    package is accepted. Frame ownership and per-submission GPU storage replace
@@ -81,7 +81,7 @@ Smash-closed/transfer-ready confirmation before further device access.
    and 36 measured hit/whiff trials across Vanilla/LessLag/LLUltra and all FX
    modes. No consistent On-specific cost or Reduced benefit was established
    on this Intel/ANV host. Fable independently checked the hit traces; no
-   hitbox/CPU attribution is justified. See [the measured results](FX_EMULATOR_RESULTS.md).
+   hitbox/CPU attribution is justified. See [the measured results](https://git.syntaxbyexample.com/intpa/ssbu-fx-control/src/branch/main/docs/FX_EMULATOR_RESULTS.md).
    The peer clarified that the remaining report concerns 400–450 FPS mods.
    That optional reproduction is deferred until after operator Switch tests.
 8. Reconcile docs, preserve optimized symbols and source, then publish accepted

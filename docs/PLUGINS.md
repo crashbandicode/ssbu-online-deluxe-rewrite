@@ -79,6 +79,12 @@ page and accept 8). A plugin that scopes its behaviour to online play reads
 scene sites itself: it returns the host's ready / online / match / training
 bits, or `None` when Deluxe is absent or older than 0.5.0.
 
+[FX Control](https://git.syntaxbyexample.com/intpa/ssbu-fx-control) is the
+first plugin built this way. It is the character-FX feature that Deluxe
+carried until 0.5.0, now a separate NRO: an own page titled **FX Control**
+with a scope row, an all-fighters row and one row per covered fighter. Its
+Online scope reads `host_online_context()`.
+
 `request` is a request, not a command: return
 `Pending` to apply a change later (the row shows `(pending)` until `current`
 reports it), `Rejected` or `Unavailable` to refuse. A read-only option (or one

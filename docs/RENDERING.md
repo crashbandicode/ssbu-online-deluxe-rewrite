@@ -109,7 +109,7 @@ consecutive-frame checks and exclusions. [Performance](PERFORMANCE.md)
 retains the results; [validation](VALIDATION.md) records build-specific
 compatibility and linked-match evidence.
 
-Client-side rendering and effect changes avoid gameplay/RNG modifications.
+Client-side rendering changes avoid gameplay/RNG modifications.
 Matching linked-match results are evidence for those trials, not proof that
 every online scenario is desync-free. NSO, console timing and four-console
 coverage must be reported separately.

@@ -30,9 +30,7 @@ that is no longer true.
 | Native CSS / arena | Fork CSS pane path, room-ID arena hooks, saved-style Streamer restoration | CSS edits, closed-window display and match return verified in Eden; NSO arena and Switch testing pending. [Details](NATIVE_DISPLAY.md) |
 | Embedded / standalone ImGui | Export/ABI detection, one active backend, namespaced hooks | Earlier load-order tests passed. The Oct 9 frame-ownership/GPU-storage correction passes embedded and patched standalone Eden checks; intermittent cause and Switch acceptance limits remain in [ImGui dependencies](IMGUI_DEPENDENCY.md) |
 | Elite Legal Stages | Separate plugin, standalone ImGui retained | Both menus and settings persist; offline stages remain unrestricted as intended; NSO filtering untested |
-| FX On / Off | Named visual requests only, live for newly requested effects | User Palutena/Sephiroth tests and TM save/load passed; final Gigaflare suppression observed; expanded catalog not fully runtime-certified |
-| FX scope | Online-only default; all for offline+online tests | c0 Training Gigaflare retains full effects for On/Off/Reduced with online-only scope; df48 Local Wireless exit resets Offline and a targeted Roy effect is restored in subsequent regular VS. Direct NSO routes remain untested |
-| Reduced FX | Live visual layer filtering and guarded lighter asset siblings; never silently mapped to Off | Visual request/cleanup checks cover most targeted families on recorded candidates. Corrected small-Flare/smash and full/dry Inkling down-smash requests passed; grounded triggered counter passed on c0; forward-smash trace2 remains open; Off-like frame-time benefit remains unverified. [Acceptance method](FX_PERFORMANCE_METHOD.md) |
+| Character FX (On / Off / Reduced, scope) | Moved to the separate [ssbu-fx-control](https://git.syntaxbyexample.com/intpa/ssbu-fx-control) 0.1.0 plugin in Deluxe 0.5.0. Deluxe has no effect hooks; it exports the online context the plugin reads | The FX evidence through 0.4.2 (Palutena/Sephiroth, scope, Reduced families, open trace2 and performance questions) moved with the FX docs to that repository. The plugin's own runtime results are recorded there |
 | Software FPS boost | Implemented only as an explicitly gated diagnostic; normal menu reports Unsupported | Measured acceleration of the match timer in Eden, so it is withheld from normal play. [Investigation](FPS_BOOST_INVESTIGATION.md) |
 | Present-at-flush | Two-image LessLag presents the acquired image at the flush that submits it and skips the game's later present of that index (0.4.0; `render_policy::present_at_flush`) | Console-verified. Counters in renderer-status.txt, mismatches in code 105. [Validation](VALIDATION.md) |
 | Match capture | Opt-in `CAPTURE_MATCH` boot flag: streamed timing and API CSVs for a whole match, ended by `scene_end` (0.4.0; `src/runtime/match_capture.rs`) | Shipped in 0.4.0; results in [VALIDATION.md](VALIDATION.md). [Debugging](DEBUGGING.md) |
@@ -176,21 +174,21 @@ context fixes. The 7c small-Flare/up/down-smash visual and request checks passed
 
 The 24e family captures cover most targeted families with On/Reduced/On,
 recognizable cues, request traces and selected cleanup paths. See the
-[per-family matrix](FX_RUNTIME_MATRIX.md) for unobserved branches and limitations.
+[per-family matrix](https://git.syntaxbyexample.com/intpa/ssbu-fx-control/src/branch/main/docs/FX_RUNTIME_MATRIX.md) for unobserved branches and limitations.
 Training placement is confirmed. The b99 paired run also verified right-side placement in connected CSS/stage selection, left-side placement in an ordinary match, and removal of the opponent column after disconnect.
 
 The later c0 follow-up added 36 measured Palutena hit/whiff trials across
 Vanilla/LessLag/LLUltra and On/Off/Reduced, plus 18 excluded warmups. It also
 did not establish a consistent On-specific cost or Reduced benefit. The
 hitbox CPU explanation remains unmeasured; see the bounded trace limits in
-[the FX results](FX_EMULATOR_RESULTS.md).
+[the FX results](https://git.syntaxbyexample.com/intpa/ssbu-fx-control/src/branch/main/docs/FX_EMULATOR_RESULTS.md).
 
 Thirty measured Palutena windows and six Gigaflare pilots did not establish
 a clear On-over-Off frame-time cost. Thirty later blue Special Zoom captures
 on 7c, across LessLag/LLUltra and On/Off/Reduced, had no presentation interval
 above 25 ms in their approximate impact windows. All modes retained the blue
 zoom. These observations do not establish zero GPU cost or a Reduced performance
-benefit; see [the measured results](FX_EMULATOR_RESULTS.md).
+benefit; see [the measured results](https://git.syntaxbyexample.com/intpa/ssbu-fx-control/src/branch/main/docs/FX_EMULATOR_RESULTS.md).
 
 The 9e9 candidate verified that offline/disconnected views contain no opponent
 column, while a connected station still displays its identity even before an

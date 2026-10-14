@@ -7,11 +7,13 @@
 
 A Rust/Skyline reconstruction of Online Deluxe for **Super Smash Bros. Ultimate 13.0.5**,
 delivered as **one NRO**: rendering profiles that cut input latency, a global
-Player Info window, the native character-select status line, network display
-and scoped character-FX controls. No overclocking.
+Player Info window, the native character-select status line and network
+display. No overclocking.
 
-**Current release: 0.4.2.** Every release on Forgejo carries the NRO and its
-manifest. Install notes: [docs/INSTALL.md](docs/INSTALL.md).
+**Current release: 0.5.0.** It moved character FX out to the separate
+[FX Control](https://git.syntaxbyexample.com/intpa/ssbu-fx-control) plugin and
+lets plugins add their own pages to the window cycle. Every release on Forgejo
+carries the NRO and its manifest. Install notes: [docs/INSTALL.md](docs/INSTALL.md).
 
 ![Cycling the overlay views](docs/media/overlay-cycle.gif)
 
@@ -34,19 +36,24 @@ More in [Screenshots](docs/SCREENSHOTS.md).
   [native display](docs/NATIVE_DISPLAY.md)
 - **Network display.** Opponent name, interface, settings and colored RTT from
   the game's own measurement; Stealth and Streamer switches. [Controls](docs/CONTROLS.md)
-- **Character FX.** On, Off or Reduced for named character effects, online
-  only by default. [FX](docs/FX.md)
+- **Character FX moved out.** Since 0.5.0 the On, Off and Reduced character
+  effects are the separate, optional plugin
+  [`intpa/ssbu-fx-control`](https://git.syntaxbyexample.com/intpa/ssbu-fx-control)
+  on Forgejo. Installed next to Deluxe, it adds an FX Control page to the
+  window cycle and uses Deluxe's online tracking. Deluxe itself has no effect hooks.
 - **Dispatcher backoff.** One inline hook that lets the game's idle dispatcher
   sleep instead of spinning. [Dispatcher backoff](docs/DISPATCHER_BACKOFF.md)
-- **Plugins page.** Other mods register rows through an exported API and the
-  Rust SDK. [Plugins](docs/PLUGINS.md), [`sdk/`](sdk/README.md)
+- **Plugins page and own pages.** Other mods register rows through an exported
+  API and the Rust SDK, on the shared Plugins page or, since 0.5.0, on a page
+  of their own. [Plugins](docs/PLUGINS.md), [`sdk/`](sdk/README.md)
 - **Captures.** Opt-in 30 s character-select captures and whole-match captures
   streamed to the card for frame analysis. [Captures](docs/CAPTURES.md)
 
 ## Controls
 
 Hold **L+R** (or **ZL+ZR**) and tap **D-pad Down** to cycle the window:
-settings → plugins (when any registered) → performance → hidden. In the window
+settings → plugins (when any registered) → own plugin pages, such as FX
+Control when that plugin is installed → performance → hidden. In the window
 **Up/Down** selects a row and **Left/Right** changes it. L+R and **Plus** opens
 the Debug view. Everything else, including the ZL-gated native edits on the
 character select, is in [Controls](docs/CONTROLS.md).
@@ -120,7 +127,6 @@ Toolchain, native dependency and release steps: [Build](docs/BUILD.md).
 | Screenshots and GIFs | [SCREENSHOTS.md](docs/SCREENSHOTS.md) |
 | Rendering profiles, Auto, present-at-flush, measured results | [RENDERING.md](docs/RENDERING.md) |
 | Native character-select and arena display | [NATIVE_DISPLAY.md](docs/NATIVE_DISPLAY.md) |
-| Character FX coverage and exclusions | [FX.md](docs/FX.md) |
 | Dispatcher backoff | [DISPATCHER_BACKOFF.md](docs/DISPATCHER_BACKOFF.md) |
 | How another plugin plugs in (menu rows, or its own ImGui windows) | [PLUGINS.md](docs/PLUGINS.md), [sdk/README.md](sdk/README.md) |
 | Timing captures | [CAPTURES.md](docs/CAPTURES.md) |
@@ -131,6 +137,6 @@ Toolchain, native dependency and release steps: [Build](docs/BUILD.md).
 | Validation ledger (every build, install and console result) | [VALIDATION.md](docs/VALIDATION.md), [STATUS.md](docs/STATUS.md) |
 | Fork provenance and deliberate differences | [reference/README.md](reference/README.md), [FORK_PARITY.md](docs/FORK_PARITY.md) |
 
-Client-side rendering and effect changes avoid gameplay and RNG modifications.
+Client-side rendering changes avoid gameplay and RNG modifications.
 Linked-match results are evidence for the trials they cover, not proof that
 every online scenario is desync-free.

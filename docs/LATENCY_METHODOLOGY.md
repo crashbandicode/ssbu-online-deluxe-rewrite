@@ -44,7 +44,9 @@ Record the exact game version, NRO SHA-256, matching symbol/source bundle,
 emulator executable hash/commit, configuration, plugin hashes and host hardware.
 Use the same character, stage, camera, controller path, game speed, graphics
 settings and background workload for every mode. Keep input buffer on Auto and
-FX On. Warm the scene and shader cache before collecting trials.
+character effects original (FX On through 0.4.2; since 0.5.0 FX is the separate
+ssbu-fx-control plugin, so leave it out or On). Warm the scene and shader cache
+before collecting trials.
 
 The recorded experiment used Smash 13.0.5, custom Eden `10bcd2d849`, Vulkan,
 docked mode, 1× resolution and 100% speed. Sephiroth crouched against Kazuya in

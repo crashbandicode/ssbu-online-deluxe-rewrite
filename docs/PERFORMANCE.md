@@ -3,11 +3,11 @@
 The rewrite defaults to Auto. Live profiles are Vanilla, LessLag, LLUltra, and
 LLDoubles. Hooks install once. Later profile, texture-count, index, flush, and
 resolution changes go through the guarded machine in `src/render_policy.rs`,
-fed by `src/runtime/auto_driver.rs`. Reduced FX is the live visual-layer policy
-in `src/runtime/effects.rs` and `src/effects_reduced.rs`. It keeps named cues.
-An unsupported Reduced request stays on its original visual. Open Reduced
-branches and the still-unshown Off-like frame-time benefit are in
-`docs/FX_RUNTIME_MATRIX.md` and `docs/FX_PERFORMANCE_METHOD.md`.
+fed by `src/runtime/auto_driver.rs`. Since 0.5.0 Deluxe has no character-FX
+hooks: On, Off and Reduced are the separate ssbu-fx-control plugin. Open
+Reduced branches and the still-unshown Off-like frame-time benefit moved with
+it, to `docs/FX_RUNTIME_MATRIX.md` and `docs/FX_PERFORMANCE_METHOD.md` in that
+repository. The FX results below are dated records of 0.4.2 and earlier builds.
 
 `lesslag_core` and `doubles_core` stay INI-only startup experiments. They are
 separate from the four live profiles. Hardware clocks stay excluded. Software
@@ -22,7 +22,7 @@ The c0 Palutena follow-up completed 36 measured hit/whiff trials across
 Vanilla/LessLag/LLUltra and On/Off/Reduced. It did not establish a consistent
 On-specific penalty. Capacity-limited API captures were accepted only for
 individually verified complete move-window slices; no GPU, displayed-frame,
-hitbox-cost or Switch claim follows. See [results and limitations](FX_EMULATOR_RESULTS.md).
+hitbox-cost or Switch claim follows. See [results and limitations](https://git.syntaxbyexample.com/intpa/ssbu-fx-control/src/branch/main/docs/FX_EMULATOR_RESULTS.md).
 
 ## Registered render profiles
 
@@ -84,7 +84,7 @@ and stage select, and on the left during the match. The opponent column
 disappeared after B stopped. This match has no full-state or checksum proof. A
 three-station match is still undone. High-RTT, VPN, NSO, and Switch performance
 are not accepted from it. b99 Reduced branch limits stay in
-`docs/FX_RUNTIME_MATRIX.md`. The Switch already has b99 installed; that install
+`docs/FX_RUNTIME_MATRIX.md` (now in ssbu-fx-control). The Switch already has b99 installed; that install
 is not a console performance acceptance.
 
 The sections from "Native latency baseline" through "Final renderer regression"
@@ -109,8 +109,8 @@ whole measured result could differ in either direction. Establish four condition
 
 | Platform | Baseline | Mod comparison |
 | --- | --- | --- |
-| Switch | Vanilla, FX On, offline | LessLag with other conditions fixed |
-| Eden | Vanilla, FX On, offline | LessLag with other conditions fixed |
+| Switch | Vanilla, original effects, offline | LessLag with other conditions fixed |
+| Eden | Vanilla, original effects, offline | LessLag with other conditions fixed |
 
 Report absolute input-to-visible-response latency and the within-platform change
 in milliseconds and 60 Hz frame equivalents. Cross-platform differences describe
@@ -124,8 +124,8 @@ The callback traces below do not measure or confirm the six-frame native baselin
 
 An opt-in capture records thirty guest-clock seconds (ten before 0.3.1) of the
 existing ImGui render callback, including callback sequence, raw system ticks,
-sampled HID buttons, requested FX mode/scope and effective suppression state.
-It adds no game hook. Storage is a 2048-sample buffer (1024 before 0.3.1)
+sampled HID buttons and overlay view (schema 1, through 0.4.2, also carried
+the requested FX mode/scope and effective suppression state). It adds no game hook. Storage is a 2048-sample buffer (1024 before 0.3.1)
 that the diagnostics thread drains and streams to the CSV every poll; the
 callback uses `try_lock`, with explicit skipped counts. Since 0.3.1 the
 `CAPTURE_CSS` boot flag arms the same capture automatically on character-select
@@ -223,6 +223,10 @@ overlay as a useful visual reference, not a substitute for the physical input
 timestamp. Rendering can reduce latency while both conditions remain at 60 FPS.
 
 ## Controlled FX experiment
+
+Since 0.5.0 the On/Off/Reduced switch is the ssbu-fx-control plugin, not
+Deluxe; its current method is that repository's `docs/FX_PERFORMANCE_METHOD.md`.
+This section is the method the 0.4.2 and earlier records followed.
 
 Gigaflare is a provisional first candidate because the fork's resolution scaler
 explicitly targets it. It is not yet established here as a measured Switch

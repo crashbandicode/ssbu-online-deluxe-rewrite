@@ -20,12 +20,22 @@ package records flush-field widths and incoming-submit membership during a
 finite API trace. It is not a rendering or menu-visibility change, and that
 invisible-window reproduction was pending at that checkpoint. The Switch then had
 `b99f087cf8ef0a9c` installed. Its historical runtime limits, including Reduced branches in
-`docs/FX_RUNTIME_MATRIX.md`, remain open. Historical frame counts stay on
-the binary that produced them.
+the FX runtime matrix (now `docs/FX_RUNTIME_MATRIX.md` in ssbu-fx-control), remain open.
+Historical frame counts stay on the binary that produced them.
 
 The rewrite is one NRO. Keep Training Modpack and SGPO coexistence: no
-`Layout::Draw`, FX hooks call `original!`, and `llultra` reads SGPO's word at
+`Layout::Draw`, no effect hooks since 0.5.0 (they called `original!` until
+then), and `llultra` reads SGPO's word at
 `0x374812c` without patching it (`src/runtime/render_ultra.rs`).
+
+## Rewrite changes 0.5.0 (2026-10-14)
+
+- Character FX (On / Off / Reduced and its scope) moved to the separate
+  ssbu-fx-control 0.1.0 plugin. Deluxe has no effect hooks, no FX row and no
+  FX keys; it ignores `effects` and `effects_scope` in an older INI. The
+  scene tracker stays and is exported as the online context.
+- Plugin API descriptor version 3: own pages in the window cycle, up to 32
+  options, and the online-context export.
 
 ## Rewrite changes 0.3.0–0.4.2 (2026-10-13/14)
 
@@ -346,7 +356,7 @@ Match class (`net/mod.rs`, all installed at `:374-390`):
 - If a singles/doubles match is still Offline, the fork prints
   `UNTRACKED ONLINE MATCH DETECTED, ASSUMING QUICKPLAY` and forces Quickplay
   (`:223-231`). The rewrite does not relabel such a match: since 0.4.1 Auto
-  and FX treat a stage the online-latency hook reached as online without
+  (and FX until 0.5.0) treat a stage the online-latency hook reached as online without
   rewriting the stored connection (`Scene::marked_online`,
   `effective_connection`). Since 0.4.2 main-menu entry keeps a stored
   Quickplay, and the only write to the stored connection outside the scene
@@ -387,8 +397,8 @@ updates are above. None replaces earlier receipts or moves their frame counts
 onto a newer NRO.
 
 The runtime calls `auto_policy` and the scene-driven `auto_driver`; the profile
-matrix is the Auto selector used by `decide`. Defaults are Auto, Console, FX On
-with online-only scope, Stealth On and Streamer Off. Explicit saved settings are
+matrix is the Auto selector used by `decide`. Defaults are Auto, Console,
+Stealth On and Streamer Off. Explicit saved settings are
 retained. Auto's target and the renderer's committed state are distinct.
 
 | Fork behavior | Rewrite | Evidence / remaining boundary |
@@ -413,8 +423,8 @@ retained. Auto's target and the renderer's committed state are distinct.
 | Native CSS / Arena / LDN text | Fork CSS and arena display paths reinstated alongside the global window | CSS retains selected values after window closure; Streamer restores original styles. Arena lists up to eight known mapped remote stations (`arena_parts`); NSO test pending. LDN lobby network count and native D-pad buffer editing (ZL held, 0.4.1) are implemented; 9e9 Auto-to-0 edit observed. [Details](NATIVE_DISPLAY.md) |
 | 300-frame native-banner grace / LDN two-pane force | Not copied | Scene generations and validated pane identities replace retained unguarded pointers; no forced controller slots |
 | SsbuSync arena marker | Not needed by the in-tree backend | Legacy host exports trigger a best-effort overlap refusal; do not install both stacks |
-| FX On/Off and scope | Added by this rewrite, not inherited from the fork | Named visual requests only; user-confirmed Palutena/Sephiroth and TM/SGPO coexistence on prior candidates; full expanded catalog not runtime-certified |
-| Reduced FX | Live visual-layer policy and guarded lighter asset siblings | Several visual checks passed; full-family and Off-like performance acceptance pending. Never silently converted to Off |
+| FX On/Off and scope | Moved to ssbu-fx-control 0.1.0 / Deluxe 0.5.0. Added by this rewrite, not inherited from the fork; Deluxe now has no effect hooks and exports only the online context | Through 0.4.2: named visual requests only; user-confirmed Palutena/Sephiroth and TM/SGPO coexistence on prior candidates; full expanded catalog not runtime-certified. Further evidence belongs to the plugin |
+| Reduced FX | Moved to ssbu-fx-control 0.1.0 / Deluxe 0.5.0. Was a live visual-layer policy with guarded lighter asset siblings | Through 0.4.2: several visual checks passed; full-family and Off-like performance acceptance pending. Never silently converted to Off |
 | Hardware overclocking | Deliberately excluded by user request | No clock management or nx_over dependency |
 | Plugin registration API / Plugins page | Added by this rewrite, not inherited from the fork; `src/plugin_api.rs`, `src/runtime/plugin_export.rs`, `sdk/` | Host tests, SDK round-trip, Eden `plugins-page-1012a` (registration, vertical edits, INI persistence) and Eden `plugins-match-1012b` (compact Settings/Plugins strips in a live match, in-match edit persisted); hardware still unverified |
 | Software FPS boost `+` | Diagnostic implementation only; normal play reports Unsupported | Native-window composition-speed control accelerated game time in a measured match. [Evidence](FPS_BOOST_INVESTIGATION.md); withheld from normal play |
@@ -430,8 +440,9 @@ reinstall hooks and never patch SGPO's `0x374812c` neighborhood.
 - Manual modes remain usable in Training for measurements. Auto uses Vanilla
   there. Main-menu entry clears stale connection context unless Quickplay is
   live (0.4.2). Unknown offline matches are not relabeled Quickplay in the
-  stored connection; since 0.4.1 Auto and FX treat a stage the online-latency
-  hook reached as online (`Scene::marked_online`, `effective_connection`).
+  stored connection; since 0.4.1 Auto (and FX until 0.5.0) treat a stage the
+  online-latency hook reached as online (`Scene::marked_online`,
+  `effective_connection`).
 - Platform is an explicit INI setting, hidden from the current menu. A nonstandard
   emulator address layout cannot silently choose console defaults.
 - RTT warmup uses initialized samples, avoiding the original manager's unwritten
@@ -500,7 +511,7 @@ on the left during the match. The opponent column disappeared after B stopped.
 There is no full-state or checksum proof. A three-station match is still not
 done. High-RTT, VPN, NSO, and Switch performance are not accepted from this
 match. b99 Reduced limits remain the open rows in
-[FX_RUNTIME_MATRIX.md](FX_RUNTIME_MATRIX.md), including the unobserved Inkling
+[FX_RUNTIME_MATRIX.md](https://git.syntaxbyexample.com/intpa/ssbu-fx-control/src/branch/main/docs/FX_RUNTIME_MATRIX.md), including the unobserved Inkling
 forward-smash trace2 cull and the unobserved triggered Sephiroth counter body.
 
 In the b99 concurrent run, the same-process embedded menu was visible on Vanilla and LLUltra and invisible on LessLag and LLDoubles. Finite traces show one draw and one submit per

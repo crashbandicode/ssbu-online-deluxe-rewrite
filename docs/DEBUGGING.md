@@ -2,11 +2,11 @@
 
 ![The Debug view of the Player Info window](media/debug-window.png)
 
-The Debug view (L+R+Plus): build id, renderer, FX tracker and request rows,
+The Debug view (L+R+Plus): build id, renderer, online tracker,
 `Timing`, `Capture L+R+Up (30 s)`, `CSS capture` and `Match capture`, then the
 live resolution, DRS, backoff, memory and frame-time rows. Captured in Eden on
-2026-10-14 with 0.4.2; the whole-screen version and the view during Training
-are in [Screenshots](SCREENSHOTS.md).
+2026-10-14 with 0.4.2, so it still shows the FX rows that 0.5.0 removed; the
+whole-screen version and the view during Training are in [Screenshots](SCREENSHOTS.md).
 
 Keep the exact dist/<NRO-hash-prefix>/ bundle for every installed build.
 Packaging checks matching NRO/ELF executable bytes, saves both SHA-256 hashes,
@@ -66,45 +66,43 @@ logs too: module list, PC/LR/backtrace, game version, loaded NROs and reproducti
 The script verifies bundle hashes and optional module ID, then uses LLVM/binutils addr2line.
 Use the faulting plugin's base/ELF, not the game's main-module base.
 
-For controlled bisection, create empty DISABLE_MENU, DISABLE_SCENE, DISABLE_FX,
+For controlled bisection, create empty DISABLE_MENU, DISABLE_SCENE,
 DISABLE_BUFFER, DISABLE_RENDERER, DISABLE_PIA, DISABLE_NATIVE or DISABLE_BACKOFF
 files in the data directory and restart. They skip the corresponding hook
 family. DISABLE_SCENE skips the scene tracker (main menu, Quickplay, arena,
 local wireless, stage setup): Auto then never becomes ready, banners stay
 hidden, the match capture never arms and the exported online context reports
 nothing (it was part of the FX family until 0.4.2). DISABLE_BUFFER disables
-input-buffer writes. DISABLE_FX skips FX requests only. DISABLE_RENDERER skips
+input-buffer writes. DISABLE_RENDERER skips
 experimental rendering text patches regardless of the INI request; actual mode
 stays Vanilla. DISABLE_PIA skips RTT and prevents the optional peer observer
 from installing. DISABLE_NATIVE skips the native banner hook. DISABLE_BACKOFF
-skips the dispatcher idle backoff (code 102 `a` = 4). All eight flags together,
+skips the dispatcher idle backoff (code 102 `a` = 4). All seven flags together,
 with DUMP_PRESENTATION_HISTORY absent, skip those hook families while retaining
 logging.
 Remove the disable flags to re-enable their hook families.
-These differ from FX On, which keeps passthrough hooks installed.
+DISABLE_FX and the PROBE_CRITICAL_SCREEN marker are ignored since 0.5.0: the
+FX hook family moved to the separate ssbu-fx-control plugin, which has its own
+data directory and flags.
 
 | Code | Meaning |
 |---|---|
 | 1 / 2 | Boot / unsupported game version |
 | 3 / 4 / 5 | Hook installing / installed / rejected |
-| 6 / 7 | Config loaded / rejected |
-| 8 | Setting changed |
+| 6 / 7 | Config loaded (a = 0, b = input buffer) / rejected |
+| 8 | Setting changed: a = 0, b = input buffer |
 | 9 / 10 | Network buffer applied / null pointer skipped |
-| 11 | FX suppression count: first then every 128 |
 | 12 / 13 | Sampled CSS entry / exit |
-| 14 / 15 / 16 | Panic / heartbeat / compatibility or diagnostic flag |
+| 14 / 15 / 16 | Panic / heartbeat (a = 0, b = iteration) / compatibility or diagnostic flag |
 | 17 | Shared function hook entry instruction before chaining |
 | 18 / 19 | Accepted title pane / unsupported CSS pane or mapping |
 | 20 | Sampled pane field: 1/2 chain pointers, 3–5 name bytes, 6 text buffer, 7 capacity/length, 8 font sizes |
 | 21 / 22 | Global overlay entry / exit, sampled every 300 frames |
 | 23 | View change: 0 hidden, 1 settings, 2 performance, 3 debug, 4 plugins |
-| 24 | Config saved: generation / effective FX mode |
+| 24 | Config saved: generation / 0 |
 | 25 | Overlay health: backend ready / bootstrap-call count |
 | 26 | Embedded backend initialization complete |
-| 27 | ACMD request seen while Off: hook ID / hash; first and every 256 per hook |
-| 28 | ACMD suppression: original hash / (hook ID shifted 32 bits, suppression count low bits); first 32 and every 128 |
-| 29 | ACMD stack refused: hook ID / argument type; first 8 only |
-| 30 | FX online context changed: online boolean / source scene or latency-setup offset |
+| 30 | Online context changed (`OnlineContext`, `FxOnlineContext` before 0.5.0): online boolean / source scene or latency-setup offset |
 | 31 / 32 | Timing capture started / export finished: capture ID / export success (code 32) |
 | 33 / 34 / 35 | Renderer owner / caller / flush target diagnostics |
 | 36 | Pia RTT sample/cleanup and foreign/drop counters |
@@ -125,6 +123,9 @@ These differ from FX On, which keeps passthrough hooks installed.
 | 107 | Scene connection hold: a = 1 main-menu entry kept a stored Quickplay (b = hook address); a = 2 a Singles/Doubles stage under Quickplay without the online-latency hook was demoted to Offline (b = ticks since the stage load; the matching code 73 AutoContext row carries source `0x0ff11e`) |
 
 Codes 18–20 describe historical CSS builds; they are no longer emitted.
+Codes 11, 27–29, 84–87 and 91–97 were the character-FX records. They moved
+to the ssbu-fx-control plugin in 0.5.0 and are not reused here. In codes 6,
+8, 15 and 24 the field that carried the FX mode is always 0 since 0.5.0.
 Codes 12/13 mark character-select entry and exit (exit = one second without a CSS update).
 No game-owned pane or font is modified by the global window.
 
@@ -136,7 +137,7 @@ changed views. Code 8 followed by 24 confirms a change was saved; inspect config
 Fixed offsets have source/version, text-bound and common-trampoline checks.
 The new rendering sites additionally check seven original instruction words
 verified from the live 13.0.5 code. Other hook families do not yet have that complete
-signature coverage. Shared EffectModule function hooks deliberately chain. Live load-order validation
+signature coverage. Live load-order validation
 is separate from successful compilation.
 
 The ImGui backend is embedded as a fallback. A compatible standalone imgui-smash
