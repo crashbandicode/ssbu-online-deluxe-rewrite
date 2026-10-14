@@ -2406,8 +2406,22 @@ but keeps hit sparks, fire and the launch trail, Reduced keeps the purple
 crescents and flames with less white washout; damage identical (49.3 %, 8
 hits) in all three. Editing one fighter made the All row read `Unavailable`
 (by design: mixed rows); All = Off then All = On restored every row
-(`fx-config-final.ini`). 59.98–60.01 fps, no crash or dialog. Not yet on the
-console.
+(`fx-config-final.ini`). 59.98–60.01 fps, no crash or dialog.
+
+Released 2026-10-14 21:12Z: Forgejo release v0.5.0 (id 374) with NRO
+`d9dd7df281671c12…` (1,462,272 B, build `0.5.0-44830e5d9255-1792012237`,
+readback verified) and FX Control v0.1.0 (release id 375, NRO
+`505dfecd68330201…`, 581,632 B, build `0.1.0-eb627b89e654-1792012419`, SDK
+resolved from the Deluxe v0.5.0 tag). Both NROs are the Eden-tested code
+rebuilt from the tagged commits; only the embedded build strings differ.
+
+Card install 21:15Z over DBI USB MTP (`switch-mtp-050/deploy-050-mtp-1014.py`
+preflight → install, readback verified): Deluxe `87322eef…` (0.4.2) replaced
+by `d9dd7df2…`, `libssbu_fx_control.nro` added; rollback archive under
+`ultimate/ssbu_online_deluxe_rewrite/backups/`; `config.ini` untouched
+(manual LessLag, input_buffer 3, auto off, streamer off; its `effects` keys are
+now ignored). Flags `CAPTURE_CSS` + `CAPTURE_MATCH` remain. Console run of
+0.5.0 + FX Control not yet performed.
 
 ### DBI USB MTP installation of f22d (0.3.0) — 2026-10-12 19:58Z
 
