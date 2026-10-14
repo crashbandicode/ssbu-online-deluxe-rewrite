@@ -2118,6 +2118,68 @@ same hardware day) and `switch-mtp-038/before-logs/` (0.3.7). Watch for
 flicker, tearing or a stale frame on the CSS and in a match. If it does
 not help or shows artifacts: revert 8687eee and reinstall the rollback.
 
+### Match capture (`CAPTURE_MATCH`) — 2026-10-14 (commits aa7ae78, 210f83f)
+
+Operator: "go ahead and build the match capture now and ship it so I can
+share both results when I come back." The finite capture pair now records a
+whole match: with `CAPTURE_MATCH` in the data directory at boot, every stage
+load (stage-setup hook; Singles, Doubles, Training) arms `timing-<id>.csv` +
+`api-<id>.csv` (label `match_*`), and the capture ends when the game leaves
+the stage (`# reason=scene_end`): scene status back to Inactive, or the
+character-select update running (210f83f; the Training CSS keeps the
+Training status). Ten-minute ceiling (`elapsed`). Both CSVs stream from the
+diagnostics thread, which polls every 250 ms while a capture runs; the
+callback buffer is drained like the API chunks (the 2048-sample buffer bounds
+nothing but a stalled drain), and API rows pack `begin` relative to a
+per-chunk base (first row minus 2^31 ticks), so the 20-byte row survives
+captures far beyond the former 223 s limit; a row outside its chunk's range
+starts the other chunk instead of ending the capture. A 30 s capture still
+running when a stage loads is ended for the match (code 106 `a=3`).
+`CAPTURE_MATCH` also installs the three read-only `CAPTURE_CSS` hooks (rows
+62–66, 77) without arming on CSS entry. Code 106; Debug row `Match capture`;
+`tools/analyze_timing.py` accepts `scene_end` (duration check only for
+`elapsed`). No hook does I/O; the render-path change is bookkeeping in
+`Capture::observe` (first/last tick kept in the state instead of the buffer).
+
+Eden smoke tests (isolated profile, embedded host, no CPU quota, Astra low
+driver `match-capture-eden-driver-1014`, `css-budget/match-capture-1014/`):
+
+- Run 1 (aa7ae78): Training stage load armed `capturing 15295074307251
+  match_training` at 15:49:50Z; the files grew while the match ran (API CSV
+  2.8 → 5.4 MB in the first 60 s); the Training exit to the CSS did **not**
+  end it (status stayed Training), found and fixed in 210f83f. The partial
+  files copied at 372 s (`runs/match-smoke-1/`): 607,954 API rows in strict
+  sequence, no `end < begin`, no backward tick jump, begins 0.005–372.2 s
+  after the id, kinds 1/2/3/5/12–17/29–34/60–64/66/77 (present rows twice
+  per frame: the early present and the skipped game present), 21,447
+  callback samples contiguous with increasing ticks over 358 s, one partial
+  trailing line (copied mid-write). 60.0 fps throughout, no dialog or
+  freeze.
+- Run 2 (210f83f, `runs/match-smoke-2/`): two Training stage loads armed
+  `match_training` captures 15306224507360 (15:59:32Z) and 15308367429258
+  (16:01:17Z, re-entered from the Training CSS); both ended on the Training
+  exit within the driver's 4 s poll (`# reason=scene_end`, events.log code
+  106 `a=1`, 31, 106 `a=2 b=0xc55`, 32 for each), footers complete:
+  159,579 API rows (6 skipped) + 5,715 callback samples over 96.3 s, and
+  76,375 rows (1 skipped) + 2,741 samples over 45.9 s. `analyze_timing.py`:
+  p50 16.67 ms, p99 17.7 / 17.6 ms, 26 / 5 intervals > 20 ms with the stage
+  load and exit inside the window (max 347 / 227 ms). `analyze_render_trace.py`
+  (now accepting `scene_end`): present rows with indices 0/1 and results
+  1/2 only, so the present-at-flush path was live. 60 fps in Training, no
+  dialog or freeze; the 47 fps sample at the second arm is the stage load.
+
+Switch install, 2026-10-14 16:03Z: DBI USB MTP, `switch-mtp-match/
+deploy-match-mtp-1014.py` (`preflight.json` 16:03:38Z, `deployment.json`
+`installed_verified` 16:03:57Z); Deluxe aa214ec2…a586 (present-at-flush
+candidate) → 4e4f2044…db56 (build `0.3.9-210f83fcc733-1791993370`, the same
+candidate plus the match capture), rollback `backups/pre-match-capture-
+4e4f2044edb3d3b5.nro`; `CAPTURE_MATCH` created in the data directory next
+to the existing `CAPTURE_CSS`; other plugins, config.ini and hekate_ipl.ini
+unchanged. Rollback chain on the card: 4e4f2044 → aa214ec2
+(`pre-match-capture-…`) → 8c20799f 0.3.9 (`pre-present-flush-…`). Hardware
+test: play matches with the flag; each stage load writes a `match_*` pair,
+pull them with the CSS captures. No version tag until the console verdict.
+
 ### DBI USB MTP installation of f22d (0.3.0) — 2026-10-12 19:58Z
 
 `switch-mtp-f22d/deploy-f22d-mtp-1012.py` preflight 19:55:47Z (installed

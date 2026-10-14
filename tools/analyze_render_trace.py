@@ -300,7 +300,9 @@ def analyze(text):
         raise ValueError("missing metadata")
     if metadata["schema"] != "1" or metadata["metric"] != "cpu_api_spans":
         raise ValueError("unsupported schema")
-    if metadata["reason"] != "elapsed":
+    # `elapsed` ran its duration; `scene_end` is a CAPTURE_MATCH capture ended
+    # by the match itself. Both have complete footers.
+    if metadata["reason"] not in ("elapsed", "scene_end"):
         raise ValueError(f"incomplete capture: {metadata['reason']}")
     hz, skipped = int(metadata["tick_hz"]), int(metadata["skipped"])
     if hz <= 0 or skipped < 0:
