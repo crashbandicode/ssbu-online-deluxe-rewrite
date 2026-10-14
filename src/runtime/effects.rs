@@ -509,7 +509,6 @@ unsafe fn deluxe_cleanup_detach_kind(
 pub(super) fn install() {
     latch_critical_probe();
     super::variant::install();
-    super::online::install();
     super::acmd::install();
     macro_rules! install {
         ($id:expr, $target:path, $hook:ident) => {

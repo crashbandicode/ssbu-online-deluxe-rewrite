@@ -6,7 +6,11 @@ import json
 import math
 from pathlib import Path
 
-COLUMNS = ["sample", "callback", "tick", "buttons", "fx_mode", "fx_scope", "fx_effective_off", "overlay_view"]
+# Schema 1 (through 0.4.2) carried three FX columns; schema 2 (0.5.0, after the
+# character FX moved to the ssbu-fx-control plugin) does not.
+COLUMNS_V1 = ["sample", "callback", "tick", "buttons", "fx_mode", "fx_scope", "fx_effective_off", "overlay_view"]
+COLUMNS_V2 = ["sample", "callback", "tick", "buttons", "overlay_view"]
+COLUMNS = COLUMNS_V2
 
 
 def percentile(values, fraction):
@@ -33,8 +37,10 @@ def analyze(text):
                 "label", "reason", "skipped", "sample_count", "complete"}
     if not required <= metadata.keys():
         raise ValueError("missing timing metadata")
-    if metadata["schema"] != "1" or metadata["metric"] != "render_callback":
+    if metadata["schema"] not in ("1", "2") or metadata["metric"] != "render_callback":
         raise ValueError("unsupported schema or metric")
+    schema = int(metadata["schema"])
+    columns = COLUMNS_V1 if schema == 1 else COLUMNS_V2
     # `elapsed` is a capture that ran its declared duration; `scene_end` is a
     # match capture (CAPTURE_MATCH) that ended because the match did.
     if metadata["reason"] not in ("elapsed", "scene_end"):
@@ -44,7 +50,7 @@ def analyze(text):
     if hz <= 0 or skipped < 0:
         raise ValueError("invalid clock frequency or skip count")
     reader = csv.DictReader(io.StringIO("\n".join(data)))
-    if reader.fieldnames != COLUMNS:
+    if reader.fieldnames != columns:
         raise ValueError("unexpected CSV columns")
     samples = []
     for n, row in enumerate(reader):
@@ -53,11 +59,15 @@ def analyze(text):
         sample = {k: int(v) for k, v in row.items()}
         if sample["sample"] != n or any(v < 0 for v in sample.values()):
             raise ValueError("invalid sample sequence or negative value")
-        if (sample["fx_mode"] not in (0, 1, 2)
-                or any(sample[k] not in (0, 1) for k in ("fx_scope", "fx_effective_off"))
-                or (sample["fx_effective_off"] and sample["fx_mode"] != 1)):
-            raise ValueError("invalid FX condition")
-        if sample["overlay_view"] not in (0, 1, 2, 3):
+        if schema == 1:
+            if (sample["fx_mode"] not in (0, 1, 2)
+                    or any(sample[k] not in (0, 1) for k in ("fx_scope", "fx_effective_off"))
+                    or (sample["fx_effective_off"] and sample["fx_mode"] != 1)):
+                raise ValueError("invalid FX condition")
+        else:
+            # Schema 2 has no FX state; keep the condition shape for the report.
+            sample["fx_mode"], sample["fx_scope"], sample["fx_effective_off"] = 0, 0, 0
+        if sample["overlay_view"] not in (0, 1, 2, 3, 4, 5):
             raise ValueError("invalid overlay view")
         samples.append(sample)
     if len(samples) != int(metadata["sample_count"]) or len(samples) < 2:
@@ -91,7 +101,7 @@ def analyze(text):
     if len(intervals) < 120:
         warnings.append("Fewer than 120 consecutive intervals; percentile estimates are weak.")
     return {
-        "metric": "render_callback", "engine": metadata["engine"], "reason": metadata["reason"],
+        "metric": "render_callback", "schema": schema, "engine": metadata["engine"], "reason": metadata["reason"],
         "build": metadata["build"], "label": metadata["label"], "id": metadata["id"],
         "samples": len(samples), "intervals": len(intervals),
         "elapsed_guest_seconds": elapsed_ticks / hz,

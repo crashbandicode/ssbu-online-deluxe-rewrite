@@ -53,5 +53,5 @@ Empty files in the same directory, read once at boot:
 | `CAPTURE_CSS` | Arm a 30 s capture on every character-select entry ([Captures](CAPTURES.md)) |
 | `CAPTURE_MATCH` | Record every match ([Captures](CAPTURES.md)) |
 | `CAPTURE_TIMING` | Not a flag: write a label into it to start one capture |
-| `DISABLE_BACKOFF`, `DISABLE_NATIVE`, `DISABLE_MENU`, `DISABLE_FX`, `DISABLE_BUFFER`, `DISABLE_RENDERER`, `DISABLE_PIA` | Bisection switches; see [Debugging](DEBUGGING.md) |
+| `DISABLE_BACKOFF`, `DISABLE_NATIVE`, `DISABLE_MENU`, `DISABLE_SCENE`, `DISABLE_FX`, `DISABLE_BUFFER`, `DISABLE_RENDERER`, `DISABLE_PIA` | Bisection switches; see [Debugging](DEBUGGING.md) |
 | `DUMP_PRESENTATION_HISTORY`, `DUMP_RENDER_PROBE` | Extra diagnostics; see [Debugging](DEBUGGING.md) |

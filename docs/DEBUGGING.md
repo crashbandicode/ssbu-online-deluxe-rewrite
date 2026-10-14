@@ -66,17 +66,20 @@ logs too: module list, PC/LR/backtrace, game version, loaded NROs and reproducti
 The script verifies bundle hashes and optional module ID, then uses LLVM/binutils addr2line.
 Use the faulting plugin's base/ELF, not the game's main-module base.
 
-For controlled bisection, create empty DISABLE_MENU, DISABLE_FX, DISABLE_BUFFER,
-DISABLE_RENDERER, DISABLE_PIA, DISABLE_NATIVE or DISABLE_BACKOFF files
-in the data directory and restart. They skip the corresponding hook family.
-DISABLE_BUFFER disables input-buffer writes; the shared setup observer can remain
-installed for FX scope. DISABLE_FX skips FX requests and scene tracking.
-DISABLE_RENDERER skips experimental rendering text patches regardless of the INI
-request; actual mode stays Vanilla. DISABLE_PIA skips RTT and prevents the
-optional peer observer from installing. DISABLE_NATIVE skips the native banner
-hook. DISABLE_BACKOFF skips the dispatcher idle backoff (code 102 `a` = 4).
-All seven flags together, with
-DUMP_PRESENTATION_HISTORY absent, skip those hook families while retaining logging.
+For controlled bisection, create empty DISABLE_MENU, DISABLE_SCENE, DISABLE_FX,
+DISABLE_BUFFER, DISABLE_RENDERER, DISABLE_PIA, DISABLE_NATIVE or DISABLE_BACKOFF
+files in the data directory and restart. They skip the corresponding hook
+family. DISABLE_SCENE skips the scene tracker (main menu, Quickplay, arena,
+local wireless, stage setup): Auto then never becomes ready, banners stay
+hidden, the match capture never arms and the exported online context reports
+nothing (it was part of the FX family until 0.4.2). DISABLE_BUFFER disables
+input-buffer writes. DISABLE_FX skips FX requests only. DISABLE_RENDERER skips
+experimental rendering text patches regardless of the INI request; actual mode
+stays Vanilla. DISABLE_PIA skips RTT and prevents the optional peer observer
+from installing. DISABLE_NATIVE skips the native banner hook. DISABLE_BACKOFF
+skips the dispatcher idle backoff (code 102 `a` = 4). All eight flags together,
+with DUMP_PRESENTATION_HISTORY absent, skip those hook families while retaining
+logging.
 Remove the disable flags to re-enable their hook families.
 These differ from FX On, which keeps passthrough hooks installed.
 

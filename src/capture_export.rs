@@ -129,9 +129,6 @@ mod tests {
             callback: 10 + n,
             tick: 1_000 + n * 16,
             buttons: if n.is_multiple_of(2) { 0 } else { u64::MAX },
-            fx_mode: (n % 3) as u8,
-            fx_scope: (n % 2) as u8,
-            fx_effective_off: n.is_multiple_of(5),
             overlay_view: (n % 4) as u8,
         }
     }

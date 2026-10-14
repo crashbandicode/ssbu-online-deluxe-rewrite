@@ -1,8 +1,9 @@
 # Timing captures
 
 Every capture writes a pair of CSVs to `sd:/ultimate/ssbu_online_deluxe_rewrite/`:
-`timing-<tick>.csv` (one row per render callback: tick, buttons, FX state,
-overlay view) and `api-<tick>.csv` (CPU-side spans around the render API
+`timing-<tick>.csv` (schema 2 since 0.5.0: one row per render callback with
+tick, buttons and overlay view; schema 1 files also carried three FX columns)
+and `api-<tick>.csv` (CPU-side spans around the render API
 calls and the plugin's own markers). Both stream from the diagnostics thread
 while the capture runs; no game hook does file I/O. `timing-status.txt` reads
 `capturing …` and then `saved …`. Analyze with `tools/analyze_timing.py` and

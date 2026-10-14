@@ -1,6 +1,6 @@
 //! Opt-in, finite callback traces. These are not display/present timestamps.
 //! Only the existing diagnostic thread touches files or allocates an export.
-use super::{effects_off, record, settings, Code, DATA_DIR};
+use super::{record, Code, DATA_DIR};
 use crate::auto_policy::SceneStatus;
 use crate::capture_export::{
     controller_request_busy, create_export_file, export_ready_csvs, status_label,
@@ -78,14 +78,10 @@ pub(super) fn observe(buttons: u64) {
     if STATUS.load(Ordering::Acquire) != PHASE_CAPTURING {
         return;
     }
-    let config = settings();
     CAPTURE.observe(Sample {
         callback,
         tick: unsafe { skyline::nn::os::GetSystemTick() as u64 },
         buttons,
-        fx_mode: config.effects as u8,
-        fx_scope: config.effects_scope as u8,
-        fx_effective_off: effects_off(),
         overlay_view: VIEW.load(Ordering::Relaxed),
     });
 }

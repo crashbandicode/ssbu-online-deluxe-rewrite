@@ -130,10 +130,6 @@ pub(super) fn fx_scope_allows() -> bool {
     FX_SCOPE.load(Ordering::Relaxed) == FxScope::All as u8 || online::active()
 }
 
-pub(super) fn effects_off() -> bool {
-    fx_mode() == FxMode::Off && fx_scope_allows()
-}
-
 pub(super) fn record(code: Code, a: u64, b: u64) {
     let tick = unsafe { skyline::nn::os::GetSystemTick() as u64 };
     RECORDER.record(tick, code, a, b);
@@ -177,9 +173,10 @@ pub fn main() {
     }
     // Liveness log first: a hang during hook installation still leaves it.
     hang_trace::install();
-    // Scene entries are observed for FX scope only; no scene mutation, global
-    // Layout::Draw, fighter-frame or Training input-delay hook. Native titles
-    // are the CSS function hook, not Layout::Draw.
+    // Scene entries are observed only (Auto profile, banners, captures and
+    // the exported online context); no scene mutation, global Layout::Draw,
+    // fighter-frame or Training input-delay hook. Native titles are the CSS
+    // function hook, not Layout::Draw.
     if legacy_host_present() {
         record(Code::Compatibility, 1, 0);
         skyline::println!("[Deluxe] Existing SsbuSync host detected; rewrite hooks skipped");
@@ -191,6 +188,9 @@ pub fn main() {
         ("RENDERER", renderer::install as fn()),
         ("MENU", ui::install as fn()),
         ("NATIVE", native_banner::install as fn()),
+        // The scene tracker was installed from the FX family until 0.4.2; it
+        // is its own family now so DISABLE_FX no longer blinds Auto.
+        ("SCENE", online::install as fn()),
         ("FX", effects::install as fn()),
         ("BUFFER", hooks::install_latency as fn()),
         ("PIA", pia_rtt::install as fn()),

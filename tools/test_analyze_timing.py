@@ -51,6 +51,27 @@ class TimingAnalysis(unittest.TestCase):
         self.assertEqual(len(analyze(trace(mixed=True))["conditions"]), 2)
         self.assertTrue(analyze(trace(mixed=True))["warnings"])
 
+    def test_schema_two_has_no_fx_columns(self):
+        lines = ["# schema=2", "# metric=render_callback", "# engine=LessLag", "# tick_hz=19200000",
+                 "# duration_ticks=192000000", "# id=2", "# build=test", "# label=css",
+                 "# reason=elapsed", "# skipped=0", "# sample_count=601",
+                 "sample,callback,tick,buttons,overlay_view"]
+        for n in range(601):
+            lines.append(f"{n},{n},{100 + n * 320000},0,5")
+        text = "\n".join(lines + ["# complete=1", ""])
+        report = analyze(text)
+        self.assertEqual(report["schema"], 2)
+        self.assertEqual(report["samples"], 601)
+        self.assertEqual(report["conditions"], [{
+            "fx_mode": 0, "fx_scope": 0, "fx_effective_off": False, "overlay_view": 5,
+        }])
+        # A schema 2 header with schema 1 columns is rejected, and so is the reverse.
+        with self.assertRaises(ValueError):
+            analyze(text.replace("sample,callback,tick,buttons,overlay_view",
+                                 "sample,callback,tick,buttons,fx_mode,fx_scope,fx_effective_off,overlay_view"))
+        with self.assertRaises(ValueError):
+            analyze(trace().replace("# schema=1", "# schema=2"))
+
     def test_scene_ended_match_capture_is_complete_below_its_ceiling(self):
         # Footer metadata (streamed CSVs) and a scene_end reason are accepted.
         text = trace().replace("# reason=elapsed\n", "").replace("# sample_count=601\n", "")

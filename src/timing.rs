@@ -21,14 +21,15 @@ pub const MATCH_DURATION_SECONDS: u64 = MATCH_DURATION_TICKS / TICK_HZ;
 /// so it bounds nothing but a drain that stops.
 pub const CAPACITY: usize = 2048;
 
+/// One render-callback sample. Schema 2 (0.5.0) dropped the three FX
+/// columns of schema 1 (`fx_mode`, `fx_scope`, `fx_effective_off`): the
+/// character FX moved to the `ssbu-fx-control` plugin, whose state Deluxe
+/// does not see.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Sample {
     pub callback: u64,
     pub tick: u64,
     pub buttons: u64,
-    pub fx_mode: u8,
-    pub fx_scope: u8,
-    pub fx_effective_off: bool,
     pub overlay_view: u8,
 }
 
@@ -308,12 +309,9 @@ pub fn write_csv_header(
     single_line(&[build, label])?;
     writeln!(
         out,
-        "# schema=1\n# metric=render_callback\n# tick_hz={TICK_HZ}\n# duration_ticks={duration_ticks}\n# id={id}\n# build={build}\n# label={label}"
+        "# schema=2\n# metric=render_callback\n# tick_hz={TICK_HZ}\n# duration_ticks={duration_ticks}\n# id={id}\n# build={build}\n# label={label}"
     )?;
-    writeln!(
-        out,
-        "sample,callback,tick,buttons,fx_mode,fx_scope,fx_effective_off,overlay_view"
-    )
+    writeln!(out, "sample,callback,tick,buttons,overlay_view")
 }
 
 /// `next` is the running sample number across drains.
@@ -321,15 +319,8 @@ pub fn write_csv_rows(mut out: impl Write, next: &mut usize, samples: &[Sample])
     for sample in samples {
         writeln!(
             out,
-            "{},{},{},{},{},{},{},{}",
-            *next,
-            sample.callback,
-            sample.tick,
-            sample.buttons,
-            sample.fx_mode,
-            sample.fx_scope,
-            u8::from(sample.fx_effective_off),
-            sample.overlay_view
+            "{},{},{},{},{}",
+            *next, sample.callback, sample.tick, sample.buttons, sample.overlay_view
         )?;
         *next += 1;
     }
@@ -504,8 +495,9 @@ mod tests {
         )
         .unwrap();
         let csv = String::from_utf8(bytes.clone()).unwrap();
-        assert!(csv.starts_with("# schema=1\n# metric=render_callback\n# tick_hz=19200000\n# duration_ticks=576000000\n# id=4\n"));
-        assert!(csv.contains("0,2,100,0,0,0,0,0\n1,3,576000100,0,0,0,0,0\n"));
+        assert!(csv.starts_with("# schema=2\n# metric=render_callback\n# tick_hz=19200000\n# duration_ticks=576000000\n# id=4\n"));
+        assert!(csv.contains("sample,callback,tick,buttons,overlay_view\n"));
+        assert!(csv.contains("0,2,100,0,0\n1,3,576000100,0,0\n"));
         assert!(csv.contains("# engine=Vanilla\n# reason=elapsed\n# skipped=0\n# sample_count=2\n"));
         assert!(csv.ends_with("# complete=1\n"));
         assert!(write_csv(
