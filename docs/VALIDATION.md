@@ -2224,7 +2224,14 @@ connection stayed `offline` through two online matches although the latency
 hook fired (code 30), so Auto would have classified them offline Singles.
 
 Release 0.4.0: present-at-flush (8687eee), `Vanilla*` banner (4f8bcfb),
-match capture (aa7ae78, 210f83f), engine label fix. Package: PACKAGE_PLACEHOLDER.
+match capture (aa7ae78, 210f83f), engine label fix. Tag `v0.4.0` on 1224ea0,
+build `0.4.0-1224ea0f3521-1791998073`, NRO
+`04c3008d0182a48eb81ede39ec9f3eec7f380adcc187198b66aacf6a494c6afb`
+(1,531,904 B), module id `1bf822fd…dd82`, package `artifacts/04c3008d0182a48e/`;
+Forgejo release 370 with the NRO and manifest, download readback verified.
+Card: `switch-mtp-040/deploy-040-mtp-1014.py`, 4e4f2044 → 04c3008d, rollback
+`backups/pre-0.4.0-04c3008d0182a48e.nro`, `CAPTURE_CSS` + `CAPTURE_MATCH`
+kept, config manual LessLag / 3 frames.
 
 ### DBI USB MTP installation of f22d (0.3.0) — 2026-10-12 19:58Z
 
