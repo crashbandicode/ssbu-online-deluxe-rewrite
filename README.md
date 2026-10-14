@@ -1,5 +1,10 @@
 # Online Deluxe rewrite
 
+> **Disclaimer:** this project was developed with the assistance of AI
+> (Claude, Codex and other coding agents) under the operator's direction and
+> review. Every build recorded here was tested as described in
+> [validation](docs/VALIDATION.md); nothing is claimed beyond those records.
+
 A Rust/Skyline reconstruction of Online Deluxe for **Super Smash Bros. Ultimate 13.0.5**,
 delivered as **one NRO**: rendering profiles that cut input latency, a global
 Player Info window, the native character-select status line, network display
