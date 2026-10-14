@@ -17,7 +17,8 @@ manifest. Install notes: [docs/INSTALL.md](docs/INSTALL.md).
 
 | | |
 | --- | --- |
-| ![Settings window](docs/media/settings-window.png) <br> The Settings view. | ![Training character select](docs/media/training-css.png) <br> The native status line on the character select. |
+| ![Settings window](docs/media/settings-window.png) <br> The Settings view in menus. | ![Training character select](docs/media/training-css.png) <br> The native status line on the character select. |
+| ![Match with the compact strip](docs/media/match-settings-strip.png) <br> In a match the window becomes a compact two-row strip at the top left. | ![Character select after a match](docs/media/smash-css-after-match.png) <br> After a match the manual profile is held at Vanilla and the line reads `Vanilla*`. |
 
 More in [Screenshots](docs/SCREENSHOTS.md).
 

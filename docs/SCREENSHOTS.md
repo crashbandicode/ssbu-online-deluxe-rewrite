@@ -34,3 +34,26 @@ NetProfile and NetLatency.
 ![Training with the Player Info window](media/training-strip.gif)
 
 A few seconds of Training with the Player Info window on the right.
+
+## In a match
+
+In a running Singles or Doubles match the window becomes the compact two-row
+strip at the top left: one row of `Label:Value` fields, one row with FPS,
+frame time and the frame-time bar.
+
+![Compact strip close-up](media/match-strip-closeup.png)
+
+| | |
+| --- | --- |
+| ![Match with the Settings strip](media/match-settings-strip.png) <br> Dark Samus vs a level 9 CPU on Final Destination with the Settings strip open: `>Net:Auto Profile:lesslag FX:On Stealth:Off Stream:Off FPS++:Off` and the frame-time line. | ![Match with the Performance strip](media/match-performance.png) <br> The Performance view in the same match. |
+| ![Debug table over the pause menu](media/match-debug.png) <br> The Debug view in a match; the Plus in the chord also opens the game's pause menu. | ![Results after quitting](media/results-quit.png) <br> The results screen after quitting through the pause menu. |
+
+![Match with the compact strip](media/match-strip.gif)
+
+Six seconds of the match with the strip open.
+
+![Character select after the match](media/smash-css-after-match.png)
+
+The regular character select right after the match: the status line reads
+`You: Vanilla* | Auto`. The manual LessLag selection is held at Vanilla until
+the next match or a new selection, and the banner says so.

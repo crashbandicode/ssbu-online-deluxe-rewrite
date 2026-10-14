@@ -2344,6 +2344,14 @@ the Settings window at the main menu afterwards read `Vanilla*`. No
 Singles/Doubles stage ran, so the stale-Quickplay demotion was not
 exercised. Screenshots and GIFs from this run are in `docs/media/`.
 
+A second media run (`docs-media-1014/NOTES.md` "Run 3") played an offline
+Smash 1v1 against a level 9 CPU with 0.4.2: the compact two-row strip,
+Performance and Debug views in the match, the results screen after quitting,
+and the regular character select afterwards reading `You: Vanilla* | Auto`,
+the first capture of the `Vanilla*` banner label (4f8bcfb) on a character
+select after a match. The driver noted that the Plus in the Debug chord also
+opens the game's pause menu in a match, which is the game's own binding.
+
 Repository history: at the operator's request the `HANDOFF.md` file was
 purged from every commit, tag and branch (`git filter-branch --index-filter
 … --prune-empty --tag-name-filter cat -- --all`; bundle backup of the
