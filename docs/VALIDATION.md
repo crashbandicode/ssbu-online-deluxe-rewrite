@@ -2098,9 +2098,13 @@ Early present lands 0.17 ms after the submit, the skipped game present
 | B1 render-poll | 58.53 | 18.0 | 32.1 | 2.8 % |
 | B2 render-poll | 57.67 | 19.5 | 32.7 | 4.6 % |
 | **P1 present-at-flush** | **59.54** | **18.0** | **22.0** | **1.5 %** |
+| **P2 present-at-flush** | **59.87** | **16.9** | **19.2** | **0.7 %** |
 
-The 33 ms mode is gone on Eden: the first candidate whose p99 is not the
-doubled vsync. P2 (repeat) pending.
+The 33 ms mode is gone on Eden in both arms: the first candidate whose p99
+is not the doubled vsync. P2 (15:10Z, full Training path, Mario selected)
+counted 13,634 early presents, 13,633 skipped game presents and 0
+mismatches over the whole boot; sweep window 59.8 fps, 0.6 % > 20 ms,
+p99 18.9 ms. Sweep coverage confirmed from the button column in both arms.
 
 Switch install, 2026-10-14 15:06Z: DBI USB MTP, `switch-mtp-flush/
 deploy-flush-mtp-1014.py` (`preflight.json` 15:05:43Z, `deployment.json`
