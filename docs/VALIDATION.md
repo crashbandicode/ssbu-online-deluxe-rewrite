@@ -2435,8 +2435,15 @@ that relocates the model update into the post-scene hook, while fighter NROs
 were unloading. Evidence: evidence root `fx-gifs-1014/run-2/GUEST-PANIC.md`
 and `guest-panic.txt`. Intermittent (the same transition succeeded many
 times earlier that day); not reproduced on purpose; no fix made or tested.
-The same render path is on the console in 0.5.0 (unchanged since 0.3.x).
-Run 3 uses a 14 GB cap to separate host memory pressure from the race.
+The same render path is on the console in 0.5.0 (unchanged since
+2026-10-06). Run 3 (14 GB cap, memory peak 8.19 GB) died 23:46Z with the
+identical backtrace at the same transition after 75 clips, so host memory
+pressure is not the trigger: three Eden deaths in about twelve Training →
+character-select transitions this evening, all with FX Control 0.1.0, the
+Training Modpack and the gamepad overlay staged next to Deluxe. Which of the
+loaded plugins, or the GIF-build Eden, makes the race observable is not yet
+established; a controlled Training → character-select cycling test with and
+without FX Control is the next step before any mitigation.
 
 ### DBI USB MTP installation of f22d (0.3.0) — 2026-10-12 19:58Z
 
