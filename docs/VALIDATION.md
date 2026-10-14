@@ -1782,6 +1782,29 @@ NRO SHA-256 `c247bd377a4220233c4bf56470d23a6ea267b752b99cfd02eb3b26b480557222`
 (1531904 B, module `34009bd1…251b`), ELF `ef694416…cb3b`; `imgui-provenance.json`
 records the fork commit and the `8a06be16` archive.
 
+Switch install of 0.3.8 plus the trimmed standalone, 2026-10-14 10:36Z
+(operator: "ship it when it's done and when the imgui agent is done. switch
+is connected via usb"): DBI USB MTP, two-target transaction
+`switch-mtp-038/deploy-038-mtp-1014.py` (preflight backed up every plugin and
+the protected files; `deployment.json` `installed_verified`). Deluxe read back
+as 8562746a…07ea (0.3.7) before, saved to
+`backups/pre-imgui-trim-c247bd377a422023.nro`, replaced by copy from a staged
+read-back, read back as c247bd37…7222; `libimgui_smash.nro` read back as
+9a9e575c…05ed before, saved to
+`backups/pre-imgui-trim-standalone-9a9e575c910c6471.nro`, replaced, read back
+as a3f794b2…775d (888832 B). Plugin names and every other plugin unchanged.
+Runtime result on hardware pending. Before the install the card's logs
+(`switch-mtp-038/before-logs/`) showed the 0.3.7 boot: 1135 s, 153 heartbeats
+(the 256 KiB diagnostics stack held), kernel probe `mem_used` 1,764,012,032 at
+the title → 2,536,943,616 in Training of `mem_total` 3,444,572,160
+(`mem_free` 907,628,544), and four complete CSS captures (ids 2570630842
+Vanilla, 4928335010 LessLag with 1775 skipped rows, 10646616362 Mixed,
+18255281875 Vanilla), handed to the Astra xhigh analysis
+`css-hw-037-analysis-1014` (`css-budget/hw-0.3.7-1014/`). The operator still
+sees frame-rate dips on the character select.
+Forgejo release `v0.3.8` (id 364, tag on 45e79af): NRO asset 82 (download
+read back as c247bd37…7222), `manifest.json` asset 83.
+
 Caveat for the CSS capture: the SD writes now happen during the measured
 interval, from the diagnostics thread. Compare the next hardware CSS capture
 against `switch-0.3.1-1013` before trusting a movement-penalty number from it.
