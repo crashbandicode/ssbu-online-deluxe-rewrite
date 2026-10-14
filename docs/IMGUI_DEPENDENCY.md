@@ -17,14 +17,16 @@ memory trims below. The compiled archive stays in the ignored
 
 | Item | Value |
 |---|---|
-| Static archive | `libimgui_smash.a`, 13,851,556 bytes |
-| SHA-256 | `8a06be16dbfd50d10bac81ee5bdd2ffa9cd3472773151cc45f1c2101541f8f7c` |
-| Source | `https://git.syntaxbyexample.com/intpa/imgui-smash`, branch `deluxe`, commit `7f0e47c4a1699a714254798bf79041b1f2e49196` |
+| Static archive | `libimgui_smash.a`, 13,851,844 bytes |
+| SHA-256 | `09b296a0f5c67641d229bb4a6d8b170f75281368da3957d666af424476bc2731` |
+| Source | `https://git.syntaxbyexample.com/intpa/imgui-smash`, branch `deluxe`, commit `c18530357a07f6fb6690c93c24eb7e2329478a3f` |
 | Upstream | `Coolsonickirby/imgui-smash` at `bb47b205ed0be2fb864269ee2d37fc886b81221e` (fork `main`) |
 | ImGui submodule | `2b415e642b002f4312ac02f6bfa955960f8bd3b6` (unchanged) |
 | Historical patch | `patches/imgui-smash/renderer-bb47.patch` (`4e138e35…`), now fork commit `ae77450`; no longer applied by the tool |
 
-Previous pin (0.3.0–0.3.7): archive `6c9591cc9f140ca6ce2efee2cdcaa0d8278b43319ea497b3f2434ce19d09ccca`,
+Previous pins: 0.3.8 archive `8a06be16dbfd50d10bac81ee5bdd2ffa9cd3472773151cc45f1c2101541f8f7c`,
+13,851,556 bytes (fork `7f0e47c`); 0.3.0–0.3.7 archive
+`6c9591cc9f140ca6ce2efee2cdcaa0d8278b43319ea497b3f2434ce19d09ccca`,
 17,181,302 bytes, built from upstream `bb47b205` plus the local patch.
 
 The renderer correction prevents overlapping ImGui frames and gives each
@@ -32,7 +34,16 @@ in-flight overlay submission its own command, control, geometry and uniform
 storage. Eight slots are reused only after a nonblocking fence check reports
 completion. If all slots are busy, that overlay draw is skipped. Exhausted
 command memory uses a bounded reserve to finish and discard the unsubmitted
-draw safely.
+draw safely. Since 0.3.9 each slot's command pool is one 64 KiB memory-pool
+page (32 KiB initial + 32 KiB reserve; was 256 KiB + 256 KiB) and its control
+block is 16 KiB (8 KiB + 8 KiB; was 64 KiB + 64 KiB): the largest recording
+seen across the Eden evidence with Deluxe and Elite open together is 1,256 B
+of command memory and 120 B of control memory, so the initial budgets keep
+more than 25x that before the reserve is touched. Over eight slots the pool
+and heap cost falls from 5 MiB to 640 KiB; geometry buffers stay demand-grown
+(64 KiB initial, 1 MiB cap) and the 4 KiB uniform buffer is unchanged.
+`renderer-status.txt` (`imgui_draw_max_command`, `imgui_draw_max_control`,
+`imgui_draw_overflow`) shows the live maxima on the embedded host.
 
 ### Fork branch `deluxe` (2026-10-14)
 
@@ -44,18 +55,22 @@ draw safely.
 | `ef98524` | `IMGUI_DISABLE_DEBUG_TOOLS`; `igDebugLog`, `igDebugLogV`, `igShowFontSelector`, `igDebugTextEncoding`, `igDebugFlashStyleColor` kept as no-ops so the `ig*` set is unchanged |
 | `5ec9928` | ProggyClean/ProggyForever default fonts dropped (the displayed font, JetBrains Mono NL 18 px, is unchanged) |
 | `384b095`, `7f0e47c` | Companion crate pinned to archive `8a06be16`; archive linked `kind = "static"` with `ImGui::GetCurrentContext` so `cimgui.o` stays out of the standalone |
+| `c185303` | Draw-slot budgets 32 KiB + 32 KiB command (one 64 KiB pool page) and 8 KiB + 8 KiB control per slot, defined in `command_memory_reserve.hpp` with a host test on the NX constants; CMake accepts `IMGUI_SMASH_RESERVE_{COMMAND,CONTROL}_BUDGET` overrides |
+| `77cdab7` | Companion crate pinned to archive `09b296a0` |
 
 None of the disable macros changes a struct in `imgui.h` or `imgui_internal.h`,
 so contexts stay compatible across old and new builds and the external-host
 checks below still hold (`1.92.7 WIP (19263)` tag, `imgui_setup_context_export`
 and `imgui_smash_add_on_draw_frame_wrapper` in text at the same addresses,
 `text_offset == 0`, identical export set). Standalone companion built from
-`7f0e47c`: `libimgui_smash.nro` 888,832 bytes (was 1,282,048), SHA-256
-`a3f794b2d2af15d5f2c2868f22e81c865702524160640864604731b7afe6775d`, mapped
-image 921,600 bytes (was 1,323,008). Deferred trims with their measured
-costs (draw-slot budgets ≈ 3.75 MiB of pool memory, `ClearTexData()` 256 KiB,
-R8 atlas 384 KiB, gc-sections for the Skyline link) are listed in the tangent
-evidence `imgui-fork-1014/REPORT.md`.
+`77cdab7` (0.3.9): `libimgui_smash.nro` 888,832 bytes, SHA-256
+`946de84f98546cb791640e40fbf5848ea3965c511631ef18b32e5c805b67d50e`; the
+0.3.8 companion from `7f0e47c` was the same size with SHA-256
+`a3f794b2d2af15d5f2c2868f22e81c865702524160640864604731b7afe6775d` (before
+the fork: 1,282,048 bytes). Remaining deferred trims with their measured
+costs (`ClearTexData()` 256 KiB, R8 atlas 384 KiB, gc-sections for the
+Skyline link, fewer slots) are listed in the tangent evidence
+`imgui-fork-1014/REPORT.md`.
 
 ## Preparing the archive
 

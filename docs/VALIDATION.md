@@ -1805,6 +1805,57 @@ sees frame-rate dips on the character select.
 Forgejo release `v0.3.8` (id 364, tag on 45e79af): NRO asset 82 (download
 read back as c247bd37…7222), `manifest.json` asset 83.
 
+Hardware CSS analysis of the 0.3.7 boot, 2026-10-14 (Astra xhigh
+`css-hw-037-analysis-1014`, read-only; report
+`css-budget/hw-0.3.7-1014/ANALYSIS.md`, reproduction scripts and per-callback
+CSVs beside it, inputs hashed in `inputs-sha256.json`). Findings:
+
+- The footer engine label compares arm with export only; every capture but D
+  contains renderer round trips (A: Vanilla → LessLag 5.7 s → LLUltra 15.8 s →
+  LessLag 23.3 s → Vanilla 24.8 s; B: LessLag → Vanilla 9.5 s → LessLag
+  22.5 s; C: Vanilla → LessLag 29.3 s), and B, C and D leave the CSS during
+  the 30 s. Whole-file averages are therefore not a Vanilla-versus-LessLag
+  benchmark; the stable interiors are.
+- In genuine two-image LessLag on the CSS the dips are **texture-ready fence
+  stalls after acquire**, not long acquire or present calls and not backoff
+  pickup. Capture A's continuous CSS visit: Vanilla zero-input 60.00 fps with
+  1.93 ms texture wait; LessLag zero-input 52.55 fps / 3.49 ms; LessLag with
+  directional input 41.35 fps / 7.67 ms; Vanilla again 60.00 fps / 1.79 ms.
+  The directional increment of 5.15 ms per callback is 4.18 ms texture wait
+  and 0.81 ms main UI barrier (81 % of the increment is the fence). B's late
+  genuine LessLag CSS sits at a 30.00 fps plateau with 16.8 ms texture wait
+  per 33.3 ms callback, with or without input. A's 30 fps plateau at
+  15.8–23.3 s is LLUltra, not LessLag evidence.
+- Backoff: no nested dispatcher wait (kind 66) overlaps any UI job; dispatch
+  → job 22–23 µs mean, job return → barrier return 32–34 µs mean, largest
+  single sleep 189 µs. Leave backoff and clocks unchanged.
+- Separate mechanisms, not the CSS plateau: 290–300 ms UI-job stalls paired
+  with CSS departure (B/88, C/668, D/244, D/1398), 1.3 s uninstrumented
+  hitches outside the CSS (B/313, D/466), and 12–56 ms "other infinite sync"
+  waits in Vanilla outside the CSS. D's second CSS visit dips with short
+  texture waits but longer UI wall and flush, so Vanilla is not hitch-free and
+  is not a menu fallback.
+- Streaming loss: both API holes start exactly on a 2048-row chunk boundary
+  (A 25.58–25.88 s, B 6.33–7.71 s), so the loss is drain/overflow on the
+  diagnostics loop, not callback loss (timing has zero skips in all four).
+- Memory: process `mem_used` 2177–2462 MiB of 3285 MiB during the captures,
+  free 823–1108 MiB; liveness, not a bandwidth or fragmentation measurement.
+
+Ranked next steps, all in existing visual-request hooks and keeping genuine
+two-image LessLag: (1) measurement integrity first (latch engine/scene
+changes per capture, separate lock-contention from overflow skips, report
+drain time and chunk high-water marks, collapse redundant per-frame field
+rows); (2) `PROBE_RENDER_POLL` discriminator at the render-wait hook
+main+0x387029c (restore the original zero-timeout poll while keeping two
+images) as a matched baseline→probe→baseline experiment; (3) hide the
+Settings overlay as a control (every capture had it visible); (4)
+`DISABLE_LESSLAG_FIELDS` discriminator at main+0x384fa10, separately; (5)
+frame/sync identities on the NVN wrappers to find the producer of the
+pending fence. None is a shipping fix yet; no LLDoubles, Vanilla-on-menus,
+clock or memory changes are recommended for the dips. Follow-up capture
+acceptance: one CSS visit, 10 s still then 20 s repeatable directional
+sweep, zero API overflow, engine and scene constant.
+
 Caveat for the CSS capture: the SD writes now happen during the measured
 interval, from the diagnostics thread. Compare the next hardware CSS capture
 against `switch-0.3.1-1013` before trusting a movement-penalty number from it.

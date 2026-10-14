@@ -17,10 +17,10 @@ TOOL = CANDIDATE / "tools" / "prepare_imgui.py"
 PATCH = CANDIDATE / "patches" / "imgui-smash" / "renderer-bb47.patch"
 # The historical patch stays in the tree for provenance; the pin no longer applies it.
 EXPECTED_PATCH = "4e138e351334732670ca250c859e44b53e1fa54eb59e447f2385281063b2871d"
-EXPECTED_ARCHIVE = "8a06be16dbfd50d10bac81ee5bdd2ffa9cd3472773151cc45f1c2101541f8f7c"
-EXPECTED_SIZE = 13851556
+EXPECTED_ARCHIVE = "09b296a0f5c67641d229bb4a6d8b170f75281368da3957d666af424476bc2731"
+EXPECTED_SIZE = 13851844
 EXPECTED_REPO = "https://git.syntaxbyexample.com/intpa/imgui-smash"
-EXPECTED_COMMIT = "7f0e47c4a1699a714254798bf79041b1f2e49196"
+EXPECTED_COMMIT = "c18530357a07f6fb6690c93c24eb7e2329478a3f"
 
 
 def sha256_of(path: Path) -> str:

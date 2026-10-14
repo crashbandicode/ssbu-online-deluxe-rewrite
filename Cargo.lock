@@ -78,7 +78,7 @@ dependencies = [
 
 [[package]]
 name = "ssbu-online-deluxe-rewrite"
-version = "0.3.8"
+version = "0.3.9"
 dependencies = [
  "deluxe-plugin-abi",
  "deluxe-plugin-sdk",

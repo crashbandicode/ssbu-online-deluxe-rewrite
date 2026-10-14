@@ -1,8 +1,8 @@
 {
   "status": "ready",
-  "sha256": "8a06be16dbfd50d10bac81ee5bdd2ffa9cd3472773151cc45f1c2101541f8f7c",
-  "size": 13851556,
-  "note": "Built from the Forgejo fork's deluxe branch: renderer correction plus memory trims (demo windows and debug tools disabled, unused default fonts dropped). Two clean builds produced this archive byte for byte. Member mtime, uid, and gid are zero. The previous pin (upstream bb47b205 + renderer-bb47.patch) was 6c9591cc9f140ca6ce2efee2cdcaa0d8278b43319ea497b3f2434ce19d09ccca, 17181302 bytes.",
+  "sha256": "09b296a0f5c67641d229bb4a6d8b170f75281368da3957d666af424476bc2731",
+  "size": 13851844,
+  "note": "Built from the Forgejo fork's deluxe branch: renderer correction plus memory trims (demo windows and debug tools disabled, unused default fonts dropped, draw-slot command/control budgets 512 KiB + 128 KiB -> 64 KiB + 16 KiB per slot). Two clean builds produced this archive byte for byte. Member mtime, uid, and gid are zero. Previous pins: 8a06be16dbfd50d10bac81ee5bdd2ffa9cd3472773151cc45f1c2101541f8f7c, 13851556 bytes (fork 7f0e47c, 0.3.8); 6c9591cc9f140ca6ce2efee2cdcaa0d8278b43319ea497b3f2434ce19d09ccca, 17181302 bytes (upstream bb47b205 + renderer-bb47.patch, 0.3.0-0.3.7).",
   "deterministic_archive": {
     "cmake": "3.31.6",
     "observed_link_rule": "aarch64-none-elf-gcc-ar qcD <archive> <objects>; aarch64-none-elf-gcc-ranlib -D <archive>",
@@ -14,7 +14,7 @@
   "source": {
     "repo": "https://git.syntaxbyexample.com/intpa/imgui-smash",
     "branch": "deluxe",
-    "commit": "7f0e47c4a1699a714254798bf79041b1f2e49196",
+    "commit": "c18530357a07f6fb6690c93c24eb7e2329478a3f",
     "upstream_repo": "https://github.com/Coolsonickirby/imgui-smash",
     "upstream_commit": "bb47b205ed0be2fb864269ee2d37fc886b81221e",
     "submodule_repo": "https://github.com/ocornut/imgui",
