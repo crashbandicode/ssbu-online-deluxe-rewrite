@@ -2051,6 +2051,69 @@ labelled the saved profile regardless of the live request. Fixed in
 (only the cleanup hold produces that) is shown as `Vanilla*` in the banner,
 the arena lines and the settings row; tests updated. Not yet on the card.
 
+### Present-at-flush candidate — 2026-10-14 (commit 8687eee, no version, no toggle)
+
+Operator, after the render-poll verdict: "letting the UI job overlap with the
+previous frame's GPU work instead of serialising behind it — let's try that".
+The console capture `switch-mtp-poll/boot-logs-1437/` (genuine LessLag)
+gives the main thread's frame order relative to the game's submit: UI
+dispatch 0.2 ms → UI job 0.2–10.7 ms (13.2 ms with the hand moving) with the
+main barrier on it → other dependency waits to 13.7 ms → **present of the
+frame submitted at 0 ms at 13.7 ms** (16.3 ms moving) → acquire 14.2 →
+texture-ready wait to the vsync at 16.4 ms (fast) or **33.1 ms (slow)** →
+late flush and flush with the next submit inside its span (1593 of 1595
+frames). So the UI job already overlaps the GPU; the stall is the present
+being issued only after the next frame's whole CPU update, so that a
+hand-moving frame presents after the vsync and the two-image acquire waits
+for the following one. Present index always equals the preceding acquire
+(1592 of 1592).
+
+Change: in committed idle two-image LessLag the flush hook
+(`renderer.rs`) presents the acquired image at the end of the flush
+(`nvn::present_at_flush`); the game's own present of that index, 13.7 ms
+later, is skipped while its loop bookkeeping still runs, and the
+per-present crop moves with the real present. `render_policy::
+present_at_flush` gates it (not during a swap, drain, forced wait or after
+a refusal; Vanilla, Ultra and Doubles keep the game's order). Counters
+`early_presents`, `early_present_skips`, `early_present_mismatches` in
+`renderer-status.txt`; code 105 records a mismatch. Trace: early present
+= kind 1 result 2, skipped game present = kind 1 result 1. Build
+`0.3.9-8687eee688c9-1791989848`, NRO
+`aa214ec238e680b3a714837b7142351c1e567a1406762171696e96e98933a586`
+(package `artifacts/aa214ec238e680b3/`). 305 host tests, Clippy host and
+Skyline, no-default, fmt, Skyline release.
+
+Eden P1, 2026-10-14 15:03Z (tangent `css-budget/present-at-flush-1014/`,
+same protocol and 120 % quota as the render-poll arms, Training CSS with
+Mario selected, Astra low driver): 1,786 early presents, 1,786 skipped
+game presents, 0 mismatches; screenshots clean (one banner-entrance frame
+with white sparkle quads, gone in the next frames; to be rechecked).
+Early present lands 0.17 ms after the submit, the skipped game present
+11.4 ms after it.
+
+| Arm (120 %, whole 30 s) | Cadence fps | p95 ms | p99 ms | > 20 ms |
+|---|---:|---:|---:|---:|
+| A1 0.3.9 | 55.83 | 31.2 | 33.2 | 8.7 % |
+| A2 0.3.9 | 58.13 | 18.3 | 32.6 | 3.5 % |
+| B1 render-poll | 58.53 | 18.0 | 32.1 | 2.8 % |
+| B2 render-poll | 57.67 | 19.5 | 32.7 | 4.6 % |
+| **P1 present-at-flush** | **59.54** | **18.0** | **22.0** | **1.5 %** |
+
+The 33 ms mode is gone on Eden: the first candidate whose p99 is not the
+doubled vsync. P2 (repeat) pending.
+
+Switch install, 2026-10-14 15:06Z: DBI USB MTP, `switch-mtp-flush/
+deploy-flush-mtp-1014.py` (`preflight.json` 15:05:43Z, `deployment.json`
+`installed_verified` 15:06:01Z); Deluxe 8c20799f…6cca (0.3.9) → aa214ec2…
+a586, rollback `backups/pre-present-flush-aa214ec238e680b3.nro`; other
+plugins, config.ini and hekate_ipl.ini unchanged. Hardware test: LessLag
+CSS (Training CSS, or re-select LessLag on the regular CSS) with hand
+movement; `CAPTURE_CSS` records each visit; compare the kind-3 wait and the
+> 20 ms share with `switch-mtp-poll/boot-logs-1437/` (candidate b044752,
+same hardware day) and `switch-mtp-038/before-logs/` (0.3.7). Watch for
+flicker, tearing or a stale frame on the CSS and in a match. If it does
+not help or shows artifacts: revert 8687eee and reinstall the rollback.
+
 ### DBI USB MTP installation of f22d (0.3.0) — 2026-10-12 19:58Z
 
 `switch-mtp-f22d/deploy-f22d-mtp-1012.py` preflight 19:55:47Z (installed
