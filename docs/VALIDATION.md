@@ -1777,6 +1777,10 @@ The isolated profile's plugin set was restored exactly afterwards
 
 Gates: 303 host tests, host and Skyline Clippy with warnings denied,
 no-default build, fmt, `tools/test_prepare_imgui.py`, Skyline release.
+Package `artifacts/c247bd377a422023/`: build `0.3.8-5c97c9c935fe-1791974104`,
+NRO SHA-256 `c247bd377a4220233c4bf56470d23a6ea267b752b99cfd02eb3b26b480557222`
+(1531904 B, module `34009bd1…251b`), ELF `ef694416…cb3b`; `imgui-provenance.json`
+records the fork commit and the `8a06be16` archive.
 
 Caveat for the CSS capture: the SD writes now happen during the measured
 interval, from the diagnostics thread. Compare the next hardware CSS capture
