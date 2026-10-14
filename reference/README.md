@@ -13,8 +13,7 @@ Only source/manifests/readme/license files were copied. The archive's nsuite
 subproject and build-specific config are not vendored; this is not a build tree.
 Per-file SHA-256 values are in provenance.json.
 
-FX selection uses named effects and observations from the user-supplied
-2026-05-14 peer sources; the peer plugins and their compiled binaries are not bundled.
-C ABI declarations in src/runtime/effects.rs match skyline-smash bed642e
-src/cpp.rs. No Nintendo game assets, decompiled game code, or closed host NROs
+The FX target lists (fx-policy.json and fx-expanded-policy.json) left with
+character FX in 0.5.0. They live in the separate ssbu-fx-control repository.
+No Nintendo game assets, decompiled game code, or closed host NROs
 are included. Do not add a new license to original third-party code by inference.
