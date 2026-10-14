@@ -57,8 +57,27 @@ character select, is in [Controls](docs/CONTROLS.md).
 Auto uses Vanilla in menus, offline matches and Training; online singles get
 LessLag on console or LLUltra on emulator; online matches with more than two
 fighters get LLDoubles. How Auto recognises an online match, the cleanup hold
-(`Vanilla*`), DRS and the measured results are in
-[Rendering profiles](docs/RENDERING.md).
+(`Vanilla*`) and DRS are in [Rendering profiles](docs/RENDERING.md).
+
+### Measured input delay
+
+Captured-response trials in Eden on build `b19b7d94ae136e55`: frames from a
+synthetic input to the first visible response, three trials per cell.
+
+| Profile | Normal injection phase | Later injection phase | Frames saved vs Vanilla |
+| --- | --- | --- | --- |
+| Vanilla | 6, 6, 6 | 6, 6, 6 | — |
+| LessLag | 3, 3, 3 | 3, 3, 3 | **3** |
+| LLUltra | 2, 2, 2 | 3, 2, 3 | **3–4** |
+| LLDoubles | 4, 4, 4 | 4, 4, 4 | **2** |
+
+LLDoubles was measured as a manual profile in two-fighter Training. These are
+emulator screenshots with synthetic input, not Switch input-to-photon
+measurements, and they predate 0.4.0's present-at-flush change to LessLag,
+which removed the console's character-select stall (49.9 → 59.85 fps on the
+hand sweep) without changing the frame count claim. Method:
+[LATENCY_METHODOLOGY.md](docs/LATENCY_METHODOLOGY.md); full results:
+[PERFORMANCE.md](docs/PERFORMANCE.md).
 
 ## Configuration
 
