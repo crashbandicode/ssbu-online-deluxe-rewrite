@@ -224,6 +224,16 @@ unsafe fn deluxe_rewrite_flush_dispatches(object: *mut u8, flag: u32) {
     }
     super::render_ultra::ORIGINAL_FLUSHES.fetch_add(u64::from(calls), Ordering::Relaxed);
     super::api_trace::end(begin, 5, -1, -1);
+    // This flush carries the frame's last submission (the hardware captures put
+    // the game's submit inside this span in 1593 of 1595 frames, with the late
+    // flush 4 µs before it). Two-image LessLag presents the acquired image here
+    // instead of after the next frame's update; see render_policy::present_at_flush.
+    if fields
+        && calls == 1
+        && crate::render_policy::present_at_flush(crate::render_policy::load_decision())
+    {
+        super::nvn::present_at_flush();
+    }
 }
 
 /// Raw widths at the LessLag flush slots. Caller has a non-null object.

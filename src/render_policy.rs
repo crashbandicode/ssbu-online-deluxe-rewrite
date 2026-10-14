@@ -367,6 +367,24 @@ pub fn skip_wait(decision: Decision, armed: RenderMode) -> bool {
     }
 }
 
+/// Present the acquired image at the end of the flush that submitted it,
+/// instead of where the game presents it: after the next frame's whole CPU
+/// update. On the console character select that update is 13.7 ms (16.3 ms
+/// with the hand moving), so a two-image ring misses the vsync and the next
+/// acquire waits for the one after it (the exact 33 ms frames in the 0.3.7
+/// and 2026-10-14 captures). Two-image LessLag only, committed and idle:
+/// never during a swap, a drain, a forced wait or after a refusal. Vanilla's
+/// third image absorbs a late present; Ultra and Doubles keep the game order.
+pub fn present_at_flush(decision: Decision) -> bool {
+    decision.live
+        && decision.effective == Profile::LessLag
+        && decision.committed == Profile::LessLag
+        && !decision.swapping
+        && !decision.force_wait
+        && !decision.failed
+        && !decision.drain
+}
+
 /// Startup `PROBE_RENDER_POLL` gate. `probe` selects the original wait.
 /// `skip` is left as `skip_wait` computed it. Not a profile change.
 pub fn render_poll_calls_original(skip: bool, probe: bool) -> bool {
@@ -1575,6 +1593,34 @@ mod tests {
         let (toward_less, _) = step(vanilla, present(RenderMode::LessLag, 0, 0, 3));
         assert!(!toward_less.decision().render_opts);
         assert_eq!(toward_less.buffer_phase, BufferPhase::AwaitSetter);
+    }
+
+    #[test]
+    fn only_committed_idle_lesslag_presents_at_the_flush() {
+        assert!(present_at_flush(
+            Machine::confirmed(Profile::LessLag).decision()
+        ));
+        assert!(!present_at_flush(
+            Machine::confirmed(Profile::Vanilla).decision()
+        ));
+        assert!(!present_at_flush(
+            Machine::confirmed(Profile::Ultra).decision()
+        ));
+        assert!(!present_at_flush(
+            Machine::confirmed(Profile::Doubles).decision()
+        ));
+        // A swap toward LessLag is not LessLag yet.
+        let (toward_less, _) = step(
+            Machine::confirmed(Profile::Vanilla),
+            present(RenderMode::LessLag, 0, 0, 3),
+        );
+        assert!(!present_at_flush(toward_less.decision()));
+        // Before the window count is confirmed nothing is live.
+        let armed = Decision {
+            live: false,
+            ..Machine::confirmed(Profile::LessLag).decision()
+        };
+        assert!(!present_at_flush(armed));
     }
 
     #[test]

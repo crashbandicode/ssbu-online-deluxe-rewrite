@@ -35,6 +35,16 @@ static CROP_ARMED: AtomicBool = AtomicBool::new(false);
 static CROP_OBSERVED: AtomicU32 = AtomicU32::new(0);
 static WINDOW: AtomicUsize = AtomicUsize::new(0);
 static ACTIVE: AtomicI32 = AtomicI32::new(-1);
+/// The game's queue, from its first tracked present. Used by `present_at_flush`.
+static QUEUE: AtomicUsize = AtomicUsize::new(0);
+/// Index returned by the latest tracked acquire and not yet presented early.
+static PENDING_INDEX: AtomicI32 = AtomicI32::new(-1);
+/// Index this module already presented at the flush; the game's own present
+/// of that index is then skipped. -1 when nothing is outstanding.
+static EARLY_INDEX: AtomicI32 = AtomicI32::new(-1);
+pub(super) static EARLY_PRESENTS: AtomicU64 = AtomicU64::new(0);
+pub(super) static EARLY_SKIPS: AtomicU64 = AtomicU64::new(0);
+pub(super) static EARLY_MISMATCHES: AtomicU64 = AtomicU64::new(0);
 
 pub(super) fn active_count() -> i32 {
     ACTIVE.load(Ordering::Relaxed)
@@ -353,10 +363,53 @@ fn note_crop_observe(x: i32, y: i32, w: i32, h: i32) {
     super::record(super::Code::CropObserve, rect_a, rect_b);
 }
 
+/// Present the image acquired this frame now, at the end of the flush that
+/// submitted it. Called from the renderer's flush hook on the game's render
+/// thread when `render_policy::present_at_flush` allows it. The game's own
+/// present of the same index, which comes after the next frame's update, is
+/// then skipped in `queue_present`; its loop bookkeeping still runs there.
+/// The per-present crop moves with the real present so it is applied once.
+pub(super) unsafe fn present_at_flush() -> bool {
+    let window = WINDOW.load(Ordering::Acquire);
+    let queue = QUEUE.load(Ordering::Acquire);
+    let present = PRESENT.load(Ordering::Acquire);
+    if window == 0 || queue == 0 || present == 0 || EARLY_INDEX.load(Ordering::Acquire) >= 0 {
+        return false;
+    }
+    let index = PENDING_INDEX.swap(-1, Ordering::AcqRel);
+    if index < 0 {
+        return false;
+    }
+    let window = window as Ptr;
+    super::resolution::on_present(window);
+    let f: unsafe extern "C" fn(Ptr, Ptr, i32) = std::mem::transmute(present);
+    let begin = super::api_trace::start();
+    f(queue as Ptr, window, index);
+    super::api_trace::end(begin, 1, index, 2);
+    EARLY_INDEX.store(index, Ordering::Release);
+    EARLY_PRESENTS.fetch_add(1, Ordering::Relaxed);
+    true
+}
+
 unsafe extern "C" fn queue_present(queue: Ptr, window: Ptr, index: i32) {
     let tick = skyline::nn::os::GetSystemTick() as u64;
-    if tracked_window(window) {
-        super::resolution::on_present(window);
+    let tracked = tracked_window(window);
+    if tracked {
+        QUEUE.store(queue as usize, Ordering::Release);
+    }
+    // An index already presented at the flush is not presented twice. Any
+    // other outstanding early index means the game presented something else:
+    // let its call through and count the mismatch.
+    let early = EARLY_INDEX.swap(-1, Ordering::AcqRel);
+    let presented_early = tracked && early >= 0 && early == index;
+    if early >= 0 && !presented_early {
+        EARLY_MISMATCHES.fetch_add(1, Ordering::Relaxed);
+        super::record(super::Code::EarlyPresent, 2, index as u64);
+    }
+    if tracked {
+        if !presented_early {
+            super::resolution::on_present(window);
+        }
         super::fps_boost::on_present(tick);
         super::dispatcher_backoff::note_present(tick);
         super::hang_trace::count(super::hang_trace::Hook::Present);
@@ -370,9 +423,14 @@ unsafe extern "C" fn queue_present(queue: Ptr, window: Ptr, index: i32) {
     let f: unsafe extern "C" fn(Ptr, Ptr, i32) =
         std::mem::transmute(PRESENT.load(Ordering::Acquire));
     let begin = super::api_trace::start();
-    f(queue, window, index);
-    super::api_trace::end(begin, 1, index, -1);
-    if tracked_window(window) {
+    if presented_early {
+        EARLY_SKIPS.fetch_add(1, Ordering::Relaxed);
+        super::api_trace::end(begin, 1, index, 1);
+    } else {
+        f(queue, window, index);
+        super::api_trace::end(begin, 1, index, -1);
+    }
+    if tracked {
         TRACKED_PRESENTS.fetch_add(1, Ordering::Relaxed);
         let before = OUTSTANDING.fetch_sub(1, Ordering::AcqRel);
         let after = crate::render_trace::outstanding_after_present(before);
@@ -430,6 +488,9 @@ unsafe extern "C" fn window_acquire(window: Ptr, sync: Ptr, index: *mut i32) {
     if tracked_window(window) {
         TRACKED_ACQUIRES.fetch_add(1, Ordering::Relaxed);
         OUTSTANDING.fetch_add(1, Ordering::AcqRel);
+        if !index.is_null() {
+            PENDING_INDEX.store(*index, Ordering::Release);
+        }
     }
     if !index.is_null() {
         mark_index(&ACQUIRE_MASK, *index);
@@ -472,6 +533,13 @@ pub(super) fn write_status() {
             file,
             "lesslag_fields_skip={}",
             u8::from(super::renderer::lesslag_fields_skipped())
+        );
+        let _ = writeln!(
+            file,
+            "early_presents={}\nearly_present_skips={}\nearly_present_mismatches={}",
+            EARLY_PRESENTS.load(Ordering::Relaxed),
+            EARLY_SKIPS.load(Ordering::Relaxed),
+            EARLY_MISMATCHES.load(Ordering::Relaxed)
         );
         super::imgui_stats::write_status(&mut file);
         let _ = write!(

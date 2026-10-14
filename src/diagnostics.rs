@@ -198,6 +198,10 @@ pub enum Code {
     /// bit 0 is the `CAPTURE_CSS` flag, bit 1 `GetThreadPriority` resolved,
     /// bit 2 `GetThreadCoreMask` resolved. Both zero: flag absent, no hooks.
     CssCapture = 104,
+    /// Two-image LessLag presents at the flush. Only mismatches are recorded:
+    /// `a` = 2 when the game then presented a different index than the one
+    /// presented early (that call went through), `b` is the game's index.
+    EarlyPresent = 105,
 }
 
 /// Game SetCrop observations recorded before further calls are forwarded only.
@@ -358,6 +362,7 @@ mod tests {
         assert_eq!(Code::DispatcherBackoff as u16, 102);
         assert_eq!(Code::DispatcherBackoffStats as u16, 103);
         assert_eq!(Code::CssCapture as u16, 104);
+        assert_eq!(Code::EarlyPresent as u16, 105);
         let rect = crop_rect_event(4, 0, 0, 1024, 576);
         assert_eq!(rect.0, crop_rect_word(0, 0, 1024, 576));
         assert_eq!(rect.1, 4);
