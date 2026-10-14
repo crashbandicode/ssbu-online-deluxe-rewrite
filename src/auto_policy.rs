@@ -100,6 +100,23 @@ pub struct Scene {
     pub ready: bool,
     pub connection: Connection,
     pub status: SceneStatus,
+    /// The online-latency hook reached a match while `connection` still says
+    /// Offline (the scene hooks missed the online entry). Auto then treats a
+    /// Singles/Doubles stage as an online match; the connection itself is not
+    /// rewritten and menus stay menus.
+    pub marked_online: bool,
+}
+
+impl Scene {
+    /// Connection the Auto decision uses: a marked match that the hooks left
+    /// Offline counts as Quickplay (same profile as Arena and Local).
+    pub const fn effective_connection(self) -> Connection {
+        if self.marked_online && matches!(self.connection, Connection::Offline) {
+            Connection::Quickplay
+        } else {
+            self.connection
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -216,7 +233,7 @@ pub fn decide(scene: Scene, selection: Selection) -> Applied {
     }
     if selection.auto_profile {
         let profile = policy::select_profile(
-            match_kind(scene.connection, scene.status),
+            match_kind(scene.effective_connection(), scene.status),
             selection.platform.emulator(),
             None,
         );
@@ -333,7 +350,62 @@ mod tests {
             ready: true,
             connection,
             status,
+            marked_online: false,
         }
+    }
+
+    #[test]
+    fn a_marked_match_the_hooks_left_offline_is_an_online_match_for_auto() {
+        let marked = |status| Scene {
+            marked_online: true,
+            ..scene(Connection::Offline, status)
+        };
+        assert_eq!(
+            marked(SceneStatus::Singles).effective_connection(),
+            Connection::Quickplay
+        );
+        // A classified connection is never rewritten by the mark.
+        assert_eq!(
+            Scene {
+                marked_online: true,
+                ..scene(Connection::Arena, SceneStatus::Singles)
+            }
+            .effective_connection(),
+            Connection::Arena
+        );
+        let console = selection(true, RenderMode::Vanilla, Platform::Console);
+        let emulator = selection(true, RenderMode::Vanilla, Platform::Emulator);
+        assert_eq!(
+            decide(scene(Connection::Offline, SceneStatus::Singles), console).request,
+            RenderMode::Vanilla
+        );
+        assert_eq!(
+            decide(marked(SceneStatus::Singles), console).request,
+            RenderMode::LessLag
+        );
+        assert_eq!(
+            decide(marked(SceneStatus::Singles), emulator).request,
+            RenderMode::LessLagUltra
+        );
+        assert_eq!(
+            decide(marked(SceneStatus::Doubles), console).request,
+            RenderMode::LessLagDoubles
+        );
+        // Menus and the waiting room stay Vanilla whatever the mark says.
+        assert_eq!(
+            decide(marked(SceneStatus::Inactive), console).request,
+            RenderMode::Vanilla
+        );
+        assert_eq!(
+            decide(marked(SceneStatus::Training), console).request,
+            RenderMode::Vanilla
+        );
+        // Manual selections ignore the mark entirely.
+        let manual = selection(false, RenderMode::LessLag, Platform::Console);
+        assert_eq!(
+            decide(marked(SceneStatus::Singles), manual).request,
+            RenderMode::LessLag
+        );
     }
 
     #[test]
@@ -354,6 +426,7 @@ mod tests {
             ready: true,
             connection: Connection::Offline,
             status: classify_stage(311, false, 2),
+            marked_online: false,
         };
         assert_eq!(waiting_room.status, SceneStatus::Training);
 
@@ -558,6 +631,7 @@ mod tests {
                 ready: false,
                 connection: Connection::Local,
                 status: SceneStatus::Doubles,
+                marked_online: false,
             },
             selection(true, RenderMode::LessLag, Platform::Emulator),
         );

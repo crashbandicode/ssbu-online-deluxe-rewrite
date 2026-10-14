@@ -209,7 +209,11 @@ impl Overlay {
             return false;
         }
         if self.view != View::Settings {
-            if native.allow && !chord && !config.streamer {
+            // Native pane edits need ZL held: the D-pad also moves the
+            // character-select hand, and plain presses rewrote the profile and
+            // the buffer on the console (23 unintended saves on 2026-10-14).
+            let native_modifier = buttons & ZL != 0 && buttons & ZR == 0;
+            if native.allow && !chord && !config.streamer && native_modifier {
                 let latency_dir = if pressed & LEFT != 0 {
                     -1
                 } else if pressed & RIGHT != 0 {
@@ -647,16 +651,23 @@ mod tests {
         let mut ui = Overlay::default();
         let mut config = Config::default();
         let css = native(crate::menu::NativeSurface::Css, true);
-        assert!(ui.poll_native(RIGHT, &mut config, css));
-        assert_eq!(config.input_buffer, 0);
+        // A plain D-pad press moves the character-select hand; it edits nothing.
         assert!(!ui.poll_native(RIGHT, &mut config, css));
-        assert_eq!(config.input_buffer, 0);
+        assert_eq!(config.input_buffer, -1);
+        assert!(!ui.poll_native(UP, &mut config, css));
+        assert!(config.auto_profile);
         ui.poll_native(0, &mut config, css);
-        assert!(ui.poll_native(RIGHT, &mut config, css));
+        // ZL held with the press edits, once per press.
+        assert!(ui.poll_native(ZL | RIGHT, &mut config, css));
+        assert_eq!(config.input_buffer, 0);
+        assert!(!ui.poll_native(ZL | RIGHT, &mut config, css));
+        assert_eq!(config.input_buffer, 0);
+        ui.poll_native(ZL, &mut config, css);
+        assert!(ui.poll_native(ZL | RIGHT, &mut config, css));
         assert_eq!(config.input_buffer, 1);
         ui.poll_native(0, &mut config, css);
         assert!(!ui.poll_native(
-            RIGHT,
+            ZL | RIGHT,
             &mut config,
             native(crate::menu::NativeSurface::Css, false)
         ));
@@ -667,6 +678,10 @@ mod tests {
         assert_eq!(config, before);
         assert!(!ui.poll_native(L | R | UP, &mut config, css));
         assert!(config.auto_profile);
+        ui.poll_native(0, &mut config, css);
+        // Both triggers are the view chord, not the edit modifier.
+        assert!(!ui.poll_native(ZL | ZR | RIGHT, &mut config, css));
+        assert_eq!(config, before);
         ui.poll_native(0, &mut config, css);
         ui.poll_native(L | R | DOWN, &mut config, css);
         assert_eq!(ui.view, View::Settings);
@@ -684,11 +699,11 @@ mod tests {
         let mut ui = Overlay::default();
         let mut config = Config::default();
         let lobby = native(crate::menu::NativeSurface::LocalLobby, true);
-        assert!(!ui.poll_native(UP, &mut config, lobby));
+        assert!(!ui.poll_native(ZL | UP, &mut config, lobby));
         assert!(config.auto_profile);
         assert_eq!(config.render_mode, crate::config::RenderMode::Vanilla);
         ui.poll_native(0, &mut config, lobby);
-        assert!(ui.poll_native(RIGHT, &mut config, lobby));
+        assert!(ui.poll_native(ZL | RIGHT, &mut config, lobby));
         assert_eq!(config.input_buffer, 0);
         assert!(config.auto_profile);
     }
@@ -709,15 +724,15 @@ mod tests {
             surface: crate::menu::NativeSurface::None,
             fresh: false,
         };
-        assert!(!ui.poll_native(RIGHT, &mut config, waiting));
+        assert!(!ui.poll_native(ZL | RIGHT, &mut config, waiting));
         assert_eq!(config.input_buffer, -1);
-        assert!(ui.poll_native(RIGHT, &mut config, css));
+        assert!(ui.poll_native(ZL | RIGHT, &mut config, css));
         assert_eq!(config.input_buffer, 0);
-        assert!(!ui.poll_native(RIGHT, &mut config, css));
+        assert!(!ui.poll_native(ZL | RIGHT, &mut config, css));
         assert_eq!(config.input_buffer, 0);
         ui.poll_native(0, &mut config, css);
-        assert!(!ui.poll_native(RIGHT, &mut config, absent));
-        assert!(!ui.poll_native(RIGHT, &mut config, css));
+        assert!(!ui.poll_native(ZL | RIGHT, &mut config, absent));
+        assert!(!ui.poll_native(ZL | RIGHT, &mut config, css));
         assert_eq!(config.input_buffer, 0);
     }
 
@@ -728,14 +743,14 @@ mod tests {
         let mut config = Config::default();
         let css = native(crate::menu::NativeSurface::Css, true);
         config.streamer = true;
-        assert!(!ui.poll_native(RIGHT, &mut config, css));
+        assert!(!ui.poll_native(ZL | RIGHT, &mut config, css));
         assert_eq!(config.input_buffer, -1);
         config.streamer = false;
-        assert!(!ui.poll_native(RIGHT, &mut config, css));
+        assert!(!ui.poll_native(ZL | RIGHT, &mut config, css));
         assert_eq!(config.input_buffer, -1);
         ui.poll_native(0, &mut config, css);
         config.streamer = true;
-        assert!(!ui.poll_native(UP, &mut config, css));
+        assert!(!ui.poll_native(ZL | UP, &mut config, css));
         assert!(config.auto_profile);
         ui.poll_native(0, &mut config, css);
         config.streamer = false;
@@ -743,9 +758,9 @@ mod tests {
         assert!(!ui.poll_native(L | R | RIGHT, &mut config, css));
         assert_eq!(config.input_buffer, before);
         ui.poll_native(0, &mut config, css);
-        assert!(ui.poll_native(RIGHT, &mut config, css));
+        assert!(ui.poll_native(ZL | RIGHT, &mut config, css));
         assert_eq!(config.input_buffer, before + 1);
-        assert!(!ui.poll_native(RIGHT, &mut config, css));
+        assert!(!ui.poll_native(ZL | RIGHT, &mut config, css));
         assert_eq!(config.input_buffer, before + 1);
         ui.view = View::Settings;
         ui.menu.open = true;

@@ -2233,6 +2233,44 @@ Card: `switch-mtp-040/deploy-040-mtp-1014.py`, 4e4f2044 → 04c3008d, rollback
 `backups/pre-0.4.0-04c3008d0182a48e.nro`, `CAPTURE_CSS` + `CAPTURE_MATCH`
 kept, config manual LessLag / 3 frames.
 
+### 0.4.1 — 2026-10-14: the three follow-ups from the 0.4.0 console boot
+
+Operator: "okay go ahead and build those and ship the minor version to the
+usb. I'll keep playing and when an fps drop occurs I will let you know."
+
+- **Opponent window after a declined rematch.** The station-leave hook
+  (`pia_rtt` `STATION_LEAVE_OFFSET`) calls `peer_transport::clear_station`,
+  whose `apply_leaves` retired the opponent only through the constant id
+  bound to the leaving index. That binding comes from the station-map hook,
+  which is part of the opt-in peer observer (off in the operator's config), so
+  the id was 0 and the opponent stayed on the banner through the single-peer
+  fallback (`view_of`: one confirmed peer is shown without a selection) until
+  the whole session ended. `apply_leaves` now retires the only confirmed peer
+  when an unbound station leaves; two or more confirmed peers are left alone
+  (test `an_unbound_station_leave_retires_the_only_confirmed_peer`). Not yet
+  seen on the console; the leave hook firing on a declined rematch is the
+  assumption (the 16:40Z boot had no peer-observer rows to confirm it).
+- **Online matches classified `offline`.** Two Quickplay matches ran with
+  the connection still Offline (no quickplay/arena scene hook fired; the
+  latency hook did, code 30). `Scene` gains `marked_online` (the latency
+  mark); `decide` uses `effective_connection()`, which counts a marked
+  Offline stage as Quickplay for Auto only. Menus and the waiting room stay
+  Vanilla, classified connections are never rewritten, manual selections
+  ignore the mark, and `mark_match` re-evaluates the request. The first match
+  of a session therefore swaps to LessLag when the latency hook fires (~3 s
+  after the stage load) instead of never; later matches in the session are
+  LessLag from the stage load (the mark clears only on the main menu). Why
+  the scene hooks miss the entry remains open.
+- **Config drift.** The 23 saves during the b044752 session were native-pane
+  edits: on an online character select the fork-style D-pad editing changed
+  the buffer (Left/Right) and the profile (Up/Down) while the operator moved
+  the hand with the D-pad. Native edits now require ZL held (ZL+ZR stays the
+  view chord; L+R chords unchanged); the Settings window still edits with the
+  plain D-pad. Overlay tests updated; README controls table.
+
+Gates: 308 host tests, host and Skyline Clippy with warnings denied,
+no-default build, rustfmt. Package: PACKAGE_PLACEHOLDER.
+
 ### DBI USB MTP installation of f22d (0.3.0) — 2026-10-12 19:58Z
 
 `switch-mtp-f22d/deploy-f22d-mtp-1012.py` preflight 19:55:47Z (installed

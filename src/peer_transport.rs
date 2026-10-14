@@ -541,6 +541,8 @@ fn apply_leaves(table: &mut Table) {
             // keeps their column up.
             if id != 0 {
                 retire_constant(table, id);
+            } else {
+                retire_only_confirmed(table);
             }
         }
     }
@@ -550,6 +552,19 @@ fn apply_leaves(table: &mut Table) {
         }
     }
     resolve_selection(table);
+}
+
+/// A station left that no constant id was ever bound to (the station map
+/// hook is part of the opt-in peer observer, so the binding is usually
+/// absent). With exactly one confirmed peer that peer is the opponent who
+/// left: an opponent who declines a rematch otherwise stays on the banner
+/// through the single-peer fallback until the whole session ends.
+fn retire_only_confirmed(table: &mut Table) {
+    let mut confirmed = table.peers.iter().flatten();
+    let (Some(only), None) = (confirmed.next(), confirmed.next()) else {
+        return;
+    };
+    retire_constant(table, only.constant_id);
 }
 
 fn bind_index(table: &mut Table, index: u8, constant_id: u64) {
@@ -2505,6 +2520,49 @@ mod tests {
         assert!(!opponent_connected());
         assert_eq!(peer_frame().selection, Selection::None);
         assert!(!opponent_column_visible(false, peer_frame().selection));
+    }
+
+    #[test]
+    fn an_unbound_station_leave_retires_the_only_confirmed_peer() {
+        let _gate = global_gate();
+        let mut table = Table::empty();
+        let ann = 0x1122_3344_5566_7788u64;
+        feed(
+            &mut table,
+            0,
+            0,
+            KIND_STATION,
+            &request(1, 0x10, 0x20),
+            false,
+        );
+        feed(
+            &mut table,
+            ann,
+            0x10,
+            KIND_STATION,
+            &response(b"Ann", true, 1, 2),
+            false,
+        );
+        table.local_index = 1;
+        // No station map (peer observer off): Ann shows through the
+        // single-peer fallback without a station selection.
+        let shown = frame_from(view_of(&mut table));
+        assert!(shown.peer.known);
+        assert_eq!(shown.selection, Selection::None);
+        // The opponent declines the rematch: the game reports station 4
+        // leaving, which nothing bound. The only confirmed peer is them.
+        LEAVE_BITS[0].fetch_or(1 << 4, Ordering::Release);
+        apply_leaves(&mut table);
+        let gone = frame_from(view_of(&mut table));
+        assert!(!gone.peer.known);
+        assert_eq!(gone.selection, Selection::None);
+        // Two confirmed peers: an unbound leave cannot tell them apart and
+        // retires neither.
+        table.peers[0] = Some(named(0x55, b"Ann", 1, AnnounceMode::Vanilla));
+        table.peers[1] = Some(named(0x99, b"Bob", 1, AnnounceMode::LessLag));
+        LEAVE_BITS[0].fetch_or(1 << 5, Ordering::Release);
+        apply_leaves(&mut table);
+        assert_eq!(table.peers.iter().flatten().count(), 2);
     }
 
     #[test]

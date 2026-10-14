@@ -68,6 +68,7 @@ fork's room-ID path, but still needs an NSO test. See [native display](docs/NATI
 | Up / Down | Select Peer, NetLatency, NetProfile, FX, FPS++, Stealth or Streamer (or a plugin row on the plugins page) |
 | Left / Right | Change the selected value |
 | Shoulder chord + Left / Right outside settings | Cycle the selected remote peer |
+| ZL + Left / Right or Up / Down on an online character select or arena pane, window closed | Edit the input buffer or the profile on the native status (since 0.4.1 the D-pad alone only moves the hand) |
 | L+R + either ZL or ZR + Y | Toggle Streamer |
 | L+R (or ZL+ZR) + Plus or Minus | Open the debug view; again to hide it |
 

@@ -38,8 +38,11 @@ pub(crate) fn fx_online() -> bool {
     ready() && (connection().is_online() || MATCH_MARKED.load(Ordering::Acquire))
 }
 
-/// The online-latency hook reached a match. FX may treat that as online.
-/// Auto keeps the last classified connection and does not assume Quickplay.
+/// The online-latency hook reached a match. FX treats that as online, and
+/// Auto treats a stage the hooks left Offline as an online match (the console
+/// ran two Quickplay matches on 2026-10-14 with the connection still Offline).
+/// The classified connection itself is kept; nothing assumes Quickplay for
+/// the UI.
 pub(crate) fn mark_match() {
     if !ready() {
         return;
@@ -47,6 +50,7 @@ pub(crate) fn mark_match() {
     let previous = MATCH_MARKED.swap(true, Ordering::AcqRel);
     if !previous && !connection().is_online() {
         record(Code::FxOnlineContext, 1, 0x16ccab8);
+        let _ = current_request();
     }
 }
 
@@ -103,6 +107,7 @@ pub(crate) fn snapshot() -> Snapshot {
         ready: ready(),
         connection,
         status,
+        marked_online: MATCH_MARKED.load(Ordering::Acquire),
     };
     let selection = selection();
     let applied = auto_policy::decide(scene, selection);
