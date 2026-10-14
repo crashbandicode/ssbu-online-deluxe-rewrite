@@ -116,7 +116,7 @@ Toolchain, native dependency and release steps: [Build](docs/BUILD.md).
 | Native character-select and arena display | [NATIVE_DISPLAY.md](docs/NATIVE_DISPLAY.md) |
 | Character FX coverage and exclusions | [FX.md](docs/FX.md) |
 | Dispatcher backoff | [DISPATCHER_BACKOFF.md](docs/DISPATCHER_BACKOFF.md) |
-| Plugins page and SDK | [PLUGINS.md](docs/PLUGINS.md), [sdk/README.md](sdk/README.md) |
+| How another plugin plugs in (menu rows, or its own ImGui windows) | [PLUGINS.md](docs/PLUGINS.md), [sdk/README.md](sdk/README.md) |
 | Timing captures | [CAPTURES.md](docs/CAPTURES.md) |
 | Configuration keys and boot flags | [CONFIGURATION.md](docs/CONFIGURATION.md) |
 | Logs, event codes, crash diagnosis, Eden test lifecycle | [DEBUGGING.md](docs/DEBUGGING.md) |

@@ -27,11 +27,11 @@ Layout of this directory:
 | `examples/demo/` | `deluxe-plugin-demo` | Minimal NRO that registers three options and logs the result. |
 
 Status of verification: the SDK is covered by host-side unit tests against a
-fake host table, and the demo builds for `aarch64-skyline-switch`. How the
-Plugins page looks and behaves on an emulator or on hardware has **not** been
-verified in this work. Emulator and hardware behaviour of tones is not yet
-verified. Treat the description of the page below as the intended behavior, not
-an observed one.
+fake host table, and the demo builds for `aarch64-skyline-switch`. The Plugins
+page, pending requests and tones were verified in Eden on 2026-10-12 with the
+demo NRO (`docs/VALIDATION.md`, "Plugin value tones and read-only rows").
+Hardware behaviour is not yet observed. A two-step guide with a minimal plugin
+is in [docs/PLUGINS.md](../docs/PLUGINS.md); this file is the reference.
 
 ## What the host shows
 
