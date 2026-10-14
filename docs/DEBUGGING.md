@@ -6,7 +6,7 @@ The Debug view (L+R+Plus): build id, renderer, FX tracker and request rows,
 `Timing`, `Capture L+R+Up (30 s)`, `CSS capture` and `Match capture`, then the
 live resolution, DRS, backoff, memory and frame-time rows. Captured in Eden on
 2026-10-14 with 0.4.2; the whole-screen version and the view during Training
-are in [README](../README.md#screenshots).
+are in [Screenshots](SCREENSHOTS.md).
 
 Keep the exact dist/<NRO-hash-prefix>/ bundle for every installed build.
 Packaging checks matching NRO/ELF executable bytes, saves both SHA-256 hashes,
