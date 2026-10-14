@@ -359,16 +359,27 @@ pub fn index_value(input: u32, decision: Decision, armed: RenderMode) -> u32 {
     }
 }
 
+/// Whether the render-wait hook skips the game's timeout-zero render poll.
+/// Only the immediate LLUltra path and the three-image Doubles shapes skip
+/// it. Two-image LessLag runs the original poll like Vanilla: the hardware
+/// CSS captures of 2026-10-14 attributed the LessLag dips to texture-ready
+/// fence stalls after acquire, and this poll was the one step of the game's
+/// completion flow that LessLag removed. A forced wait during a swap never
+/// skips.
 pub fn skip_wait(decision: Decision, armed: RenderMode) -> bool {
     if decision.live {
-        !decision.force_wait && decision.effective != Profile::Vanilla
+        !decision.force_wait && matches!(decision.effective, Profile::Ultra | Profile::Doubles)
     } else {
-        armed != RenderMode::Vanilla
+        matches!(
+            armed,
+            RenderMode::LessLagUltra | RenderMode::LessLagDoubles | RenderMode::DoublesCore
+        )
     }
 }
 
-/// Startup `PROBE_RENDER_POLL` gate. `probe` selects the original wait.
-/// `skip` is left as `skip_wait` computed it. Not a profile change.
+/// Startup `PROBE_RENDER_POLL` gate. `probe` selects the original wait for
+/// the policies that still skip it (LLUltra, Doubles). `skip` is left as
+/// `skip_wait` computed it. Not a profile change.
 pub fn render_poll_calls_original(skip: bool, probe: bool) -> bool {
     probe || !skip
 }
@@ -1561,7 +1572,7 @@ mod tests {
         );
         let less = Machine::confirmed(Profile::LessLag);
         let decision = less.decision();
-        assert!(skip_wait(decision, RenderMode::Vanilla));
+        assert!(!skip_wait(decision, RenderMode::Vanilla));
         assert!(!run_early(decision, RenderMode::Vanilla));
         assert!(!skip_late(decision, RenderMode::Vanilla));
         assert!(decision.render_opts);
@@ -1569,12 +1580,64 @@ mod tests {
         assert_eq!((plan.calls, plan.lesslag_fields), (1, true));
         let ultra = Machine::confirmed(Profile::Ultra);
         let decision = ultra.decision();
+        assert!(skip_wait(decision, RenderMode::Vanilla));
         assert!(run_early(decision, RenderMode::Vanilla));
         assert!(skip_late(decision, RenderMode::Vanilla));
         assert_eq!(plan_flush(ultra, RenderMode::Vanilla).calls, 3);
         let (toward_less, _) = step(vanilla, present(RenderMode::LessLag, 0, 0, 3));
         assert!(!toward_less.decision().render_opts);
         assert_eq!(toward_less.buffer_phase, BufferPhase::AwaitSetter);
+    }
+
+    #[test]
+    fn two_image_lesslag_runs_the_render_poll_and_only_ultra_or_doubles_skip_it() {
+        // Live machine: LessLag and Vanilla poll; LLUltra and Doubles skip.
+        assert!(!skip_wait(
+            Machine::confirmed(Profile::LessLag).decision(),
+            RenderMode::Vanilla
+        ));
+        assert!(!skip_wait(
+            Machine::confirmed(Profile::Vanilla).decision(),
+            RenderMode::LessLag
+        ));
+        assert!(skip_wait(
+            Machine::confirmed(Profile::Ultra).decision(),
+            RenderMode::Vanilla
+        ));
+        assert!(skip_wait(
+            Machine::confirmed(Profile::Doubles).decision(),
+            RenderMode::Vanilla
+        ));
+        // A swap in flight forces the wait for every profile.
+        let vanilla = Machine::confirmed(Profile::Vanilla);
+        let (toward_ultra, _) = step(vanilla, present(RenderMode::LessLagUltra, 0, 0, 3));
+        let swapping = toward_ultra.decision();
+        assert!(swapping.live && swapping.force_wait);
+        assert!(!skip_wait(swapping, RenderMode::LessLagUltra));
+        // Before the window count is confirmed the armed mode decides the same way.
+        let armed = Decision {
+            live: false,
+            ..Machine::confirmed(Profile::Vanilla).decision()
+        };
+        assert!(!skip_wait(armed, RenderMode::Vanilla));
+        assert!(!skip_wait(armed, RenderMode::LessLag));
+        assert!(!skip_wait(armed, RenderMode::LessLagCore));
+        assert!(skip_wait(armed, RenderMode::LessLagUltra));
+        assert!(skip_wait(armed, RenderMode::LessLagDoubles));
+        assert!(skip_wait(armed, RenderMode::DoublesCore));
+        // The probe only matters where the skip still applies.
+        assert!(render_poll_calls_original(
+            skip_wait(armed, RenderMode::LessLag),
+            false
+        ));
+        assert!(!render_poll_calls_original(
+            skip_wait(armed, RenderMode::LessLagUltra),
+            false
+        ));
+        assert!(render_poll_calls_original(
+            skip_wait(armed, RenderMode::LessLagUltra),
+            true
+        ));
     }
 
     #[test]

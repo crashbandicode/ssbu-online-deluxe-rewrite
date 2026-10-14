@@ -21,7 +21,9 @@ pub(super) static INDEX_CALLS: AtomicU64 = AtomicU64::new(0);
 pub(super) static INDEX_PAIR: AtomicU64 = AtomicU64::new(0);
 pub(super) static SKIPPED_WAITS: AtomicU64 = AtomicU64::new(0);
 /// Latched once from `PROBE_RENDER_POLL` after the wait hook is installed.
-/// Not a shipping fix: LessLag and the other policies stay as committed.
+/// Forces the original render poll for the policies that still skip it
+/// (LLUltra, Doubles); two-image LessLag runs the poll unconditionally, see
+/// `render_policy::skip_wait`. Not a profile change.
 static RENDER_POLL_PROBE: AtomicBool = AtomicBool::new(false);
 /// Boot file `DISABLE_LESSLAG_FIELDS`. Skips only the three flush stores.
 /// Absent file keeps the stores. Not a profile change and not a ship candidate.
