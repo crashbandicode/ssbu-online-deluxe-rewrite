@@ -1856,6 +1856,75 @@ clock or memory changes are recommended for the dips. Follow-up capture
 acceptance: one CSS visit, 10 s still then 20 s repeatable directional
 sweep, zero API overflow, engine and scene constant.
 
+0.3.9 (operator: "go ahead and do the draw slot trims too, test and ship
+with astra's findings") takes the first deferred fork trim. Fork commit
+`c185303` (pin `77cdab7`): each of the backend's eight draw slots held a
+256 KiB + 256 KiB command pool and a 64 KiB + 64 KiB control block of game
+heap (5 MiB in all) for recordings that never exceeded 1,256 B of command
+memory or 120 B of control memory across the stored Eden evidence. The
+budgets are now 32 KiB + 32 KiB command memory (exactly one 64 KiB NX
+memory-pool page) and 8 KiB + 8 KiB control memory per slot, 640 KiB in all;
+the reserve still finishes and discards one oversized frame, and exceeding
+base plus reserve remains an abort, which is why the Eden runs below read
+the live counters. Budgets and rationale moved to
+`command_memory_reserve.hpp`; `command_memory_reserve_test` asserts the
+planned layout on the NX constants (pool exactly 65536, control 16384, also
+on a 4 KiB page and with device minimums). Archive
+`09b296a0f5c67641d229bb4a6d8b170f75281368da3957d666af424476bc2731`,
+13,851,844 B, identical in two clean Docker builds; `archive-pin.json`,
+`build.rs` and `tools/test_prepare_imgui.py` follow. Deluxe's own code is
+unchanged. Standalone companion from `77cdab7`: 888,832 B,
+`946de84f98546cb791640e40fbf5848ea3965c511631ef18b32e5c805b67d50e`, same
+segment layout, exports, version tag and `text_offset == 0` as the 0.3.8
+companion; a `draw-stats` build (`ef0e57bf…2c04`, 905,216 B, not shipped)
+adds the 2 s logger thread that writes `imgui-renderer-status.txt`.
+
+Eden acceptance, 2026-10-14 (isolated profile, private display `:2`, Astra
+low driver `imgui-slots-eden-driver-1014`, brief and evidence in
+`imgui-fork-1014/eden-test/`, `slots-N-shots/NOTES.md` per run):
+
+- Run 1, external with the draw-stats companion + Elite (`slots-1-shots/`):
+  `overlay_host_external_ready`; Deluxe Debug/Settings/Performance and
+  Elite's stage list open together on the main menu and on the CSS, then a
+  Shulk vs Wolf match on Small Battlefield with the compact strip (20 s,
+  pause, quit, results, CSS return), all clean at 59.9–60.0 fps. Final
+  `imgui-renderer-status.txt`: 29,658 submissions, 29,650 reuses, 0 pending
+  skips, 0 failed, 0 geometry skips, **0 command overflows, max 1,448 B
+  command / 120 B control** (a new maximum, 4.4 % of the 32 KiB initial
+  budget). A shared Right press during the quit prompt flipped Stealth on;
+  the driver restored it (config.ini `stealth=false`, `config.previous.ini`
+  shows the transient). Eden hit its 8 GiB host cgroup cap during the match
+  (`memory.events max 2470`, no OOM kill) and the game stayed at 60 fps;
+  the unit's SIGBUS core-dump at `systemctl stop` is the same teardown
+  pattern as all three 0.3.8 runs.
+- Run 2, embedded (`slots-2-shots/`): `overlay_host_ready`; all views on
+  the main menu and the CSS, three portrait hovers with Settings open,
+  60.0 fps. Final `renderer-status.txt`: 13,201 submissions, 13,193 reuses,
+  3 busy-frame rejections, 0 pending/failed/geometry/overflow, max 1,040 B
+  command / 120 B control. Clean exit at stop, peak 6.25 GB.
+- Run 3, reversed order (release companion as `libzz_imgui_smash.nro` +
+  Elite, `slots-3-shots/`): `overlay_host_external_ready` again; Debug,
+  Performance and Settings each open beside Elite's stage list on the main
+  menu and on the CSS, Elite cursor moved Up/Down only, 59.95–60.0 fps;
+  all settings unchanged (`config.ini` `stealth=false`); no crash, assert
+  or window loss. The release companion has no counters; its slot code and
+  archive are the ones measured in run 1.
+
+The profile's plugin set was restored exactly afterwards
+(`eden-test/staging-journal.json`, `restore_verified` 12:40Z).
+
+Gates: 303 host tests, host and Skyline Clippy with warnings denied,
+no-default build, rustfmt, `tools/test_prepare_imgui.py`; fork host tests
+(`command_memory_reserve_test`, `draw_slot_rules_test`, `frame_guard_test`,
+`frame_guard_concurrent_test`) with warnings denied; fork crate Clippy and
+no-default build; Skyline release. Package `artifacts/8c20799f3974f45b/`:
+build `0.3.9-4fd77a238f9e-1791980278`, NRO SHA-256
+`8c20799f3974f45beaf28c2373982bcc546f08f6496ee58ed95852fd78496cca`
+(1531904 B, module `8910f609…628b`), ELF `871d513f…d2fe`;
+`imgui-provenance.json` records fork commit `c185303` and the `09b296a0`
+archive. Fork branch `deluxe` (head `77cdab7`) and tag `deluxe-0.3.9` are
+pushed to Forgejo.
+
 Caveat for the CSS capture: the SD writes now happen during the measured
 interval, from the diagnostics thread. Compare the next hardware CSS capture
 against `switch-0.3.1-1013` before trusting a movement-penalty number from it.
