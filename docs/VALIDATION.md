@@ -1672,6 +1672,47 @@ nro_hook, param_hook 53248 each, gamepad overlay 151552, OBS companion
 from 3379200), stage pack 1351680, imgui 1282048. Runtime result pending:
 the first boot's heartbeats give the first `mem_used`/`mem_total` numbers.
 
+0.3.7 (operator: "do all of them, test and ship") trims what the plugin holds
+while the game runs, after a symbol-level pass over the 0.3.6 ELF:
+
+- Diagnostics thread stack 2 MiB → 256 KiB (`logging::DIAGNOSTICS_STACK_BYTES`).
+  The Switch std (`sys/thread/switch.rs`) gives every Rust thread a 2 MiB
+  pthread stack from the game heap unless the builder sets one, and Deluxe
+  never did. The thread's deepest frames are the file writers; its buffers
+  (64 KiB `BufWriter`, drain scratch, log lines) are heap. About 1.75 MiB of
+  heap back for the whole run. Hardware check: heartbeats keep arriving in
+  `hang-trace.log` and no crash report names `deluxe-diagnostics`.
+- Pia RTT station table (`pia_rtt::Session`, 253 slots × 100-sample ring,
+  about 107 KB, non-zero initialised so it sat in `.data`) is no longer a
+  static. `runtime::pia_rtt::STATE` is `Mutex<Option<Box<Session>>>`: the
+  first RTT sample of the process sets `WANT_SESSION`, the next diagnostics
+  poll (≤ 500 ms) allocates with `Session::new_boxed` (zeroed heap block plus
+  three scalar writes; equality with `Session::new()` is tested) and the table
+  stays for the rest of the process. Until then the sample hook counts its
+  sample as dropped, the leave and cleanup hooks have nothing to clear, and
+  the poll publishes the unavailable reading and empty board an empty table
+  would (`missing_table_publishes_like_an_empty_one`). Offline the table
+  never exists. `.data` 179368 → 69912.
+- API trace chunks 4096 → 2048 rows (`render_trace::CHUNK`, 80 KiB `.bss`); a
+  chunk still holds about 1.9 s at the 1,100 rows/s measured on the hardware
+  CSS capture against the 500 ms drain.
+- Callback capture buffer (`timing::Capture`, 2048 × 32 B) is allocated by
+  `begin` on the diagnostics thread (`try_reserve_exact`; a refused allocation
+  refuses the capture) and moved into the snapshot by `take_ready`, freed
+  after the export. The render path still never allocates. `.bss` 286160 →
+  138672.
+
+Not changed here: the embedded imgui backend (about 545 KB of `.text` plus
+demo windows, fonts and glyph tables), which is being trimmed in the Forgejo
+fork `intpa/imgui-smash` (tangent `imgui-fork-1014/`) for both the embedded
+archive and the standalone companion plugin.
+
+Gates: 303 host tests (two new), host and Skyline Clippy with warnings
+denied, no-default build, fmt, Skyline release. Sections `.text` 1402336 /
+`.rodata` 343136 / `.data` 69912 / `.bss` 138672, resident image 1.95 MB
+(0.3.6: 2.21 MB); with the thread stack the steady-state cost drops by about
+2.0 MB, more than the whole 0.3.1 regression. Package: see below.
+
 Caveat for the CSS capture: the SD writes now happen during the measured
 interval, from the diagnostics thread. Compare the next hardware CSS capture
 against `switch-0.3.1-1013` before trusting a movement-penalty number from it.

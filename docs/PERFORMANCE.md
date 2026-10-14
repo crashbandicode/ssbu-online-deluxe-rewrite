@@ -304,7 +304,8 @@ together; see the registered-profile section.
 Each CAPTURE_TIMING request also writes api-<tick>.csv, a capture using
 try_lock (4096 events in this build; 8192 later; 65536 resident events in
 0.3.1–0.3.4; since 0.3.5 the rows are packed to 20 B and streamed: hooks fill
-one of two 4096-row chunks, 160 KiB in `.bss`, and the diagnostics thread
+one of two chunks (4096 rows in 0.3.5–0.3.6, 2048 rows = 80 KiB in `.bss`
+since 0.3.7), and the diagnostics thread
 drains the other into the open CSV every 500 ms, so the capture is bounded by
 the 30 s duration, not by memory. The CSV header is written when the capture
 arms and `engine`, `reason`, `skipped` and `event_count` move to the footer;

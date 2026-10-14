@@ -8,11 +8,12 @@ use std::{
     },
 };
 /// Rows per drain chunk. Two chunks are the whole resident cost of the trace:
-/// 2 × 4096 × 20 B = 160 KiB of `.bss`. At the ~1,100 rows/s measured on the
-/// hardware CSS capture a chunk holds about 3.7 s; the diagnostics thread drains
+/// 2 × 2048 × 20 B = 80 KiB of `.bss`. At the ~1,100 rows/s measured on the
+/// hardware CSS capture a chunk holds about 1.9 s; the diagnostics thread drains
 /// every 500 ms, so the capture length is bounded by `DURATION_TICKS`, not by
-/// memory (0.3.1–0.3.4 held all 65536 × 32 B rows until the end).
-pub const CHUNK: usize = 4096;
+/// memory (0.3.1–0.3.4 held all 65536 × 32 B rows until the end; 0.3.5 and
+/// 0.3.6 used 4096-row chunks).
+pub const CHUNK: usize = 2048;
 pub const KIND_INDEX: u8 = 12;
 pub const KIND_PRESENT_ENTRY: u8 = 13;
 pub const KIND_LATE_FLUSH: u8 = 14;

@@ -29,7 +29,13 @@ static EPOCH: AtomicU64 = AtomicU64::new(1);
 /// not write `PUB_*`. The diagnostic poll is the only publication writer.
 static DRAW_GEN: AtomicU64 = AtomicU64::new(0);
 static PUBLISHED_GEN: AtomicU64 = AtomicU64::new(0);
-static STATE: Mutex<Session> = Mutex::new(Session::new());
+/// The station table (about 107 KB) exists only after the first RTT sample
+/// of the process. The sample hook asks for it through `WANT_SESSION`; the
+/// diagnostics poll allocates it (`Session::new_boxed`) on its own thread, so
+/// no Pia thread allocates. Until then samples are counted as dropped and the
+/// publication is the same "no peer" an empty table gives. It is never freed.
+static STATE: Mutex<Option<Box<Session>>> = Mutex::new(None);
+static WANT_SESSION: AtomicBool = AtomicBool::new(false);
 static PUB_SEQ: AtomicU64 = AtomicU64::new(0);
 static PUB_BITS: AtomicU64 = AtomicU64::new((1u64 << 63) | (REASON_OFF as u64));
 static PUB_TICK: AtomicU64 = AtomicU64::new(0);
@@ -92,7 +98,7 @@ pub(super) fn poll() {
     let now = unsafe { skyline::nn::os::GetSystemTick() as u64 };
     let generation = DRAW_GEN.load(Ordering::Acquire);
     let targets = crate::peer_transport::publication_targets();
-    let Ok(mut session) = lock_session() else {
+    let Ok(mut slot) = lock_session() else {
         DROPPED.fetch_add(1, Ordering::Relaxed);
         if targets.busy {
             write_board(crate::pia_rtt::StationBoard::busy(
@@ -102,15 +108,33 @@ pub(super) fn poll() {
         return;
     };
     let epoch = EPOCH.load(Ordering::Acquire);
-    session.accept_poll_for(now, epoch, targets.selected);
-    let board = if targets.busy {
-        crate::pia_rtt::StationBoard::busy(epoch)
-    } else {
-        session.board_for(now, epoch, &targets.stations[..usize::from(targets.len)])
+    if slot.is_none() && WANT_SESSION.swap(false, Ordering::AcqRel) {
+        *slot = Some(Session::new_boxed());
+        record(Code::PiaRtt, u64::MAX, 0);
+        skyline::println!("[Deluxe] Pia RTT station table allocated");
+    }
+    let stations = &targets.stations[..usize::from(targets.len)];
+    let (publication, board) = match slot.as_deref_mut() {
+        Some(session) => {
+            session.accept_poll_for(now, epoch, targets.selected);
+            let board = if targets.busy {
+                crate::pia_rtt::StationBoard::busy(epoch)
+            } else {
+                session.board_for(now, epoch, stations)
+            };
+            store_counters(session);
+            (session.publication(), board)
+        }
+        None => {
+            let board = if targets.busy {
+                crate::pia_rtt::StationBoard::busy(epoch)
+            } else {
+                crate::pia_rtt::StationBoard::empty(epoch, stations)
+            };
+            (Publication::unavailable(epoch), board)
+        }
     };
-    store_counters(&session);
-    let publication = session.publication();
-    drop(session);
+    drop(slot);
     write_publication(publication);
     write_board(board);
     if DRAW_GEN.load(Ordering::Acquire) == generation {
@@ -174,14 +198,26 @@ pub(super) fn ready() -> bool {
     INSTALLED.load(Ordering::Acquire)
 }
 
-fn with_session<T>(update: impl FnOnce(&mut Session, u64) -> T) -> Option<T> {
-    let Ok(mut session) = lock_session() else {
-        return None;
+/// Outcome of a hook's table update.
+enum Access<T> {
+    Done(T),
+    /// The lock was busy. The hook cannot say what the table would have done.
+    Busy,
+    /// No table has been allocated yet, so there is nothing mapped to update.
+    NoSession,
+}
+
+fn with_session<T>(update: impl FnOnce(&mut Session, u64) -> T) -> Access<T> {
+    let Ok(mut slot) = lock_session() else {
+        return Access::Busy;
+    };
+    let Some(session) = slot.as_deref_mut() else {
+        return Access::NoSession;
     };
     let epoch = EPOCH.load(Ordering::Acquire);
-    let value = update(&mut session, epoch);
-    store_counters(&session);
-    Some(value)
+    let value = update(session, epoch);
+    store_counters(session);
+    Access::Done(value)
 }
 
 fn store_counters(session: &Session) {
@@ -218,7 +254,7 @@ fn shown_publication() -> Option<Publication> {
     Some(expire_publication(published, now, epoch))
 }
 
-fn lock_session() -> Result<std::sync::MutexGuard<'static, Session>, ()> {
+fn lock_session() -> Result<std::sync::MutexGuard<'static, Option<Box<Session>>>, ()> {
     match STATE.try_lock() {
         Ok(guard) => Ok(guard),
         Err(TryLockError::WouldBlock) => Err(()),
@@ -336,15 +372,21 @@ unsafe fn deluxe_rewrite_observe_rtt_sample(ctx: &InlineCtx) {
     match with_session(|session, epoch| session.accept_sample_for(sample, epoch, station)) {
         // Existing path: a stale protocol table was replaced. Drop every
         // mapped id. This does not name the old or new protocol.
-        Some(true) => {
+        Access::Done(true) => {
             begin_publication_retirement();
             super::peer_observer::invalidate_session();
             crate::peer_transport::clear_session();
             crate::peer_transport::note_local(u32::from(local));
             end_publication_retirement();
         }
-        Some(false) => crate::peer_transport::note_local(u32::from(local)),
-        None => {
+        Access::Done(false) => crate::peer_transport::note_local(u32::from(local)),
+        Access::Busy => {
+            DROPPED.fetch_add(1, Ordering::Relaxed);
+        }
+        // First sample of the process: ask the diagnostics thread for a table.
+        // This sample is lost; the next poll (at most 500 ms) allocates.
+        Access::NoSession => {
+            WANT_SESSION.store(true, Ordering::Release);
             DROPPED.fetch_add(1, Ordering::Relaxed);
         }
     }
@@ -357,14 +399,15 @@ unsafe fn deluxe_rewrite_observe_station_left(ctx: &InlineCtx) {
     let station = station_pick();
     match with_session(|session, epoch| session.accept_leave_for(protocol, remote, epoch, station))
     {
-        Some(true) => {
+        Access::Done(true) => {
             begin_publication_retirement();
             super::peer_observer::invalidate_index(remote);
             crate::peer_transport::clear_station(remote);
             end_publication_retirement();
         }
-        Some(false) => {}
-        None => lifecycle_missed(),
+        // Without a table nothing was mapped, so there is nothing to clear.
+        Access::Done(false) | Access::NoSession => {}
+        Access::Busy => lifecycle_missed(),
     }
 }
 
@@ -373,13 +416,13 @@ unsafe fn deluxe_rewrite_observe_session_end(ctx: &InlineCtx) {
     let protocol = ctx.registers[0].x();
     let station = station_pick();
     match with_session(|session, epoch| session.accept_cleanup_for(protocol, epoch, station)) {
-        Some(true) => {
+        Access::Done(true) => {
             begin_publication_retirement();
             super::peer_observer::invalidate_session();
             crate::peer_transport::clear_session();
             end_publication_retirement();
         }
-        Some(false) => {}
-        None => lifecycle_missed(),
+        Access::Done(false) | Access::NoSession => {}
+        Access::Busy => lifecycle_missed(),
     }
 }

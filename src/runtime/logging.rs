@@ -21,6 +21,9 @@ extern "C" {
 }
 
 const MAX_LOG_BYTES: u64 = 4 * 1024 * 1024;
+/// Stack of the diagnostics thread. The platform default of 2 MiB was the
+/// largest single resident cost of the plugin through 0.3.6.
+const DIAGNOSTICS_STACK_BYTES: usize = 256 * 1024;
 static PANICKING: AtomicBool = AtomicBool::new(false);
 
 /// Persist startup progress before configuration, recorder locks or Skyline's
@@ -200,8 +203,12 @@ pub(super) fn start(version: &str) {
 
     let mut generation = CONFIG_GENERATION.load(Ordering::Acquire);
     startup_phase("diagnostic_thread_begin");
+    // The Switch std default is a 2 MiB stack per thread, taken from the game
+    // heap for the whole run. This thread formats log lines and streams CSV
+    // rows through heap buffers; its deepest frames are the file writers.
     if let Err(error) = std::thread::Builder::new()
         .name("deluxe-diagnostics".into())
+        .stack_size(DIAGNOSTICS_STACK_BYTES)
         .spawn(move || {
             let mut persisted = 0;
             let mut dropped = 0;

@@ -26,9 +26,10 @@ pub struct Sample {
 }
 
 /// `Aborted` is the first variant on purpose: it is the initial `reason` of
-/// the static capture buffers, and an all-zero initializer keeps them in
-/// `.bss` instead of the NRO file. `Capacity` no longer occurs (the API trace
-/// streams since 0.3.5) but stays for decoding older CSVs.
+/// the static capture state, and an all-zero initializer keeps it in `.bss`
+/// instead of the NRO file. `Capacity` ends the callback capture when its
+/// buffer is full; the API trace no longer produces it (it streams since
+/// 0.3.5) but the label stays for decoding older CSVs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Finish {
     Aborted,
@@ -55,11 +56,14 @@ enum Phase {
     Ready,
 }
 
+/// `samples` is empty between captures. `begin` reserves `CAPACITY` on the
+/// background thread (64 KiB; since 0.3.7 the buffer is not resident while
+/// idle) and `take_ready` hands the filled vector to the snapshot without a
+/// copy, so the render path never allocates or frees.
 struct State {
     phase: Phase,
     id: u64,
-    samples: [Sample; CAPACITY],
-    len: usize,
+    samples: Vec<Sample>,
     reason: Finish,
 }
 
@@ -85,21 +89,11 @@ impl Default for Capture {
 
 impl Capture {
     pub const fn new() -> Self {
-        const EMPTY: Sample = Sample {
-            callback: 0,
-            tick: 0,
-            buttons: 0,
-            fx_mode: 0,
-            fx_scope: 0,
-            fx_effective_off: false,
-            overlay_view: 0,
-        };
         Self {
             state: Mutex::new(State {
                 phase: Phase::Idle,
                 id: 0,
-                samples: [EMPTY; CAPACITY],
-                len: 0,
+                samples: Vec::new(),
                 reason: Finish::Aborted,
             }),
             active: AtomicBool::new(false),
@@ -108,7 +102,8 @@ impl Capture {
         }
     }
 
-    /// Background thread only. Refuses to overwrite an unexported capture.
+    /// Background thread only. Refuses to overwrite an unexported capture, and
+    /// refuses to arm when the sample buffer cannot be allocated.
     pub fn begin(&self, id: u64) -> bool {
         let Ok(mut state) = self.state.lock() else {
             return false;
@@ -116,9 +111,12 @@ impl Capture {
         if state.phase != Phase::Idle {
             return false;
         }
+        state.samples.clear();
+        if state.samples.try_reserve_exact(CAPACITY).is_err() {
+            return false;
+        }
         state.phase = Phase::Recording;
         state.id = id;
-        state.len = 0;
         self.skipped.store(0, Ordering::Relaxed);
         self.epoch.fetch_add(1, Ordering::Release);
         drop(state);
@@ -140,17 +138,24 @@ impl Capture {
         if state.phase != Phase::Recording || self.epoch.load(Ordering::Acquire) != epoch {
             return;
         }
-        let n = state.len;
-        let invalid = n > 0
-            && (sample.tick <= state.samples[n - 1].tick
-                || sample.callback <= state.samples[n - 1].callback);
-        state.samples[n] = sample;
-        state.len += 1;
+        let invalid = state
+            .samples
+            .last()
+            .is_some_and(|last| sample.tick <= last.tick || sample.callback <= last.callback);
+        // `begin` reserved CAPACITY, so this push never reallocates. A buffer
+        // that is somehow full ends the capture instead of growing it here.
+        if state.samples.len() < state.samples.capacity() {
+            state.samples.push(sample);
+        }
+        let first_tick = state
+            .samples
+            .first()
+            .map_or(sample.tick, |first| first.tick);
         let reason = if invalid {
             Some(Finish::ClockInvalid)
-        } else if sample.tick.saturating_sub(state.samples[0].tick) >= DURATION_TICKS {
+        } else if sample.tick.saturating_sub(first_tick) >= DURATION_TICKS {
             Some(Finish::Elapsed)
-        } else if state.len == CAPACITY {
+        } else if state.samples.len() >= CAPACITY {
             Some(Finish::Capacity)
         } else {
             None
@@ -184,10 +189,13 @@ impl Capture {
         if state.phase != Phase::Ready {
             return None;
         }
+        // The buffer moves into the snapshot and is freed with it after the
+        // export; the idle state keeps an empty vector.
+        let samples = std::mem::take(&mut state.samples);
         let snapshot = Snapshot {
             id: state.id,
             reason: state.reason,
-            samples: state.samples[..state.len].to_vec(),
+            samples,
             skipped: self.skipped.load(Ordering::Relaxed),
         };
         state.phase = Phase::Idle;

@@ -344,6 +344,7 @@ pub enum PingGap {
 /// The closed manager's warmup loop also reads one never-written zero. That
 /// zero is not included here: a steady sample is Stable from the first push.
 #[derive(Clone, Copy)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 struct Ring {
     samples: [u32; RING_CAP],
     count: u8,
@@ -399,6 +400,7 @@ impl Ring {
 }
 
 #[derive(Clone, Copy)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 struct Slot {
     ring: Ring,
     tick: u64,
@@ -454,6 +456,7 @@ pub fn window_stability(samples: &[u32]) -> Option<Stability> {
 }
 
 #[derive(Clone)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct Table {
     protocol: u64,
     local: u8,
@@ -823,6 +826,15 @@ impl StationBoard {
             ..Self::unavailable(epoch)
         }
     }
+
+    /// What an empty table publishes for `stations`: every requested slot
+    /// unavailable. Used while no session table has been allocated, so it
+    /// must match `Session::board_for` on an empty session (tested).
+    pub fn empty(epoch: u64, stations: &[u8]) -> Self {
+        let mut board = Self::unavailable(epoch);
+        board.len = stations.len().min(BOARD_CAP) as u8;
+        board
+    }
 }
 
 /// One UI publication. `bits` packs the reading and the reason together.
@@ -922,6 +934,7 @@ fn gap_of(reason: u8) -> PingGap {
 
 /// Table plus the epoch that makes a missed leave or cleanup discard old slots.
 #[derive(Clone)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct Session {
     table: Table,
     applied: u64,
@@ -929,17 +942,39 @@ pub struct Session {
 }
 
 impl Session {
+    const INITIAL_PUBLICATION: Publication = Publication {
+        bits: (1u64 << 63) | (REASON_OFF as u64),
+        tick: 0,
+        ticks_per_ms: 0,
+        epoch: 1,
+        peer: NO_PEER,
+    };
+
     pub const fn new() -> Self {
         Self {
             table: Table::new(),
             applied: 1,
-            publication: Publication {
-                bits: (1u64 << 63) | (REASON_OFF as u64),
-                tick: 0,
-                ticks_per_ms: 0,
-                epoch: 1,
-                peer: NO_PEER,
-            },
+            publication: Self::INITIAL_PUBLICATION,
+        }
+    }
+
+    /// The same empty session on the heap. The 253 station slots are about
+    /// 107 KB and all zero, so the allocation is zeroed in place and only the
+    /// three non-zero scalars are written: no 107 KB temporary on the caller's
+    /// stack and no copy of the table in the NRO image. Equality with `new()`
+    /// is tested.
+    pub fn new_boxed() -> Box<Self> {
+        let mut boxed: Box<std::mem::MaybeUninit<Self>> = Box::new_zeroed();
+        // SAFETY: every field of Session, Table, Slot, Ring and Publication is
+        // an integer or a bool, and all-zero is a valid value for each. The
+        // fields that `new()` sets to non-zero values are written below, through
+        // raw pointers so no reference to uninitialized memory is formed.
+        unsafe {
+            let session = boxed.as_mut_ptr();
+            std::ptr::addr_of_mut!((*session).table.local).write(0xfd);
+            std::ptr::addr_of_mut!((*session).applied).write(1);
+            std::ptr::addr_of_mut!((*session).publication).write(Self::INITIAL_PUBLICATION);
+            boxed.assume_init()
         }
     }
 
@@ -1189,6 +1224,40 @@ mod tests {
             now_tick,
             ticks_per_ms: PER_MS,
         }
+    }
+
+    #[test]
+    fn boxed_session_equals_the_const_session() {
+        let boxed = Session::new_boxed();
+        assert!(*boxed == Session::new());
+        assert_eq!(boxed.publication(), Session::INITIAL_PUBLICATION);
+        assert_eq!(boxed.table.local, 0xfd);
+        assert_eq!(boxed.applied, 1);
+        let mut live = Session::new_boxed();
+        live.accept_sample(obs(3, 1, 20, 1_000), 1);
+        assert_eq!(live.publication().reading(), PingReading::Measured(20));
+        assert_eq!(live.samples(), 1);
+    }
+
+    #[test]
+    fn missing_table_publishes_like_an_empty_one() {
+        let stations = [3u8, 7, 1];
+        for (epoch, pick) in [
+            (1, StationPick::Absent),
+            (5, StationPick::Index(3)),
+            (9, StationPick::Busy),
+        ] {
+            let mut session = Session::new_boxed();
+            session.accept_poll_for(123_456, epoch, pick);
+            assert_eq!(session.publication(), Publication::unavailable(epoch));
+            assert_eq!(
+                session.board_for(123_456, epoch, &stations),
+                StationBoard::empty(epoch, &stations)
+            );
+        }
+        let many = [0u8; BOARD_CAP + 3];
+        assert_eq!(StationBoard::empty(2, &many).len as usize, BOARD_CAP);
+        assert_eq!(StationBoard::empty(2, &[]).len, 0);
     }
 
     #[test]
