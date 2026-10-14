@@ -1072,6 +1072,7 @@ unsafe extern "C" fn draw() {
                 }
                 row("Capture", "L+R+Up (30 s)");
                 row("CSS capture", &super::css_capture::status_label());
+                row("Match capture", &super::match_capture::status_label());
                 igEndTable();
             }
             if let Some(lines) = compact_lines.as_ref() {

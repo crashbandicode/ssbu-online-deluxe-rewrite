@@ -51,6 +51,17 @@ class TimingAnalysis(unittest.TestCase):
         self.assertEqual(len(analyze(trace(mixed=True))["conditions"]), 2)
         self.assertTrue(analyze(trace(mixed=True))["warnings"])
 
+    def test_scene_ended_match_capture_is_complete_below_its_ceiling(self):
+        # Footer metadata (streamed CSVs) and a scene_end reason are accepted.
+        text = trace().replace("# reason=elapsed\n", "").replace("# sample_count=601\n", "")
+        text = text.replace("# complete=1\n", "# reason=scene_end\n# sample_count=601\n# complete=1\n")
+        text = text.replace("# duration_ticks=192000000", "# duration_ticks=11520000000")
+        report = analyze(text)
+        self.assertEqual(report["reason"], "scene_end")
+        self.assertEqual(report["samples"], 601)
+        with self.assertRaises(ValueError):
+            analyze(text.replace("# duration_ticks=11520000000", "# duration_ticks=192000000"))
+
     def test_truncation_invalid_clock_and_short_capture_are_rejected(self):
         for text in (trace().replace("# complete=1\n", ""),
                      trace().replace("1,1,320100,", "1,1,100,"),

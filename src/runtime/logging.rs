@@ -216,7 +216,13 @@ pub(super) fn start(version: &str) {
             let mut error_reported = false;
             let mut timing = super::timing::Service::default();
             loop {
-                std::thread::sleep(Duration::from_millis(500));
+                // A running capture drains its chunks twice per period so a
+                // match's row rate has twice the headroom of the 30 s capture.
+                std::thread::sleep(Duration::from_millis(250));
+                if timing.capturing() {
+                    timing.poll();
+                }
+                std::thread::sleep(Duration::from_millis(250));
                 timing.poll();
                 super::presentation::poll();
                 super::fps_boost::publish();

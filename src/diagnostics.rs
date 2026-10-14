@@ -202,6 +202,12 @@ pub enum Code {
     /// `a` = 2 when the game then presented a different index than the one
     /// presented early (that call went through), `b` is the game's index.
     EarlyPresent = 105,
+    /// `CAPTURE_MATCH` capture. `a` = 0 startup (`b` = flag present), 1 stage
+    /// entered and a capture requested (`b` = scene status), 2 stage left and
+    /// the capture ended (`b` = previous status), 3 a running 30 s capture was
+    /// ended early for a starting match (`b` = its id). `TimingStarted` `b` = 1
+    /// marks the match capture itself.
+    MatchCapture = 106,
 }
 
 /// Game SetCrop observations recorded before further calls are forwarded only.
@@ -363,6 +369,7 @@ mod tests {
         assert_eq!(Code::DispatcherBackoffStats as u16, 103);
         assert_eq!(Code::CssCapture as u16, 104);
         assert_eq!(Code::EarlyPresent as u16, 105);
+        assert_eq!(Code::MatchCapture as u16, 106);
         let rect = crop_rect_event(4, 0, 0, 1024, 576);
         assert_eq!(rect.0, crop_rect_word(0, 0, 1024, 576));
         assert_eq!(rect.1, 4);

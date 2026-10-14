@@ -181,6 +181,7 @@ pub(crate) fn set_scene(
             generation,
         );
         store_cleanup(active, generation);
+        super::match_capture::note_scene(previous_status, status);
     }
     store_scene(connection, status);
     if previous_connection.is_online() != connection.is_online() {

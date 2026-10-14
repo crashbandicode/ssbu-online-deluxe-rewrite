@@ -234,6 +234,19 @@ these hooks exist. The Debug view's `CSS capture` row shows the state, and
 `tools/analyze_render_trace.py` prints a `css_capture` section. The manual
 L+R+Up capture also lasts 30 s now.
 
+### Match capture (opt-in)
+
+To see what a whole match does, create an empty file
+`sd:/ultimate/ssbu_online_deluxe_rewrite/CAPTURE_MATCH` before boot. The same
+capture pair (`timing-<tick>.csv`, `api-<tick>.csv`) is then armed when a
+stage loads (Singles, Doubles or Training) and ends when the match leaves the
+stage, or after ten minutes. Both files stream to the card while the match
+runs, about 4 MB per minute, from the background thread; nothing is written
+from a game hook. The flag also installs the three read-only `CAPTURE_CSS`
+hooks so dependency waits and the UI job appear in the trace; with both flags
+on the card the character-select capture runs as well. The Debug view's
+`Match capture` row counts the captures armed and ended.
+
 ## Configuration
 
 Settings are created at:

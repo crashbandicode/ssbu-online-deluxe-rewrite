@@ -16,8 +16,11 @@ Under sd:/ultimate/ssbu_online_deluxe_rewrite/:
   retains the last good version and is recovered if replacement was interrupted.
   Switch RenameFile cannot overwrite an existing destination: save closes the temp file,
   parks the original in the backup, then promotes temp to the now-absent destination.
-- timing-<tick>.csv: opt-in ten-second render-callback traces; timing-status.txt
+- timing-<tick>.csv: opt-in render-callback traces (30 s; a `CAPTURE_MATCH`
+  capture runs to the end of the match, ten minutes at most); timing-status.txt
   reports capture/export failures. See [measurement procedure](PERFORMANCE.md).
+  Both CSVs stream while the capture runs: header at arm time, rows every
+  poll, `# engine/reason/skipped/sample_count` in the footer before `# complete=1`.
 - api-<tick>.csv: paired CPU spans around render APIs. These are not GPU or display
   times. Analyze with tools/analyze_render_trace.py.
 - renderer-status.txt: actual active mode, texture counts/index masks and cumulative
@@ -176,6 +179,23 @@ the same pure hash for every kind; `tools/analyze_render_trace.py` recomputes it
 from kind 62 and reports a `css_capture` section. Install log code 104 gives the
 hook mask (7 = all three) and which SDK symbols resolved; codes 12/13 mark
 character-select entry and exit (exit = one second without a CSS update).
+
+With the `CAPTURE_MATCH` boot flag the same capture pair is armed when the
+scene enters a stage (the stage-setup hook classifies Singles, Doubles or
+Training; label `match_singles`, `match_doubles` or `match_training`) and
+ended when the scene returns to Inactive at the results screen (`# reason=
+scene_end`), with a ten-minute ceiling (`elapsed`). Both CSVs stream from the
+diagnostics thread, which polls every 250 ms while a capture runs; the trace
+chunks pack `begin` relative to a per-chunk base, so a long capture keeps the
+20-byte row. A 30 s capture still running when a match starts is ended
+(install log code 106 `a=3`) and the match capture arms once its export is
+done. `CAPTURE_MATCH` also installs the three `CAPTURE_CSS` hooks (rows
+62–66 and 77) without arming on character-select entry; put both flags on
+the card for both captures. Code 106: `a=0` startup (`b` = flag present),
+`a=1` stage entered (`b` = status), `a=2` stage left (`b` = previous status).
+The Debug view's `Match capture` row shows the counts. `tools/analyze_timing.py`
+accepts `scene_end`. Nothing in the hot path changes: no hook does I/O, and
+the rows are the ones the CSS capture already records.
 
 ## Hang trace (0.3.2)
 

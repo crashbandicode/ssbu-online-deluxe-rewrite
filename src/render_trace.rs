@@ -1,5 +1,5 @@
 //! Bounded CPU-side API spans. These do not measure GPU execution or scanout.
-use crate::timing::{Finish, DURATION_TICKS, TICK_HZ};
+use crate::timing::{Finish, TICK_HZ};
 use std::{
     io::{self, Write},
     sync::{
@@ -186,8 +186,12 @@ pub struct Event {
     /// -1 when no trustworthy result exists.
     pub result: i32,
 }
-/// Stored row: ticks relative to the capture start and the span length, both
-/// 32-bit (a 30 s capture is 576 M ticks), so a row is 20 B instead of 32.
+/// Stored row: ticks relative to the chunk's base and the span length, both
+/// 32-bit, so a row is 20 B instead of 32. The base is set `CHUNK_HALF_RANGE`
+/// before the chunk's first row, so a span that began up to 111 s before it
+/// (or a row up to 111 s after it) still packs; a match capture of many
+/// minutes therefore needs no 64-bit column (before the match capture the
+/// base was the capture start, which limited a capture to 223 s).
 #[derive(Clone, Copy)]
 #[repr(C)]
 struct Packed {
@@ -204,12 +208,16 @@ const PACKED_ZERO: Packed = Packed {
     result: 0,
     kind: 0,
 };
+const CHUNK_HALF_RANGE: u64 = 1 << 31;
 struct Chunk {
     len: usize,
+    /// Tick the rows' `begin` is relative to; set with the first row.
+    base: u64,
     rows: [Packed; CHUNK],
 }
 struct State {
     id: u64,
+    duration: u64,
     first: u64,
     /// Rows accepted since `begin`, drained or not.
     total: usize,
@@ -251,6 +259,7 @@ impl Trace {
         Self {
             state: Mutex::new(State {
                 id: 0,
+                duration: 0,
                 first: 0,
                 total: 0,
                 phase: 0,
@@ -260,10 +269,12 @@ impl Trace {
                 chunks: [
                     Chunk {
                         len: 0,
+                        base: 0,
                         rows: [PACKED_ZERO; CHUNK],
                     },
                     Chunk {
                         len: 0,
+                        base: 0,
                         rows: [PACKED_ZERO; CHUNK],
                     },
                 ],
@@ -276,7 +287,8 @@ impl Trace {
     pub fn active(&self) -> bool {
         self.active.load(Ordering::Acquire)
     }
-    pub fn begin(&self, id: u64) -> bool {
+    /// The capture ends `duration_ticks` after its first row.
+    pub fn begin(&self, id: u64, duration_ticks: u64) -> bool {
         let Ok(mut state) = self.state.lock() else {
             return false;
         };
@@ -284,6 +296,7 @@ impl Trace {
             return false;
         }
         state.id = id;
+        state.duration = duration_ticks;
         state.first = 0;
         state.total = 0;
         state.active = 0;
@@ -313,21 +326,29 @@ impl Trace {
         if state.total == 0 {
             state.first = event.begin;
         }
-        // A full chunk hands over to the other one only once that has been
-        // drained; until then the row is counted as skipped, never blocked on.
-        if state.chunks[state.active].len == CHUNK {
-            let other = state.active ^ 1;
+        // A full chunk, or a row whose `begin` is outside the chunk's 32-bit
+        // range (the game stalled for minutes), hands over to the other chunk
+        // only once that has been drained; until then the row is counted as
+        // skipped, never blocked on.
+        let mut active = state.active;
+        let current = &state.chunks[active];
+        if current.len == CHUNK
+            || (current.len > 0 && event.begin.wrapping_sub(current.base) > u64::from(u32::MAX))
+        {
+            let other = active ^ 1;
             if state.chunks[other].len != 0 {
                 self.skipped.fetch_add(1, Ordering::Relaxed);
                 return;
             }
             state.active = other;
+            active = other;
         }
-        let rel_begin = event.begin - state.id;
+        if state.chunks[active].len == 0 {
+            state.chunks[active].base = event.begin.wrapping_sub(CHUNK_HALF_RANGE);
+        }
+        let rel_begin = event.begin.wrapping_sub(state.chunks[active].base);
         let span = event.end.wrapping_sub(event.begin);
-        let clock_invalid = event.end < event.begin
-            || rel_begin > u64::from(u32::MAX)
-            || span > u64::from(u32::MAX);
+        let clock_invalid = event.end < event.begin || span > u64::from(u32::MAX);
         let packed = Packed {
             begin: u32::try_from(rel_begin).unwrap_or(u32::MAX),
             span: u32::try_from(span).unwrap_or(u32::MAX),
@@ -335,14 +356,13 @@ impl Trace {
             result: event.result,
             kind: event.kind,
         };
-        let active = state.active;
         let n = state.chunks[active].len;
         state.chunks[active].rows[n] = packed;
         state.chunks[active].len = n + 1;
         state.total += 1;
         let reason = if clock_invalid {
             Some(Finish::ClockInvalid)
-        } else if event.end.saturating_sub(state.first) >= DURATION_TICKS {
+        } else if event.end.saturating_sub(state.first) >= state.duration {
             Some(Finish::Elapsed)
         } else {
             None
@@ -354,11 +374,15 @@ impl Trace {
         }
     }
     pub fn finish(&self) {
+        self.finish_with(Finish::Aborted);
+    }
+    /// Background end with a stated reason (scene end, abort).
+    pub fn finish_with(&self, reason: Finish) {
         let Ok(mut state) = self.state.lock() else {
             return;
         };
         if state.phase == 1 {
-            state.reason = Finish::Aborted;
+            state.reason = reason;
             state.phase = 2;
             self.active.store(false, Ordering::Release);
         }
@@ -375,12 +399,11 @@ impl Trace {
         if state.phase == 0 {
             return 0;
         }
-        let id = state.id;
         let inactive = state.active ^ 1;
-        let mut moved = take_chunk(&mut state.chunks[inactive], id, out);
+        let mut moved = take_chunk(&mut state.chunks[inactive], out);
         if state.phase == 2 {
             let active = state.active;
-            moved += take_chunk(&mut state.chunks[active], id, out);
+            moved += take_chunk(&mut state.chunks[active], out);
         }
         moved
     }
@@ -408,10 +431,11 @@ impl Trace {
         Some(summary)
     }
 }
-fn take_chunk(chunk: &mut Chunk, id: u64, out: &mut Vec<Event>) -> usize {
+fn take_chunk(chunk: &mut Chunk, out: &mut Vec<Event>) -> usize {
     let len = chunk.len;
+    let base = chunk.base;
     out.extend(chunk.rows[..len].iter().map(|row| {
-        let begin = id + u64::from(row.begin);
+        let begin = base.wrapping_add(u64::from(row.begin));
         Event {
             begin,
             end: begin + u64::from(row.span),
@@ -630,6 +654,7 @@ pub fn write_csv(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::timing::DURATION_TICKS;
     fn drained(trace: &Trace) -> Vec<Event> {
         let mut out = Vec::new();
         trace.drain(&mut out);
@@ -640,8 +665,8 @@ mod tests {
         // 160 KiB of rows: keep the test trace off the test thread's stack.
         static TRACE: Trace = Trace::new();
         let trace = &TRACE;
-        assert!(trace.begin(1));
-        assert!(!trace.begin(12));
+        assert!(trace.begin(1, DURATION_TICKS));
+        assert!(!trace.begin(12, DURATION_TICKS));
         let rows = [
             Event {
                 begin: 20,
@@ -678,14 +703,14 @@ mod tests {
                 event_count: 3
             }
         );
-        assert!(trace.begin(12));
+        assert!(trace.begin(12, DURATION_TICKS));
     }
     #[test]
     fn chunks_hand_over_only_after_a_drain_and_count_the_overflow() {
         // 160 KiB of rows: keep the test trace off the test thread's stack.
         static TRACE: Trace = Trace::new();
         let trace = &TRACE;
-        trace.begin(0);
+        trace.begin(0, DURATION_TICKS);
         let guard = trace.state.lock().unwrap();
         trace.observe(Event::default());
         drop(guard);
@@ -717,14 +742,14 @@ mod tests {
             (data.reason, data.event_count, data.skipped),
             (Finish::Aborted, 2 * CHUNK + 1, 2)
         );
-        trace.begin(2);
+        trace.begin(2, DURATION_TICKS);
         trace.observe(Event {
             begin: 2,
             end: 1,
             ..Event::default()
         });
         assert_eq!(trace.take_ready().unwrap().reason, Finish::ClockInvalid);
-        trace.begin(3);
+        trace.begin(3, DURATION_TICKS);
         trace.finish();
         assert_eq!(trace.take_ready().unwrap().reason, Finish::Aborted);
     }
@@ -733,7 +758,7 @@ mod tests {
         static TRACE: Trace = Trace::new();
         let trace = &TRACE;
         let id = 0x0629_a32f_64f8u64;
-        assert!(trace.begin(id));
+        assert!(trace.begin(id, DURATION_TICKS));
         let late = Event {
             begin: id + 29 * TICK_HZ,
             end: id + 29 * TICK_HZ + 123_456,
@@ -745,13 +770,86 @@ mod tests {
         trace.finish();
         assert_eq!(drained(trace), vec![late]);
         trace.take_ready().unwrap();
-        assert!(trace.begin(id));
+        assert!(trace.begin(id, DURATION_TICKS));
         trace.observe(Event {
             begin: id + 1,
             end: id + 1 + u64::from(u32::MAX) + 1,
             ..Event::default()
         });
         assert_eq!(trace.take_ready().unwrap().reason, Finish::ClockInvalid);
+    }
+    #[test]
+    fn long_captures_keep_exact_ticks_across_chunk_bases_and_end_by_scene() {
+        use crate::timing::MATCH_DURATION_TICKS;
+        static TRACE: Trace = Trace::new();
+        let trace = &TRACE;
+        let id = 0x0629_a32f_64f8u64;
+        assert!(trace.begin(id, MATCH_DURATION_TICKS));
+        // Well past the 223 s a capture-relative u32 could hold.
+        let minute_five = id + 300 * TICK_HZ;
+        let first = Event {
+            begin: minute_five,
+            end: minute_five + 10,
+            kind: 1,
+            index: 0,
+            result: 0,
+        };
+        // A span that began 100 s before the chunk's first row still packs.
+        let earlier = Event {
+            begin: minute_five - 100 * TICK_HZ,
+            end: minute_five + 20,
+            kind: 27,
+            index: -1,
+            result: 1,
+        };
+        let later = Event {
+            begin: minute_five + 110 * TICK_HZ,
+            end: minute_five + 110 * TICK_HZ + 5,
+            kind: 2,
+            index: 1,
+            result: 0,
+        };
+        for row in [first, earlier, later] {
+            trace.observe(row);
+        }
+        // Rows stay in the active chunk until it is full or the capture ends.
+        assert!(trace.take_ready().is_none());
+        assert!(drained(trace).is_empty());
+        // A row outside the chunk's range (a long stall) starts the other
+        // chunk with its own base instead of ending the capture.
+        let near_end = id + MATCH_DURATION_TICKS - TICK_HZ;
+        let late = Event {
+            begin: near_end,
+            end: near_end + 1,
+            kind: 1,
+            index: 0,
+            result: 2,
+        };
+        trace.observe(late);
+        trace.finish_with(Finish::SceneEnd);
+        assert_eq!(drained(trace), vec![first, earlier, later, late]);
+        let data = trace.take_ready().unwrap();
+        assert_eq!(
+            (data.reason, data.event_count, data.skipped),
+            (Finish::SceneEnd, 4, 0)
+        );
+        assert_eq!(data.reason.label(), "scene_end");
+        // The ceiling is measured from the first row, not from the id.
+        assert!(trace.begin(id, MATCH_DURATION_TICKS));
+        trace.observe(first);
+        trace.observe(Event {
+            begin: minute_five + MATCH_DURATION_TICKS - 1,
+            end: minute_five + MATCH_DURATION_TICKS - 1,
+            ..Event::default()
+        });
+        assert!(trace.take_ready().is_none());
+        trace.observe(Event {
+            begin: minute_five + MATCH_DURATION_TICKS,
+            end: minute_five + MATCH_DURATION_TICKS,
+            ..Event::default()
+        });
+        assert_eq!(drained(trace).len(), 3);
+        assert_eq!(trace.take_ready().unwrap().reason, Finish::Elapsed);
     }
     #[test]
     fn streamed_csv_matches_the_single_shot_form() {
@@ -817,7 +915,7 @@ mod tests {
         // 160 KiB of rows: keep the test trace off the test thread's stack.
         static TRACE: Trace = Trace::new();
         let trace = &TRACE;
-        assert!(trace.begin(7));
+        assert!(trace.begin(7, DURATION_TICKS));
         trace.observe(Event {
             begin: 1_000,
             end: 1_000,
@@ -859,7 +957,7 @@ mod tests {
         // 160 KiB of rows: keep the test trace off the test thread's stack.
         static TRACE: Trace = Trace::new();
         let trace = &TRACE;
-        assert!(trace.begin(8));
+        assert!(trace.begin(8, DURATION_TICKS));
         trace.observe(resize);
         assert!(trace.take_ready().is_none());
         trace.finish();

@@ -123,16 +123,18 @@ The callback traces below do not measure or confirm the six-frame native baselin
 An opt-in capture records thirty guest-clock seconds (ten before 0.3.1) of the
 existing ImGui render callback, including callback sequence, raw system ticks,
 sampled HID buttons, requested FX mode/scope and effective suppression state.
-It adds no game hook. Storage is a fixed 2048-sample array (1024 before 0.3.1);
-the callback uses `try_lock`, with explicit skipped counts. Recording stops
-before the background logger exports a CSV. Since 0.3.1 the `CAPTURE_CSS` boot
-flag arms the same capture automatically on character-select entry (label
-`css`) and adds the read-only dispatcher/UI rows described in the README.
+It adds no game hook. Storage is a 2048-sample buffer (1024 before 0.3.1)
+that the diagnostics thread drains and streams to the CSV every poll; the
+callback uses `try_lock`, with explicit skipped counts. Since 0.3.1 the
+`CAPTURE_CSS` boot flag arms the same capture automatically on character-select
+entry (label `css`) and adds the read-only dispatcher/UI rows described in the
+README; the `CAPTURE_MATCH` boot flag arms it for a whole match (label
+`match_*`, ended by the scene change, ten-minute ceiling).
 No per-sample file write, allocation, or blocking lock occurs in the callback.
 
 From Settings, use the existing debug shortcut (hold L+R and Plus or Minus, tap
 Down), then hold L+R and tap Up to capture. The buffered-export source correction
-shows `Capturing (10 s)`, then `Exporting CSV`, then `CSV saved` only after both
+shows `Capturing`, then `Exporting CSV`, then `CSV saved` only after both
 CSVs are flushed/synchronized and the saved status is persisted. Errors show
 `Export error`, even if writing the error status file also fails. The debug view's
 capture shortcut uses L/R, not ZL/ZR.

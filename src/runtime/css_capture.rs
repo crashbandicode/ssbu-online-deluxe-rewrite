@@ -217,7 +217,9 @@ pub(super) fn install() {
     );
     let present = std::path::Path::new(super::DATA_DIR).join(FLAG).is_file();
     FLAG_PRESENT.store(present, Ordering::Release);
-    if !present {
+    // `CAPTURE_MATCH` wants the same read-only rows in a match; only
+    // `CAPTURE_CSS` arms on character-select entry.
+    if !present && !super::match_capture::flag_present() {
         record(Code::CssCapture, 0, 0);
         return;
     }
@@ -259,10 +261,17 @@ pub(super) fn install() {
     record(
         Code::CssCapture,
         u64::from(hooks),
-        1 | (u64::from(GET_PRIORITY.load(Ordering::Relaxed) != 0) << 1)
+        u64::from(present)
+            | (u64::from(GET_PRIORITY.load(Ordering::Relaxed) != 0) << 1)
             | (u64::from(GET_CORE_MASK.load(Ordering::Relaxed) != 0) << 2),
     );
-    skyline::println!("[Deluxe] CSS capture hooks {hooks:#x}; arming on character-select entry");
+    if present {
+        skyline::println!(
+            "[Deluxe] CSS capture hooks {hooks:#x}; arming on character-select entry"
+        );
+    } else {
+        skyline::println!("[Deluxe] CSS capture hooks {hooks:#x} for the match capture");
+    }
 }
 
 fn hooks_ready() -> bool {
@@ -277,7 +286,7 @@ pub(super) fn note_css_frame() {
     if IN_CSS.swap(true, Ordering::AcqRel) {
         return;
     }
-    let ready = hooks_ready();
+    let ready = hooks_ready() && FLAG_PRESENT.load(Ordering::Acquire);
     record(Code::CssEntered, tick, u64::from(ready));
     if ready && super::timing::request_css() {
         ARMED_CAPTURES.fetch_add(1, Ordering::Relaxed);
@@ -308,7 +317,10 @@ pub(super) fn poll() {
 
 pub(super) fn status_label() -> String {
     if !FLAG_PRESENT.load(Ordering::Acquire) {
-        return "Off (no CAPTURE_CSS)".to_string();
+        return match HOOKS.load(Ordering::Acquire) {
+            0 => "Off (no CAPTURE_CSS)".to_string(),
+            hooks => format!("Hooks {hooks:#x} for CAPTURE_MATCH; not arming"),
+        };
     }
     match HOOKS.load(Ordering::Acquire) {
         7 => format!(

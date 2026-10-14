@@ -14,6 +14,7 @@ mod imgui;
 mod imgui_stats;
 mod input;
 mod logging;
+mod match_capture;
 mod memory;
 mod native_banner;
 mod nvn;
@@ -208,7 +209,9 @@ pub fn main() {
             install();
         }
     }
-    // After the renderer family verified the dispatcher sites it shares.
+    // After the renderer family verified the dispatcher sites it shares. The
+    // match flag is read first: it also wants the CSS capture hooks.
+    match_capture::install();
     css_capture::install();
     resolution::install();
     fighter_probe::install();

@@ -35,7 +35,9 @@ def analyze(text):
         raise ValueError("missing timing metadata")
     if metadata["schema"] != "1" or metadata["metric"] != "render_callback":
         raise ValueError("unsupported schema or metric")
-    if metadata["reason"] != "elapsed":
+    # `elapsed` is a capture that ran its declared duration; `scene_end` is a
+    # match capture (CAPTURE_MATCH) that ended because the match did.
+    if metadata["reason"] not in ("elapsed", "scene_end"):
         raise ValueError(f"capture is not complete: {metadata['reason']}")
     hz = int(metadata["tick_hz"])
     skipped = int(metadata["skipped"])
@@ -61,8 +63,12 @@ def analyze(text):
     if len(samples) != int(metadata["sample_count"]) or len(samples) < 2:
         raise ValueError("sample count mismatch or insufficient samples")
     elapsed_ticks = samples[-1]["tick"] - samples[0]["tick"]
-    if elapsed_ticks < int(metadata["duration_ticks"]) or int(metadata["duration_ticks"]) <= 0:
+    if int(metadata["duration_ticks"]) <= 0:
+        raise ValueError("invalid declared duration")
+    if metadata["reason"] == "elapsed" and elapsed_ticks < int(metadata["duration_ticks"]):
         raise ValueError("capture shorter than its declared duration")
+    if metadata["reason"] == "scene_end" and elapsed_ticks >= int(metadata["duration_ticks"]):
+        raise ValueError("scene-ended capture reached its ceiling")
     intervals, missing_callbacks, excluded_intervals = [], 0, 0
     for before, after in zip(samples, samples[1:]):
         tick_delta = after["tick"] - before["tick"]
@@ -85,7 +91,7 @@ def analyze(text):
     if len(intervals) < 120:
         warnings.append("Fewer than 120 consecutive intervals; percentile estimates are weak.")
     return {
-        "metric": "render_callback", "engine": metadata["engine"],
+        "metric": "render_callback", "engine": metadata["engine"], "reason": metadata["reason"],
         "build": metadata["build"], "label": metadata["label"], "id": metadata["id"],
         "samples": len(samples), "intervals": len(intervals),
         "elapsed_guest_seconds": elapsed_ticks / hz,
