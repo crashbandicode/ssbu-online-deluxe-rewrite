@@ -47,20 +47,20 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("deluxe-config-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("config.ini");
-        save(&path, "effects=on\n").unwrap();
-        save(&path, "effects=off\n").unwrap();
-        assert_eq!(fs::read_to_string(&path).unwrap(), "effects=off\n");
+        save(&path, "stealth=true\n").unwrap();
+        save(&path, "stealth=false\n").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "stealth=false\n");
         assert_eq!(
             fs::read_to_string(path.with_extension("previous.ini")).unwrap(),
-            "effects=on\n"
+            "stealth=true\n"
         );
         // Interruption after parking the original but before promoting temp.
         fs::remove_file(&path).unwrap();
         recover(&path).unwrap();
-        assert_eq!(fs::read_to_string(&path).unwrap(), "effects=on\n");
-        save(&path, "effects=off\n").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "stealth=true\n");
+        save(&path, "stealth=false\n").unwrap();
         recover(&path).unwrap();
-        assert_eq!(fs::read_to_string(&path).unwrap(), "effects=off\n");
+        assert_eq!(fs::read_to_string(&path).unwrap(), "stealth=false\n");
         fs::remove_dir_all(dir).unwrap();
     }
 }

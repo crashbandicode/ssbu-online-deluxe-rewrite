@@ -108,7 +108,7 @@ pub unsafe extern "C" fn ssbu_online_deluxe_online_context_v1() -> u32 {
     if scene.ready {
         bits |= abi::ONLINE_CONTEXT_READY;
     }
-    if super::auto_driver::fx_online() {
+    if super::auto_driver::context_online() {
         bits |= abi::ONLINE_CONTEXT_ONLINE;
     }
     match scene.status {

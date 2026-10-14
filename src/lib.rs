@@ -1,18 +1,9 @@
 //! Portable settings, policy and diagnostics; Switch hooks are isolated.
-pub mod acmd;
 pub mod auto_policy;
 pub mod config;
 pub mod config_store;
-pub mod critical_probe;
 pub mod diagnostics;
 pub mod dispatcher_backoff;
-pub mod eff_cleanup;
-pub mod eff_sibling;
-pub mod eff_variant;
-pub mod effect_context;
-pub mod effects;
-mod effects_catalog;
-pub mod effects_reduced;
 pub mod fps_boost;
 pub mod hook_chain;
 pub mod hud_place;

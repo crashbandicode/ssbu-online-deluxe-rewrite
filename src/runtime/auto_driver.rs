@@ -8,7 +8,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 
 static SCENE: AtomicU8 = AtomicU8::new(0);
 static READY: AtomicBool = AtomicBool::new(false);
-/// Latency-hook reachability for FX only. It does not classify a match.
+/// Latency-hook reachability for the online context only. It does not
+/// classify a match.
 static MATCH_MARKED: AtomicBool = AtomicBool::new(false);
 static CLEANUP: AtomicU64 = AtomicU64::new(0);
 /// Tick of the Singles/Doubles stage load under a menu-set Quickplay; 0 idle.
@@ -38,13 +39,16 @@ pub(crate) fn ready() -> bool {
     READY.load(Ordering::Acquire)
 }
 
-pub(crate) fn fx_online() -> bool {
+/// The exported online bit: an online connection, or a match the online-latency
+/// hook reached. False until the scene tracker is ready.
+pub(crate) fn context_online() -> bool {
     ready() && (connection().is_online() || MATCH_MARKED.load(Ordering::Acquire))
 }
 
-/// The online-latency hook reached a match. FX treats that as online, and
-/// Auto treats a stage the hooks left Offline as an online match (the console
-/// ran two Quickplay matches on 2026-10-14 with the connection still Offline).
+/// The online-latency hook reached a match. The exported online context
+/// treats that as online, and Auto treats a stage the hooks left Offline as an
+/// online match (the console ran two Quickplay matches on 2026-10-14 with the
+/// connection still Offline).
 /// The classified connection itself is kept; nothing assumes Quickplay for
 /// the UI.
 pub(crate) fn mark_match() {
@@ -55,7 +59,7 @@ pub(crate) fn mark_match() {
     // The match is online: the stale-Quickplay check has its answer.
     OFFLINE_CHECK.store(0, Ordering::Release);
     if !previous && !connection().is_online() {
-        record(Code::FxOnlineContext, 1, 0x16ccab8);
+        record(Code::OnlineContext, 1, 0x16ccab8);
         let _ = current_request();
     }
 }
@@ -221,7 +225,7 @@ pub(crate) fn set_scene(
     if next_connection == Some(Connection::Offline) {
         let was_marked = MATCH_MARKED.swap(false, Ordering::AcqRel);
         if was_marked && !previous_connection.is_online() {
-            record(Code::FxOnlineContext, 0, source);
+            record(Code::OnlineContext, 0, source);
         }
     }
     if connection == previous_connection && status == previous_status {
@@ -257,7 +261,7 @@ pub(crate) fn set_scene(
     store_scene(connection, status);
     if previous_connection.is_online() != connection.is_online() {
         record(
-            Code::FxOnlineContext,
+            Code::OnlineContext,
             u64::from(connection.is_online()),
             source,
         );

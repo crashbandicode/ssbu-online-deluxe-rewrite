@@ -1,10 +1,7 @@
-mod acmd;
 mod api_trace;
 mod auto_driver;
 mod css_capture;
 mod dispatcher_backoff;
-mod effect_context;
-mod effects;
 mod fighter_main;
 mod fighter_probe;
 mod fps_boost;
@@ -32,17 +29,14 @@ mod resolution;
 mod response_probe;
 mod timing;
 mod ui;
-mod variant;
 
 use crate::{
-    config::{Config, FxMode, FxScope},
+    config::Config,
     diagnostics::{Code, Recorder},
 };
 use std::sync::atomic::{AtomicBool, AtomicI8, AtomicU64, AtomicU8, Ordering};
 
 pub(super) static RECORDER: Recorder = Recorder::new();
-static FX_MODE: AtomicU8 = AtomicU8::new(0);
-static FX_SCOPE: AtomicU8 = AtomicU8::new(FxScope::Online as u8);
 static RENDER_MODE: AtomicU8 = AtomicU8::new(0);
 static AUTO_PROFILE: AtomicBool = AtomicBool::new(true);
 static PLATFORM: AtomicU8 = AtomicU8::new(0);
@@ -60,16 +54,6 @@ pub(super) fn saved_render_mode() -> crate::config::RenderMode {
 
 pub(super) fn settings() -> Config {
     Config {
-        effects: match FX_MODE.load(Ordering::Acquire) {
-            1 => FxMode::Off,
-            2 => FxMode::Reduced,
-            _ => FxMode::On,
-        },
-        effects_scope: if FX_SCOPE.load(Ordering::Acquire) == FxScope::All as u8 {
-            FxScope::All
-        } else {
-            FxScope::Online
-        },
         input_buffer: INPUT_BUFFER.load(Ordering::Acquire),
         render_mode: saved_render_mode(),
         auto_profile: AUTO_PROFILE.load(Ordering::Acquire),
@@ -93,10 +77,6 @@ pub(super) fn stealth() -> bool {
 pub(super) fn publish(config: &Config) {
     let mode_changed = saved_render_mode() != config.render_mode;
     let auto_changed = AUTO_PROFILE.load(Ordering::Acquire) != config.auto_profile;
-    let previous_fx = fx_mode();
-    FX_MODE.store(config.effects as u8, Ordering::Release);
-    crate::effects_reduced::observe_mode(previous_fx, config.effects);
-    FX_SCOPE.store(config.effects_scope as u8, Ordering::Release);
     INPUT_BUFFER.store(config.input_buffer, Ordering::Release);
     RENDER_MODE.store(config.render_mode as u8, Ordering::Release);
     AUTO_PROFILE.store(config.auto_profile, Ordering::Release);
@@ -116,18 +96,6 @@ pub(crate) fn select_user_profile(mode: crate::config::RenderMode) {
 
 pub(crate) fn set_auto_profile(enabled: bool) {
     auto_driver::set_auto_profile(enabled);
-}
-
-pub(super) fn fx_mode() -> FxMode {
-    match FX_MODE.load(Ordering::Relaxed) {
-        1 => FxMode::Off,
-        2 => FxMode::Reduced,
-        _ => FxMode::On,
-    }
-}
-
-pub(super) fn fx_scope_allows() -> bool {
-    FX_SCOPE.load(Ordering::Relaxed) == FxScope::All as u8 || online::active()
 }
 
 pub(super) fn record(code: Code, a: u64, b: u64) {
@@ -188,10 +156,8 @@ pub fn main() {
         ("RENDERER", renderer::install as fn()),
         ("MENU", ui::install as fn()),
         ("NATIVE", native_banner::install as fn()),
-        // The scene tracker was installed from the FX family until 0.4.2; it
-        // is its own family now so DISABLE_FX no longer blinds Auto.
+        // Character FX and its hook family moved to ssbu-fx-control in 0.5.0.
         ("SCENE", online::install as fn()),
-        ("FX", effects::install as fn()),
         ("BUFFER", hooks::install_latency as fn()),
         ("PIA", pia_rtt::install as fn()),
         ("BACKOFF", dispatcher_backoff::install as fn()),

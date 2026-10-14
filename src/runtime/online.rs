@@ -19,14 +19,6 @@ extern "C" {
 
 const STAGE_SETUP: usize = 0x25d9288;
 
-pub(super) fn active() -> bool {
-    // Offline Training remains normal even while background matchmaking exists.
-    if !auto_driver::fx_online() {
-        return false;
-    }
-    unsafe { !is_training_mode() }
-}
-
 pub(super) fn ready() -> bool {
     auto_driver::ready()
 }
@@ -111,8 +103,9 @@ unsafe fn deluxe_rewrite_stage_setup(ctx: &InlineCtx) {
 
 pub(super) fn install() {
     // Require all resets and entries together. Unknown/overlapping patches leave
-    // Online-only effects normal; explicit All remains usable for offline tests.
-    // Auto also stays off this path: a failed guard does not rewrite the request.
+    // the tracker not ready, so the exported online context never reports
+    // online. Auto also stays off this path: a failed guard does not rewrite
+    // the request.
     let offsets = [0x235aaa0, 0x22da160, 0x22da090, 0x22d9fa0, 0x1bd45e0];
     let stage_words = unsafe {
         super::renderer::expect(STAGE_SETUP, 0xaa0003f8)

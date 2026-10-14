@@ -1,56 +1,7 @@
 //! Versioned, human-readable settings. `version=1` is required; omitted settings
 //! use defaults. Blank lines and `#` comments (including trailing comments) are
 //! allowed. Each remaining line is exactly one `key=value` assignment.
-
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-#[repr(u8)]
-pub enum FxMode {
-    #[default]
-    On = 0,
-    Off = 1,
-    Reduced = 2,
-}
-
-impl FxMode {
-    pub const fn label(self) -> &'static str {
-        match self {
-            Self::On => "On",
-            Self::Off => "Off",
-            Self::Reduced => "Reduced",
-        }
-    }
-
-    /// Stored mode. Unknown raw bytes still become On in the runtime loader.
-    pub const fn effective(self) -> Self {
-        self
-    }
-
-    pub const fn available(self) -> bool {
-        true
-    }
-}
-
-/// Restricts Off and Reduced. It never overrides FX On.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-#[repr(u8)]
-pub enum FxScope {
-    #[default]
-    Online = 0,
-    All = 1,
-}
-
-impl FxScope {
-    pub const fn allows(self, online: bool) -> bool {
-        matches!(self, Self::All) || online
-    }
-
-    pub const fn label(self) -> &'static str {
-        match self {
-            Self::Online => "Online",
-            Self::All => "All",
-        }
-    }
-}
+//! `effects` and `effects_scope` are accepted and ignored since 0.5.0.
 
 /// Live profiles plus the startup-only core experiments.
 /// `LessLagDoubles` is the 3-texture OneBehind profile. `DoublesCore` is not.
@@ -133,8 +84,6 @@ impl Platform {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Config {
-    pub effects: FxMode,
-    pub effects_scope: FxScope,
     /// -1 means Auto; explicit values must be in 0..=25.
     pub input_buffer: i8,
     /// Saved manual profile. Auto does not overwrite this when the scene changes.
@@ -162,8 +111,6 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            effects: FxMode::On,
-            effects_scope: FxScope::Online,
             input_buffer: -1,
             render_mode: RenderMode::Vanilla,
             auto_profile: true,
@@ -178,7 +125,7 @@ impl Default for Config {
 
 pub fn parse(text: &str) -> Result<Config, String> {
     let mut config = Config::default();
-    let mut seen = [false; 11];
+    let mut seen = [false; 9];
     for (index, raw) in text.lines().enumerate() {
         let line = raw.split('#').next().unwrap_or_default().trim();
         if line.is_empty() {
@@ -190,18 +137,20 @@ pub fn parse(text: &str) -> Result<Config, String> {
             .ok_or_else(|| error("expected key=value"))?;
         let key = key.trim();
         let value = value.trim();
+        // FX moved to ssbu_fx_control/config.ini in 0.5.0; an unknown key would reset this file.
+        if matches!(key, "effects" | "effects_scope") {
+            continue;
+        }
         let slot = match key {
             "version" => 0,
-            "effects" => 1,
-            "input_buffer" => 2,
-            "effects_scope" => 3,
-            "render_mode" => 4,
-            "auto_profile" => 5,
-            "platform" => 6,
-            "peer_observer" => 7,
-            "stealth" => 8,
-            "streamer" => 9,
-            "fps_boost" => 10,
+            "input_buffer" => 1,
+            "render_mode" => 2,
+            "auto_profile" => 3,
+            "platform" => 4,
+            "peer_observer" => 5,
+            "stealth" => 6,
+            "streamer" => 7,
+            "fps_boost" => 8,
             _ => return Err(error(&format!("unknown key '{key}'"))),
         };
         if seen[slot] {
@@ -211,21 +160,6 @@ pub fn parse(text: &str) -> Result<Config, String> {
         match key {
             "version" if value != "1" => return Err(error("unsupported version; expected 1")),
             "version" => {}
-            "effects" => {
-                config.effects = match value {
-                    "on" => FxMode::On,
-                    "off" => FxMode::Off,
-                    "reduced" => FxMode::Reduced,
-                    _ => return Err(error("effects must be on, off, or reduced")),
-                };
-            }
-            "effects_scope" => {
-                config.effects_scope = match value {
-                    "online" => FxScope::Online,
-                    "all" => FxScope::All,
-                    _ => return Err(error("effects_scope must be online or all")),
-                };
-            }
             "render_mode" => {
                 config.render_mode = match value {
                     "vanilla" => RenderMode::Vanilla,
@@ -310,22 +244,13 @@ pub fn parse(text: &str) -> Result<Config, String> {
     }
     // Older files always wrote render_mode and had no Auto key. Keep that
     // explicit profile manual. A file with neither key gets fork Auto.
-    if !seen[5] {
-        config.auto_profile = !seen[4];
+    if !seen[3] {
+        config.auto_profile = !seen[2];
     }
     Ok(config)
 }
 
 pub fn serialize(config: &Config) -> String {
-    let effects = match config.effects {
-        FxMode::On => "on",
-        FxMode::Off => "off",
-        FxMode::Reduced => "reduced",
-    };
-    let effects_scope = match config.effects_scope {
-        FxScope::Online => "online",
-        FxScope::All => "all",
-    };
     let input_buffer = if config.input_buffer == -1 {
         "auto".to_owned()
     } else {
@@ -341,7 +266,7 @@ pub fn serialize(config: &Config) -> String {
     let fps_boost = if config.fps_boost { "true" } else { "false" };
     let auto_profile = if config.auto_profile { "true" } else { "false" };
     format!(
-        "# Online Deluxe settings\nversion=1\neffects={effects}\neffects_scope={effects_scope}\ninput_buffer={input_buffer}\nrender_mode={}\nauto_profile={auto_profile}\nplatform={}\npeer_observer={peer_observer}\nstealth={stealth}\nstreamer={streamer}\nfps_boost={fps_boost}\n",
+        "# Online Deluxe settings\nversion=1\ninput_buffer={input_buffer}\nrender_mode={}\nauto_profile={auto_profile}\nplatform={}\npeer_observer={peer_observer}\nstealth={stealth}\nstreamer={streamer}\nfps_boost={fps_boost}\n",
         config.render_mode.key(),
         config.platform.key(),
     )
@@ -363,7 +288,6 @@ mod tests {
             parse(" # settings\n version = 1 # format\n").unwrap(),
             Config::default()
         );
-        assert_eq!(Config::default().effects, FxMode::On);
         assert_eq!(Config::default().input_buffer, -1);
         assert!(Config::default().stealth);
         assert!(parse("version=1").unwrap().stealth);
@@ -381,22 +305,18 @@ mod tests {
 
     #[test]
     fn saved_settings_round_trip_at_every_buffer_boundary() {
-        for effects in [FxMode::On, FxMode::Off, FxMode::Reduced] {
-            for input_buffer in [-1, 0, 25] {
-                let config = Config {
-                    effects,
-                    effects_scope: FxScope::Online,
-                    input_buffer,
-                    render_mode: RenderMode::Vanilla,
-                    auto_profile: true,
-                    platform: Platform::Console,
-                    peer_observer: false,
-                    stealth: false,
-                    streamer: false,
-                    fps_boost: false,
-                };
-                assert_eq!(parse(&config.serialize()).unwrap(), config);
-            }
+        for input_buffer in [-1, 0, 25] {
+            let config = Config {
+                input_buffer,
+                render_mode: RenderMode::Vanilla,
+                auto_profile: true,
+                platform: Platform::Console,
+                peer_observer: false,
+                stealth: false,
+                streamer: false,
+                fps_boost: false,
+            };
+            assert_eq!(parse(&config.serialize()).unwrap(), config);
         }
     }
 
@@ -434,9 +354,7 @@ mod tests {
             "effects=on",
             "version=2",
             "version=1\nversion=1",
-            "version=1\neffects=on\neffects=off",
             "version=1\nunknown=1",
-            "version=1\neffects=ON",
             "version=1\ninput_buffer=-1",
             "version=1\ninput_buffer=26",
             "version=1\ninput_buffer=+1",
@@ -450,33 +368,36 @@ mod tests {
     }
 
     #[test]
-    fn reduced_round_trips_and_is_not_on_or_off() {
-        let config = parse("version=1\neffects=reduced\neffects_scope=all").unwrap();
-        assert_eq!(config.effects, FxMode::Reduced);
-        assert_eq!(config.effects_scope, FxScope::All);
-        assert_eq!(parse(&config.serialize()).unwrap().effects, FxMode::Reduced);
-        assert!(FxMode::Reduced.available());
-        assert_eq!(FxMode::Reduced.effective(), FxMode::Reduced);
-        assert_ne!(FxMode::Reduced.effective(), FxMode::Off);
-        assert!(parse("version=1\neffects=Reduced").is_err());
-    }
-    #[test]
-    fn scope_defaults_migrates_and_round_trips() {
-        let old = parse("version=1\neffects=off\ninput_buffer=auto").unwrap();
-        assert_eq!(old.effects_scope, FxScope::Online);
-        for effects_scope in [FxScope::Online, FxScope::All] {
-            let config = Config {
-                effects_scope,
-                ..old.clone()
-            };
-            assert_eq!(parse(&config.serialize()).unwrap(), config);
-        }
+    fn pre_050_fx_keys_are_ignored_and_never_written() {
+        // A 0.4.x file keeps every other setting; the FX keys are skipped with
+        // any value, repeated or not, so the file does not fall back to defaults.
+        let old =
+            parse("version=1\neffects=reduced\neffects_scope=all\ninput_buffer=4\nstealth=false")
+                .unwrap();
+        assert_eq!(
+            old,
+            Config {
+                input_buffer: 4,
+                stealth: false,
+                ..Config::default()
+            }
+        );
         for text in [
+            "version=1\neffects=off",
+            "version=1\neffects=ON",
+            "version=1\neffects=on\neffects=off",
             "version=1\neffects_scope=offline",
             "version=1\neffects_scope=all\neffects_scope=online",
         ] {
-            assert!(parse(text).is_err());
+            assert_eq!(parse(text).unwrap(), Config::default(), "{text:?}");
         }
+        let written = old.serialize();
+        assert!(!written.contains("effects"));
+        assert_eq!(parse(&written).unwrap(), old);
+    }
+
+    #[test]
+    fn peer_observer_defaults_off_and_round_trips() {
         assert!(!parse("version=1").unwrap().peer_observer);
         assert!(
             parse("version=1\npeer_observer=true")
@@ -500,10 +421,6 @@ mod tests {
         ] {
             assert!(parse(text).is_err(), "accepted {text:?}");
         }
-        assert!(!FxScope::Online.allows(false));
-        assert!(FxScope::Online.allows(true));
-        assert!(FxScope::All.allows(false));
-        assert!(FxScope::All.allows(true));
     }
 
     #[test]

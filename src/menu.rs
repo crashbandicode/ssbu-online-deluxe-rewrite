@@ -1,17 +1,17 @@
 //! Portable menu state. Runtime owns controller edges and rendering.
 
 use crate::auto_policy::{cycle_profile_choice, Connection, ProfileChoice, SceneStatus};
-use crate::config::{Config, FxMode, Platform, RenderMode};
+use crate::config::{Config, Platform, RenderMode};
 
-/// Editable Player Info rows, top to bottom.
+/// Editable Player Info rows, top to bottom. The FX row left in 0.5.0 with
+/// character FX (now the `ssbu-fx-control` plugin).
 pub const ROW_PEER: usize = 0;
 pub const ROW_NET_LATENCY: usize = 1;
 pub const ROW_NET_PROFILE: usize = 2;
-pub const ROW_FX: usize = 3;
-pub const ROW_STEALTH: usize = 4;
-pub const ROW_STREAMER: usize = 5;
-pub const ROW_FPS: usize = 6;
-pub const ROW_COUNT: usize = 7;
+pub const ROW_STEALTH: usize = 3;
+pub const ROW_STREAMER: usize = 4;
+pub const ROW_FPS: usize = 5;
+pub const ROW_COUNT: usize = 6;
 
 /// Which editable rows exist. Platform is configured, never a row.
 /// FPS++ is the emulator toggle only.
@@ -32,7 +32,7 @@ pub fn row_visible(row: usize, gate: RowGate) -> bool {
     match row {
         ROW_PEER => gate.peers_connected,
         ROW_FPS => gate.fps_visible,
-        ROW_NET_LATENCY | ROW_NET_PROFILE | ROW_FX | ROW_STEALTH | ROW_STREAMER => true,
+        ROW_NET_LATENCY | ROW_NET_PROFILE | ROW_STEALTH | ROW_STREAMER => true,
         _ => false,
     }
 }
@@ -256,57 +256,6 @@ pub fn net_profile_status(
     crate::render_policy::profile_status(saved, armed, textures, machine, applied)
 }
 
-/// Right walks On → Off → Reduced. Left walks the other way.
-pub fn cycle_fx(mode: FxMode, direction: i8) -> FxMode {
-    let order = [FxMode::On, FxMode::Off, FxMode::Reduced];
-    let index = match mode {
-        FxMode::On => 0,
-        FxMode::Off => 1,
-        FxMode::Reduced => 2,
-    };
-    let next = (index as i16 + i16::from(direction)).rem_euclid(order.len() as i16);
-    order[next as usize]
-}
-
-/// FX setting text. Tracker-unavailable stays the scope message. Per-file
-/// sibling state is debug-only, so a failed file does not rename this row Off.
-pub fn fx_row_value(
-    mode: FxMode,
-    tracker_blocked: bool,
-    variant: crate::eff_variant::VariantAvailability,
-) -> &'static str {
-    let _ = variant;
-    if tracker_blocked {
-        return match mode {
-            FxMode::Off => "On (tracker unavailable)",
-            FxMode::Reduced => "Reduced (tracker unavailable)",
-            FxMode::On => "On",
-        };
-    }
-    mode.label()
-}
-
-/// Debug value for one Reduced file. A failed callback says the original cue
-/// is still used. `ready_text` is the file's own status and is not a speed claim.
-pub fn fx_file_debug(
-    mode: FxMode,
-    tracker_blocked: bool,
-    availability: crate::eff_variant::VariantAvailability,
-    ready_text: &'static str,
-) -> &'static str {
-    if mode != FxMode::Reduced {
-        return "not selected";
-    }
-    if tracker_blocked {
-        return "original (tracker unavailable)";
-    }
-    match availability {
-        crate::eff_variant::VariantAvailability::Unavailable => "original (callback unavailable)",
-        crate::eff_variant::VariantAvailability::Pending => "original (callback pending)",
-        crate::eff_variant::VariantAvailability::Ready => ready_text,
-    }
-}
-
 /// Saved preference, and the latched session when one is open.
 pub fn stealth_value(saved: bool, latched: Option<bool>) -> &'static str {
     crate::peer_transport::stealth_label(saved, latched)
@@ -504,10 +453,6 @@ impl Menu {
             }
             ROW_NET_LATENCY => edit_latency(config, direction),
             ROW_NET_PROFILE => edit_profile(config, direction),
-            ROW_FX => {
-                config.effects = cycle_fx(config.effects, direction);
-                true
-            }
             ROW_STEALTH => {
                 config.stealth = !config.stealth;
                 true
@@ -554,26 +499,15 @@ mod tests {
         assert_eq!(menu.selected, ROW_NET_LATENCY);
         assert!(menu.handle(Action::Right, &mut config));
         assert_eq!(config.input_buffer, 0);
-        assert_eq!(config.effects, FxMode::On);
+        assert_eq!(
+            config,
+            Config {
+                input_buffer: 0,
+                ..Config::default()
+            }
+        );
         menu.handle(Action::Close, &mut config);
         assert!(!menu.open);
-    }
-
-    #[test]
-    fn fx_cycles_on_off_and_reduced_in_both_directions() {
-        let mut menu = Menu {
-            open: true,
-            selected: ROW_FX,
-        };
-        let mut config = Config::default();
-        for expected in [FxMode::Off, FxMode::Reduced, FxMode::On] {
-            assert!(menu.handle(Action::Right, &mut config));
-            assert_eq!(config.effects, expected);
-        }
-        for expected in [FxMode::Reduced, FxMode::Off, FxMode::On] {
-            assert!(menu.handle(Action::Left, &mut config));
-            assert_eq!(config.effects, expected);
-        }
     }
 
     #[test]
@@ -590,8 +524,6 @@ mod tests {
         assert_eq!(menu.selected, ROW_NET_LATENCY);
         menu.handle(Action::Down, &mut config);
         assert_eq!(menu.selected, ROW_NET_PROFILE);
-        menu.handle(Action::Down, &mut config);
-        assert_eq!(menu.selected, ROW_FX);
         menu.handle(Action::Down, &mut config);
         assert_eq!(menu.selected, ROW_STEALTH);
         menu.handle(Action::Down, &mut config);
@@ -954,11 +886,6 @@ mod tests {
                 selected: false,
             },
             CompactField {
-                label: "FX",
-                value: "Reduced!".to_owned(),
-                selected: false,
-            },
-            CompactField {
                 label: "Stealth",
                 value: "On (reconnect)".to_owned(),
                 selected: false,
@@ -983,7 +910,7 @@ mod tests {
         let opponent = compact_fields_line(fields.iter(), true);
         assert_eq!(
             settings,
-            ">Net:Auto   Profile:Auto:LLDbl++   FX:Reduced!   Stealth:On (reconnect)   Stream:Off   FPS++:On (Applied)"
+            ">Net:Auto   Profile:Auto:LLDbl++   Stealth:On (reconnect)   Stream:Off   FPS++:On (Applied)"
         );
         assert_eq!(opponent, format!(">Peer:{peer}"));
         assert!(!settings.contains('\n'));
@@ -1017,11 +944,6 @@ mod tests {
             CompactField {
                 label: "Profile",
                 value: "Auto:LLDbl++".to_owned(),
-                selected: false,
-            },
-            CompactField {
-                label: "FX",
-                value: "Reduced!".to_owned(),
                 selected: false,
             },
             CompactField {

@@ -13,9 +13,6 @@ crate-type = ["cdylib", "rlib"]
 
 [features]
 default = []
-# Host-only variant availability controls; omitted from NRO builds.
-variant-test = []
-# Rendering reconstruction is kept separate from the first diagnostics/FX build.
 
 [dependencies]
 # Plugin registration ABI shared with separately built NROs (sdk/abi).

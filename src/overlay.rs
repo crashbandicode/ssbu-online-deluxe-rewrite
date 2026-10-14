@@ -337,7 +337,6 @@ impl FrameTimes {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::FxMode;
     #[test]
     fn view_cycle_consumes_toggle_down_and_edits_only_in_settings() {
         let _gate = crate::peer_transport::global_gate();
@@ -345,7 +344,7 @@ mod tests {
         let mut ui = Overlay::default();
         let mut config = Config::default();
         ui.poll(RIGHT, &mut config);
-        assert_eq!(config.effects, FxMode::On);
+        assert_eq!(config, Config::default());
         ui.poll(L | R | DOWN, &mut config);
         assert_eq!(
             (ui.view, ui.menu.selected),
@@ -360,9 +359,9 @@ mod tests {
         ui.poll(0, &mut config);
         ui.poll(DOWN, &mut config);
         ui.poll(0, &mut config);
-        assert_eq!(ui.menu.selected, crate::menu::ROW_FX);
+        assert_eq!(ui.menu.selected, crate::menu::ROW_STEALTH);
         assert!(ui.poll(RIGHT, &mut config));
-        assert_eq!(config.effects, FxMode::Off);
+        assert!(!config.stealth);
         assert!(!ui.poll(RIGHT, &mut config));
         ui.poll(L | R | DOWN, &mut config);
         assert_eq!(ui.view, View::Performance);

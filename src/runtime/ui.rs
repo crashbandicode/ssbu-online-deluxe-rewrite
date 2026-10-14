@@ -435,32 +435,6 @@ fn setting_cells(
         ping: false,
         compact: None,
     });
-    let fx = crate::menu::fx_row_value(
-        config.effects,
-        config.effects_scope == crate::config::FxScope::Online && !super::online::ready(),
-        crate::eff_variant::availability(),
-    )
-    .to_owned();
-    let compact_fx = if fx == "Reduced (tracker unavailable)" {
-        "Reduced!".to_owned()
-    } else {
-        fx.clone()
-    };
-    cells.push(SettingCell {
-        label: marked(selected == crate::menu::ROW_FX, "FX"),
-        local: fx,
-        remote: if show_remote {
-            "---".to_owned()
-        } else {
-            String::new()
-        },
-        ping: false,
-        compact: Some(CompactField {
-            label: "FX",
-            value: compact_fx,
-            selected: selected == crate::menu::ROW_FX,
-        }),
-    });
     let stealth =
         crate::menu::stealth_value(super::stealth(), crate::peer_transport::latched_stealth())
             .to_owned();
@@ -841,11 +815,8 @@ unsafe extern "C" fn draw() {
             crate::menu::ProfileAction::Unchanged => {}
         }
         publish(&config);
-        record(
-            Code::MenuChanged,
-            config.effects as u64,
-            config.input_buffer as i64 as u64,
-        );
+        // `a` carried the FX mode until 0.5.0 and is always 0 now.
+        record(Code::MenuChanged, 0, config.input_buffer as i64 as u64);
     }
     crate::plugin_api::REGISTRY.reconcile_pending();
     if let Some(step) = crate::plugin_api::REGISTRY.take_last_step() {
@@ -1038,8 +1009,6 @@ unsafe extern "C" fn draw() {
                     &crate::build_info::GIT_COMMIT[..crate::build_info::GIT_COMMIT.len().min(12)],
                 );
                 row("Renderer", super::renderer::mode().label());
-                row("FX", config.effects.label());
-                row("FX scope", config.effects_scope.label());
                 row(
                     "Online tracker",
                     if super::online::ready() {
@@ -1047,57 +1016,6 @@ unsafe extern "C" fn draw() {
                     } else {
                         "Unavailable"
                     },
-                );
-                row(
-                    "Reduced FX",
-                    match config.effects {
-                        crate::config::FxMode::Reduced
-                            if config.effects_scope == crate::config::FxScope::Online
-                                && !super::online::ready() =>
-                        {
-                            "Saved (tracker unavailable)"
-                        }
-                        crate::config::FxMode::Reduced => "Selected",
-                        _ => "Not selected",
-                    },
-                );
-                let tracker_blocked = config.effects_scope == crate::config::FxScope::Online
-                    && !super::online::ready();
-                row(
-                    "Palutena FX",
-                    crate::menu::fx_file_debug(
-                        config.effects,
-                        tracker_blocked,
-                        crate::eff_variant::availability(),
-                        "sibling ready",
-                    ),
-                );
-                row(
-                    "Edge FX",
-                    crate::menu::fx_file_debug(
-                        config.effects,
-                        tracker_blocked,
-                        crate::eff_variant::edge_availability(),
-                        "sibling ready",
-                    ),
-                );
-                row(
-                    "Ink FX",
-                    crate::menu::fx_file_debug(
-                        config.effects,
-                        tracker_blocked,
-                        crate::eff_variant::ink_availability(),
-                        "sibling ready",
-                    ),
-                );
-                row(
-                    "Chrom FX",
-                    crate::menu::fx_file_debug(
-                        config.effects,
-                        tracker_blocked,
-                        crate::eff_variant::chrom_availability(),
-                        "life 3 to 2 candidate",
-                    ),
                 );
                 row("Engine", super::renderer::status());
                 if fps_visible {

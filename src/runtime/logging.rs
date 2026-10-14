@@ -115,11 +115,8 @@ pub(super) fn start(version: &str) {
     startup_phase("config_read_complete");
     publish(&config);
     startup_phase("recorder_begin");
-    record(
-        Code::ConfigLoaded,
-        config.effects as u64,
-        config.input_buffer as i64 as u64,
-    );
+    // `a` carried the FX mode until 0.5.0 and is always 0 now.
+    record(Code::ConfigLoaded, 0, config.input_buffer as i64 as u64);
     startup_phase("recorder_ready");
     let text_base =
         unsafe { skyline::hooks::getRegionAddress(skyline::hooks::Region::Text) as u64 };
@@ -235,7 +232,7 @@ pub(super) fn start(version: &str) {
                 super::hang_trace::poll(iteration);
                 if iteration.is_multiple_of(10) {
                     super::nvn::write_status();
-                    record(Code::Heartbeat, settings().effects as u64, iteration);
+                    record(Code::Heartbeat, 0, iteration);
                     record(
                         Code::OverlayHealth,
                         super::overlay_host::ready() as u64,
@@ -292,7 +289,7 @@ pub(super) fn start(version: &str) {
                     match save_config(&settings()) {
                         Ok(()) => {
                             generation = next_generation;
-                            record(Code::ConfigSaved, generation, settings().effects as u64);
+                            record(Code::ConfigSaved, generation, 0);
                         }
                         Err(error) if !error_reported => {
                             skyline::println!("[Deluxe] config save failed: {}", error);
