@@ -119,7 +119,7 @@ These differ from FX On, which keeps passthrough hooks installed.
 | 104 | CSS capture startup: a = hook mask (bit 0 dispatcher registration, 1 dependency wait, 2 UI job; 7 = arming); b bit 0 `CAPTURE_CSS` flag, bit 1 `GetThreadPriority` resolved, bit 2 `GetThreadCoreMask` resolved |
 | 105 | Early present mismatch (two-image present-at-flush): a = 2 when the game then presented a different index than the early one, b = the game's index |
 | 106 | `CAPTURE_MATCH`: a = 0 startup (b = flag present), 1 stage entered (b = scene status), 2 stage left (b = previous status), 3 a running 30 s capture ended for a starting match (b = its id) |
-| 107 | Scene connection hold: a = 1 main-menu entry kept a live Quickplay (b = hook address); a = 2 a Singles/Doubles stage under Quickplay without the online-latency hook was demoted to Offline (b = ticks since the stage load; the matching code 73 AutoContext row carries source `0x0ff11e`) |
+| 107 | Scene connection hold: a = 1 main-menu entry kept a stored Quickplay (b = hook address); a = 2 a Singles/Doubles stage under Quickplay without the online-latency hook was demoted to Offline (b = ticks since the stage load; the matching code 73 AutoContext row carries source `0x0ff11e`) |
 
 Codes 18–20 describe historical CSS builds; they are no longer emitted.
 Codes 12/13 mark character-select entry and exit (exit = one second without a CSS update).

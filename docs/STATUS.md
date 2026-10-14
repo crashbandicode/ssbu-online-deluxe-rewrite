@@ -36,7 +36,7 @@ that is no longer true.
 | Software FPS boost | Implemented only as an explicitly gated diagnostic; normal menu reports Unsupported | Measured acceleration of the match timer in Eden, so it is withheld from normal play. [Investigation](FPS_BOOST_INVESTIGATION.md) |
 | Present-at-flush | Two-image LessLag presents the acquired image at the flush that submits it and skips the game's later present of that index (0.4.0; `render_policy::present_at_flush`) | Console-verified. Counters in renderer-status.txt, mismatches in code 105. [Validation](VALIDATION.md) |
 | Match capture | Opt-in `CAPTURE_MATCH` boot flag: streamed timing and API CSVs for a whole match, ended by `scene_end` (0.4.0; `src/runtime/match_capture.rs`) | Shipped in 0.4.0; results in [VALIDATION.md](VALIDATION.md). [Debugging](DEBUGGING.md) |
-| Quickplay hold and stale demotion | Main-menu entry keeps a live Quickplay; a Quickplay with no online-latency hook five seconds into a Singles/Doubles stage is demoted to Offline (0.4.2; `auto_policy::main_menu_connection`, `offline_match_due`) | Host-verified; see VALIDATION.md for console results |
+| Quickplay hold and stale demotion | Main-menu entry keeps a stored Quickplay; a Quickplay with no online-latency hook five seconds into a Singles/Doubles stage is demoted to Offline (0.4.2; `auto_policy::main_menu_connection`, `offline_match_due`) | Host-verified; see VALIDATION.md for console results |
 | ZL-gated native edits | Native pane D-pad edits need ZL held (0.4.1; `src/overlay.rs`); added after 23 unintended saves on the console | Host-verified; see VALIDATION.md for console results |
 
 ## Current: 0.4.2 (ddea22d)

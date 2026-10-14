@@ -163,9 +163,12 @@ The analyzer reports callback interval percentiles, maximum and counts above
 thresholds. Intervals spanning missing callback records are excluded and flagged.
 Mixed settings are flagged. Truncated, unfinished and nonmonotonic traces are
 rejected. The footer and declared sample count identify incomplete file writes.
-The 30-second background timeout exports an explicitly aborted trace if the
-callback does not finish the capture. That timeout also uses the guest clock.
-It does not cancel blocked native filesystem calls. The CSV export uses a bounded
+A wall-clock watchdog on the diagnostics thread (the capture's guest duration
+plus ten seconds) ends a capture whose callback never finishes it and exports
+it with `# reason=aborted`; a match capture ends with `scene_end` when the
+game leaves the stage. The `# engine` footer is the profile at arm time, or
+`Mixed` when the effective profile differed at any poll while recording.
+The watchdog does not cancel blocked native filesystem calls. The CSV export uses a bounded
 64KiB buffer per file with an explicit fallible flush before `File::sync_all`.
 
 October9 Switch evidence on installed `5c72a0b54b8c8c95`: recording finished, but

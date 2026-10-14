@@ -8,7 +8,9 @@ progress note, not this inventory.
 `src/policy.rs` `select_profile` is the Auto scene table. `src/auto_policy.rs`
 `decide` calls it when Auto is on and the scene is ready
 (`src/runtime/auto_driver.rs` `snapshot`). Manual mode keeps the saved
-`RenderMode`. The table tests are the selector specification; a completed
+`RenderMode`, except that after a match or Training ends the cleanup hold
+requests Vanilla on the inactive scene until the next match or a newer
+selection (shown as `Vanilla*`). The table tests are the selector specification; a completed
 match is still required before treating a profile as runtime-accepted.
 
 The historical diagnostic build
@@ -44,8 +46,10 @@ evidence is in [VALIDATION.md](VALIDATION.md).
   `peer_transport::retire_only_confirmed`).
 - `Scene::marked_online` for Auto (0.4.1): a stage the online-latency hook
   reached counts as online.
-- Main menu keeps a live Quickplay, and a stale Quickplay is demoted five
-  seconds into an offline Singles/Doubles stage (0.4.2,
+- Main-menu entry keeps a stored Quickplay (no liveness check), and the
+  diagnostics poll demotes a Singles/Doubles stage that has run five seconds
+  under a stored Quickplay without the online-latency mark to Offline, which
+  does rewrite the stored connection (0.4.2,
   `auto_policy::main_menu_connection`, `offline_match_due`, code 107).
 
 ## Earlier rewrite changes — 2026-10-12 (plugin value tones and read-only rows)
@@ -341,10 +345,13 @@ Match class (`net/mod.rs`, all installed at `:374-390`):
   fighters is Doubles; result stages 310 and 354 clear the match.
 - If a singles/doubles match is still Offline, the fork prints
   `UNTRACKED ONLINE MATCH DETECTED, ASSUMING QUICKPLAY` and forces Quickplay
-  (`:223-231`). The rewrite does not rewrite the stored connection. Since 0.4.1
-  Auto and FX treat a stage the online-latency hook reached as online
-  (`Scene::marked_online`, `effective_connection`), and since 0.4.2 main-menu
-  entry keeps a live Quickplay.
+  (`:223-231`). The rewrite does not relabel such a match: since 0.4.1 Auto
+  and FX treat a stage the online-latency hook reached as online without
+  rewriting the stored connection (`Scene::marked_online`,
+  `effective_connection`). Since 0.4.2 main-menu entry keeps a stored
+  Quickplay, and the only write to the stored connection outside the scene
+  hooks is the demotion of an unmarked Singles/Doubles stage to Offline five
+  seconds after its load (`offline_match_due`).
 - LDN host forces the CSS pane count to 2 once (`0x1a26200`, `:155-166`).
 - LDN initialize/scan hooks only count networks (`net/ldn/mod.rs:41-42`).
 - CSS `0x1a12f60` writes the native banner when online and the 300-frame
@@ -398,12 +405,12 @@ retained. Auto's target and the renderer's committed state are distinct.
 | Stealth | Default On; suppress owned beacon and custom payload, retain receive; latched per connection, menu changes persist and show reconnect notice | Host-tested; Off interoperability and pending-On behavior observed on `410ac1f7`; fresh-On d9 suppressed its beacon with zero custom writes; saved Off stayed pending until reconnect |
 | Peer cycling | Bounded station selection using one identity snapshot for name/interface/settings/ping | 9e9 cycled two remote identities correctly in a three-station lobby; no three-station match completed |
 | Streamer | Menu and fork chord; hides all remote rows and ping, persists to INI | d9 exact menu-saved INI reload and menu/chord privacy passed |
-| Connection / match classification | Quickplay, Arena and Local stay distinct; fighter count classifies doubles; Training/result-stage rules retained | Stage/context guards required; does not rewrite the stored connection. Since 0.4.1 Auto and FX treat a stage the online-latency hook reached as online (`Scene::marked_online`); since 0.4.2 main-menu entry keeps a live Quickplay |
+| Connection / match classification | Quickplay, Arena and Local stay distinct; fighter count classifies doubles; Training/result-stage rules retained | Stage/context guards required. Since 0.4.1 the latency mark changes Auto's effective connection without rewriting the stored one (`Scene::marked_online`); since 0.4.2 main-menu entry keeps a stored Quickplay and the diagnostics poll demotes an unmarked Singles/Doubles stage to Offline after five seconds (`offline_match_due`) |
 | Resolution and DRS | Committed profile plus explicit platform table; guarded resolution function/register/crop path | Console-policy Eden full-Gigaflare scaling and restoration passed for Less/Ultra/Doubles; Vanilla stays off; b19 title fullscreen-crop reset fixed |
 | Cut-in and Sephiroth Gigaflare scaler | Bounded visual resolution reports driven by guarded fighter Main and cut-in sites | Two approximate callback-count gates and Gigaflare trigger passed; Luigi Up-B cut-in scaling/restoration passed |
 | Player Info / performance view | Global ImGui table; connected-only remote column; right in Training/online lobbies, left in ordinary matches | 9e9 remote visibility passed offline/connected/disconnected; a9c right-side Training window confirmed; lobby check pending |
 | Standalone ImGui | Reuse compatible host, embedded fallback otherwise | Embedded and both standalone load orders tested previously; Elite coexistence observed |
-| Native CSS / Arena / LDN text | Fork CSS and arena display paths reinstated alongside the global window | CSS retains selected values after window closure; Streamer restores original styles. Arena uses the selected peer, not the full station list; NSO test pending. LDN lobby network count and native D-pad buffer editing (ZL held, 0.4.1) are implemented; 9e9 Auto-to-0 edit observed. [Details](NATIVE_DISPLAY.md) |
+| Native CSS / Arena / LDN text | Fork CSS and arena display paths reinstated alongside the global window | CSS retains selected values after window closure; Streamer restores original styles. Arena lists up to eight known mapped remote stations (`arena_parts`); NSO test pending. LDN lobby network count and native D-pad buffer editing (ZL held, 0.4.1) are implemented; 9e9 Auto-to-0 edit observed. [Details](NATIVE_DISPLAY.md) |
 | 300-frame native-banner grace / LDN two-pane force | Not copied | Scene generations and validated pane identities replace retained unguarded pointers; no forced controller slots |
 | SsbuSync arena marker | Not needed by the in-tree backend | Legacy host exports trigger a best-effort overlap refusal; do not install both stacks |
 | FX On/Off and scope | Added by this rewrite, not inherited from the fork | Named visual requests only; user-confirmed Palutena/Sephiroth and TM/SGPO coexistence on prior candidates; full expanded catalog not runtime-certified |

@@ -208,7 +208,7 @@ pub enum Code {
     /// ended early for a starting match (`b` = its id). `TimingStarted` `b` = 1
     /// marks the match capture itself.
     MatchCapture = 106,
-    /// Scene connection hold. `a=1`: main-menu entry kept a live Quickplay
+    /// Scene connection hold. `a=1`: main-menu entry kept a stored Quickplay
     /// (`b` = hook address). `a=2`: a Singles/Doubles stage ran the deadline
     /// under Quickplay without the online-latency hook and was demoted to
     /// Offline (`b` = ticks since the stage load); the matching `AutoContext`

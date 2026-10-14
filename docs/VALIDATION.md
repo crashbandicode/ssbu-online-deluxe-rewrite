@@ -2308,12 +2308,14 @@ an online match; the events ring (128 entries, 500 ms flush) drops rows in
 stage-load bursts, so the 16:40Z session's missing menu rows are not evidence
 of the hooks not firing.
 
-Fix (this release): `auto_policy::main_menu_connection` keeps Quickplay on
-main-menu entry (anything else resets to Offline; code 107 `a=1`), and a
-Singles/Doubles stage that runs five seconds under a menu-set Quickplay
-without the online-latency hook is demoted to Offline by the diagnostics poll
-(`offline_match_due`, `OFFLINE_CHECK_TICKS`; code 107 `a=2`, context source
-`0x0ff11e`). Auto therefore runs online matches as online from the stage load
+Fix (this release): `auto_policy::main_menu_connection` keeps a stored
+Quickplay on main-menu entry with no liveness check (anything else resets to
+Offline; code 107 `a=1`), and a Singles/Doubles stage that has run five
+seconds under a stored Quickplay with no online-latency mark is demoted to
+Offline on the next diagnostics poll (500 ms cadence; `offline_match_due`,
+`OFFLINE_CHECK_TICKS`; code 107 `a=2`, context source `0x0ff11e`). The mark
+itself clears only when the connection is set to Offline, so a kept Quickplay
+carries an earlier match's mark through the main menu. Auto therefore runs online matches as online from the stage load
 (the 0.4.1 latency-mark fallback remains for the first match of a session that
 somehow never passed the menu hook) and corrects a stale Quickplay five
 seconds into an offline match instead of never. Manual profiles unaffected.

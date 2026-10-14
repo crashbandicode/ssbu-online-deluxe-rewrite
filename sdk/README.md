@@ -104,11 +104,14 @@ Keep labels short. The strip is narrow and labels are limited to 24 bytes.
   descriptor and its strings only need to live for that call.
 * **Callbacks are retained.** `user`, `current` and `request` must stay valid
   for the life of the process. There is no unregister in version 1.
-* **Threading.** Callbacks run on the host's overlay draw thread while the menu
-  is open. They must be non-blocking, must not call back into the host API
-  (no re-entrancy, including `register`) and must not assume a game thread.
-  `current` runs once per visible option per frame; `request` runs once per
-  accepted controller edge. Do shared-state work with atomics or short locks.
+* **Threading.** Callbacks run on the host's overlay draw thread. They must
+  be non-blocking, must not call back into the host API (no re-entrancy,
+  including `register`) and must not assume a game thread. `current` runs
+  once per visible option per frame while the Plugins page is shown, and once
+  per frame for every option with a pending request even while the window is
+  hidden (the host re-checks pending requests every draw so a change applied
+  at match end is persisted); `request` runs once per accepted controller
+  edge. Do shared-state work with atomics or short locks.
 * **Persistence is yours by default.** Unless you opt in (see
   [Host persistence](#host-persistence-optional)), the host stores nothing for
   the plugin. Load your own settings at startup and report them through
@@ -166,8 +169,9 @@ read-only flag (a single-choice row is still read-only on every host).
 `choice_tones` is null for neutral text, or `choice_count` bytes, each
 `TONE_NEUTRAL` (0), `TONE_OK` (1), `TONE_WARN` (2) or `TONE_ERROR` (3). The Rust
 SDK rejects a `tones` slice whose length is not `choices.len()` as
-`RegisterError::Invalid` before it calls the host. Emulator and hardware
-behaviour of tones is not yet verified.
+`RegisterError::Invalid` before it calls the host. Tones were verified in
+Eden on 2026-10-12 (`docs/VALIDATION.md`, "Plugin value tones"); hardware
+behaviour is not yet observed.
 
 ## Host persistence (optional)
 
@@ -383,7 +387,7 @@ Everything is C layout with natural alignment on a 64-bit target. Sizes:
 points at `OptionDesc`. The table's own `abi_version` stays 1. An old host
 returns `REGISTER_ERR_ABI` (-2) for version 2; retry once with version 1 and
 `OptionDescV1` (no `choice_tones`, and do not set `READ_ONLY`). Emulator and
-hardware behaviour of tones is not yet verified.
+hardware behaviour of tones is not yet observed (Eden-verified 2026-10-12).
 
 ```c
 #include <stdint.h>

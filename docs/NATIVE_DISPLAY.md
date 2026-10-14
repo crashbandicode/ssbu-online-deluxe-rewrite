@@ -53,9 +53,11 @@ not change simulation, networking, rendering policy or input handling.
   cursor. The LDN scan count is captured (`runtime/native_banner.rs`
   `store_scan_count`).
 - CSS status is available offline too. Offline screens omit the opponent line.
-- Arena currently displays the selected remote peer, rather than the fork's
-  complete station list. Its room-ID path, style and positioning are implemented
-  but require an actual NSO arena test on Switch.
+- Arena lists the known mapped remote stations (up to eight lines, local and
+  unmapped stations omitted; `runtime/native_banner.rs` `arena_parts`), each
+  with name, profile, input buffer, RTT and the announced interface suffix when
+  known. Its room-ID path, style and positioning are implemented but require an
+  actual NSO arena test on Switch.
 - Original styles are captured and restored instead of assuming the fork's
   hard-coded default title styles. The CSS original function runs before the
   display update; this ordering is covered by the emulator tests below.

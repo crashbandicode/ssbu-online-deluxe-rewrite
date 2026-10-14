@@ -113,8 +113,9 @@ fork's room-ID path, but still needs an NSO test. See [native display](docs/NATI
 
 The window commands fire when the whole combination is held, in any press
 order, and once per press: L+R+Down works whether the bumpers or the D-pad
-land first. Holding Plus or Minus while tapping Down with the chord also opens
-Debug, as before.
+land first. Holding Plus or Minus while tapping Down with the chord opens Debug
+from Settings or Plugins and keeps Debug open; from hidden the chord still
+opens Settings and from Performance it still hides the window.
 
 The first controller operates the window. Input also reaches the game. If
 Elite's menu is open too, D-pad edits can affect both menus; close one before
@@ -122,8 +123,9 @@ changing settings. With the
 current Eden keyboard mapping, **Q+E+Down Arrow** is the window chord.
 
 NetLatency is the game's online input buffer, **Auto or 0–25**. It is separate
-from NetProfile's rendering policy. A menu change is saved immediately; the
-game's next relevant buffer hook applies the selected value.
+from NetProfile's rendering policy. A menu change takes effect at once and is
+written to `config.ini` by the background thread within about half a second;
+the game's next relevant buffer hook applies the selected value.
 
 FX **On / Off / Reduced** affects newly requested, named character effects.
 Existing effects expire naturally. **On** is the default. **Reduced** keeps
@@ -162,7 +164,9 @@ shows in red on both layouts without being editable. A plugin that declares its 
 path gets that file updated by Deluxe after each accepted menu edit, so the
 plugin only has to read it at startup. Deluxe's `config.ini` is unchanged. The ABI,
 Rust SDK and a demo NRO live under [`sdk/`](sdk/README.md). The page is
-covered by host tests; emulator and hardware behaviour are not yet verified.
+covered by host tests and was verified in Eden on 2026-10-12 (Plugins page,
+pending requests, tones; see [validation](docs/VALIDATION.md)); hardware
+behaviour is not yet observed.
 
 ## Rendering profiles
 
@@ -170,7 +174,7 @@ covered by host tests; emulator and hardware behaviour are not yet verified.
 online singles use LessLag on console or LLUltra on emulator; online matches with
 more than two fighters use LLDoubles. Local wireless counts as online here.
 The online context comes from the game's scene entries: main-menu entry keeps
-a live Quickplay (background matchmaking passes through the main menu, 0.4.2),
+a stored Quickplay (background matchmaking passes through the main menu, 0.4.2),
 a Quickplay that reaches a match without the online-latency hook is demoted
 to Offline five seconds in, and a match the online-latency hook reaches while
 the scene hooks still say Offline counts as online (0.4.1).
