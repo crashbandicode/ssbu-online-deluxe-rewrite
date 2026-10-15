@@ -2448,6 +2448,27 @@ the host-side Eden deaths (runs 1 and 4, and a latency run) were traced to
 the private display service's 1 h runtime limit taking the X server down;
 only runs 2 and 3 are guest aborts.
 
+Input-delay re-measurement on the release NRO, 2026-10-15 00:35–01:45Z
+(operator request after a PK Thunder recovery stayed at 60 fps under LessLag
+on the console): same method and Eden build as the b19 table, 18 trials,
+640×360 captures. Included trials: Vanilla R = 6, LessLag R = 3, LLUltra
+R = 2 (normal) and 2–3 (delayed) — three and four fewer captured response
+frames, unchanged from b19. Four trials excluded for one missing present
+identity each; details in `docs/LATENCY_METHODOLOGY.md` ("Re-measurement on
+0.5.0"). Emulator captured-image frames, not console input-to-photon.
+
+Card experiment, 2026-10-15 01:53Z (operator order): the rewrite 0.5.0 and
+FX Control NROs were removed from the card and the ORIGINAL fork
+`libssbu_online_deluxe(nuevo).nro` (`21af1ac0…`, 1,441,792 B) with the
+original `libimgui_smash.nro` (`61e19e1b…`, 1,261,568 B) installed over DBI
+MTP, readback verified (`switch-mtp-fork-swap/deployment.json`); the three
+replaced files are archived on the card under
+`ultimate/ssbu_online_deluxe_rewrite/backups/fork-swap-20261015T015254Z/`
+and locally in `switch-mtp-fork-swap/before/`; `restore` mode reverses it.
+Purpose: compare the original fork's frame drops on PK Thunder recoveries
+with the rewrite's. The card is therefore NOT running Deluxe 0.5.0 until the
+restore runs.
+
 ### DBI USB MTP installation of f22d (0.3.0) — 2026-10-12 19:58Z
 
 `switch-mtp-f22d/deploy-f22d-mtp-1012.py` preflight 19:55:47Z (installed

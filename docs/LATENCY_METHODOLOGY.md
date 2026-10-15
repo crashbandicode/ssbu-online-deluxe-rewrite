@@ -239,6 +239,40 @@ scripts and the manual correction, is retained outside Git:
 dist/b19b7d94ae136e55/runtime-evidence/response-and-cutin/
 ```
 
+## Re-measurement on 0.5.0, 2026-10-15
+
+NRO SHA-256 (release v0.5.0, build `0.5.0-44830e5d9255-1792012237`):
+
+```text
+d9dd7df281671c12f14c4da191534650d4eac1856aaf5e4f886b97f6f7fcaf4f
+```
+
+Same method and the same Eden build (`10bcd2d849`), Vulkan/docked/1×/100%,
+Sephiroth versus Kazuya (CPU Stop) on the Training stage, 640×360 captures,
+`INPUT_RECEIPT` marker, input buffer Auto. Plugins next to Deluxe: Training
+Modpack, gamepad overlay, nro_hook, param_hook; no FX Control. Modes were
+selected manually and verified `policy_committed` + `engine_status=Active`
+before every group (status files retained). Three trials per cell; LLDoubles
+was not measured.
+
+| Mode | Normal `R` (included trials) | Delayed `R` (included trials) | Fewer frames than Vanilla, normal / delayed |
+| --- | --- | --- | --- |
+| Vanilla | 6, 6 (2 of 3) | 6, 6, 6 (3 of 3) | — |
+| LessLag | 3, 3, 3 (3 of 3) | 3, 3 (2 of 3) | 3 / 3 |
+| LLUltra | 2, 2 (2 of 3) | 2, 3 (2 of 3) | 4 / 4, 3 |
+
+Four of the 18 trials had one missing present identity inside the critical
+window and are excluded from exact counts (their first-crouch images were
+10, 7, 7 and 8, consistent with the included trials). Visual pose review
+agreed with the automatic index in all 18. The three delayed Vanilla trials
+share an API trace with four skipped events and are included on image counts
+only. A first pass with Eden's `ui.screenshot_height` at 720 produced ~34 ms
+captures and non-consecutive identities in every trial; it is retained as
+invalid. The counts match the b19 table above: the 0.4.0 present-at-flush
+change and the 0.5.0 FX removal did not change the captured response delay
+in this setup. Evidence (360 images per pass, traces, status snapshots,
+NOTES.md) is in the operator's evidence root under `latency-050-1015/`.
+
 ## Confirming on Switch
 
 Repeat the controlled A/B comparison on the console using a high-speed camera

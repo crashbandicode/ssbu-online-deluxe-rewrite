@@ -88,9 +88,12 @@ LLDoubles was measured as a manual profile in two-fighter Training. These are
 emulator screenshots with synthetic input, not Switch input-to-photon
 measurements, and they predate 0.4.0's present-at-flush change to LessLag,
 which removed the console's character-select stall (49.9 → 59.85 fps on the
-hand sweep) without changing the frame count claim. Method:
-[LATENCY_METHODOLOGY.md](docs/LATENCY_METHODOLOGY.md); full results:
-[PERFORMANCE.md](docs/PERFORMANCE.md).
+hand sweep) without changing the frame count claim. Re-measured on the 0.5.0
+release NRO on 2026-10-15 with the same method: Vanilla 6, LessLag 3, LLUltra
+2 (normal phase) and 2–3 (delayed phase) captured response frames, so the
+three- and four-frame savings hold on the current build. Method and both
+result sets: [LATENCY_METHODOLOGY.md](docs/LATENCY_METHODOLOGY.md); original
+full results: [PERFORMANCE.md](docs/PERFORMANCE.md).
 
 ## Configuration
 
