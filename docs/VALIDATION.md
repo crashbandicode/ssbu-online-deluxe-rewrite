@@ -2359,6 +2359,46 @@ pre-rewrite repository in the evidence root), and `AGENTS.md` no longer asks
 for a handoff file in the repository. Every tag was re-pointed to its
 rewritten commit; the Forgejo releases keep their assets.
 
+### 0.5.2 — 2026-10-15: per-move and adaptive dynamic-resolution triggers (experiment, on the card)
+
+Operator order after the Training analysis and the console A/B (Falcon Punch
+"barely budged", Pyra's side special "dropped several frames, especially when
+it connected"): "build the 0.5.2 experiment with both flags … make the
+threshold where it triggers configurable in the ini as well". Commit 03bd237:
+`src/drs_triggers.rs` (catalog of eleven named moves as fighter kind + status
+sets from skyline-smash bed642e, `MoveSet` mask parsing, threshold parsing in
+hundredths of a millisecond, the `Adaptive` over/under-budget state machine),
+`src/perf_scaler.rs` (per-entry move slots and one adaptive slot on the same
+report multiset as the cut-in and Gigaflare, `MainTick` input, counters),
+`src/runtime/adaptive_drs.rs` (present-thread side: interval from the tracked
+present ticks, 192 ticks per hundredth of a millisecond), config keys
+`drs_moves`, `drs_adaptive`, `drs_adaptive_threshold_ms`,
+`drs_adaptive_trigger_frames`, `drs_adaptive_release_frames` (all default
+off/17.5/6/90, round-trip through the INI so menu saves keep them), event
+code 108, `renderer-status.txt` settings and counters, Debug-view rows `DRS
+moves` and `DRS adaptive`, compact-strip `Adp`. No smashline. Docs:
+CONFIGURATION, DEBUGGING, RENDERING. Gates on 03bd237: host Clippy with
+warnings denied, 293 host tests (eight new: catalog, mask, threshold, state
+machine, move slots, adaptive slot, config round trip), no-default-features
+build, `cargo fmt`, Skyline Clippy with warnings denied, `tools/Build.ps1`
+release. Package `artifacts/9b9660ead3338d78/` in the tangent evidence: build
+`0.5.2-03bd237d7d1c-1792068556`, NRO SHA-256
+`9b9660ead3338d782dfcd27f03043efa1e55d351f47daf9d3d602ffc13239183`
+(1,470,464 B, module `5a9e2e10…4e42`).
+
+Card install, 2026-10-15 12:50Z: `switch-mtp-052/deploy-052-mtp-1015.py`
+preflight and install over DBI USB MTP, `installed_verified` (the 0.5.0
+release NRO archived on the card under `…/backups/pre-0.5.2-…/` and locally;
+the other ten plugins and the protected files unchanged). The experiment
+flags were then written to `config.ini` (previous copy saved as
+`switch-mtp-052/config.ini.card-before`): `drs_moves=all`,
+`drs_adaptive=true`, threshold 17.5 ms, 6 trigger frames, 90 release frames,
+on the operator's manual LessLag. Not released, not tagged, no hardware
+result yet. Acceptance per move or setting: a 30 s `CAPTURE_TIMING` on the
+console with the trigger on and off, compared on intervals over 20 ms and on
+the `Resolution` row; code 108 edges and the status counters show whether and
+when each trigger fired.
+
 ### 0.5.1 — 2026-10-15: render-opts teardown guard, console test pending
 
 Branch `post-scene-teardown-guard` (candidate `cc7f07f6…`, Eden evidence in
