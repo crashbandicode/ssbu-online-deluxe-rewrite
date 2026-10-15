@@ -230,6 +230,8 @@ pub(super) fn start(version: &str) {
                 super::fighter_probe::poll();
                 iteration += 1;
                 super::hang_trace::poll(iteration);
+                #[cfg(feature = "coverage")]
+                super::coverage::poll(iteration);
                 if iteration.is_multiple_of(10) {
                     super::nvn::write_status();
                     record(Code::Heartbeat, 0, iteration);

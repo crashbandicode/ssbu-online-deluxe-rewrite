@@ -2,6 +2,7 @@
 pub mod auto_policy;
 pub mod config;
 pub mod config_store;
+pub mod coverage_profile;
 pub mod diagnostics;
 pub mod dispatcher_backoff;
 pub mod fps_boost;

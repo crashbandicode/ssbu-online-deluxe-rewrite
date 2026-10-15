@@ -926,6 +926,13 @@ unsafe extern "C" fn draw() {
     {
         super::timing::request();
     }
+    #[cfg(feature = "coverage")]
+    if view == View::Debug
+        && buttons & shoulders == shoulders
+        && pressed & crate::overlay::LEFT != 0
+    {
+        super::coverage::request_manual();
+    }
     if view != previous_view {
         record(Code::OverlayView, previous_view as u64, view as u64);
     }

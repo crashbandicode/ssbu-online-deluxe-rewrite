@@ -257,6 +257,8 @@ pub(crate) fn set_scene(
         );
         store_cleanup(active, generation);
         super::match_capture::note_scene(previous_status, status);
+        #[cfg(feature = "coverage")]
+        super::coverage::note_scene(previous_status as u8, status as u8);
     }
     store_scene(connection, status);
     if previous_connection.is_online() != connection.is_online() {

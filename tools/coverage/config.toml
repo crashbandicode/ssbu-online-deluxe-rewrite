@@ -1,0 +1,16 @@
+# Cargo configuration for the coverage variant of the plugin
+# (tools/Build.ps1 -Coverage; see docs/DEBUGGING.md "Coverage build").
+#
+# Only this crate is instrumented: the per-package rustflags leave std,
+# skyline and the imgui archive untouched, so the counters and reports cover
+# the rewrite's own source. `-Zno-profiler-runtime` stops rustc from linking
+# the LLVM profiler runtime, which does not exist for the Skyline target; the
+# plugin's `runtime::coverage` module writes the raw profiles instead.
+# Per-package rustflags are a nightly cargo feature; the Skyline toolchain is
+# a nightly, and this file is never read by the product build.
+
+[unstable]
+profile-rustflags = true
+
+[profile.release.package.ssbu-online-deluxe-rewrite]
+rustflags = ["-Cinstrument-coverage", "-Zno-profiler-runtime"]

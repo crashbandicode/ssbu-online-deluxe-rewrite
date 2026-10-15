@@ -1,6 +1,8 @@
 mod adaptive_drs;
 mod api_trace;
 mod auto_driver;
+#[cfg(feature = "coverage")]
+mod coverage;
 mod css_capture;
 mod dispatcher_backoff;
 mod fighter_main;

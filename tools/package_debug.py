@@ -13,8 +13,8 @@ from pathlib import Path
 def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
-def package(root, output=None):
-    build = root / "target/aarch64-skyline-switch/release"
+def package(root, output=None, target_dir=None, variant=None):
+    build = (target_dir if target_dir is not None else root / "target") / "aarch64-skyline-switch/release"
     nro = build / "libssbu_online_deluxe_rewrite.nro"
     elf = build / "libssbu_online_deluxe_rewrite.so"
     binary = nro.read_bytes()
@@ -88,6 +88,10 @@ def package(root, output=None):
         "compiler": compiler, "game_version": "13.0.5",
         "text_verified": True, "runtime_tested": False,
     }
+    if variant:
+        # A non-product build (for example "coverage"); the ELF carries the
+        # LLVM coverage mapping that tools/coverage/report.py reads.
+        manifest["variant"] = variant
     (dest / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     print(dest)
     return dest
@@ -96,5 +100,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--output", type=Path, help="Artifact directory outside the source checkout")
+    parser.add_argument("--target-dir", type=Path, help="Cargo target directory (default <root>/target)")
+    parser.add_argument("--variant", help="Build variant recorded in the manifest, e.g. coverage")
     args = parser.parse_args()
-    package(args.root, args.output)
+    package(args.root, args.output, args.target_dir, args.variant)

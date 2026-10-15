@@ -185,6 +185,12 @@ pub enum Code {
     /// source the triggering present interval in hundredths of a millisecond in
     /// bits 16..47. Edges only, never per frame.
     DrsTrigger = 108,
+    /// Coverage build only (feature `coverage`): a raw LLVM profile was written
+    /// under `coverage/`. `a` bits 0..7: 1 periodic `live.profraw`, 2 scene
+    /// status change (bits 8..15 previous status, bits 16..23 new status),
+    /// 3 manual (Debug view L+R+Left). `b`: bytes written, 0 when the write
+    /// failed (the first failure is also printed to the Skyline log).
+    CoverageDump = 109,
 }
 
 /// Game SetCrop observations recorded before further calls are forwarded only.
@@ -342,6 +348,7 @@ mod tests {
         assert_eq!(Code::MatchCapture as u16, 106);
         assert_eq!(Code::SceneHold as u16, 107);
         assert_eq!(Code::DrsTrigger as u16, 108);
+        assert_eq!(Code::CoverageDump as u16, 109);
         let rect = crop_rect_event(4, 0, 0, 1024, 576);
         assert_eq!(rect.0, crop_rect_word(0, 0, 1024, 576));
         assert_eq!(rect.1, 4);
