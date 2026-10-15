@@ -2469,6 +2469,21 @@ Purpose: compare the original fork's frame drops on PK Thunder recoveries
 with the rewrite's. The card is therefore NOT running Deluxe 0.5.0 until the
 restore runs.
 
+FX Control performance campaign in Eden, 2026-10-15 02:40–05:45Z (operator
+request; results in the FX Control repository, `docs/FX_EMULATOR_RESULTS.md`
+"Per-move frame drops under a 120 % CPU quota"): Eden's unit under
+`CPUQuota=120%` / 5 ms period, Deluxe LessLag with the Performance view open,
+27 moves × On/Off/Reduced, one 30 s `CAPTURE_TIMING` each. Deluxe-relevant
+outcomes: (1) the post-scene guest abort recurred twice more on the release
+NRO at Training exits (runs 5 and 6; five guest aborts in roughly 22 exits
+over the night, all the same backtrace); (2) from 04:55Z the Eden profile
+ran the teardown-guard candidate `cc7f07f6…` (branch
+`post-scene-teardown-guard`, package `artifacts/6e74426068fed7a2/`): six
+Training → character-select exits plus one boot, `teardown_guard_skips` 0 →
+11 with a code-48 event each time, no abort and 60 fps between captures.
+That is the first evidence for the guard; it is Eden-only, six exits, and
+not a verified fix. A dedicated cycling test (16 exits, no quota) follows.
+
 ### DBI USB MTP installation of f22d (0.3.0) — 2026-10-12 19:58Z
 
 `switch-mtp-f22d/deploy-f22d-mtp-1012.py` preflight 19:55:47Z (installed
