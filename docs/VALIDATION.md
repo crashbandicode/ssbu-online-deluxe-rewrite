@@ -2435,6 +2435,19 @@ for the operator: the same Kirby Training scene (a) with hitbox
 visualization off, (b) on Vanilla, (c) on the archived 0.5.0 NRO (one
 restore command). Evidence copies: session scratchpad `card-051/`.
 
+Resolved by the operator, 2026-10-15 ~12:55Z (verbatim: "It's not the
+hitbox visualization it's the Input Display. When I switch it to off it
+goes to 60 and stays locked there"): the Training Modpack's Input Display
+overlay was the ~3 ms of extra frame work. With it off, LessLag Training
+holds 60 on the console; the operator is taking the cost up with the
+modpack's maintainers. Consequence for the fork/upstream comparison above:
+the upstream run that "stayed locked" had the modpack removed from the card,
+so it never carried that cost, and the earlier "ours in the 50s versus
+upstream at 60" impression compared different plugin sets. Deluxe-side
+lesson, unchanged: the two-image LessLag ring exposes any per-frame work
+over 16.7 ms as a missed vblank; an adaptive resolution trigger (0.5.2
+experiment) is the mitigation that does not depend on naming the cause.
+
 ### 0.5.0 — 2026-10-14: character FX split into `ssbu-fx-control`; plugin own pages
 
 Operator: "project out the fx mods into their own repo … a plugin that users
