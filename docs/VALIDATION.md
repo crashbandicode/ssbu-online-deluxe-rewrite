@@ -2482,7 +2482,19 @@ ran the teardown-guard candidate `cc7f07f6…` (branch
 Training → character-select exits plus one boot, `teardown_guard_skips` 0 →
 11 with a code-48 event each time, no abort and 60 fps between captures.
 That is the first evidence for the guard; it is Eden-only, six exits, and
-not a verified fix. A dedicated cycling test (16 exits, no quota) follows.
+not a verified fix.
+
+Cycling test on the candidate, 2026-10-15 05:50–06:20Z (evidence root
+`fx-guard-test-1015/`, no CPU quota, same plugin stack): 16 Training →
+character-select exits alternating Sephiroth, Pyra/Mythra, Inkling, Lucas,
+Ganondorf, Palutena, Kazuya and Ness, with a main-menu round trip after
+every fourth cycle. 16 of 16 exits reached the character select at 60 fps;
+`teardown_guard_skips` and the code-48 count rose by exactly one across every
+exit (11 → 43, the guard also fires on fighter loads); zero stalls or
+aborts. Together with the campaign that is 22 exits without an abort on the
+candidate against five aborts in about 22 exits on the release build the
+same night, all in Eden. The candidate is not merged, not pushed, not on the
+console; the operator decides.
 
 ### DBI USB MTP installation of f22d (0.3.0) — 2026-10-12 19:58Z
 
