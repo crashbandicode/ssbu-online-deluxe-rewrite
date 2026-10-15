@@ -2359,6 +2359,38 @@ pre-rewrite repository in the evidence root), and `AGENTS.md` no longer asks
 for a handoff file in the repository. Every tag was re-pointed to its
 rewritten commit; the Forgejo releases keep their assets.
 
+### 0.5.2 — 2026-10-15: present at the flush for LLUltra and LLDoubles (candidate for the console LLUltra drop)
+
+Operator report: LLUltra "drops fps dramatically" on the console (scene not
+yet specified, no capture yet). Code reading: `render_policy::present_at_flush`
+was gated to LessLag, so LLUltra, the other two-image ring, still presented
+each frame after the next frame's whole CPU update, exactly the mechanism
+the 0.4.0 analysis traced on the console character select (update over
+about 13.7 ms → missed vblank → the acquire waits for the following one →
+33 ms frames). LLUltra's 576p lightens the GPU and cannot touch that.
+Operator decision ("can we just apply the fix to LLUltra and Doubles too?"):
+commit ce0145a extends the predicate to every committed, idle render-opts
+profile (LessLag, Ultra, Doubles; Vanilla and every swap, drain, forced-wait
+or refused state still refused) and the flush hook calls
+`nvn::present_at_flush` whenever the policy allows instead of only on the
+LessLag field path, so Ultra's three-call flush presents the acquired image
+too. Doubles gains the earlier present with its third image as slack. Not
+measured anywhere yet; the Ultra early flush and skipped late flush are
+unchanged, so visual checks (anything recorded after the early present) are
+part of the console test. Gates on ce0145a: host Clippy with warnings
+denied, 293 host tests (the present-at-flush test now asserts Ultra and
+Doubles), no-default-features build, `cargo fmt`, Skyline Clippy with
+warnings denied, `tools/Build.ps1` release. Package
+`artifacts/1525e3e0392c8403/`: build `0.5.2-ce0145a2155c-1792070522`, NRO
+SHA-256 `1525e3e0392c840306073762cb7e78670745fe0e925de013f660c901371cfdff`
+(1,470,464 B, module `6f2750f4…a860`). Card install over the first 0.5.2
+build via `switch-mtp-052b/deploy-052b-mtp-1015.py`; `config.ini` on the
+card is the LLUltra baseline (manual LLUltra, both DRS experiment flags off)
+so the first console run measures this change alone. Acceptance: an LLUltra
+Training capture with Input Display off, intervals and the texture-sync
+waits compared against the 0.5.1 LessLag Training capture; `early_presents`
+≈ `early_present_skips`, zero mismatches (code 105), no visual corruption.
+
 ### 0.5.2 — 2026-10-15: per-move and adaptive dynamic-resolution triggers (experiment, on the card)
 
 Operator order after the Training analysis and the console A/B (Falcon Punch
