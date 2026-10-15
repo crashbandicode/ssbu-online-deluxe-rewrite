@@ -2443,7 +2443,10 @@ character-select transitions this evening, all with FX Control 0.1.0, the
 Training Modpack and the gamepad overlay staged next to Deluxe. Which of the
 loaded plugins, or the GIF-build Eden, makes the race observable is not yet
 established; a controlled Training → character-select cycling test with and
-without FX Control is the next step before any mitigation.
+without FX Control is the next step before any mitigation. Later that night
+the host-side Eden deaths (runs 1 and 4, and a latency run) were traced to
+the private display service's 1 h runtime limit taking the X server down;
+only runs 2 and 3 are guest aborts.
 
 ### DBI USB MTP installation of f22d (0.3.0) — 2026-10-12 19:58Z
 
