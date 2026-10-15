@@ -2359,6 +2359,36 @@ pre-rewrite repository in the evidence root), and `AGENTS.md` no longer asks
 for a handoff file in the repository. Every tag was re-pointed to its
 rewritten commit; the Forgejo releases keep their assets.
 
+### 0.5.1 — 2026-10-15: render-opts teardown guard, console test pending
+
+Branch `post-scene-teardown-guard` (candidate `cc7f07f6…`, Eden evidence in
+the 0.5.0 entry below: 22 Training → character-select exits without the
+post-scene guest abort that hit the release five times in about 22 exits)
+merged into main at 8aaef69 (`--no-ff`), version bumped to 0.5.1 at 231f4c8.
+Change: `src/teardown_guard.rs` and `src/runtime/render_sequence.rs` skip
+the relocated model update and the fighter worker on a frame in which a
+fighter module unloaded (code 48 `RenderTeardownGuard`,
+`teardown_guard_skips` in `renderer-status.txt`) and fall back to the game's
+ordering for 180 scene frames; see `docs/DEBUGGING.md` and
+`docs/PERFORMANCE.md`. Gates on 231f4c8: host Clippy with warnings denied,
+284 host tests, no-default-features build, Skyline Clippy with warnings
+denied, `tools/Build.ps1` release. Package
+`artifacts/aee3852d905218e9/` in the tangent evidence: build
+`0.5.1-231f4c82ec3a-1792064680`, NRO SHA-256
+`aee3852d905218e922886d338e2540cd4dd379a25c23e5f4f32981b2a24642da`
+(1,462,272 B, module `d60c4a2e…1fdf`).
+
+Card install, 2026-10-15 11:45Z (operator: "test 0.5.1 before the
+release"): `switch-mtp-051/deploy-051-mtp-1015.py` preflight and install
+over DBI USB MTP, `installed_verified`; the 0.5.0 release NRO is archived on
+the card under `ultimate/ssbu_online_deluxe_rewrite/backups/pre-0.5.1-
+20261015T114532Z/` and locally; the other ten plugins, `config.ini` (manual
+LessLag, Auto off) and the protected files are unchanged. Not released, not
+tagged: the hardware result decides. Planned afterwards: the same build on
+upstream Online Deluxe's bundled Skyline `d3630815…` and on the latest
+skyline-dev release `9959ecb1…` (the card's current one), so neither user
+group has to change Skyline.
+
 ### 0.5.0 — 2026-10-14: character FX split into `ssbu-fx-control`; plugin own pages
 
 Operator: "project out the fx mods into their own repo … a plugin that users
@@ -2466,8 +2496,39 @@ replaced files are archived on the card under
 `ultimate/ssbu_online_deluxe_rewrite/backups/fork-swap-20261015T015254Z/`
 and locally in `switch-mtp-fork-swap/before/`; `restore` mode reverses it.
 Purpose: compare the original fork's frame drops on PK Thunder recoveries
-with the rewrite's. The card is therefore NOT running Deluxe 0.5.0 until the
-restore runs.
+with the rewrite's.
+
+Outcome, 2026-10-15 10:00–11:45Z (evidence root `switch-mtp-fork-deps/`,
+`switch-mtp-fork-solo/`, `switch-mtp-upstream-143/`, crash reports in the
+session scratchpad): the fork never reached a match on this console. Smash
+first crashed at launch three times (Instruction Abort, PC 0, LR in the fork's
+`main+0x838`) because the fork's dynamic imports `ssbu_pia_manager_*` were
+unresolved; the swap had installed only the fork and its ImGui host. With
+`libssbu_pia_manager.nro`, `libssbusync.nro` 1.3.0, `libnx_over.nro` and
+`libsmashline_plugin.nro` added (the set that ran next to the fork until
+2026-10-06) and the fork configured for offline LessLag, the game aborted at
+the versus splash (User Break in game code, no plugin frame) the moment the
+render options engaged; with Training Modpack, gamepad overlay, replay and
+Elite removed it failed two boots (an init-time null identical to a
+2026-10-13 boot fault seen with the rewrite installed, then a null fiber
+stack in a fighter-script coroutine). The UPSTREAM mod,
+saad-script/ssbu-online-deluxe v1.4.3 (release zip `5640c63a…`), installed as
+its installer script would produce it (latest ARCropolis 4.1.1 = the card's
+`92171b2f…`, nro_hook 0.4.0, imgui-smash 1.0.0, pia-interface 1.3.0,
+smashline 1.6.8, upstream's own ssbusync 1.3.2, nx_over and Skyline
+`d3630815…`; overclock sysmodule omitted, `overclocker = false`), crashed
+once at boot while the card still had the older smashline `d472c596…` (null
+in a task worker, no plugin frame) and then reached an offline LessLag match
+after smashline was swapped to 1.6.8. The operator observed upstream holding
+60 fps through special zooms by lowering the internal resolution; no
+frame-time capture of that run exists. All swaps were restored in order
+(11:41–11:42Z, each `restored_verified`): the card is back on the 0.5.0
+plugin set, the rewrite's ImGui host `946de84f…` and Skyline `9959ecb1…`,
+which is byte-identical to the latest skyline-dev release ("beta",
+2026-04-12). For the record: the rewrite carries the same cut-in and
+Gigaflare dynamic-resolution policy (`src/perf_scaler.rs`, "Dynamic
+resolution" in `docs/RENDERING.md`), and the two Skyline builds are to be
+tested with 0.5.1 so users need not change Skyline.
 
 FX Control performance campaign in Eden, 2026-10-15 02:40–05:45Z (operator
 request; results in the FX Control repository, `docs/FX_EMULATOR_RESULTS.md`
