@@ -2383,11 +2383,20 @@ release"): `switch-mtp-051/deploy-051-mtp-1015.py` preflight and install
 over DBI USB MTP, `installed_verified`; the 0.5.0 release NRO is archived on
 the card under `ultimate/ssbu_online_deluxe_rewrite/backups/pre-0.5.1-
 20261015T114532Z/` and locally; the other ten plugins, `config.ini` (manual
-LessLag, Auto off) and the protected files are unchanged. Not released, not
-tagged: the hardware result decides. Planned afterwards: the same build on
-upstream Online Deluxe's bundled Skyline `d3630815…` and on the latest
-skyline-dev release `9959ecb1…` (the card's current one), so neither user
-group has to change Skyline.
+LessLag, Auto off) and the protected files are unchanged.
+
+Hardware result, 2026-10-15 ~12:10Z (operator, verbatim: "0.5.1 passed"):
+repeated Training → character-select exits and a LessLag match on this NRO
+with the full plugin set, Skyline `9959ecb1…` (latest skyline-dev release),
+no crash. This is the first console run of the teardown guard; the guard
+counter and code-48 events on the card have not been read back yet. Released
+as v0.5.1 (tag at 231f4c8, Forgejo release with the NRO and manifest).
+Observed in the same session and NOT addressed by 0.5.1: in Training the
+frame rate fell into the 50s and 40s during Kirby's charged hammer, while
+the zoom (the cut-in that the scaler already covers) produced no drop. That
+is a candidate for the 0.5.2 per-move dynamic-resolution experiment, with no
+capture yet. Planned next: the same build on upstream Online Deluxe's
+bundled Skyline `d3630815…` so neither user group has to change Skyline.
 
 ### 0.5.0 — 2026-10-14: character FX split into `ssbu-fx-control`; plugin own pages
 

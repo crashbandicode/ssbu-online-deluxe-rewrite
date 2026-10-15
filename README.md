@@ -10,7 +10,9 @@ delivered as **one NRO**: rendering profiles that cut input latency, a global
 Player Info window, the native character-select status line and network
 display. No overclocking.
 
-**Current release: 0.5.0.** It moved character FX out to the separate
+**Current release: 0.5.1.** It adds the render-opts teardown guard, which
+removes a crash at scene exits with render options active (Training →
+character select on the console). 0.5.0 moved character FX out to the separate
 [FX Control](https://git.syntaxbyexample.com/intpa/ssbu-fx-control) plugin and
 lets plugins add their own pages to the window cycle. Every release on Forgejo
 carries the NRO and its manifest. Install notes: [docs/INSTALL.md](docs/INSTALL.md).
