@@ -2394,9 +2394,46 @@ as v0.5.1 (tag at 231f4c8, Forgejo release with the NRO and manifest).
 Observed in the same session and NOT addressed by 0.5.1: in Training the
 frame rate fell into the 50s and 40s during Kirby's charged hammer, while
 the zoom (the cut-in that the scaler already covers) produced no drop. That
-is a candidate for the 0.5.2 per-move dynamic-resolution experiment, with no
-capture yet. Planned next: the same build on upstream Online Deluxe's
-bundled Skyline `d3630815…` so neither user group has to change Skyline.
+is a candidate for the 0.5.2 per-move dynamic-resolution experiment. Planned
+next: the same build on upstream Online Deluxe's bundled Skyline `d3630815…`
+so neither user group has to change Skyline.
+
+Training frame-rate analysis from the card, 2026-10-15 ~12:30Z (operator:
+"see why lesslag was in the 50s though without any effects"). The
+`CAPTURE_MATCH` flag on the card recorded the Training session as
+`timing-1794782036751.csv` / `api-1794782036751.csv` (label `match_training`,
+build 0.5.1, 165 s, 8,609 frames; Kirby vs CPU Corrin per the modpack's
+`nro_load` lines). Result: median render-callback interval 17.2 ms, mean
+19.2 ms, 23.4 % of intervals over 20 ms, frame rate per 10 s between 45 and
+59; the hang-trace heartbeats of the same boot show 47–59 presents/s in
+Training. Reference: the previous Training capture on the card,
+`timing-958174278187.csv` (build 0.5.0, 2026-10-14, Falco vs Ness, same
+plugin set and capture flags): median 16.67 ms, p99 17.1 ms, 0.4 % over
+20 ms, 60 fps; the previous boot's heartbeats (0.5.0, earlier the same day)
+show Training at 60.0 presents/s. Decomposition from the API trace: kind 3 is
+the infinite `nvnSyncWait` on the swapchain texture sync. On 0.5.0 it
+returned 1 (waited, about 3 ms) on 99 % of frames, the signature of a frame
+finishing early and idling to vblank. On 0.5.1 Training it returned 0
+(texture already free, no wait) on 53 % of frames and waited about 6 ms on
+the slow frames. Per-frame work excluding that wait: median 16.8 ms, p90
+20.0 ms on 0.5.1 Training against 13.8 ms / 14.8 ms on the 0.5.0 capture,
+and the 10 s medians swing between 14.6 and 18.6 ms with play. The game's
+UI job (kind 77) rose only 7.0 → 7.5 ms and the worker dependency waits
+(kind 66) are unchanged per frame. Reading: the scene's frame work exceeded
+the 16.7 ms budget by about 3 ms and varied with activity; the two-image
+LessLag ring has no slack, so every late frame becomes a missed vblank
+(Vanilla's three-image ring would show the same work as 60 fps with one
+more frame of latency). Not attributable to the 0.5.1 change from this data:
+the guard fired twice in the session (`teardown_guard_skips=2`) and its only
+per-frame effect is the 180-frame fallback after a transition (1,040 of
+12,512 frames here). Differences from the 60 fps capture that the logs do
+show: different fighters (Kirby and Corrin vs Falco and Ness) and the
+Training Modpack menu with hitbox visualization, frame advantage, input
+display, stage hazards and save-state autoload selected; whether those
+toggles were the same on 2026-10-14 is not recorded. Discriminating tests
+for the operator: the same Kirby Training scene (a) with hitbox
+visualization off, (b) on Vanilla, (c) on the archived 0.5.0 NRO (one
+restore command). Evidence copies: session scratchpad `card-051/`.
 
 ### 0.5.0 — 2026-10-14: character FX split into `ssbu-fx-control`; plugin own pages
 
