@@ -56,6 +56,21 @@ Immediate (LLUltra) is committed; in any other mode it counts the entry and
 returns without flushing or changing the mode. There is no separate
 observer flag (`src/runtime/render_ultra.rs`, `renderer.rs` `install`).
 
+**Teardown guard (candidate, 2026-10-15).** The relocated model update runs
+after the scene update, so on the frame that leaves Training or a match it
+would touch fighters the scene update has just destroyed; four Eden runs on
+2026-10-14 aborted there in `nn::os::LockMutex` (kernel `InvalidHandle`) with
+`deluxe_rewrite_post_scene` on the stack (VALIDATION.md, "0.5.0"). The
+module-unload hook now bumps an epoch; the fighter-recording hook snapshots
+it per frame; when the post-scene hook sees the epoch changed within the
+frame it skips the relocated model update and fighter worker (the deferred
+queue is still dispatched), records code 48 and hands the next 180 frames
+back to the game's own ordering (`src/teardown_guard.rs`,
+`render_sequence.rs`; `teardown_guard_skips` in `renderer-status.txt`).
+Render opts are therefore off for about three seconds after every scene
+transition and otherwise unchanged. Not yet verified in Eden or on the
+console.
+
 The LessLag path reads the gate byte at `+0x1d18` and the dispatch index at
 `+0x1d20`, then writes `+0x1d30` and `+0x1d28` when the gate is nonzero.
 Diagnostic candidate `c0e9a625eb44a735` samples those fields and checks whether

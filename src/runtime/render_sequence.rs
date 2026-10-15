@@ -22,6 +22,23 @@ static MODEL_ORIGINAL: AtomicUsize = AtomicUsize::new(0);
 pub(super) static FRAMES: AtomicU64 = AtomicU64::new(0);
 pub(super) static MODELS_MOVED: AtomicU64 = AtomicU64::new(0);
 pub(super) static DISPATCHES: AtomicU64 = AtomicU64::new(0);
+/// Every post-scene pass, active or not: the clock for the teardown guard.
+static SCENE_FRAMES: AtomicU64 = AtomicU64::new(0);
+/// Bumped on every `nn::ro::UnloadModule` entry (see `fighter_probe`).
+static UNLOAD_EPOCH: AtomicU64 = AtomicU64::new(0);
+/// The unload epoch this frame's fighter recording saw.
+static FRAME_UNLOAD_EPOCH: AtomicU64 = AtomicU64::new(0);
+/// Scene frame from which render opts may relocate again after an unload.
+static QUIET_UNTIL_FRAME: AtomicU64 = AtomicU64::new(0);
+/// Post-scene passes that skipped the relocated work (`renderer-status.txt`).
+pub(super) static GUARD_SKIPS: AtomicU64 = AtomicU64::new(0);
+
+/// Called from the module-unload hook for every module. See
+/// `crate::teardown_guard` for why the relocation must not run on a frame
+/// whose scene update unloaded modules.
+pub(super) fn note_module_unload() {
+    UNLOAD_EPOCH.fetch_add(1, Ordering::AcqRel);
+}
 
 unsafe fn base() -> usize {
     getRegionAddress(Region::Text) as usize
@@ -51,11 +68,20 @@ unsafe fn update_models(manager: *mut u8) {
 unsafe fn deluxe_rewrite_record_fighters(ctx: &InlineCtx) {
     let decision = crate::render_policy::load_decision();
     // One present-thread snapshot. Later dispatch and post-scene hooks read the latch.
-    let active = if decision.live {
-        decision.render_opts
-    } else {
-        super::renderer::mode().render_opts()
-    };
+    // Inside the quiet window after a module unload the game keeps its own
+    // ordering for the whole frame (model update and recording at their
+    // original sites, no deferred dispatch).
+    let quiet = !crate::teardown_guard::relocation_allowed(
+        SCENE_FRAMES.load(Ordering::Relaxed),
+        QUIET_UNTIL_FRAME.load(Ordering::Acquire),
+    );
+    FRAME_UNLOAD_EPOCH.store(UNLOAD_EPOCH.load(Ordering::Acquire), Ordering::Release);
+    let active = !quiet
+        && if decision.live {
+            decision.render_opts
+        } else {
+            super::renderer::mode().render_opts()
+        };
     super::api_trace::mark_thread(crate::render_trace::KIND_RECORD_FIGHTERS, i32::from(active));
     FRAME_ACTIVE.store(active, Ordering::Release);
     if !active {
@@ -122,7 +148,21 @@ unsafe fn submit_queue() {
 unsafe fn deluxe_rewrite_post_scene(_: &InlineCtx) {
     let active = FRAME_ACTIVE.load(Ordering::Acquire);
     super::api_trace::mark_thread(crate::render_trace::KIND_POST_SCENE, i32::from(active));
+    let scene_frame = SCENE_FRAMES.fetch_add(1, Ordering::Relaxed);
     if !active {
+        return;
+    }
+    // A module unloaded during this frame's scene update: the fighters the
+    // relocated model update would touch are being torn down. Skip the
+    // relocated work, still dispatch the queue the deferred hook held back,
+    // and run the game's own ordering for the next quiet window.
+    let epoch = UNLOAD_EPOCH.load(Ordering::Acquire);
+    if crate::teardown_guard::teardown_detected(FRAME_UNLOAD_EPOCH.load(Ordering::Acquire), epoch) {
+        QUIET_UNTIL_FRAME.store(crate::teardown_guard::quiet_until(scene_frame), Ordering::Release);
+        GUARD_SKIPS.fetch_add(1, Ordering::Relaxed);
+        record(Code::RenderTeardownGuard, epoch, scene_frame);
+        submit_queue();
+        FRAMES.fetch_add(1, Ordering::Relaxed);
         return;
     }
     let manager = *((base() + MANAGER) as *const *mut u8);

@@ -67,6 +67,11 @@ pub enum Code {
     SendDrop = 45,
     ProfileTransition = 46,
     ProfileRefused = 47,
+    /// Render-opts teardown guard: a module unloaded between this frame's
+    /// fighter recording and its post-scene hook, so the relocated model
+    /// update and fighter worker were skipped and the game's own ordering
+    /// runs for the quiet window. `a` is the unload epoch, `b` the frame.
+    RenderTeardownGuard = 48,
     /// Station-index hook reachability. `a` is hits since install; `b` is flags.
     StationProbe = 64,
     /// Mixed source id from that sample. `a` is `mix_id` after a successful read.
