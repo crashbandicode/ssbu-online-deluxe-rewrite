@@ -3,6 +3,11 @@
 //! allowed. Each remaining line is exactly one `key=value` assignment.
 //! `effects` and `effects_scope` are accepted and ignored since 0.5.0.
 
+use crate::drs_triggers::{
+    format_threshold, parse_threshold, AdaptiveSettings, MoveSet, RELEASE_FRAMES_MAX,
+    TRIGGER_FRAMES_MAX,
+};
+
 /// Live profiles plus the startup-only core experiments.
 /// `LessLagDoubles` is the 3-texture OneBehind profile. `DoublesCore` is not.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -106,6 +111,14 @@ pub struct Config {
     /// Emulator-only native-window swap interval. Default and a missing key are
     /// off. Console never applies it. This is not a hardware clock.
     pub fps_boost: bool,
+    /// 0.5.2 experiment: moves that lower the internal resolution while their
+    /// status is active (`none`, `all`, or catalog names). Default none.
+    pub drs_moves: MoveSet,
+    /// 0.5.2 experiment: lower the resolution one level after
+    /// `drs_adaptive_trigger_frames` consecutive presents slower than
+    /// `drs_adaptive_threshold_ms`, restore after `drs_adaptive_release_frames`
+    /// presents within budget. Default off, 17.5 ms, 6 and 90.
+    pub drs_adaptive: AdaptiveSettings,
 }
 
 impl Default for Config {
@@ -119,13 +132,27 @@ impl Default for Config {
             stealth: true,
             streamer: false,
             fps_boost: false,
+            drs_moves: MoveSet::NONE,
+            drs_adaptive: AdaptiveSettings::default(),
         }
     }
 }
 
+fn parse_count<T: TryFrom<u32>>(value: &str, max: u32, message: &str) -> Result<T, String> {
+    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(message.to_owned());
+    }
+    value
+        .parse::<u32>()
+        .ok()
+        .filter(|count| (1..=max).contains(count))
+        .and_then(|count| T::try_from(count).ok())
+        .ok_or_else(|| message.to_owned())
+}
+
 pub fn parse(text: &str) -> Result<Config, String> {
     let mut config = Config::default();
-    let mut seen = [false; 9];
+    let mut seen = [false; 14];
     for (index, raw) in text.lines().enumerate() {
         let line = raw.split('#').next().unwrap_or_default().trim();
         if line.is_empty() {
@@ -151,6 +178,11 @@ pub fn parse(text: &str) -> Result<Config, String> {
             "stealth" => 6,
             "streamer" => 7,
             "fps_boost" => 8,
+            "drs_moves" => 9,
+            "drs_adaptive" => 10,
+            "drs_adaptive_threshold_ms" => 11,
+            "drs_adaptive_trigger_frames" => 12,
+            "drs_adaptive_release_frames" => 13,
             _ => return Err(error(&format!("unknown key '{key}'"))),
         };
         if seen[slot] {
@@ -217,6 +249,36 @@ pub fn parse(text: &str) -> Result<Config, String> {
                     _ => return Err(error("fps_boost must be true or false")),
                 };
             }
+            "drs_moves" => {
+                config.drs_moves = MoveSet::parse(value).map_err(|message| error(&message))?;
+            }
+            "drs_adaptive" => {
+                config.drs_adaptive.enabled = match value {
+                    "true" => true,
+                    "false" => false,
+                    _ => return Err(error("drs_adaptive must be true or false")),
+                };
+            }
+            "drs_adaptive_threshold_ms" => {
+                config.drs_adaptive.threshold_hundredths_ms =
+                    parse_threshold(value).map_err(|message| error(&message))?;
+            }
+            "drs_adaptive_trigger_frames" => {
+                config.drs_adaptive.trigger_frames = parse_count(
+                    value,
+                    u32::from(TRIGGER_FRAMES_MAX),
+                    "drs_adaptive_trigger_frames must be an integer from 1 to 60",
+                )
+                .map_err(|message| error(&message))?;
+            }
+            "drs_adaptive_release_frames" => {
+                config.drs_adaptive.release_frames = parse_count(
+                    value,
+                    u32::from(RELEASE_FRAMES_MAX),
+                    "drs_adaptive_release_frames must be an integer from 1 to 600",
+                )
+                .map_err(|message| error(&message))?;
+            }
             "input_buffer" => {
                 config.input_buffer = if value == "auto" {
                     -1
@@ -265,10 +327,19 @@ pub fn serialize(config: &Config) -> String {
     let streamer = if config.streamer { "true" } else { "false" };
     let fps_boost = if config.fps_boost { "true" } else { "false" };
     let auto_profile = if config.auto_profile { "true" } else { "false" };
+    let drs_adaptive = if config.drs_adaptive.enabled {
+        "true"
+    } else {
+        "false"
+    };
     format!(
-        "# Online Deluxe settings\nversion=1\ninput_buffer={input_buffer}\nrender_mode={}\nauto_profile={auto_profile}\nplatform={}\npeer_observer={peer_observer}\nstealth={stealth}\nstreamer={streamer}\nfps_boost={fps_boost}\n",
+        "# Online Deluxe settings\nversion=1\ninput_buffer={input_buffer}\nrender_mode={}\nauto_profile={auto_profile}\nplatform={}\npeer_observer={peer_observer}\nstealth={stealth}\nstreamer={streamer}\nfps_boost={fps_boost}\ndrs_moves={}\ndrs_adaptive={drs_adaptive}\ndrs_adaptive_threshold_ms={}\ndrs_adaptive_trigger_frames={}\ndrs_adaptive_release_frames={}\n",
         config.render_mode.key(),
         config.platform.key(),
+        config.drs_moves.serialize(),
+        format_threshold(config.drs_adaptive.threshold_hundredths_ms),
+        config.drs_adaptive.trigger_frames,
+        config.drs_adaptive.release_frames,
     )
 }
 
@@ -315,8 +386,60 @@ mod tests {
                 stealth: false,
                 streamer: false,
                 fps_boost: false,
+                drs_moves: MoveSet::NONE,
+                drs_adaptive: AdaptiveSettings::default(),
             };
             assert_eq!(parse(&config.serialize()).unwrap(), config);
+        }
+    }
+
+    #[test]
+    fn drs_experiment_keys_default_off_round_trip_and_reject_bad_values() {
+        let defaults = parse("version=1").unwrap();
+        assert_eq!(defaults.drs_moves, MoveSet::NONE);
+        assert_eq!(defaults.drs_adaptive, AdaptiveSettings::default());
+        assert!(!defaults.drs_adaptive.enabled);
+        let written = defaults.serialize();
+        assert!(written.contains("drs_moves=none"));
+        assert!(written.contains("drs_adaptive=false"));
+        assert!(written.contains("drs_adaptive_threshold_ms=17.5"));
+        assert!(written.contains("drs_adaptive_trigger_frames=6"));
+        assert!(written.contains("drs_adaptive_release_frames=90"));
+        let tuned = parse(
+            "version=1\ndrs_moves=pyra_side_b,kirby_hammer\ndrs_adaptive=true\ndrs_adaptive_threshold_ms=16.9\ndrs_adaptive_trigger_frames=4\ndrs_adaptive_release_frames=120",
+        )
+        .unwrap();
+        assert_eq!(
+            tuned.drs_moves,
+            MoveSet::parse("pyra_side_b,kirby_hammer").unwrap()
+        );
+        assert_eq!(
+            tuned.drs_adaptive,
+            AdaptiveSettings {
+                enabled: true,
+                threshold_hundredths_ms: 1690,
+                trigger_frames: 4,
+                release_frames: 120,
+            }
+        );
+        assert_eq!(parse(&tuned.serialize()).unwrap(), tuned);
+        let all = parse("version=1\ndrs_moves=all").unwrap();
+        assert_eq!(all.drs_moves, MoveSet::all());
+        assert_eq!(parse(&all.serialize()).unwrap(), all);
+        for text in [
+            "version=1\ndrs_moves=pyra_side_b,unknown_move",
+            "version=1\ndrs_adaptive=yes",
+            "version=1\ndrs_adaptive=true\ndrs_adaptive=false",
+            "version=1\ndrs_adaptive_threshold_ms=9",
+            "version=1\ndrs_adaptive_threshold_ms=17.555",
+            "version=1\ndrs_adaptive_threshold_ms=abc",
+            "version=1\ndrs_adaptive_trigger_frames=0",
+            "version=1\ndrs_adaptive_trigger_frames=61",
+            "version=1\ndrs_adaptive_release_frames=0",
+            "version=1\ndrs_adaptive_release_frames=601",
+            "version=1\ndrs_adaptive_release_frames=-5",
+        ] {
+            assert!(parse(text).is_err(), "accepted {text:?}");
         }
     }
 

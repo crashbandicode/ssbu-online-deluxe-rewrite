@@ -1,3 +1,4 @@
+mod adaptive_drs;
 mod api_trace;
 mod auto_driver;
 mod css_capture;
@@ -45,6 +46,11 @@ static PEER_OBSERVER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicB
 static STEALTH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 static STREAMER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static FPS_BOOST: AtomicBool = AtomicBool::new(false);
+static DRS_MOVES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+static DRS_ADAPTIVE: AtomicBool = AtomicBool::new(false);
+static DRS_THRESHOLD: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(1750);
+static DRS_TRIGGER_FRAMES: AtomicU8 = AtomicU8::new(6);
+static DRS_RELEASE_FRAMES: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(90);
 static CONFIG_GENERATION: AtomicU64 = AtomicU64::new(0);
 pub(super) const DATA_DIR: &str = "sd:/ultimate/ssbu_online_deluxe_rewrite";
 
@@ -66,6 +72,25 @@ pub(super) fn settings() -> Config {
         stealth: STEALTH.load(Ordering::Acquire),
         streamer: STREAMER.load(Ordering::Acquire),
         fps_boost: FPS_BOOST.load(Ordering::Acquire),
+        drs_moves: drs_moves(),
+        drs_adaptive: adaptive_settings(),
+    }
+}
+
+/// Enabled per-move resolution triggers (0.5.2 experiment). Atomic read; the
+/// fighter Main hook calls this every tick.
+pub(super) fn drs_moves() -> crate::drs_triggers::MoveSet {
+    crate::drs_triggers::MoveSet(DRS_MOVES.load(Ordering::Acquire))
+}
+
+/// Adaptive trigger settings (0.5.2 experiment). Atomic reads; the present
+/// hook calls this every frame.
+pub(super) fn adaptive_settings() -> crate::drs_triggers::AdaptiveSettings {
+    crate::drs_triggers::AdaptiveSettings {
+        enabled: DRS_ADAPTIVE.load(Ordering::Acquire),
+        threshold_hundredths_ms: DRS_THRESHOLD.load(Ordering::Acquire),
+        trigger_frames: DRS_TRIGGER_FRAMES.load(Ordering::Acquire),
+        release_frames: DRS_RELEASE_FRAMES.load(Ordering::Acquire),
     }
 }
 
@@ -85,6 +110,14 @@ pub(super) fn publish(config: &Config) {
     STEALTH.store(config.stealth, Ordering::Release);
     STREAMER.store(config.streamer, Ordering::Release);
     FPS_BOOST.store(config.fps_boost, Ordering::Release);
+    DRS_MOVES.store(config.drs_moves.0, Ordering::Release);
+    DRS_ADAPTIVE.store(config.drs_adaptive.enabled, Ordering::Release);
+    DRS_THRESHOLD.store(
+        config.drs_adaptive.threshold_hundredths_ms,
+        Ordering::Release,
+    );
+    DRS_TRIGGER_FRAMES.store(config.drs_adaptive.trigger_frames, Ordering::Release);
+    DRS_RELEASE_FRAMES.store(config.drs_adaptive.release_frames, Ordering::Release);
     CONFIG_GENERATION.fetch_add(1, Ordering::Release);
     // Same saved mode and Auto flag do not clear a post-match Vanilla hold.
     auto_driver::note_published(mode_changed, auto_changed);

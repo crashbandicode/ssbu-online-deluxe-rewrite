@@ -47,6 +47,35 @@ Vanilla kept DRS off. This verifies the trigger and policy, not Switch performan
 Luigi's close-range Up-B cut-in also lowered LLDoubles from 1080p to 720p and
 restored it in Eden.
 
+### Per-move and adaptive triggers (0.5.2 experiment)
+
+The shipped triggers are the fighter cut-in (the critical-hit and finish
+zoom, held for a seven-frame cooldown) and Sephiroth's full-charge Gigaflare,
+the same two the original Online Deluxe scales on. Both are reached without
+smashline: a function hook on the cut-in start and an inline hook on the
+fighter Main line that samples entry, kind, status and the Gigaflare charge
+every tick. 0.5.2 adds two opt-in triggers on the same report multiset,
+configured in `config.ini` ([Configuration](CONFIGURATION.md)):
+
+- **Move table** (`drs_moves`): while a fighter's status is one of a named
+  move's statuses, that entry holds one report at the next lower level
+  (1080p → 720p, 720p → 576p, 576p and below → 480p, the fork's ladder) and
+  releases it when the status leaves the move. Candidates came from the
+  2026-10-15 FX campaign under a 120 % CPU quota in Eden and from the
+  console: Pyra's side special dropped several frames when it connected,
+  Falcon Punch about one.
+- **Adaptive** (`drs_adaptive`): the present hook measures the interval
+  between tracked presents; after `drs_adaptive_trigger_frames` consecutive
+  intervals over `drs_adaptive_threshold_ms` it pushes one report, and after
+  `drs_adaptive_release_frames` consecutive intervals within budget it pops
+  it. Intervals of 200 ms or more (scene loads) reset the counters without
+  counting. It covers work that no move name describes, such as a
+  per-frame overlay plugin.
+
+Neither trigger is a measured Switch improvement yet. Acceptance per move or
+setting is a 30 s `CAPTURE_TIMING` on the console with the trigger on and
+off, compared on intervals over 20 ms and on the `Resolution` row.
+
 ## Manual selection and the cleanup hold
 
 Manual selection works during play and remains saved when Auto is selected.

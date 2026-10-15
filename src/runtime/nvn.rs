@@ -411,6 +411,7 @@ unsafe extern "C" fn queue_present(queue: Ptr, window: Ptr, index: i32) {
             super::resolution::on_present(window);
         }
         super::fps_boost::on_present(tick);
+        super::adaptive_drs::on_present(tick);
         super::dispatcher_backoff::note_present(tick);
         super::hang_trace::count(super::hang_trace::Hook::Present);
         if super::api_trace::active() {
@@ -554,6 +555,27 @@ pub(super) fn write_status() {
                 },
                 crate::resolution::status()
             )
+        );
+        let settings = super::settings();
+        let counters = crate::perf_scaler::global().counters();
+        let _ = writeln!(
+            file,
+            "drs_moves={}\ndrs_adaptive={}\ndrs_adaptive_threshold_ms={}\ndrs_adaptive_trigger_frames={}\ndrs_adaptive_release_frames={}\nadaptive_active={}\nadaptive_observed={}\nadaptive_pushes={}\nadaptive_pops={}\nmove_active={}\nmove_pushes={}\nmove_pops={}",
+            settings.drs_moves.serialize(),
+            if settings.drs_adaptive.enabled { "true" } else { "false" },
+            crate::drs_triggers::format_threshold(settings.drs_adaptive.threshold_hundredths_ms),
+            settings.drs_adaptive.trigger_frames,
+            settings.drs_adaptive.release_frames,
+            if counters.adaptive_active { "true" } else { "false" },
+            super::adaptive_drs::observed(),
+            counters.adaptive_pushes,
+            counters.adaptive_pops,
+            counters
+                .move_active
+                .and_then(|index| crate::drs_triggers::MOVES.get(usize::from(index)))
+                .map_or("none", |entry| entry.name),
+            counters.move_pushes,
+            counters.move_pops,
         );
         let _ = file.sync_all();
     }

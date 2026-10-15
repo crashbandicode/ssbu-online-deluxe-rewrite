@@ -18,6 +18,11 @@ stealth=true
 streamer=false
 fps_boost=false
 peer_observer=false
+drs_moves=none
+drs_adaptive=false
+drs_adaptive_threshold_ms=17.5
+drs_adaptive_trigger_frames=6
+drs_adaptive_release_frames=90
 ```
 
 | Key | Values | Meaning |
@@ -30,6 +35,32 @@ peer_observer=false
 | `streamer` | `true`, `false` | Hide remote identities and restore the original native styles |
 | `fps_boost` | `true`, `false` | Diagnostic experiment; the normal build reports Unsupported |
 | `peer_observer` | `true`, `false` | Opt-in peer-observer diagnostics (station map, name rows) |
+| `drs_moves` | `none`, `all`, or comma-separated move names (below) | 0.5.2 experiment: lower the internal resolution one level while a named move's status is active; see [Rendering profiles](RENDERING.md) |
+| `drs_adaptive` | `true`, `false` | 0.5.2 experiment: lower the resolution one level after a run of presents slower than the threshold, restore after a run within budget |
+| `drs_adaptive_threshold_ms` | `10.00`–`40.00` (up to two decimals) | Present interval that counts as a late frame; 16.67 is one vblank, the default 17.5 allows half a millisecond of jitter |
+| `drs_adaptive_trigger_frames` | `1`–`60` | Consecutive late presents before the resolution drops (default 6, one tenth of a second) |
+| `drs_adaptive_release_frames` | `1`–`600` | Consecutive presents within budget before the resolution is restored (default 90, 1.5 s) |
+
+## Dynamic-resolution experiment (0.5.2)
+
+Both keys are off by default and only act where dynamic resolution is on,
+that is on the console under LessLag, LLUltra and LLDoubles (Vanilla and the
+emulator policy ignore them). Neither needs smashline. The move table reads
+the fighter kind and status the Main hook already samples; the adaptive
+trigger reads the present intervals the renderer already counts. The Debug
+view shows both (`DRS moves`, `DRS adaptive`) and `renderer-status.txt`
+carries the settings and the push/pop counters; every edge is event code 108.
+
+Move names for `drs_moves`: `falcon_punch`, `pyra_side_b`, `pyra_neutral_b`,
+`pyra_up_b`, `mythra_specials`, `palutena_explosive_flame`,
+`ness_pk_thunder`, `lucas_pk_thunder`, `kirby_hammer`, `byleth_specials`,
+`inkling_roller`. Example:
+
+```ini
+drs_moves=pyra_side_b,pyra_neutral_b,kirby_hammer
+drs_adaptive=true
+drs_adaptive_threshold_ms=17.5
+```
 
 Use the explicit `platform=emulator` setting in Eden. The
 [Eden test configuration](../config/eden-test.ini) contains that override.

@@ -158,7 +158,10 @@ unsafe fn deluxe_rewrite_post_scene(_: &InlineCtx) {
     // and run the game's own ordering for the next quiet window.
     let epoch = UNLOAD_EPOCH.load(Ordering::Acquire);
     if crate::teardown_guard::teardown_detected(FRAME_UNLOAD_EPOCH.load(Ordering::Acquire), epoch) {
-        QUIET_UNTIL_FRAME.store(crate::teardown_guard::quiet_until(scene_frame), Ordering::Release);
+        QUIET_UNTIL_FRAME.store(
+            crate::teardown_guard::quiet_until(scene_frame),
+            Ordering::Release,
+        );
         GUARD_SKIPS.fetch_add(1, Ordering::Relaxed);
         record(Code::RenderTeardownGuard, epoch, scene_frame);
         submit_queue();

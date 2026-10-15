@@ -202,6 +202,10 @@ unsafe fn performance(
             "Unavailable"
         },
     );
+    let settings = super::settings();
+    let counters = crate::perf_scaler::global().counters();
+    row("DRS moves", &drs_moves_label(&settings, counters));
+    row("DRS adaptive", &drs_adaptive_label(&settings, counters));
     if width.is_finite() && height.is_finite() && width > 0.0 && height > 0.0 {
         row("Output", &format!("{width:.0}x{height:.0}"));
     }
@@ -557,6 +561,47 @@ fn compact_settings_lines(
     }
 }
 
+/// Debug-view text for the 0.5.2 move table: the enabled set, and the move
+/// currently holding a report when there is one.
+fn drs_moves_label(
+    settings: &crate::config::Config,
+    counters: crate::perf_scaler::TriggerCounters,
+) -> String {
+    if settings.drs_moves.is_empty() {
+        return "Off".to_owned();
+    }
+    let holding = counters
+        .move_active
+        .and_then(|index| crate::drs_triggers::MOVES.get(usize::from(index)))
+        .map(|entry| entry.name);
+    match holding {
+        Some(name) => format!("{} ({name} active)", settings.drs_moves.serialize()),
+        None => settings.drs_moves.serialize(),
+    }
+}
+
+/// Debug-view text for the adaptive trigger: threshold and frame counts, and
+/// whether it currently holds a report.
+fn drs_adaptive_label(
+    settings: &crate::config::Config,
+    counters: crate::perf_scaler::TriggerCounters,
+) -> String {
+    if !settings.drs_adaptive.enabled {
+        return "Off".to_owned();
+    }
+    format!(
+        "{} ms, {}/{} frames{}",
+        crate::drs_triggers::format_threshold(settings.drs_adaptive.threshold_hundredths_ms),
+        settings.drs_adaptive.trigger_frames,
+        settings.drs_adaptive.release_frames,
+        if counters.adaptive_active {
+            " (active)"
+        } else {
+            ""
+        }
+    )
+}
+
 fn compact_performance_lines(
     frames: &FrameTimes,
     width: f32,
@@ -580,6 +625,23 @@ fn compact_performance_lines(
             if triggers { "Available" } else { "Unavailable" }
         ),
     ];
+    let counters = crate::perf_scaler::global().counters();
+    let settings = super::settings();
+    if !settings.drs_moves.is_empty() || settings.drs_adaptive.enabled {
+        details.push(format!(
+            "Adp:{}{}",
+            if settings.drs_adaptive.enabled {
+                "On"
+            } else {
+                "Off"
+            },
+            if counters.adaptive_active || counters.move_active.is_some() {
+                "*"
+            } else {
+                ""
+            }
+        ));
+    }
     if width.is_finite() && height.is_finite() && width > 0.0 && height > 0.0 {
         details.push(format!("Out:{width:.0}x{height:.0}"));
     }

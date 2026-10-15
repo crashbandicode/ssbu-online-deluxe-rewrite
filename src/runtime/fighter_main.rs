@@ -113,6 +113,7 @@ pub(super) fn reset_reports() {
     // the scene reset so a stale token cannot pop the next scene's report.
     let _gate = lock_gate();
     perf_scaler::clear_global();
+    super::adaptive_drs::reset();
     crate::resolution::reset_scene();
 }
 
@@ -132,6 +133,7 @@ pub(super) fn sync_resolution() {
         return;
     }
     perf_scaler::clear_global();
+    super::adaptive_drs::reset();
     if crate::resolution::retarget(setting.level, setting.dynamic) {
         perf_scaler::global().set_base(setting.level);
     }
@@ -268,16 +270,21 @@ unsafe fn fighter_main_body(this: u64) {
             if !ARMED.load(Ordering::Acquire) {
                 return;
             }
-            let (cut, edge) = perf_scaler::global().on_main(
-                sample.entry as i32,
-                true,
-                sample.kind,
-                sample.slow,
-                sample.status,
-                sample.charge,
+            let (cut, edge, (moved, which)) = perf_scaler::global().on_main(
+                perf_scaler::MainTick {
+                    entry_id: sample.entry as i32,
+                    entry_present: true,
+                    kind: sample.kind,
+                    slow: sample.slow,
+                    status: sample.status,
+                    charge: sample.charge,
+                },
+                super::drs_moves(),
             );
             note_transition(sample.entry, 1, cut);
             note_transition(sample.entry, 2, edge);
+            note_transition(sample.entry, 3, moved);
+            note_move_trigger(sample.entry, which, moved);
         }
         Err(reason) => {
             let mut ticks = lock_ticks();
@@ -441,6 +448,27 @@ fn read_u32(address: u64) -> Option<u32> {
         return None;
     }
     Some(unsafe { std::ptr::read_unaligned(address as *const u32) })
+}
+
+/// Code 108 edge for the 0.5.2 move table: a = 1 | move << 8 | entry << 16,
+/// b = 1 push / 2 pop | pushed level << 8.
+fn note_move_trigger(entry: usize, which: Option<u8>, action: Action) {
+    let (edge, Some(which)) = (
+        match action {
+            Action::Started => 1u64,
+            Action::Ended => 2,
+            _ => return,
+        },
+        which,
+    ) else {
+        return;
+    };
+    let level = crate::perf_scaler::intensive_level(perf_scaler::global().base_level()) as u64;
+    record(
+        Code::DrsTrigger,
+        1 | (u64::from(which) << 8) | ((entry as u64) << 16),
+        edge | (level << 8),
+    );
 }
 
 fn note_transition(entry: usize, source: u64, action: Action) {

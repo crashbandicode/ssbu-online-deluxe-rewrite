@@ -24,15 +24,16 @@ pub mod build_info {
     include!(concat!(env!("OUT_DIR"), "/build_info.rs"));
 }
 
+pub mod drs_triggers;
 pub mod fighter_probe;
 pub mod hang_trace;
 pub mod perf_scaler;
 pub mod render_policy;
 pub mod render_trace;
 pub mod resolution;
-pub mod teardown_guard;
 #[cfg(target_os = "switch")]
 mod runtime;
+pub mod teardown_guard;
 
 /// Records an explicit manual profile choice for the later menu.
 /// Does not write `config.ini`. Pair with [`set_auto_profile`] when leaving Auto.

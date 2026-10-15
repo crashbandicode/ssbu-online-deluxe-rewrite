@@ -178,6 +178,13 @@ pub enum Code {
     /// Offline (`b` = ticks since the stage load); the matching `AutoContext`
     /// row carries source `0x0ff11e`.
     SceneHold = 107,
+    /// 0.5.2 dynamic-resolution experiment trigger edge. `a`: source in bits
+    /// 0..7 (1 = move table, 2 = adaptive), catalog move index in bits 8..15
+    /// (moves only), fighter entry in bits 16..23 (moves only). `b`: 1 push or
+    /// 2 pop in bits 0..7, the pushed level in bits 8..15, and for the adaptive
+    /// source the triggering present interval in hundredths of a millisecond in
+    /// bits 16..47. Edges only, never per frame.
+    DrsTrigger = 108,
 }
 
 /// Game SetCrop observations recorded before further calls are forwarded only.
@@ -334,6 +341,7 @@ mod tests {
         assert_eq!(Code::EarlyPresent as u16, 105);
         assert_eq!(Code::MatchCapture as u16, 106);
         assert_eq!(Code::SceneHold as u16, 107);
+        assert_eq!(Code::DrsTrigger as u16, 108);
         let rect = crop_rect_event(4, 0, 0, 1024, 576);
         assert_eq!(rect.0, crop_rect_word(0, 0, 1024, 576));
         assert_eq!(rect.1, 4);
