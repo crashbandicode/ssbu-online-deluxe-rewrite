@@ -214,6 +214,9 @@ unsafe extern "C" fn on_load(
 
 unsafe extern "C" fn on_unload(module: *mut Module) -> u32 {
     let address = module as u64;
+    // Every unload, tracked or not, marks the frame for the render-sequence
+    // teardown guard before the module goes away.
+    super::render_sequence::note_module_unload();
     let tracked = address != 0 && address == snapshot().module;
     let trampoline = UNLOAD_ORIGINAL.load(Ordering::Acquire);
     if trampoline == 0 {

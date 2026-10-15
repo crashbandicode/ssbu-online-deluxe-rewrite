@@ -106,6 +106,7 @@ data directory and flags.
 | 31 / 32 | Timing capture started / export finished: capture ID / export success (code 32) |
 | 33 / 34 / 35 | Renderer owner / caller / flush target diagnostics |
 | 36 | Pia RTT sample/cleanup and foreign/drop counters |
+| 48 | Render-opts teardown guard fired: a module unloaded between the frame's fighter recording and its post-scene hook, so the relocated model update and fighter worker were skipped and the game's own ordering runs for the next 180 frames. a = unload epoch, b = scene frame |
 | 37 / 38 | Opt-in parsed peer observation / bounded escaped name sample |
 | 39 / 40 | Peer observer drops / station identity mapping changes |
 | 41–45 | Opt-in read-only outgoing packet/header diagnostics; never packet writes |

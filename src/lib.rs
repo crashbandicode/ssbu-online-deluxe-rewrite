@@ -30,6 +30,7 @@ pub mod perf_scaler;
 pub mod render_policy;
 pub mod render_trace;
 pub mod resolution;
+pub mod teardown_guard;
 #[cfg(target_os = "switch")]
 mod runtime;
 
