@@ -4,7 +4,10 @@ param(
     [string]$Unit = 'deluxe-private-display',
     [string]$Socket = 'wayland-deluxe',
     [ValidateRange(60, 43200)]
-    [int]$MaxRuntimeSeconds = 3600,
+    # Eden dies with the X server when this expires (XIO fatal IO error), so
+    # the limit must outlast the longest planned Eden run; 1 h cost three Eden
+    # instances on 2026-10-14.
+    [int]$MaxRuntimeSeconds = 28800,
     [int]$Width = 1920,
     [int]$Height = 1080
 )
