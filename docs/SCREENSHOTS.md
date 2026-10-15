@@ -36,7 +36,7 @@ All row reads `Unavailable` while the fighter rows differ.
 
 | | |
 | --- | --- |
-| ![Training character select with the native status line](media/training-css.png) <br> The native status line at the top of the Training character select, reached by quitting a Training session: `You: Vanilla* \| Auto` (profile and input buffer). The asterisk is the cleanup hold: leaving the fighter scene returned the renderer to Vanilla, and the saved LessLag selection applies again on the next match. | ![Regular character select after Training](media/smash-css-after-training.png) <br> The regular character select entered after that Training session: the status line reads `LessLag \| Auto`. |
+| ![Training character select with the native status line](media/training-css.png) <br> The native status line at the top of the Training character select (profile and input buffer). In this capture, taken after a Training session, it reads `You: Vanilla* \| Auto`: the cleanup hold was running Vanilla for the saved LessLag selection at that moment. The same screen read `LessLag \| Auto` after another session, so the hold is not a fixed Training behaviour. | ![Regular character select after Training](media/smash-css-after-training.png) <br> The regular character select entered after that Training session: the status line reads `LessLag \| Auto`. |
 | ![Debug view during Training](media/debug-training.png) <br> Training with the Debug view open: `Match capture: Armed; 1 capture(s)` and `Timing: Capturing` while the match capture streams. | ![Main menu](media/main-menu.png) <br> The main menu with the window hidden. |
 
 ![Training with the Player Info window](media/training-strip.gif)
