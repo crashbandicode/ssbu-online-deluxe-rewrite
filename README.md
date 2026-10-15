@@ -77,8 +77,8 @@ character select, is in [Controls](docs/CONTROLS.md).
 | --- | --- | --- | --- | --- |
 | Vanilla | 3 | TwoBehind | 1080p, DRS off | 1080p, DRS off |
 | LessLag | 2 | OneBehind, presents at the flush | 1080p, DRS on | 1080p, DRS off |
-| LLUltra | 2 | Immediate, earlier flush | 576p, DRS on | 1080p, DRS off |
-| LLDoubles | 3 | OneBehind | 1080p, DRS on | 1080p, DRS on |
+| LLUltra | 2 | Immediate, earlier flush, presents at the flush (0.5.2) | 576p, DRS on | 1080p, DRS off |
+| LLDoubles | 3 | OneBehind, presents at the flush (0.5.2) | 1080p, DRS on | 1080p, DRS on |
 
 Auto uses Vanilla in menus, offline matches and Training; online singles get
 LessLag on console or LLUltra on emulator; online matches with more than two

@@ -372,13 +372,20 @@ pub fn skip_wait(decision: Decision, armed: RenderMode) -> bool {
 /// update. On the console character select that update is 13.7 ms (16.3 ms
 /// with the hand moving), so a two-image ring misses the vsync and the next
 /// acquire waits for the one after it (the exact 33 ms frames in the 0.3.7
-/// and 2026-10-14 captures). Two-image LessLag only, committed and idle:
-/// never during a swap, a drain, a forced wait or after a refusal. Vanilla's
-/// third image absorbs a late present; Ultra and Doubles keep the game order.
+/// and 2026-10-14 captures). Every render-opts profile, committed and idle:
+/// LessLag since 0.4.0; LLUltra (the other two-image ring, which had kept the
+/// game's late present and therefore the same stall) and LLDoubles (three
+/// images, the earlier present is a latency gain) since 0.5.2. Never during a
+/// swap, a drain, a forced wait or after a refusal. Vanilla keeps the game
+/// order: its third image already absorbs a late present and it has no
+/// render-opts frame shape to present against.
 pub fn present_at_flush(decision: Decision) -> bool {
     decision.live
-        && decision.effective == Profile::LessLag
-        && decision.committed == Profile::LessLag
+        && decision.effective == decision.committed
+        && matches!(
+            decision.committed,
+            Profile::LessLag | Profile::Ultra | Profile::Doubles
+        )
         && !decision.swapping
         && !decision.force_wait
         && !decision.failed
@@ -1596,17 +1603,18 @@ mod tests {
     }
 
     #[test]
-    fn only_committed_idle_lesslag_presents_at_the_flush() {
+    fn committed_idle_render_opts_profiles_present_at_the_flush() {
         assert!(present_at_flush(
             Machine::confirmed(Profile::LessLag).decision()
         ));
         assert!(!present_at_flush(
             Machine::confirmed(Profile::Vanilla).decision()
         ));
-        assert!(!present_at_flush(
+        // 0.5.2: the other two-image ring and the three-image Doubles too.
+        assert!(present_at_flush(
             Machine::confirmed(Profile::Ultra).decision()
         ));
-        assert!(!present_at_flush(
+        assert!(present_at_flush(
             Machine::confirmed(Profile::Doubles).decision()
         ));
         // A swap toward LessLag is not LessLag yet.

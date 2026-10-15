@@ -33,7 +33,8 @@ Under sd:/ultimate/ssbu_online_deluxe_rewrite/:
   times. Analyze with tools/analyze_render_trace.py.
 - renderer-status.txt: actual active mode, texture counts/index masks and cumulative
   hook counters, including `early_presents`, `early_present_skips` and
-  `early_present_mismatches` for the two-image present-at-flush path (0.4.0).
+  `early_present_mismatches` for the present-at-flush path (0.4.0 LessLag;
+  0.5.2 LLUltra and LLDoubles).
   Values are independent observations, not an atomic frame snapshot.
 - presentation-history.txt: bounded VI probe results, only when the boot flag
   DUMP_PRESENTATION_HISTORY is present. No usable presented timestamps were obtained

@@ -37,8 +37,8 @@ change drains before commit. A transition does not reinstall hooks.
 | --- | --- | --- | --- | --- | --- |
 | Vanilla | 3 | TwoBehind | original once, fields off | No | 1080p, off |
 | LessLag | 2 | OneBehind | original once, LessLag fields; since 0.4.0 presents the acquired image at the flush that submits it (`render_policy::present_at_flush`) and skips the game's later present of that index | Yes | console 1080p on; emulator 1080p off |
-| LLUltra | 2 | Immediate | original three times, fields off, early flush | Yes | console 576p on; emulator 1080p off |
-| LLDoubles | 3 | OneBehind | original once, LessLag fields | Yes | 1080p on, both platforms |
+| LLUltra | 2 | Immediate | original three times, fields off, early flush; since 0.5.2 presents the acquired image at this flush like LessLag | Yes | console 576p on; emulator 1080p off |
+| LLDoubles | 3 | OneBehind | original once, LessLag fields; since 0.5.2 presents the acquired image at this flush like LessLag | Yes | 1080p on, both platforms |
 
 Sources: `src/render_policy.rs` `Profile` and `plan_flush`; `src/resolution.rs`
 `defaults_for` and `delay_for_profile`; `src/config.rs` `RenderMode::textures`
