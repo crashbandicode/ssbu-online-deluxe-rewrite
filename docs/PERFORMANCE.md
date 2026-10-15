@@ -183,6 +183,20 @@ plus ten seconds) ends a capture whose callback never finishes it and exports
 it with `# reason=aborted`; a match capture ends with `scene_end` when the
 game leaves the stage. The `# engine` footer is the profile at arm time, or
 `Mixed` when the effective profile differed at any poll while recording.
+
+For the performance-floor rule ("no one-second window below 59 callbacks")
+use the second tool:
+
+    /usr/bin/python3 ./tools/frame_windows.py /path/to/timing-123.csv --events /path/to/events.log
+
+It prints the callbacks in each wall-clock second (`!` below the floor, `*`
+overlapping a dynamic-resolution push or pop from event codes 82/108), the
+worst sliding one-second window and PASS/FAIL; `--json` gives the same as
+data. It accepts a capture copied while still being written (the partial
+last row is counted, not parsed). When a session switched profiles through
+the menu, split it on the code 46 kind-3 commits first and drop the seconds
+with the window open (code 23 with a non-zero new view); the 2026-10-15
+console entry in [Validation](VALIDATION.md) is the worked example.
 The watchdog does not cancel blocked native filesystem calls. The CSV export uses a bounded
 64KiB buffer per file with an explicit fallible flush before `File::sync_all`.
 

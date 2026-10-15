@@ -2359,6 +2359,68 @@ pre-rewrite repository in the evidence root), and `AGENTS.md` no longer asks
 for a handoff file in the repository. Every tag was re-pointed to its
 rewritten commit; the Forgejo releases keep their assets.
 
+### 0.5.2 — 2026-10-15: console move captures — Vanilla and LessLag hold 60, LLUltra alone drops
+
+Console, build `1525e3e0` (`0.5.2-ce0145a2155c`), FX Control installed with
+every effect on, Training Modpack Input Display off, `drs_moves=none`,
+`drs_adaptive=false`. Seventeen `CAPTURE_MATCH` Training sessions (label
+`match_training`, 82–367 s each, one per move of the performance-floor list:
+Pyra side/neutral/up B, Mythra specials, Falcon Punch, Palutena side B, Ness
+PK Thunder and PK Fire, Lucas PK Thunder, Kirby Hammer, Byleth specials,
+Inkling Roller, Sephiroth, plus four unnamed), each switching Vanilla →
+LessLag → LLUltra through the Deluxe window with the window hidden while
+the move was repeated against a stopped CPU. Segments split on the code 46
+kind-3 commits; seconds with the window open (code 23), within 3 s of a
+commit, overlapping a cut-in push (code 82 source 1) or inside the quit
+transition excluded. Analysis script `tools/frame_windows.py` (per-second
+callback counts, worst sliding one-second window, resolution edges marked)
+plus per-frame reading of `api-<id>.csv`; evidence and per-session table in
+the tangent evidence root, `card-captures-1015-redo/ANALYSIS.md` and
+`MOVE-LEDGER.md`.
+
+Result. Vanilla: every segment holds 60 after one 51–57 second 1–3 s into
+the capture (a single 55–140 ms gap at match start). LessLag: 60 in all 16
+segments; the only sub-59 seconds are three 53–54 seconds on cut-in pushes
+in one session. The first attempt the same evening, which read as
+"LessLag drops 20–49 % of seconds", had the Deluxe window open while
+fighting; with those seconds excluded it is clean too. LLUltra: fails the
+"no second below 59" rule in 11 of 17 sessions — stretches of 33–41
+callbacks per second made of alternating 19 ms and 31–33 ms frames (Kirby
+hammer eleven seconds in a row, Falcon Punch 8 of 14 s, Pyra side B 9 of
+25 s); Palutena side B, both PK Thunders, Inkling Roller and the Sephiroth
+session pass.
+
+Mechanism, from the per-frame API trace. LLUltra (Immediate) acquires and
+waits for the texture at the start of the frame, runs the CPU update and
+flushes + presents at the present entry, so the image can flip at the very
+next vblank: the frame has to fit **CPU work + GPU time ≤ 16.7 ms**.
+LessLag and Vanilla present at the late flush right after the vblank wait
+and pipeline the GPU behind the next frame's CPU work: **max(work, GPU) ≤
+16.7 ms**. Measured: CPU work from the vblank to the present entry is
+9.2–10.4 ms (p50) in LLUltra and Vanilla and 11.5–12.1 ms in LessLag
+(relocated model update); in LLUltra's half-rate seconds it is 10–12 ms
+(p50) and 11.7–16.5 ms (p90), the extra lying between the fighter-record
+and post-scene marks (scene/effect update; UI job and worker waits
+unchanged). A frame that presents 6.9 ms before the vblank held, one that
+presented 4.3 ms before it missed, so the GPU time at 576p is 3.4–5.3 ms
+and any frame over about 11.5 ms of CPU work misses; the two-image ring
+then waits 19–20 ms for the next acquire (the `nvnSyncWait` max span,
+against 5–8 ms in every other profile). Resolution is not the separator
+(LessLag at 1080p holds, LLUltra at 576p drops).
+
+Consequences. The per-move effect cost drops no frame in Vanilla or LessLag
+on the console in this scene, so the measured-drop part of the
+performance-floor plan concerns LLUltra only. The shipped levers trim the
+GPU term by about 1–1.5 ms (adaptive or move-table DRS 576p → 480p), enough
+for the moves with work p90 ≈ 12 ms and not for Falcon Punch or the Kirby
+hammer; Reduced effects are the only lever on the CPU term and are unproven
+(the Eden quota numbers did not fall for Pyra, Palutena, Falcon). A
+render-policy fallback — present at the late flush for a run of frames after
+an acquire wait over about 10 ms, i.e. LessLag's response for the duration of
+the move — would hold 60 without per-move knowledge; not built. Gaps: Falcon
+Punch has no LessLag segment, no full-charge Gigaflare edge (code 82 source
+2) was recorded, four sessions are unnamed, no online match was captured.
+
 ### 0.5.2 — 2026-10-15: coverage build and the first Eden coverage campaign (offline and local wireless)
 
 Operator request: light execution-coverage tracing of the Eden build to

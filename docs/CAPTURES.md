@@ -6,7 +6,9 @@ tick, buttons and overlay view; schema 1 files also carried three FX columns)
 and `api-<tick>.csv` (CPU-side spans around the render API
 calls and the plugin's own markers). Both stream from the diagnostics thread
 while the capture runs; no game hook does file I/O. `timing-status.txt` reads
-`capturing …` and then `saved …`. Analyze with `tools/analyze_timing.py` and
+`capturing …` and then `saved …`. Analyze with `tools/analyze_timing.py`,
+`tools/frame_windows.py` (callbacks per second, worst one-second window,
+resolution edges from `events.log`) and
 `tools/analyze_render_trace.py`; the column and footer formats are in
 [Performance](PERFORMANCE.md) and the event kinds in [Debugging](DEBUGGING.md).
 
