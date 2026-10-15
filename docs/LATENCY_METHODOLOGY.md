@@ -17,7 +17,8 @@ on that exact binary. Keep this distinction when citing the measurements.
 `d9acd03611e1d1d6` was the shipping candidate on 2026-10-07. Since 0.4.0,
 two-image LessLag presents the acquired image at the flush that submits it
 (`render_policy::present_at_flush`). The LessLag frame counts below come from
-the earlier path, and no response trials have been taken on the new one.
+the earlier path. The 0.5.0 and 0.5.2 re-measurements below were taken on the
+new path; since 0.5.2 LLUltra and LLDoubles present at the flush too.
 
 ## Measurement boundaries
 
@@ -272,6 +273,75 @@ invalid. The counts match the b19 table above: the 0.4.0 present-at-flush
 change and the 0.5.0 FX removal did not change the captured response delay
 in this setup. Evidence (360 images per pass, traces, status snapshots,
 NOTES.md) is in the operator's evidence root under `latency-050-1015/`.
+
+## Re-measurement on 0.5.2 present-at-flush, 2026-10-15
+
+0.5.2 extended `render_policy::present_at_flush` from LessLag to LLUltra and
+LLDoubles (commit `ce0145a`), so all three render-opts profiles now present the
+acquired image at the flush that submits it. This pass asks whether that moved
+the captured response counts, LLUltra's advantage over LessLag in particular.
+
+NRO SHA-256 (build `0.5.2-ce0145a2155c-1792070522`, package `1525e3e0392c8403`):
+
+```text
+1525e3e0392c840306073762cb7e78670745fe0e925de013f660c901371cfdff
+```
+
+Same method and Eden build (`10bcd2d849`), Vulkan/docked/1×/100%, Sephiroth
+versus Kazuya (CPU Stop) on the Training stage, `ui.screenshot_height=360`
+(480 native 640×360 images; per-trial median capture interval 16.0 to 17.5 ms),
+`INPUT_RECEIPT` marker, input buffer Auto, `platform=emulator`,
+`auto_profile=false`. Plugins next to Deluxe: Training Modpack, gamepad overlay,
+Arcropolis, css_preserve, nro_hook, param_hook; no FX Control. One private
+profile copy and one uninterrupted Eden session (6 GiB cgroup cap). Normal
+groups ran Vanilla, LessLag, LLUltra, LLDoubles; delayed groups ran in reverse.
+Every group's committed mode and `engine_status=Active` were read from
+`renderer-status.txt` before and after the group (status files retained). Three
+20-image trials per cell, 24 trials, no replacements.
+
+| Mode | Normal `R` | Normal `M` / `D` | Delayed `R` | Delayed `M` / `D` | Fewer frames than Vanilla, normal / delayed |
+| --- | --- | --- | --- | --- | --- |
+| Vanilla | 6, 6, 6 | 3 / 3 | 6, 6, 6 | 4 / 2 | — |
+| LessLag | 3, 3, 3 | 2 / 1 | 3, 3, 3 | 3 / 0 | 3 / 3 |
+| LLUltra | 2, 2, 2 | 2 / 0 | 2, 3, 3 | 2 / 0, 1, 1 | 4 / 4, 3, 3 |
+| LLDoubles | 4, 4, 4 | 3 / 1 | 4, 4, 5 | 4 / 0, 0, 1 | 2 / 2, 2, 1 |
+
+All 24 critical windows (image 4 through max(pose, Down)+1) had consecutive
+present identities, so none was excluded; automatic and visually reviewed pose
+indices agreed in all 24 and `R = M + D` held in all 24. Seven delayed-phase
+trials (Vanilla 1 and 2, LessLag 1, LLUltra 1, LLDoubles 1 to 3) are not covered
+by their API trace export, which holds 1800 present identities that begin after
+those trials; they rest on the image marker's identities alone. Restricted to
+trials whose identities join exactly one API kind-6 and one kind-7 record
+(17 of 24), the delayed values are Vanilla 6, LessLag 3, 3, LLUltra 3, 3 and no
+LLDoubles trial. Five of the eight traces carry the analyzer warning "Engine
+state changed during capture." and one (LLUltra normal) one skipped event;
+neither was investigated, no API-level A/B claim is made, and every group's
+before/after `renderer-status.txt` agree on the committed profile.
+
+Result: LessLag (3), Vanilla (6) and normal-phase LLUltra (2) and LLDoubles (4)
+are unchanged from the b19 and 0.5.0 results, so present-at-flush did not shift
+the captured-image counts. LLUltra still has one frame fewer than LessLag in the
+normal phase (2 against 3, three of three trials). In the delayed phase the
+LLUltra advantage is within the trial-to-trial spread: 2, 3, 3 against 3, 3, 3,
+and on the API-covered trials both are 3. LLDoubles delayed shows a single
+5 (consecutive identities, serials 35777 to 35783). These are captured-image
+emulator frames from synthetic input; they say nothing about the console frame
+time stall that present-at-flush targets and are not Switch input-to-photon
+measurements.
+
+Each included trial's native images are annotated in
+[latency-vanilla.gif](media/latency-vanilla.gif),
+[latency-lesslag.gif](media/latency-lesslag.gif) and
+[latency-llultra.gif](media/latency-llultra.gif) (normal-phase trial 1 of each;
+the counter starts at the first image after the injection and reaches `R` on the
+first crouch image). Evidence, including all 480 images, per-trial analysis, the
+adapted helpers, partial-copy verification and the staging receipt, is retained
+outside Git in the operator's evidence root under `latency-052-1015/`, which
+also holds the helper scripts. Deviations from the 0.5.0 run: a private copy of
+its profile was used instead of the original, and the 6 GiB cgroup cap (8 GiB
+before) reached its limit repeatedly (`memory.events max`) without an OOM kill
+or a visible frame-rate drop.
 
 ## Confirming on Switch
 

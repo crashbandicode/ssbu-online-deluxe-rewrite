@@ -2359,6 +2359,55 @@ pre-rewrite repository in the evidence root), and `AGENTS.md` no longer asks
 for a handoff file in the repository. Every tag was re-pointed to its
 rewritten commit; the Forgejo releases keep their assets.
 
+### 0.5.2 — 2026-10-15: response trials after present-at-flush for LLUltra and LLDoubles (Eden, captured images)
+
+Operator request: re-measure the README input-delay table on the 0.5.2
+present-at-flush build (commit ce0145a, package `artifacts/1525e3e0392c8403/`,
+build `0.5.2-ce0145a2155c-1792070522`, NRO SHA-256
+`1525e3e0392c840306073762cb7e78670745fe0e925de013f660c901371cfdff`), because
+LLUltra's lead over LessLag might have shrunk. Method as in
+LATENCY_METHODOLOGY.md: one uninterrupted CLI-control Eden `10bcd2d849`
+(Vulkan/docked/1×/100%, `ui.screenshot_height=360`, 6 GiB cap) on a private copy
+of the 0.5.0 profile (Deluxe only plus Training Modpack, gamepad overlay,
+Arcropolis, css_preserve, nro_hook, param_hook; no FX Control), Sephiroth versus
+Kazuya CPU Stop in Training, `INPUT_RECEIPT` marker, input buffer Auto,
+`platform=emulator`, `auto_profile=false`. Four profiles × two injection phases
+× three 20-image trials = 24 trials (480 native 640×360 images), normal-phase
+order Vanilla, LessLag, LLUltra, LLDoubles, delayed order reversed; the
+committed mode and `engine_status=Active` were read from `renderer-status.txt`
+before and after every group. Captured-image response `R` (images from the
+injection after image 5 to the first crouch image):
+
+| Profile | Normal | Delayed | Saved vs Vanilla, normal / delayed |
+| --- | --- | --- | --- |
+| Vanilla | 6, 6, 6 | 6, 6, 6 | — |
+| LessLag | 3, 3, 3 | 3, 3, 3 | 3 / 3 |
+| LLUltra | 2, 2, 2 | 2, 3, 3 | 4 / 4, 3, 3 |
+| LLDoubles | 4, 4, 4 | 4, 4, 5 | 2 / 2, 2, 1 |
+
+All 24 critical windows had consecutive present identities (no exclusions, no
+replacement trials); automatic and visually reviewed pose indices agreed in all
+24 and `R = M + D` held in all 24. Present-at-flush did not change any captured
+count versus the b19 and 0.5.0 runs; LLUltra still has one frame fewer than
+LessLag in the normal phase (2 against 3, three of three) and is within one
+frame of it in the delayed phase (2, 3, 3 against 3, 3, 3). Qualifications:
+seven delayed-phase trials (Vanilla 1 and 2, LessLag 1, LLUltra 1, LLDoubles 1
+to 3) are not covered by their API trace export (each export holds 1800
+identities that start after those trials), so they rest on the marker's image
+identities alone; on the 17 API-joined trials the delayed values are Vanilla 6,
+LessLag 3, 3, LLUltra 3, 3 and no LLDoubles trial. Five traces carry "Engine
+state changed during capture." and the LLUltra normal trace one skipped event;
+not investigated, no API-level A/B claim. These are emulator captured-image
+counts with synthetic input; they do not measure the console frame-time stall
+that present-at-flush targets and do not establish Switch input-to-photon
+latency. At the stop the unit recorded SIGBUS at the external
+`systemctl --user stop` (after a clean `game.stop` and Eden's own clean
+shutdown log), the known shutdown behaviour. Evidence outside Git:
+`latency-052-1015/` (NOTES.md, per-trial analysis, 480 images, traces with
+partial-copy verification, staging receipt); annotated GIFs
+`docs/media/latency-{vanilla,lesslag,llultra}.gif` (normal-phase trial 1 of
+each, frame counter from the first image after the injection to the crouch).
+
 ### 0.5.2 — 2026-10-15: present at the flush for LLUltra and LLDoubles (candidate for the console LLUltra drop)
 
 Operator report: LLUltra "drops fps dramatically" on the console (scene not

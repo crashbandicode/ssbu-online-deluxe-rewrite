@@ -87,27 +87,49 @@ fighters get LLDoubles. How Auto recognises an online match, the cleanup hold
 
 ### Measured input delay
 
-Captured-response trials in Eden on build `b19b7d94ae136e55`: frames from a
-synthetic input to the first visible response, three trials per cell.
+Captured-response trials in Eden: frames from a synthetic input to the first
+visible response, three trials per cell, at two injection phases. The earlier
+columns are build `b19b7d94ae136e55`; the 0.5.2 columns are the 0.5.2
+NRO `1525e3e0` (build `0.5.2-ce0145a2155c`), measured on 2026-10-15
+with the same method, after LLUltra and LLDoubles started presenting at the
+flush as LessLag does.
 
-| Profile | Normal injection phase | Later injection phase | Frames saved vs Vanilla |
-| --- | --- | --- | --- |
-| Vanilla | 6, 6, 6 | 6, 6, 6 | — |
-| LessLag | 3, 3, 3 | 3, 3, 3 | **3** |
-| LLUltra | 2, 2, 2 | 3, 2, 3 | **3–4** |
-| LLDoubles | 4, 4, 4 | 4, 4, 4 | **2** |
+| Profile | Normal phase (b19) | Later phase (b19) | Normal phase (0.5.2) | Later phase (0.5.2) | Frames saved vs Vanilla (0.5.2) |
+| --- | --- | --- | --- | --- | --- |
+| Vanilla | 6, 6, 6 | 6, 6, 6 | 6, 6, 6 | 6, 6, 6 | — |
+| LessLag | 3, 3, 3 | 3, 3, 3 | 3, 3, 3 | 3, 3, 3 | **3** |
+| LLUltra | 2, 2, 2 | 3, 2, 3 | 2, 2, 2 | 2, 3, 3 | **4** normal, **3–4** later |
+| LLDoubles | 4, 4, 4 | 4, 4, 4 | 4, 4, 4 | 4, 4, 5 | **2** normal, **1–2** later |
+
+On 0.5.2 LLUltra still shows one captured frame fewer than LessLag when the
+input lands at the normal phase (2 against 3 in all three trials). At the later
+phase the two are within a frame: LLUltra 2, 3, 3 against LessLag 3, 3, 3, and
+the one 2 is in a trial whose API trace was not captured. Present-at-flush
+did not change the captured-image counts of any profile; its purpose is the
+console frame-time stall, which these trials do not measure. Seven of the 24
+0.5.2 trials (all in the later phase) are not covered by their API trace
+export and rest on the in-game marker's consecutive present identities alone.
+
+Each frame below is a real 640×360 capture from one included trial (normal
+phase, trial 1), played at about three frames per second. The number counts
+captured frames from the first image after the stick-down was injected up to
+the first image showing the crouch (green); INPUT lights from that first image,
+and the small "plugin saw it" lamp lights when the in-game input marker first
+shows the Down bit.
+
+| Vanilla: 6 frames | LessLag: 3 frames | LLUltra: 2 frames |
+| --- | --- | --- |
+| ![Vanilla input to crouch](docs/media/latency-vanilla.gif) | ![LessLag input to crouch](docs/media/latency-lesslag.gif) | ![LLUltra input to crouch](docs/media/latency-llultra.gif) |
 
 LLDoubles was measured as a manual profile in two-fighter Training. These are
 emulator screenshots with synthetic input, not Switch input-to-photon
-measurements, and they predate 0.4.0's present-at-flush change to LessLag,
-which removed the console's character-select stall (49.9 → 59.85 fps on the
-hand sweep) without changing the frame count claim. Re-measured on the 0.5.0
-release NRO on 2026-10-15 with the same method: Vanilla 6, LessLag 3, LLUltra
-2 (normal phase) and 2–3 (delayed phase) captured response frames, so the
-three- and four-frame savings hold on the current build. Method and both
-result sets: [LATENCY_METHODOLOGY.md](docs/LATENCY_METHODOLOGY.md); original
-full results: [PERFORMANCE.md](docs/PERFORMANCE.md).
-
+measurements. The b19 columns predate 0.4.0's present-at-flush change to
+LessLag, which removed the console's character-select stall (49.9 → 59.85 fps
+on the hand sweep) without changing the frame count claim; the 0.5.0 release
+NRO re-measured on 2026-10-15 gave Vanilla 6, LessLag 3, LLUltra 2 (normal) and
+2–3 (delayed), and 0.5.2 gives the same counts. Method and every result set:
+[LATENCY_METHODOLOGY.md](docs/LATENCY_METHODOLOGY.md); original full results:
+[PERFORMANCE.md](docs/PERFORMANCE.md).
 ## Configuration
 
 `sd:/ultimate/ssbu_online_deluxe_rewrite/config.ini`, created with defaults on

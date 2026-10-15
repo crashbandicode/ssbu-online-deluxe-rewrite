@@ -613,3 +613,31 @@ Raw evidence is retained outside Git:
 ```text
 dist/b19b7d94ae136e55/runtime-evidence/response-and-cutin/
 ```
+
+## Response trials re-measured on 0.5.2, 2026-10-15
+
+NRO `1525e3e0392c8403` (SHA-256 `1525e3e0392c840306073762cb7e78670745fe0e925de013f660c901371cfdff`,
+build `0.5.2-ce0145a2155c-1792070522`) repeated the receipt-marker and visible-crouch
+experiment after LLUltra and LLDoubles began presenting at the flush (commit
+`ce0145a`): 24 trials, three per profile at each of two input phases, same Eden
+build, scene and 640×360 capture as the 0.5.0 re-measurement.
+
+| Profile | Normal phase `R` | Later phase `R` |
+| --- | --- | --- |
+| Vanilla | 6, 6, 6 | 6, 6, 6 |
+| LessLag | 3, 3, 3 | 3, 3, 3 |
+| LLUltra | 2, 2, 2 | 2, 3, 3 |
+| LLDoubles | 4, 4, 4 | 4, 4, 5 |
+
+The counts match the b19 and 0.5.0 results: present-at-flush on LLUltra and
+LLDoubles did not change the captured response frames, and LLUltra still has one
+frame fewer than LessLag at the normal phase (2 against 3) while the two are
+within one frame at the later phase. All 24 critical windows had consecutive
+present identities; seven later-phase trials are not covered by their API trace
+export. These are emulator captured-image counts, not the console frame-time
+stall that change targets and not input-to-photon latency. Full per-trial table,
+exclusions (none), trace caveats and deviations are in
+[LATENCY_METHODOLOGY.md](LATENCY_METHODOLOGY.md#re-measurement-on-052-present-at-flush-2026-10-15);
+annotated frames are in the README ([Measured input delay](../README.md#measured-input-delay)).
+Evidence is retained outside Git in the operator's evidence root under
+`latency-052-1015/`.
