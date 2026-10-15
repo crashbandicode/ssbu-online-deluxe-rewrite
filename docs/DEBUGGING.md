@@ -124,6 +124,7 @@ data directory and flags.
 | 106 | `CAPTURE_MATCH`: a = 0 startup (b = flag present), 1 stage entered (b = scene status), 2 stage left (b = previous status), 3 a running 30 s capture ended for a starting match (b = its id) |
 | 107 | Scene connection hold: a = 1 main-menu entry kept a stored Quickplay (b = hook address); a = 2 a Singles/Doubles stage under Quickplay without the online-latency hook was demoted to Offline (b = ticks since the stage load; the matching code 73 AutoContext row carries source `0x0ff11e`) |
 | 108 | 0.5.2 dynamic-resolution trigger edge: a = source (1 move table, 2 adaptive) with the catalog move index in bits 8–15 and the fighter entry in bits 16–23 for moves; b = 1 push or 2 pop, the pushed level in bits 8–15, and for the adaptive source the triggering present interval in hundredths of a millisecond in bits 16–47. `renderer-status.txt` carries the settings (`drs_moves`, `drs_adaptive*`) and the counters (`adaptive_active`, `adaptive_observed`, `adaptive_pushes`, `adaptive_pops`, `move_active`, `move_pushes`, `move_pops`); code 82 also records each move edge with source 3 |
+| 109 | Coverage build only (`tools/Build.ps1 -Coverage`): a raw LLVM profile was written under `coverage/`. a bits 0–7 = 1 periodic `live.profraw`, 2 scene status change (bits 8–15 previous status, bits 16–23 new status), 3 manual (Debug view L+R+Left); b = bytes written, 0 when the write failed (the first failure is also printed to the Skyline log). See [Coverage build](#coverage-build-052) |
 
 Codes 18–20 describe historical CSS builds; they are no longer emitted.
 Codes 11, 27–29, 84–87 and 91–97 were the character-FX records. They moved
@@ -264,6 +265,56 @@ The previous boot is kept as `hang-trace.previous.log`; the file rotates at 2 Mi
 Zero-code bisection for a freeze: delete `CAPTURE_CSS` first (removes the three
 CSS hooks), then add `DISABLE_BACKOFF`, then the other `DISABLE_*` flags. The
 heartbeat keeps running with every family disabled.
+
+## Coverage build (0.5.2)
+
+A separate, never-shipped variant of the NRO records which functions, lines
+and branch arms of the rewrite actually execute. Build and package it with
+
+```powershell
+/usr/bin/pwsh -NoLogo -NoProfile -NonInteractive -Command '& ./tools/Build.ps1 -Coverage -Package -Output <artifacts>'
+```
+
+which compiles the plugin crate alone with `-C instrument-coverage
+-Zno-profiler-runtime` (per-package rustflags in `tools/coverage/config.toml`,
+a nightly cargo feature the Skyline toolchain has), enables the `coverage`
+cargo feature and builds into `target/coverage` so the product build is never
+mixed with it. The manifest records `"variant": "coverage"`. std, skyline and
+the ImGui archive are not instrumented. The ELF in the package carries the
+LLVM coverage mapping; keep it next to the profiles.
+
+There is no LLVM profiler runtime for the Skyline target, so
+`runtime::coverage` is the runtime: it defines the `__llvm_profile_runtime`
+hook symbol and serialises the counter, descriptor and name sections through
+`coverage_profile` (raw profile format 10, the format this toolchain's LLVM
+22.1.0 emits) on the diagnostics thread. Files land under
+`sd:/ultimate/ssbu_online_deluxe_rewrite/coverage/`:
+
+| File | When |
+| --- | --- |
+| `build.txt` | First dump: build id, commit, function and counter counts, section addresses |
+| `live.profraw` | Rewritten every 10 s through a staging file, so a guest abort loses at most that much |
+| `scene-NNN-P-S.profraw` | Every scene status change (`P` previous, `S` new status byte) |
+| `manual-NNN.profraw` | Debug view L+R+Left |
+
+Counters are cumulative for the life of the process, so every file is a
+superset of the earlier ones. Per-scenario counts come from differencing two
+snapshots with `tools/coverage/profraw_diff.py`, or from separate sessions.
+Each dump is about 140 KB and costs one memory copy; the hooks themselves
+only add counter increments. Event code 109 records each dump.
+
+Reports: `tools/coverage/report.py --elf <package>.elf --out <dir>
+name=<profraw or directory> ...` runs `llvm-profdata merge` and `llvm-cov`
+(the matching `llvm-tools` component of the nightly that shares the Skyline
+toolchain's LLVM) and writes `summary.md` (per-file coverage),
+`never-functions.md` (functions no scenario executed, with their physical
+lines and whether non-test code references them), `uncovered-lines.md`
+(arms inside executed functions that never ran), `ride-along.md` (functions
+whose count vectors across scenarios are identical, so they only ever run
+together), `functions.csv` and an HTML tree. The numbers are evidence for a
+review next to the source, never a removal list: zero coverage means the
+scenarios did not reach the code, which for the NSO paths (Quickplay, Arena)
+is true of every emulator session.
 
 ## Eden test lifecycle on this Ubuntu host
 

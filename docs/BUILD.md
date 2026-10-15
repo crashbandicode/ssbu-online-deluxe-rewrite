@@ -39,6 +39,13 @@ provenance and hashes. Preserve each tested bundle. No Nintendo assets or
 third-party compiled plugins are committed. Build checks alone do not establish
 runtime compatibility or reduced latency.
 
+`Build.ps1 -Coverage` builds the instrumented coverage variant into
+`target/coverage` (feature `coverage`, `tools/coverage/config.toml`); with
+`-Package -Output <dir>` the bundle's manifest records `"variant": "coverage"`.
+It is a measurement build for emulator and console sessions, never a release
+asset. How it works and how to read its profiles:
+[Coverage build](DEBUGGING.md#coverage-build-052).
+
 ## Release
 
 A release is a tag `vX.Y.Z` on the commit that bumps `Cargo.toml`, built from

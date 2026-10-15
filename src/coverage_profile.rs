@@ -122,7 +122,9 @@ pub fn write_profraw<W: Write>(out: &mut W, sections: &Sections) -> io::Result<u
     Ok(sections.profraw_len())
 }
 
-/// Header fields a reader needs, parsed back from a raw profile.
+/// Header fields a reader needs, parsed back from a raw profile. Test support
+/// only: the plugin never reads profiles, the host tools do (in Python).
+#[cfg(test)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Header {
     pub version: u64,
@@ -136,6 +138,7 @@ pub struct Header {
 
 /// Parse the header of a raw profile written by this module or by compiler-rt.
 /// `None` when the magic is wrong or the bytes are too short.
+#[cfg(test)]
 pub fn read_header(bytes: &[u8]) -> Option<Header> {
     if bytes.len() < HEADER_WORDS * 8 {
         return None;

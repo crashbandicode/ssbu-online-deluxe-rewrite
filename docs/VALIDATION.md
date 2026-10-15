@@ -2359,6 +2359,72 @@ pre-rewrite repository in the evidence root), and `AGENTS.md` no longer asks
 for a handoff file in the repository. Every tag was re-pointed to its
 rewritten commit; the Forgejo releases keep their assets.
 
+### 0.5.2 — 2026-10-15: coverage build and the first Eden coverage campaign (offline and local wireless)
+
+Operator request: light execution-coverage tracing of the Eden build to
+inform code reduction without blind removal, with the rule that code is not
+kept because a unit test exercises it. Implementation (commit "Coverage build:
+instrumented variant with a Rust raw-profile writer"): cargo feature
+`coverage`, `tools/Build.ps1 -Coverage`, per-package `-C instrument-coverage
+-Zno-profiler-runtime` through `tools/coverage/config.toml`, and
+`runtime::coverage` as the whole profiler runtime (defines
+`__llvm_profile_runtime`, serialises the `__llvm_prf_*` sections as raw
+profile format 10 through `coverage_profile`; `live.profraw` every 10 s,
+`scene-NNN-P-S.profraw` at scene changes, `manual-NNN.profraw` on Debug
+L+R+Left; event code 109). Host proof: a program built with the same flags and
+the same writer merges in `llvm-profdata` and reports exact per-function
+counts in `llvm-cov`. Gates: host clippy with and without the feature, 297
+tests, no-default build, Skyline clippy with and without the feature, Skyline
+build. Coverage package `artifacts/7df44f460e8f9aa3/` (build
+`0.5.2-35ec596fc1a9-dirty-1792077376`, NRO 1,765,376 B, manifest
+`"variant": "coverage"`, 1,392 instrumented functions, 4,676 counters).
+
+Campaign (Eden CLI-control `10bcd2d849`, private display, `platform=emulator`,
+manual LessLag, buffer 3, DRS flags off; game driven by an Astra low agent,
+snapshots and staging by the primary): six scenarios — boot to Training;
+the Player Info window in Training through every profile, buffer edit, view
+cycle, Debug view, 30 s timing capture, manual dump and combat; Training
+exit, main-menu Stealth/Streamer toggles and two Smash CPU matches; and a
+two-peer local-wireless session (profiles A and B through an unlisted
+password-protected emulator room on localhost, `CAPTURE_CSS` and
+`CAPTURE_MATCH` present, SDK demo plugin installed on the host): lobby,
+challenger accept, character select with both native status lines (18–21 ms
+peer latency shown), a Sonic versus Lucario match on Final Destination with
+the compact strip, Plugins 1/1 page, Performance and Debug views, about two
+minutes of combat, the quit chord and clean room exits. The first LDN
+attempt's host was OOM-killed by its 6 GiB cgroup cap while the match loaded
+(kernel `oom-kill`, not a guest fault); the lobby/CSS profile was kept and the
+second attempt ran at 8 GiB without incident. Cumulative snapshots were
+differenced with `tools/coverage/profraw_diff.py`.
+
+Result (`tools/coverage/report.py`, llvm-cov total 1,383 functions in the
+map, 70.4 % regions, 69.0 % lines): 1,091 of 1,422 instrumented functions in
+`src/` executed in at least one scenario (77 %); 331 never (107 closures, 22
+const constructors/trait impls); 202 named never-executed functions spanning
+2,723 physical lines; 2,188 lines never executed inside functions that ran.
+The never-executed code is, in order of size: Nintendo Switch Online paths
+(Arena room and station board, Quickplay hooks, about 750 lines; unreachable
+in any emulator session), flag-gated diagnostics from closed investigations
+(`DUMP_PRESENTATION_HISTORY`, `PROBE_FIGHTER_MODULE`, `DUMP_RENDER_PROBE`,
+`PROBE_CROP`, the `dispatcher_backoff.ini` parser; about 740 lines), features
+off in this configuration (FPS++, DRS and the 0.5.2 triggers; about 560
+lines), plugin-API paths needing an option edit or an own-page plugin,
+defensive and teardown paths, and 21 production helpers (115 lines) with no
+production caller. Two groups of functions share identical aggregate counts
+in every scenario (27 per present, 24 per diagnostics poll); equal totals,
+not proof of shared or dispensable work. Analysis, tiers and the deduplicated
+reduction inventory (Tier 1 unused helpers 115 source lines; Tier 2 opt-in
+diagnostics and the backoff override file ≈ 1,100 source lines plus ≈ 180
+test lines; together about 5 % of the non-test source) are in the evidence
+root's `coverage-1015/REPORT.md`, reviewed by an Astra high session whose
+nine findings (two FPS++ helpers wrongly listed as unused, `window_finalize`
+wrongly grouped with the crop probe, an unsupported poller-gating claim,
+double-counted totals) are applied; the report is evidence for review, not a
+removal list. Scenario
+gaps stated there: no NSO session, no first boot without `config.ini`, no
+plugin option edit, no own-page plugin, no console run. Both Eden profiles
+were restored afterwards (journal `RESTORED`, SHA-256 verified).
+
 ### 0.5.2 — 2026-10-15: response trials after present-at-flush for LLUltra and LLDoubles (Eden, captured images)
 
 Operator request: re-measure the README input-delay table on the 0.5.2

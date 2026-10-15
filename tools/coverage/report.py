@@ -110,13 +110,19 @@ def union_lines(spans):
 
 
 def test_boundary(path):
-    """Line after which a file's content is test code (first `#[cfg(test)]`)."""
+    """First line of a file's test module (`mod tests` and its `#[cfg(test)]`).
+
+    Inline `#[cfg(test)]` helpers earlier in the file are not the boundary;
+    they are small, and treating them as it would call live code test-only.
+    """
     try:
         text = path.read_text().splitlines()
     except OSError:
         return None
     for index, line in enumerate(text, 1):
-        if line.strip().startswith("#[cfg(test)]"):
+        if re.match(r"\s*(pub(\(crate\))?\s+)?mod tests\b", line):
+            if index > 1 and "#[cfg(test)]" in text[index - 2]:
+                return index - 1
             return index
     return len(text) + 1
 
@@ -253,10 +259,21 @@ def main():
          if len(members) >= 2 and all(vector) and max(vector) > 1),
         key=lambda item: -len(item[1]))
 
-    # Candidate reduction: never functions with no live references.
-    candidates = [e for e in never if e["refs"] is None or e["refs"][0] == 0]
-    candidate_lines = union_lines([(e["start"], e["end"]) for e in candidates])
-    never_lines = union_lines([(e["start"], e["end"]) for e in never])
+    # Candidate reduction: never functions with no live references. Spans are
+    # unioned per file so nested closures are not counted twice.
+    def lines_per_file(entries):
+        spans = defaultdict(list)
+        for entry in entries:
+            spans[entry["file"]].append((entry["start"], entry["end"]))
+        return sum(union_lines(group) for group in spans.values())
+
+    # Constructors and trait impls (`refs` None) are skipped: `const fn new`
+    # bodies run at compile time for statics and never count at runtime.
+    candidates = [e for e in never if e["refs"] is not None and e["refs"][0] == 0]
+    constructors = [e for e in never if e["refs"] is None]
+    closures = [e for e in never if "{closure" in e["name"]]
+    candidate_lines = lines_per_file(candidates)
+    never_lines = lines_per_file(never)
     uncovered_count = sum(len(v) for v in uncovered.values())
 
     with (args.out / "functions.csv").open("w", newline="") as handle:
@@ -280,7 +297,7 @@ def main():
         "| Metric | Value |", "| --- | --- |",
         f"| Instrumented functions (src/) | {len(functions)} |",
         f"| Executed in at least one scenario | {len(executed)} |",
-        f"| Never executed | {len(never)} |",
+        f"| Never executed | {len(never)} (of which {len(closures)} closures, {len(constructors)} constructors/trait impls) |",
         f"| Physical lines of never-executed functions | {never_lines} |",
         f"| Never-executed functions with no live reference | {len(candidates)} |",
         f"| Estimated reduction (lines, those candidates) | {candidate_lines} |",

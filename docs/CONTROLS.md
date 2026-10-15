@@ -26,6 +26,7 @@ fork's room-ID path, but still needs an NSO test. See [native display](NATIVE_DI
 | L+R + either ZL or ZR + Y | Toggle Streamer |
 | L+R (or ZL+ZR) + Plus or Minus | Open the debug view; again to hide it |
 | L+R + Up in the Debug view | Start a 30 s timing capture (see [Captures](CAPTURES.md)) |
+| L+R + Left in the Debug view | Coverage build only: write a `manual-NNN.profraw` snapshot (see [Coverage build](DEBUGGING.md#coverage-build-052)) |
 
 The window commands fire when the whole combination is held, in any press
 order, and once per press: L+R+Down works whether the bumpers or the D-pad
