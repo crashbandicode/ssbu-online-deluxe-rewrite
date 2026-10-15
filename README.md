@@ -15,6 +15,17 @@ display. No overclocking.
 lets plugins add their own pages to the window cycle. Every release on Forgejo
 carries the NRO and its manifest. Install notes: [docs/INSTALL.md](docs/INSTALL.md).
 
+> **Install only this NRO.** The rewrite replaces the original Online Deluxe
+> fork (`libssbu_online_deluxe*.nro`), SsbuSync (`libssbusync.nro`) and the
+> PIA manager (`libssbu_pia_manager.nro`). Remove those three; do not run them
+> next to `libssbu_online_deluxe_rewrite.nro`. The two do not stack: when
+> SsbuSync is loaded, Deluxe switches every one of its hooks off, logs
+> `Existing SsbuSync host detected; rewrite hooks skipped` (event code 16, `a` = 1),
+> and you are playing the old fork without noticing. The fork's other
+> companions, `libnx_over.nro` and `libsmashline_plugin.nro`, are not needed by
+> Deluxe either; keep them only if another mod needs them.
+> [What to remove, what to keep](docs/INSTALL.md#what-to-remove-what-to-keep).
+
 ![Cycling the overlay views](docs/media/overlay-cycle.gif)
 
 | | |

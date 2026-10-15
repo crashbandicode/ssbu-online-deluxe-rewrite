@@ -11,13 +11,32 @@ id, module id). Skyline is required.
 
 ## What to remove, what to keep
 
-This NRO implements the sync/render transitions and the peer-manager handshake
-itself (`src/render_policy.rs`, `src/runtime/resolution.rs`,
-`src/peer_transport.rs`, `src/runtime/pia_rtt.rs`). Leave out the old Online
-Deluxe, SsbuSync, and PIA-manager plugins: if SsbuSync exports are already
-present, the rewrite skips its hooks (`src/runtime/mod.rs` `legacy_host_present`).
-Replace overlapping latency plugins. Keep dependencies needed by other installed
-mods. Training Modpack and the gamepad overlay remain separate mods.
+**You need this one NRO, not this NRO plus the old stack.** The original
+Online Deluxe was three plugins working together: the fork NRO (menu and
+profiles), SsbuSync (the render and buffer backend the fork drives through
+imported symbols) and the PIA manager (the peer handshake). This NRO implements
+all three parts itself (`src/render_policy.rs`, `src/runtime/resolution.rs`,
+`src/peer_transport.rs`, `src/runtime/pia_rtt.rs`).
+
+| File in `skyline/plugins/` | Action | Why |
+| --- | --- | --- |
+| `libssbu_online_deluxe*.nro` (the fork, any filename variant such as `(nuevo)`) | **Remove** | Replaced by this NRO. It also crashes at launch when its own companions are missing. |
+| `libssbusync.nro` | **Remove** | Replaced. If it is loaded, Deluxe disables **all** of its hooks (`legacy_host_present` in `src/runtime/mod.rs`), prints `[Deluxe] Existing SsbuSync host detected; rewrite hooks skipped` and records event code 16 with `a` = 1. No window, no profiles: you are running the fork. |
+| `libssbu_pia_manager.nro` | **Remove** | Replaced by the built-in handshake and RTT reading. |
+| `libnx_over.nro` | Not needed | The fork's overclock companion. Deluxe does no overclocking. Keep only if another mod needs it. |
+| `libsmashline_plugin.nro` | Not needed by Deluxe | Keep if another mod needs it (the old FX plugins did). |
+| `libnro_hook.nro`, `libparam_hook.nro`, `libarcropolis.nro`, `libcss_preserve.nro` | Keep | Shared infrastructure other mods use. |
+| `libimgui_smash.nro` | See below | Keep when Elite Legal Stages needs it. |
+| Training Modpack, gamepad overlay, FX Control | Keep | Separate mods that work next to Deluxe. |
+
+Replace overlapping latency plugins rather than stacking them. Keep
+dependencies other installed mods need; do not remove those blindly. The fork's
+own data directory `sd:/ultimate/ssbu_online_deluxe/` and SsbuSync's
+`sd:/ultimate/ssbusync/` can stay; Deluxe reads neither.
+
+**Symptom check.** If Deluxe installed but L+R+Down opens nothing, look at
+`sd:/ultimate/ssbu_online_deluxe_rewrite/events.log` for code 16 with `a` = 1,
+or at the Skyline log for the line above. That means SsbuSync is still loaded.
 
 ## Character FX (separate, optional)
 
