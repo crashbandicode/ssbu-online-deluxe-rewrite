@@ -112,8 +112,19 @@ pub struct Overlay {
     /// Which own page is shown while `view == View::PluginPage`
     /// (index into `plugin_api::page_plugins`).
     pub page: usize,
+    /// While a fight is live (Training, Singles, Doubles) the runtime sets
+    /// this so a Left/Right edit in the open window needs ZL held, as the
+    /// native pane edits do: the D-pad also taunts, and a plain press must
+    /// not change a setting mid-game. Up/Down still move the selection.
+    pub edit_hold: bool,
     previous_buttons: u64,
     latch: CommandLatch,
+}
+
+/// The hold that unlocks a value edit while `edit_hold` is on: ZL alone
+/// (ZL+ZR is the window chord).
+const fn edit_modifier(buttons: u64) -> bool {
+    buttons & ZL != 0 && buttons & ZR == 0
 }
 
 impl Overlay {
@@ -237,6 +248,9 @@ impl Overlay {
                 self.plugin_row =
                     crate::plugin_api::move_selectable_row(self.plugin_row, 1, &selectable);
             } else if !chord && pressed & (LEFT | RIGHT) != 0 {
+                if self.edit_hold && !edit_modifier(buttons) {
+                    return false;
+                }
                 let direction: i8 = if pressed & LEFT != 0 { -1 } else { 1 };
                 let row = rows[self.plugin_row];
                 plugins.step(row.plugin, row.option, direction);
@@ -247,7 +261,7 @@ impl Overlay {
             // Native pane edits need ZL held: the D-pad also moves the
             // character-select hand, and plain presses rewrote the profile and
             // the buffer on the console (23 unintended saves on 2026-10-14).
-            let native_modifier = buttons & ZL != 0 && buttons & ZR == 0;
+            let native_modifier = edit_modifier(buttons);
             if native.allow && !chord && !config.streamer && native_modifier {
                 let latency_dir = if pressed & LEFT != 0 {
                     -1
@@ -288,10 +302,16 @@ impl Overlay {
             Action::Up
         } else if pressed & DOWN != 0 {
             Action::Down
-        } else if pressed & LEFT != 0 {
-            Action::Left
-        } else if pressed & RIGHT != 0 {
-            Action::Right
+        } else if pressed & (LEFT | RIGHT) != 0 {
+            // Mid-game a value edit needs ZL held (see `edit_hold`).
+            if self.edit_hold && !edit_modifier(buttons) {
+                return false;
+            }
+            if pressed & LEFT != 0 {
+                Action::Left
+            } else {
+                Action::Right
+            }
         } else {
             return false;
         };
@@ -564,6 +584,73 @@ mod tests {
     static PLUGIN_STATE: crate::plugin_api::testing::FakePlugin =
         crate::plugin_api::testing::FakePlugin::new(
             [0, 1, 0, 0],
+            deluxe_plugin_abi::REQUEST_APPLIED,
+        );
+
+    #[test]
+    fn edit_hold_needs_zl_for_value_changes_but_not_for_navigation() {
+        let _gate = crate::peer_transport::global_gate();
+        crate::peer_transport::clear_session();
+        let registry = crate::plugin_api::Registry::new();
+        let mut ui = Overlay::default();
+        let mut config = Config::default();
+        let none = crate::menu::NativePads::off();
+        ui.edit_hold = true;
+        // Settings: a plain Right is ignored, ZL+Right edits, Down still moves.
+        ui.poll_with(L | R | DOWN, &mut config, none, &registry);
+        ui.poll_with(0, &mut config, none, &registry);
+        assert_eq!(ui.view, View::Settings);
+        assert!(!ui.poll_with(RIGHT, &mut config, none, &registry));
+        assert_eq!(config, Config::default());
+        ui.poll_with(0, &mut config, none, &registry);
+        assert!(ui.poll_with(ZL | RIGHT, &mut config, none, &registry));
+        assert_eq!(config.input_buffer, 0);
+        ui.poll_with(ZL, &mut config, none, &registry);
+        // ZL+ZR is the window chord, not the edit hold.
+        assert!(!ui.poll_with(ZL | ZR | RIGHT, &mut config, none, &registry));
+        ui.poll_with(0, &mut config, none, &registry);
+        let before = ui.menu.selected;
+        ui.poll_with(DOWN, &mut config, none, &registry);
+        assert_ne!(ui.menu.selected, before, "navigation never needs the hold");
+        ui.poll_with(0, &mut config, none, &registry);
+        // Without the hold flag (menus) a plain Right edits as before.
+        ui.edit_hold = false;
+        ui.poll_with(UP, &mut config, none, &registry);
+        ui.poll_with(0, &mut config, none, &registry);
+        assert!(ui.poll_with(RIGHT, &mut config, none, &registry));
+        ui.poll_with(0, &mut config, none, &registry);
+
+        // Plugin page: the same rule.
+        ui.edit_hold = true;
+        let buffer = config.input_buffer;
+        assert_eq!(
+            crate::plugin_api::testing::register_fake(
+                &registry,
+                "held",
+                "Held",
+                &[("enabled", "Enabled", &["Off", "On"])],
+                &HOLD_STATE,
+            ),
+            0
+        );
+        ui.poll_with(L | R | DOWN, &mut config, none, &registry);
+        ui.poll_with(0, &mut config, none, &registry);
+        assert_eq!(ui.view, View::Plugins);
+        ui.poll_with(RIGHT, &mut config, none, &registry);
+        assert_eq!(registry.take_last_step(), None, "plain Right ignored");
+        ui.poll_with(0, &mut config, none, &registry);
+        ui.poll_with(ZL | RIGHT, &mut config, none, &registry);
+        let step = registry.take_last_step().unwrap();
+        assert_eq!((step.option, step.requested), (0, 1));
+        assert_eq!(
+            config.input_buffer, buffer,
+            "plugin edits never touch Config"
+        );
+    }
+
+    static HOLD_STATE: crate::plugin_api::testing::FakePlugin =
+        crate::plugin_api::testing::FakePlugin::new(
+            [0, 0, 0, 0],
             deluxe_plugin_abi::REQUEST_APPLIED,
         );
 

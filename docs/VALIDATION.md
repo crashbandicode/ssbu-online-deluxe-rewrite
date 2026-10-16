@@ -2487,6 +2487,22 @@ gaps stated there: no NSO session, no first boot without `config.ini`, no
 plugin option edit, no own-page plugin, no console run. Both Eden profiles
 were restored afterwards (journal `RESTORED`, SHA-256 verified).
 
+### 0.5.3 — 2026-10-16: ZL hold for window edits while a fight is live (host tests only)
+
+Operator request: the native character-select edits already need ZL held
+(0.4.1); do the same in Training, so a setting is harder to change by
+accident. Implemented for every live fight scene (Training, Singles,
+Doubles; the runtime sets `Overlay::edit_hold` from the Auto driver's scene
+snapshot when it is ready and not Inactive): with the window open, Left and
+Right on a Settings row or a plugin row apply only while ZL is held without
+ZR (ZL+ZR stays the window chord); a plain press is ignored. Up/Down move
+the selection as before, menus and the character select keep plain edits,
+and the native pane gate is unchanged. Evidence: overlay test
+`edit_hold_needs_zl_for_value_changes_but_not_for_navigation` (Settings
+row, plugin row, chord exclusion, flag off); full library suite green. Not
+yet run in Eden or on the console; the first run is the FX Control variant
+pass on the card, where Left/Right on the variant rows now need ZL.
+
 ### 0.5.3 — 2026-10-16: plugin API v4, header and inline rows (host tests only)
 
 Operator request: FX Control's measurement page should show, per fighter, a

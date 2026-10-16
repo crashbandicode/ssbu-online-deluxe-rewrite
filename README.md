@@ -67,9 +67,11 @@ More in [Screenshots](docs/SCREENSHOTS.md).
 Hold **L+R** (or **ZL+ZR**) and tap **D-pad Down** to cycle the window:
 settings → plugins (when any registered) → own plugin pages, such as FX
 Control when that plugin is installed → performance → hidden. In the window
-**Up/Down** selects a row and **Left/Right** changes it. L+R and **Plus** opens
-the Debug view. Everything else, including the ZL-gated native edits on the
-character select, is in [Controls](docs/CONTROLS.md).
+**Up/Down** selects a row and **Left/Right** changes it; while a fight is live
+(Training or a match) hold **ZL** with Left/Right, since the D-pad alone also
+taunts (0.5.3). L+R and **Plus** opens the Debug view. Everything else,
+including the ZL-gated native edits on the character select, is in
+[Controls](docs/CONTROLS.md).
 
 ## Rendering profiles
 
