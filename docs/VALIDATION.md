@@ -2487,6 +2487,50 @@ gaps stated there: no NSO session, no first boot without `config.ini`, no
 plugin option edit, no own-page plugin, no console run. Both Eden profiles
 were restored afterwards (journal `RESTORED`, SHA-256 verified).
 
+### 0.5.3 — 2026-10-16: boot crashes after the plugin API v4 deploy; bootstrap hook chaining and SDK header fix (host tests only)
+
+Operator report: "a few crashes in the beginning" after the first 0.5.3 +
+FX Control 0.2.0 deploy; the third boot came up. Two Atmosphère reports
+(01792152191, 01792152247) and both plugins' install/event logs for the
+crashed and the good boot were pulled to the evidence root
+(`switch-mtp-fx02/logs-1016/`, analysis `CRASH-ANALYSIS-1016.md`, read-only
+GPT-6 Astra pass with exact-build symbols).
+
+- **Crash 1 (Skyline thread, memcpy in Skyline+0x3500):** Skyline's
+  inline-hook relocator decoding another plugin's `ldr x17; br x17; .quad`
+  stub at `nvnBootstrapLoader` as instructions: the stack held the stub's
+  address word, which decodes to a PC-relative load whose target is the
+  faulting address exactly. `overlay_host::hook_bootstrap` recognised the
+  far hook (Compatibility 4) but still asked for a trampoline. Commit
+  e862970 plans the entry with `hook_chain::plan_far_chain` as the
+  fighter-module probe does: Chain keeps the stub's handler as the previous
+  callable and installs with a null trampoline; Relocate behaves as before;
+  Reject or a failed install refuses the overlay host
+  (`overlay_host_entry_malformed`). The hook is now a plain `extern "C"`
+  function with its own previous-callable slot, and the embedded imgui host
+  receives a chaining original. Entry words before and after and the
+  previous handler are written to `install.log`.
+- **Crash 2 (MainThread, strlen from cross2+0x37ec290, no plugin frames):**
+  game initialisation; none of the return addresses is a Deluxe patch site,
+  no host path hands a plugin string to game code (labels are copied at
+  registration), and an older report (01792087152, a day earlier, older
+  builds) has the same signature. Unattributed, intermittent; no change.
+- **Side finding:** FX Control's 39-row page registered as **-3 (invalid)**
+  in both boots (`99 0xfffffffffffffffd` in its install.log), so the
+  operator never saw the variant rows. Cause: the SDK passed an empty Vec's
+  dangling `as_ptr()` as the header rows' choice table where the host
+  requires null. `register_with` and `v1_option_descs` now send null for
+  empty tables; `tests/plugin_sdk_roundtrip.rs` registers a header + inline
+  spec through the real SDK into the host registry.
+
+Evidence: `cargo test --workspace` (300 lib + round trip), SDK 27, clippy
+`-D warnings`, fmt, Skyline release build; package
+`artifacts/1b361b7fdbb9b00b/` (build `0.5.3-e862970e373d-1792155058`, NRO
+1,478,656 B, SHA-256 `1b361b7fdbb9b00be9b79e11febbe6306d4d318c9187bf301d43246d337a1623`)
+deployed to the card. **Not yet booted**; the first boot with another
+plugin's far hook on the bootstrap entry is the test of the chaining path,
+and `install.log` will show `nvn_bootstrap_hook_before … plan=Chain(…)`.
+
 ### 0.5.3 — 2026-10-16: ZR hold for window edits while a fight is live (host tests only)
 
 Operator request: the native character-select edits already need ZL held
