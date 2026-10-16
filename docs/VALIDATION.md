@@ -2487,6 +2487,33 @@ gaps stated there: no NSO session, no first boot without `config.ini`, no
 plugin option edit, no own-page plugin, no console run. Both Eden profiles
 were restored afterwards (journal `RESTORED`, SHA-256 verified).
 
+### 0.5.3 — 2026-10-16: `ultra_resolution` and the UltraRes row (host tests only)
+
+Operator question: is LLUltra's 576p drop doing anything, and would 720p
+hold? From the 2026-10-15 console traces the drop is what lets LLUltra fit
+CPU work plus GPU time inside one vblank (GPU ≈ 3.4–5.3 ms at 576p against
+≈ 10 ms of idle work; LessLag and Vanilla pipeline the GPU and run 1080p),
+while the move drops are CPU work that resolution cannot touch; the GPU
+term at 720p was never measured. Commits 7fd057c and e432de1 add the
+measurement: INI key `ultra_resolution=576|720` (default 576) and a
+console-only Settings row **UltraRes** (last row, ZR + Left/Right, applies
+on the next present through `sync_resolution`); `resolution::defaults_for`
+and `active_setting` take the Ultra base level, only (Ultra, Console) uses
+it, dynamic resolution still steps down from it, and the peer announce
+carries the configured level. 1080 was dropped at the operator's request.
+Evidence: 301 lib tests (config parse/serialize/cycle, menu row visibility
+and edit on console vs emulator, policy defaults for 576/720/1080 bases),
+clippy `-D warnings`, fmt, Skyline release build; package
+`artifacts/48cce4f2b0a5a7d4/` (build `0.5.3-e432de1bf1a5-1792161003`, NRO
+1,478,656 B, SHA-256
+`48cce4f2b0a5a7d48cc7f7ecb3d25120e7ebc629c56980858daf14eda578f12e`)
+deployed to the card. **Not yet booted.** The first Skyline build of
+7fd057c failed on the runtime's atomic-backed `settings()` literal (the
+host tests do not compile `runtime/`); e432de1 carries the field through
+`ULTRA_720`. Capture plan: Training stage, Mario, 10 s idle + 20 s
+fireballs at 576p and at 720p, and Kirby Hammer at 720p
+(`STAGE-CAPTURES-CHECKLIST.md` in the evidence root, cells 13–15).
+
 ### 0.5.3 — 2026-10-16: boot crashes after the plugin API v4 deploy; bootstrap hook chaining and SDK header fix (host tests only)
 
 Operator report: "a few crashes in the beginning" after the first 0.5.3 +
