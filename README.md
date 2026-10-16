@@ -106,13 +106,15 @@ columns. Full-size Performance stills from the character-select runs:
 
 | Scene, 175 % CPU quota (calibrated) | Both off | Both on | Console, for comparison |
 | --- | --- | --- | --- |
-| Character select, hand sweep | 50–53 fps | 60.0 fps | 49.9 → 59.85 fps |
-| Training, Pyra Blazing End vs Terry | 52 fps | 59 fps | LessLag Training holds 60 on the console |
-| Backoff row | `Off (ini)` | 2 782/s · 50 µs (CSS), 1 398/s · 50 µs (Training) | — |
-| `early_presents` over the run (`renderer-status.txt`) | 0 | 4 228 (CSS), 12 568 (Training): one per frame | — |
+| Character select, hand sweep (FPS row / frame time in the clip) | 51 fps / 19.7 ms | 60 fps / 16.7 ms | 49.9 → 59.85 fps |
+| Training, Pyra Blazing End vs Terry | 49 fps | 57 fps | LessLag Training holds 60 on the console |
+| Backoff row | `Off (ini)` | 2 958/s · 50 µs (CSS), 1 780/s · 50 µs (Training) | — |
+| `early_presents` over the run (`renderer-status.txt`) | 0 | one per frame | — |
 
 Same build (`0.5.3-d10fce5eeb59`), same quota, same profile, same CPU
-opponent; the clips are 6 s at 12 fps, 72–73 frames each, none dropped.
+opponent; the clips are 6 s at 12 fps, 73 frames each, none dropped,
+recorded at 1280 px and composed to 640 px with the Performance panel kept
+at full resolution (the yellow frame).
 Emulator clips show the mechanism, not console numbers; the console results
 are in [Rendering profiles](docs/RENDERING.md#measured-results) and the
 calibration in [Mimicking the Switch in Eden](docs/EMULATOR_METHOD.md).

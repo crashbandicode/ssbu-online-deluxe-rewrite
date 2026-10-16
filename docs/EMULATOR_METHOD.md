@@ -104,10 +104,16 @@ same two console numbers.
 3. Launch, apply the quota, load the game, open the Deluxe window on the
    **Performance** view and leave it open: the fps line and the `Backoff`
    row are part of the clip.
-4. Record 6 s at 12 fps, 640 px wide, through the emulator's own GIF
+4. Record 6 s at 12 fps, **1280 px wide**, through the emulator's own GIF
    recorder (game frames, not a desktop capture): character select with the
    hand sweeping the roster; Training on the Training stage, LessLag, Pyra's
-   Blazing End at a stopped CPU.
+   Blazing End at a stopped CPU. The published clip is then composed from
+   that recording (`compose_gifs.py` in the evidence kit): the frame is
+   downscaled to 640 px with Lanczos, the Deluxe Performance panel is cut
+   from the full-resolution frame and pasted over its own position at 2×, and
+   every frame is quantized against one palette for the whole clip. The
+   recorder's own 640 px GIFs (first attempt) were too coarse to read the
+   panel.
 5. Copy `renderer-status.txt` after each clip (`early_presents`,
    `early_present_skips`, backoff counters, `clock`) and the recorder's frame
    and drop counts into the run notes.

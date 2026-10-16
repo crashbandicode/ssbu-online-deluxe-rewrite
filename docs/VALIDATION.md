@@ -2508,9 +2508,15 @@ was swept with both switches off (175 % → 52 fps, 160 → 46, 150 → 43,
 140 → 38, 130 → 35 on the hand sweep) and **175 %** chosen as the value
 that reproduces the console's 49.9 fps; with both switches on the same quota
 gives 60.0 (console 59.85). Final clips at 175 % (72/73/73/73 frames, none
-dropped; `docs/media/toggles-*`): character select 50–53 → 60.0 fps,
+dropped): character select 50–53 → 60.0 fps,
 Training with Blazing End vs Terry 52 → 59 fps, Backoff `Off (ini)` →
-2 782 / 1 398 sleeps/s, `early_presents` 0 → one per present. Evidence
+2 782 / 1 398 sleeps/s, `early_presents` 0 → one per present. The operator
+found the recorder's 640 px GIFs too compressed to read, so the four scenes
+were recorded once more at 1280 px (same quota, same build, Pyra vs Terry;
+73 frames each, none dropped; `hd-toggles-*.gif` in the kit) and the
+published `docs/media/toggles-*.gif` are composed from those by
+`compose_gifs.py`: Lanczos downscale to 640 px, the Performance panel pasted
+at 2× from the full-resolution frame, one palette per clip. Evidence
 root: `toggle-gifs-1016/` (NOTES.md, CALIBRATION.md, q-renderer-*.txt,
 q-config-used-*.ini, driver-evidence.jsonl). Host tests 310, clippy `-D warnings`,
 `--no-default-features`, Skyline release build. **Emulator only; not on the
