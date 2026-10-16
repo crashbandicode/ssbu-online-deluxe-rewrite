@@ -60,6 +60,14 @@ leaving the picture waiting a whole extra refresh. The rewrite hands it over
 as soon as it is finished, at the flush, so it can catch that refresh.
 
 ![Present at the flush, late and early present on a 16.7 ms timeline](docs/media/present-at-flush-timeline.svg)
+
+The green P stands for Present, the step that queues a finished frame for
+display. In the top row the CPU does its work first and then asks for
+presentation, which can miss the 16.7 ms refresh. In the bottom row
+presentation is requested right after the previous frame's GPU commands are
+flushed, before the CPU starts the next frame. The P therefore presents the
+previous frame, not the one the CPU is about to work on, so presenting and the
+next frame's CPU work overlap instead of holding the finished picture back.
 Conceptual timing diagram, not a measured trace.
 
 [How present at the flush works](docs/RENDERING.md#present-at-the-flush-040).
