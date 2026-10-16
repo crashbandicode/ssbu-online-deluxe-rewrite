@@ -191,6 +191,11 @@ pub enum Code {
     /// 3 manual (Debug view L+R+Left). `b`: bytes written, 0 when the write
     /// failed (the first failure is also printed to the Skyline log).
     CoverageDump = 109,
+    /// A stage finished loading (`deluxe_rewrite_stage_setup`): `a` = the
+    /// game's stage id, `b` = the scene status it was classified as
+    /// (`SceneStatus` as u8). One edge per stage load, so a capture can be
+    /// attributed to its stage.
+    StageLoaded = 110,
 }
 
 /// Game SetCrop observations recorded before further calls are forwarded only.
@@ -349,6 +354,7 @@ mod tests {
         assert_eq!(Code::SceneHold as u16, 107);
         assert_eq!(Code::DrsTrigger as u16, 108);
         assert_eq!(Code::CoverageDump as u16, 109);
+        assert_eq!(Code::StageLoaded as u16, 110);
         let rect = crop_rect_event(4, 0, 0, 1024, 576);
         assert_eq!(rect.0, crop_rect_word(0, 0, 1024, 576));
         assert_eq!(rect.1, 4);

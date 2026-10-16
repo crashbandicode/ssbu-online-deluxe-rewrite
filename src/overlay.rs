@@ -113,18 +113,25 @@ pub struct Overlay {
     /// (index into `plugin_api::page_plugins`).
     pub page: usize,
     /// While a fight is live (Training, Singles, Doubles) the runtime sets
-    /// this so a Left/Right edit in the open window needs ZL held, as the
-    /// native pane edits do: the D-pad also taunts, and a plain press must
-    /// not change a setting mid-game. Up/Down still move the selection.
+    /// this so a Left/Right edit in the open window needs ZR held: the D-pad
+    /// also taunts, and a plain press must not change a setting mid-game.
+    /// ZR, not ZL, because ZL + D-pad Left/Right in Training swaps which
+    /// fighter the player controls. Up/Down still move the selection.
     pub edit_hold: bool,
     previous_buttons: u64,
     latch: CommandLatch,
 }
 
-/// The hold that unlocks a value edit while `edit_hold` is on: ZL alone
-/// (ZL+ZR is the window chord).
-const fn edit_modifier(buttons: u64) -> bool {
+/// The hold that unlocks a native pane edit (character select, window
+/// closed): ZL alone (ZL+ZR is the window chord).
+const fn native_modifier(buttons: u64) -> bool {
     buttons & ZL != 0 && buttons & ZR == 0
+}
+
+/// The hold that unlocks a value edit in the open window while `edit_hold`
+/// is on: ZR alone.
+const fn edit_modifier(buttons: u64) -> bool {
+    buttons & ZR != 0 && buttons & ZL == 0
 }
 
 impl Overlay {
@@ -261,7 +268,7 @@ impl Overlay {
             // Native pane edits need ZL held: the D-pad also moves the
             // character-select hand, and plain presses rewrote the profile and
             // the buffer on the console (23 unintended saves on 2026-10-14).
-            let native_modifier = edit_modifier(buttons);
+            let native_modifier = native_modifier(buttons);
             if native.allow && !chord && !config.streamer && native_modifier {
                 let latency_dir = if pressed & LEFT != 0 {
                     -1
@@ -303,7 +310,7 @@ impl Overlay {
         } else if pressed & DOWN != 0 {
             Action::Down
         } else if pressed & (LEFT | RIGHT) != 0 {
-            // Mid-game a value edit needs ZL held (see `edit_hold`).
+            // Mid-game a value edit needs ZR held (see `edit_hold`).
             if self.edit_hold && !edit_modifier(buttons) {
                 return false;
             }
@@ -596,16 +603,20 @@ mod tests {
         let mut config = Config::default();
         let none = crate::menu::NativePads::off();
         ui.edit_hold = true;
-        // Settings: a plain Right is ignored, ZL+Right edits, Down still moves.
+        // Settings: a plain Right is ignored, ZR+Right edits, Down still moves.
         ui.poll_with(L | R | DOWN, &mut config, none, &registry);
         ui.poll_with(0, &mut config, none, &registry);
         assert_eq!(ui.view, View::Settings);
         assert!(!ui.poll_with(RIGHT, &mut config, none, &registry));
         assert_eq!(config, Config::default());
         ui.poll_with(0, &mut config, none, &registry);
-        assert!(ui.poll_with(ZL | RIGHT, &mut config, none, &registry));
+        // ZL is the Training fighter-swap modifier, never the edit hold.
+        assert!(!ui.poll_with(ZL | RIGHT, &mut config, none, &registry));
+        assert_eq!(config, Config::default());
+        ui.poll_with(0, &mut config, none, &registry);
+        assert!(ui.poll_with(ZR | RIGHT, &mut config, none, &registry));
         assert_eq!(config.input_buffer, 0);
-        ui.poll_with(ZL, &mut config, none, &registry);
+        ui.poll_with(ZR, &mut config, none, &registry);
         // ZL+ZR is the window chord, not the edit hold.
         assert!(!ui.poll_with(ZL | ZR | RIGHT, &mut config, none, &registry));
         ui.poll_with(0, &mut config, none, &registry);
@@ -640,6 +651,9 @@ mod tests {
         assert_eq!(registry.take_last_step(), None, "plain Right ignored");
         ui.poll_with(0, &mut config, none, &registry);
         ui.poll_with(ZL | RIGHT, &mut config, none, &registry);
+        assert_eq!(registry.take_last_step(), None, "ZL is not the hold");
+        ui.poll_with(0, &mut config, none, &registry);
+        ui.poll_with(ZR | RIGHT, &mut config, none, &registry);
         let step = registry.take_last_step().unwrap();
         assert_eq!((step.option, step.requested), (0, 1));
         assert_eq!(

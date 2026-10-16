@@ -906,8 +906,9 @@ unsafe extern "C" fn draw() {
         },
         fresh: surface_fresh,
     };
-    // Training and matches: a Left/Right edit in the window needs ZL held so
-    // a taunt or a stray press cannot change a setting mid-game.
+    // Training and matches: a Left/Right edit in the window needs ZR held so
+    // a taunt or a stray press cannot change a setting mid-game (ZL + D-pad
+    // swaps the controlled fighter in Training).
     ui.controls.edit_hold =
         scene.ready && scene.status != crate::auto_policy::SceneStatus::Inactive;
     if ui.controls.poll_native(buttons, &mut config, native) {

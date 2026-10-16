@@ -97,6 +97,7 @@ unsafe fn deluxe_rewrite_stage_setup(ctx: &InlineCtx) {
     let stage_id = *(stage_addr as *const u32);
     let status =
         auto_policy::classify_stage(stage_id, is_training_mode(), get_fighter_entry_count());
+    record(Code::StageLoaded, u64::from(stage_id), status as u64);
     auto_driver::set_scene(None, Some(status), STAGE_SETUP as u64);
     super::match_capture::note_stage(status);
 }

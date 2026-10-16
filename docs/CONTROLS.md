@@ -21,7 +21,7 @@ fork's room-ID path, but still needs an NSO test. See [native display](NATIVE_DI
 | L+R (or ZL+ZR) + Down | Cycle settings → (plugins) → (own plugin pages) → performance → hidden |
 | Up / Down | Select Peer, NetLatency, NetProfile, Stealth, Streamer or FPS++ (or a plugin row on a plugin page) |
 | Left / Right | Change the selected value (in menus and on the character select) |
-| ZL + Left / Right | Change the selected value while a fight is live (Training, Singles, Doubles; since 0.5.3). A plain Left/Right is ignored there, so a taunt or a stray press cannot change a setting mid-game; Up/Down still move the selection |
+| ZR + Left / Right | Change the selected value while a fight is live (Training, Singles, Doubles; since 0.5.3). A plain Left/Right is ignored there, so a taunt or a stray press cannot change a setting mid-game; Up/Down still move the selection. ZR rather than ZL because ZL + D-pad Left/Right in Training swaps the controlled fighter |
 | Shoulder chord + Left / Right outside settings | Cycle the selected remote peer |
 | ZL + Left / Right or Up / Down on an online character select or arena pane, window closed | Edit the input buffer or the profile on the native status (since 0.4.1 the D-pad alone only moves the hand) |
 | L+R + either ZL or ZR + Y | Toggle Streamer |
