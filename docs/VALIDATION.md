@@ -2487,6 +2487,37 @@ gaps stated there: no NSO session, no first boot without `config.ini`, no
 plugin option edit, no own-page plugin, no console run. Both Eden profiles
 were restored afterwards (journal `RESTORED`, SHA-256 verified).
 
+### 0.5.3 — 2026-10-16: `hide_pages` + page rows, `perf_view` + PerfView row (host tests only)
+
+Operator requests after the first good 0.5.3 boot (Kirby Hammer cells 1–4
+run): FX Control second in the window cycle with the other two pages off
+for now, every page except Settings toggleable in-game with Settings
+showing which are hidden, and the frame-time graph selectable against a
+plain number to trim draw work while measuring. Commits a1e3475 and
+71015d5: INI `hide_pages=none|plugins,own_pages,performance` and Settings
+rows **PluginsPage / OwnPages / PerfPage** (Shown / Hidden, live, ZR-gated
+in a fight like every row); `next_view` takes the `HiddenPages` and drops
+the shared Plugins page, every plugin's own page and/or Performance from
+the chord walk (Settings is always in it, Debug keeps its chord, a stale
+Performance view still hides); INI `perf_view=graph|number` and row
+**PerfView**, which replaces the 180-sample `igPlotLines` block at the
+bottom of every vertical view with the mean as text (the compact match
+strip was text already). Both carried through the runtime's settings
+atomics (`HIDE_PAGES` bits, `PERF_NUMBER`); the first Skyline build of
+a1e3475 failed on that literal again, 71015d5 fixes it. Evidence: 305 lib
+tests (config parse/serialize/reject for both keys, `next_view` with each
+flag and all three, menu row order on console and emulator, row toggles,
+overlay walk Settings → Hidden with the INI value), clippy `-D warnings`,
+`--no-default-features`, Skyline release build; package
+`artifacts/2ff8ba576ce7bb78/` (build `0.5.3-71015d54ad09-1792171175`, NRO
+1,482,752 B, SHA-256
+`2ff8ba576ce7bb784ecc4fd3de2500daddac7900a37ac8b101e387982308cb4b`)
+deployed to the card with `hide_pages=plugins,performance` and
+`perf_view=graph` in the card INI, next to FX Control `0.2.0-ee00c5c736f4`
+(ledger-only page, value rows, EFF siblings off). **Not yet booted.** The
+cost of the plot itself is unmeasured; PerfView gives the operator the
+switch, not a claim.
+
 ### 0.5.3 — 2026-10-16: `ultra_resolution` and the UltraRes row (host tests only)
 
 Operator question: is LLUltra's 576p drop doing anything, and would 720p
