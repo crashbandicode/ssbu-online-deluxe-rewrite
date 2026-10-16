@@ -1,72 +1,37 @@
 # How Deluxe LessLag and LLUltra work
 
-LessLag and LLUltra aim to show more recent controller inputs at the game's
-usual frame rate. They shorten the rendering pipeline without making the game
-simulation itself run faster.
+When you press a button, Smash processes the input long before you see the result. The CPU must update the game, the GPU must render the image into a buffer, and the display system must show it.
 
-## Why does Smash buffer frames?
+![Input, CPU update, GPU draw, presentation request and screen refresh for overlapping frames](media/rendering-pipeline-overlap.svg)
 
-Smash normally uses three image buffers. This gives the CPU and GPU room to
-prepare upcoming frames while other images are still waiting to be shown.
-That overlap helps keep the game running smoothly, but it can also leave you
-looking at an older picture of what is happening.
+Illustrative, not a measured trace. The CPU updates the next frame while the GPU is still drawing the current one, so the screen gets a new image at every refresh, but the image it shows was started some refreshes earlier.
 
-Think of buffers as space for work in progress: more space keeps production
-moving, but also allows a larger backlog.
+## Vanilla: headroom first
 
-![Vanilla, LessLag and LLUltra buffer capacity and rendering tradeoffs](media/rendering-pipeline-three-profiles.svg)
+**Vanilla Smash** uses three buffers and a longer rendering pipeline. This gives the CPU and GPU more breathing room to prepare frames, but increases the delay before your inputs become visible.
 
-The boxes show capacity, not exact frame ages or hardware timing.
+![Three framebuffers in Vanilla against two in LessLag and LLUltra](media/framebuffers-three-vs-two.svg)
 
-## How does LessLag reduce the delay?
+A third buffer lets a finished frame wait while another is drawn, so more frames are in circulation at once. The buffer count is one of several changes in LessLag. The three-frame figure below belongs to the whole profile, not to the missing buffer alone.
 
-LessLag uses two buffers and changes which image the game prepares for
-display. It also moves some rendering work later in the frame and skips one
-waiting step when safe. Together, these changes shorten the path from an
-input to its visible response. GPU work still has to finish before an image
-can be reused, so the CPU can still wait elsewhere.
+## LessLag: a shorter pipeline
 
-Present-at-flush supports this shorter pipeline: it queues an image for
-display as soon as its drawing commands are submitted, rather than waiting
-through the next CPU update. The GPU may still be finishing the image;
-requesting presentation and showing it are separate events.
+**LessLag** reduces this to two buffers, changes which frame gets rendered, and eliminates unnecessary waiting. Together, these changes shorten the pipeline, reducing input delay by approximately three frames.
 
-## How does LLUltra go further?
+## LLUltra: shorter still, less headroom
 
-LLUltra also uses two buffers, but changes the rendering schedule to reduce
-the delay between updating the game and displaying the result. In favorable
-conditions, this saves another frame compared with LessLag.
+**LLUltra** pushes the pipeline further, potentially saving a fourth frame. However, this leaves less time for the CPU and GPU to finish their work. If they miss the display's deadline, FPS can drop and the additional latency advantage disappears.
 
-## Why can LLUltra hurt performance?
+![Captured frames from the press to the first visible response: Vanilla 6, LessLag 3, LLUltra 2 to 3](media/latency-captured-frames.svg)
 
-Normally, the CPU can prepare the next frame while the GPU finishes drawing
-the previous one. LLUltra reduces that overlap, leaving less time to finish
-everything before the screen refreshes. If a demanding scene takes too long,
-the image misses that refresh and waits for another, lowering the frame rate.
+Measured in Eden on 0.5.2 as captured images from an injected input to the first image showing the response. They are captured-response frames, not controller-to-photon timings. Full tables and clips: [Measured input delay](../README.md#measured-input-delay). Method: [Measuring frames removed by LessLag and LLUltra](LATENCY_METHODOLOGY.md).
 
-This was observed in recorded console sessions: expensive moves caused drops
-in LLUltra while LessLag maintained its frame rate. LessLag gives up some
-potential latency reduction to preserve more timing headroom. The tradeoff
-depends on the scene and load.
+![LLUltra fits the CPU update and the GPU draw into one refresh. A heavy frame runs past it and waits for the next](media/llultra-deadline-tradeoff.svg)
 
-## What we measured in Eden
+Illustrative. In console Training captures on 0.5.2, expensive moves made LLUltra miss refreshes while Vanilla and LessLag held their frame rate in those sessions. See [Implementation and timing tradeoffs](RENDERING.md#implementation-and-timing-tradeoffs).
 
-Recorded 0.5.2 benchmarks measured synthetic stick input to the first visible
-crouch in captured images, with three trials per cell. The later phase
-injected input about 8 ms later.
+## Recovering smoothness
 
-| Profile | Normal-phase response, frames | Later-phase response, frames |
-| --- | --- | --- |
-| Vanilla | 6 | 6 |
-| LessLag | 3 | 3 |
-| LLUltra | 2 | 2–3 |
+Finally, **dispatcher backoff and present-at-flush** reduce wasted CPU work and prevent late presentation requests, helping recover FPS consistency. Faster emulator hardware generally has more processing headroom, making these tighter deadlines easier to meet.
 
-LessLag's three-frame improvement belongs to the combined profile. Removing
-one buffer does not automatically explain all three saved frames; these
-experiments did not isolate each change's contribution. The counts are Eden
-capture results, not Switch controller-to-screen timings.
-
-For implementation, settings and console tradeoffs, see
-[Rendering profiles](RENDERING.md). Full benchmark results and measurement
-limits are in [Performance](PERFORMANCE.md#response-trials-re-measured-on-052-2026-10-15)
-and the [measurement methodology](LATENCY_METHODOLOGY.md#re-measurement-on-052-present-at-flush-2026-10-15).
+Both are explained with diagrams under [Additional optimizations not yet present in Deluxe](../README.md#additional-optimizations-not-yet-present-in-deluxe), with details in [Dispatcher backoff](DISPATCHER_BACKOFF.md) and [Present at the flush](RENDERING.md#present-at-the-flush-040). They are separate from the changes behind LessLag's three-frame reduction: dispatcher backoff runs in every profile, Vanilla included, and the measured frame counts were the same before and after present-at-flush.

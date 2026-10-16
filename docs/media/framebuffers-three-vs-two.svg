@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="398" viewBox="0 0 760 398" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect x="0.5" y="0.5" width="759" height="397" rx="16" fill="#1b1c20" stroke="#3a3c42"/>
+  <text x="28" y="39" fill="#ffffff" font-size="18">Three framebuffers against two</text>
+  <text x="28" y="63" fill="#9aa0a6" font-size="13">Illustrative snapshot of one moment, not a measured state.</text>
+
+  <rect x="28" y="80" width="336" height="250" rx="12" fill="#26272c"/>
+  <rect x="396" y="80" width="336" height="250" rx="12" fill="#26272c"/>
+  <g fill="#ffffff" font-size="15" font-weight="600">
+    <text x="44" y="108">Vanilla: three framebuffers</text>
+    <text x="412" y="108">LessLag, LLUltra: two framebuffers</text>
+  </g>
+
+  <!-- Vanilla: shown, waiting, in progress -->
+  <g fill="#33455b">
+    <rect x="44" y="122" width="304" height="52" rx="10"/>
+    <rect x="44" y="184" width="304" height="52" rx="10"/>
+    <rect x="44" y="246" width="304" height="52" rx="10"/>
+  </g>
+  <!-- LessLag and LLUltra: shown, in progress -->
+  <g fill="#214a40">
+    <rect x="412" y="122" width="304" height="52" rx="10"/>
+    <rect x="412" y="184" width="304" height="52" rx="10"/>
+  </g>
+  <rect x="412" y="246" width="304" height="52" rx="10" fill="none" stroke="#6b6f78" stroke-dasharray="4 4"/>
+
+  <g fill="#ffffff" font-size="14">
+    <text x="58" y="143">Framebuffer A</text>
+    <text x="58" y="205">Framebuffer B</text>
+    <text x="58" y="267">Framebuffer C</text>
+    <text x="426" y="143">Framebuffer A</text>
+    <text x="426" y="205">Framebuffer B</text>
+  </g>
+  <g fill="#c9ccd2" font-size="13">
+    <text x="58" y="163">Frame 10, on screen</text>
+    <text x="58" y="225">Frame 11, done, waiting in the queue</text>
+    <text x="58" y="287">Frame 12, being drawn</text>
+    <text x="426" y="163">Frame 10, on screen</text>
+    <text x="426" y="225">Frame 11, being drawn, shown next</text>
+  </g>
+  <text x="564" y="277" fill="#9aa0a6" font-size="13" text-anchor="middle">No third buffer, so nothing waits here</text>
+
+  <g fill="#c9ccd2" font-size="13">
+    <text x="44" y="318">Three frames in circulation at once.</text>
+    <text x="412" y="318">Two frames in circulation at once.</text>
+  </g>
+  <g fill="#9aa0a6" font-size="13">
+    <text x="28" y="356">Framebuffer: reusable image memory. Frame: the picture drawn into it.</text>
+    <text x="28" y="376">Presentation queue: frames the CPU has asked the screen to show next.</text>
+  </g>
+</svg>

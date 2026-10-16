@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="424" viewBox="0 0 760 424" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect x="0.5" y="0.5" width="759" height="423" rx="16" fill="#1b1c20" stroke="#3a3c42"/>
+  <text x="28" y="39" fill="#ffffff" font-size="18">From a button press to the screen</text>
+  <text x="28" y="63" fill="#9aa0a6" font-size="13">Illustrative timing, not a measured trace. Each column is one display refresh.</text>
+
+  <!-- Display refreshes -->
+  <g fill="#9aa0a6" font-size="12" text-anchor="middle">
+    <text x="172" y="84">refresh</text>
+    <text x="311" y="84">refresh</text>
+    <text x="450" y="84">refresh</text>
+    <text x="589" y="84">refresh</text>
+    <text x="728" y="84">refresh</text>
+  </g>
+  <g stroke="#6b6f78" stroke-dasharray="4 4">
+    <line x1="172" y1="90" x2="172" y2="332"/>
+    <line x1="311" y1="90" x2="311" y2="332"/>
+    <line x1="450" y1="90" x2="450" y2="332"/>
+    <line x1="589" y1="90" x2="589" y2="332"/>
+    <line x1="728" y1="90" x2="728" y2="332"/>
+  </g>
+
+  <!-- Lane labels -->
+  <g fill="#ffffff" font-size="15" font-weight="600">
+    <text x="28" y="118">Input</text>
+    <text x="28" y="172">CPU update</text>
+    <text x="28" y="220">GPU draw</text>
+    <text x="28" y="268">Present request</text>
+    <text x="28" y="316">Screen</text>
+  </g>
+
+  <!-- Input -->
+  <circle cx="190" cy="113" r="7" fill="#ffffff"/>
+  <text x="204" y="118" fill="#c9ccd2" font-size="13">you press</text>
+  <line x1="190" y1="120" x2="190" y2="150" stroke="#9aa0a6"/>
+
+  <!-- CPU update: one frame per column; frame N carries the press -->
+  <rect x="180" y="150" width="123" height="34" rx="6" fill="#6f9bd1" stroke="#ffffff" stroke-width="1.5"/>
+  <g fill="#6f9bd1" opacity="0.5">
+    <rect x="319" y="150" width="123" height="34" rx="6"/>
+    <rect x="458" y="150" width="123" height="34" rx="6"/>
+    <rect x="597" y="150" width="123" height="34" rx="6"/>
+  </g>
+  <g font-size="14" text-anchor="middle">
+    <text x="241" y="172" fill="#0f1a2b">Update N</text>
+    <text x="380" y="172" fill="#dfe6f0">Update N+1</text>
+    <text x="519" y="172" fill="#dfe6f0">Update N+2</text>
+    <text x="658" y="172" fill="#dfe6f0">Update N+3</text>
+  </g>
+
+  <!-- GPU draw: runs one column behind the CPU, on its own -->
+  <g fill="#2f8f6f" opacity="0.5">
+    <rect x="180" y="198" width="123" height="34" rx="6"/>
+    <rect x="458" y="198" width="123" height="34" rx="6"/>
+    <rect x="597" y="198" width="123" height="34" rx="6"/>
+  </g>
+  <rect x="319" y="198" width="123" height="34" rx="6" fill="#2f8f6f" stroke="#ffffff" stroke-width="1.5"/>
+  <g font-size="14" text-anchor="middle">
+    <text x="241" y="220" fill="#d7efe6">Draw N-1</text>
+    <text x="380" y="220" fill="#ffffff">Draw N</text>
+    <text x="519" y="220" fill="#d7efe6">Draw N+1</text>
+    <text x="658" y="220" fill="#d7efe6">Draw N+2</text>
+  </g>
+
+  <!-- Presentation requests: CPU-side instants after a frame is submitted -->
+  <rect x="283" y="246" width="40" height="26" rx="6" fill="#d9a441" stroke="#ffffff" stroke-width="1.5"/>
+  <g fill="#d9a441" opacity="0.5">
+    <rect x="422" y="246" width="40" height="26" rx="6"/>
+    <rect x="561" y="246" width="40" height="26" rx="6"/>
+    <rect x="700" y="246" width="40" height="26" rx="6"/>
+  </g>
+  <g font-size="13" text-anchor="middle">
+    <text x="303" y="264" fill="#0f1a2b">N</text>
+    <text x="442" y="264" fill="#f3e2bd">N+1</text>
+    <text x="581" y="264" fill="#f3e2bd">N+2</text>
+    <text x="720" y="264" fill="#f3e2bd">N+3</text>
+  </g>
+
+  <!-- Screen: the display controller shows a frame from a refresh onward -->
+  <g fill="#33455b" opacity="0.5">
+    <rect x="180" y="294" width="123" height="34" rx="6"/>
+    <rect x="319" y="294" width="123" height="34" rx="6"/>
+    <rect x="597" y="294" width="123" height="34" rx="6"/>
+  </g>
+  <rect x="458" y="294" width="123" height="34" rx="6" fill="#33455b" stroke="#ffffff" stroke-width="1.5"/>
+  <g font-size="14" text-anchor="middle">
+    <text x="241" y="316" fill="#c9ccd2">Shows N-2</text>
+    <text x="380" y="316" fill="#c9ccd2">Shows N-1</text>
+    <text x="519" y="316" fill="#ffffff">Shows N</text>
+    <text x="658" y="316" fill="#c9ccd2">Shows N+1</text>
+  </g>
+
+  <!-- Press to the first refresh that shows frame N -->
+  <g stroke="#c9ccd2" stroke-width="1.5">
+    <line x1="190" y1="348" x2="450" y2="348"/>
+    <line x1="190" y1="342" x2="190" y2="354"/>
+    <line x1="450" y1="342" x2="450" y2="354"/>
+  </g>
+  <text x="28" y="372" fill="#c9ccd2" font-size="13">Press to the first refresh showing frame N: two columns here. Deeper queues add more.</text>
+  <g fill="#9aa0a6" font-size="13">
+    <text x="28" y="396">The GPU runs on its own schedule. The CPU starts the next update without waiting for it to finish.</text>
+    <text x="28" y="414">A presentation request only queues the image. The screen picks it up at a later refresh.</text>
+  </g>
+</svg>
