@@ -34,9 +34,9 @@ Illustrative timings. In console Training captures on 0.5.2, expensive moves cau
 
 ### Following the same input
 
-![Six dashed captured-frame guides show the same input responding at frame 6 in Vanilla, frame 3 in LessLag and frame 2 or 3 in LLUltra; CPU and GPU stages are schematic](media/same-input-earlier-response.svg)
+![Detailed CPU, GPU and presentation timelines with six captured-frame guides and separate occupancy insets: three reusable images in Vanilla, two each in LessLag and LLUltra](media/same-input-earlier-response.svg)
 
-Follow N, the picture carrying the same button press. The six dashed guides count captured frames after input: Vanilla first responds at 6, LessLag at 3, and LLUltra at 2 or 3 in the Eden trials. LLUltra's outlined marker is an alternative result with later input. CPU/GPU work sizes and positions remain illustrative; only the response counts are measured.
+Follow N, the picture carrying the same press. The six guides and response dots show the Eden counts: Vanilla 6, LessLag 3, LLUltra 2–3. LLUltra's outlined marker is the alternative later-input result. Left insets show three reusable images versus two; their shown, queued and rendering roles can move between slots. CPU/GPU work and request positions are illustrative. Conceptual buffer occupancy, not an exact trace.
 
 ## Recovering smoothness
 
