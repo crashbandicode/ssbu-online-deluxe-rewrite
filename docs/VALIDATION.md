@@ -2487,6 +2487,34 @@ gaps stated there: no NSO session, no first boot without `config.ini`, no
 plugin option edit, no own-page plugin, no console run. Both Eden profiles
 were restored afterwards (journal `RESTORED`, SHA-256 verified).
 
+### 0.5.3 — 2026-10-16: plugin API v4, header and inline rows (host tests only)
+
+Operator request: FX Control's measurement page should show, per fighter, a
+non-selectable title row and under it one row per move with all of its
+variant choices visible on one line (`[Original]  Variant 1  Variant 2`),
+instead of `Label: Value` rows cycled with Left/Right. Commit ab79355 adds
+descriptor version 4 to the plugin API without changing any struct layout:
+`OPTION_FLAG_HEADER` (label only, `choice_count` 0, null tables, Up/Down
+skip it, nothing persisted, callbacks never called) and `OPTION_FLAG_INLINE`
+(every choice drawn on the row, the current one bracketed in its tone, the
+others dimmed; Left/Right unchanged; compact strip unchanged), option limit
+64 for v4 (32 for v3, 8 before). The SDK gains `OptionSpec.layout`
+(`RowLayout::Value | Inline | Header`), `OptionSpec::header()`, and retries
+4 → 3 → 2 → 1 only while the spec fits the lower revision (a v4 row is never
+downgraded). Crates `deluxe-plugin-abi` and `deluxe-plugin-sdk` 4.0.0.
+Evidence: `cargo test --workspace` 299 + roundtrip 1 (new: v4 parse,
+header validation, per-version option limits, selectable navigation, inline
+pieces, compact header), SDK 27 (REJECT_V4 fake host, retry chains,
+header/inline flags), ABI 2; `cargo clippy --all-targets -- -D warnings`;
+`cargo build --no-default-features`; Skyline release build, package
+`artifacts/366490e47a893100/` (build `0.5.3-ab79355250c9-1792148005`, NRO
+1,478,656 B, SHA-256 `366490e47a893100c7ab21a6036825492a618fc00a4686bd104058e2af3030ad`).
+**Not run in Eden or on the console yet**; the first run is the FX Control
+0.2.0 variant-pass deployment on the card (evidence root
+`switch-mtp-fx02/`). Hidden-window frame timing is not expected to change
+(page drawing only), but the console move captures from 2026-10-15 were on
+build 1525e3e0, so any comparison across the two builds says so.
+
 ### 0.5.2 — 2026-10-15: response trials after present-at-flush for LLUltra and LLDoubles (Eden, captured images)
 
 Operator request: re-measure the README input-delay table on the 0.5.2
