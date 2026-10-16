@@ -13,7 +13,15 @@ pub const ROW_STREAMER: usize = 4;
 pub const ROW_FPS: usize = 5;
 /// Console LLUltra base resolution (`ultra_resolution`, 0.5.3 experiment).
 pub const ROW_ULTRA_RES: usize = 6;
-pub const ROW_COUNT: usize = 7;
+/// Window pages in the chord cycle (`hide_pages`, 0.5.3): the shared Plugins
+/// page, every plugin's own page, Performance. Settings has no row: it is
+/// always in the cycle and shows these three.
+pub const ROW_PAGE_PLUGINS: usize = 7;
+pub const ROW_PAGE_OWN: usize = 8;
+pub const ROW_PAGE_PERF: usize = 9;
+/// Frame time as the plot or a number (`perf_view`, 0.5.3).
+pub const ROW_PERF_VIEW: usize = 10;
+pub const ROW_COUNT: usize = 11;
 
 /// Which editable rows exist. Platform is configured, never a row.
 /// FPS++ is the emulator toggle only; UltraRes is the console one.
@@ -37,7 +45,14 @@ pub fn row_visible(row: usize, gate: RowGate) -> bool {
         ROW_PEER => gate.peers_connected,
         ROW_FPS => gate.fps_visible,
         ROW_ULTRA_RES => gate.ultra_res_visible,
-        ROW_NET_LATENCY | ROW_NET_PROFILE | ROW_STEALTH | ROW_STREAMER => true,
+        ROW_NET_LATENCY
+        | ROW_NET_PROFILE
+        | ROW_STEALTH
+        | ROW_STREAMER
+        | ROW_PAGE_PLUGINS
+        | ROW_PAGE_OWN
+        | ROW_PAGE_PERF
+        | ROW_PERF_VIEW => true,
         _ => false,
     }
 }
@@ -481,6 +496,22 @@ impl Menu {
                 config.ultra_resolution = config.ultra_resolution.cycle(direction);
                 true
             }
+            ROW_PAGE_PLUGINS => {
+                config.hide_pages.plugins = !config.hide_pages.plugins;
+                true
+            }
+            ROW_PAGE_OWN => {
+                config.hide_pages.own_pages = !config.hide_pages.own_pages;
+                true
+            }
+            ROW_PAGE_PERF => {
+                config.hide_pages.performance = !config.hide_pages.performance;
+                true
+            }
+            ROW_PERF_VIEW => {
+                config.perf_view = config.perf_view.cycle();
+                true
+            }
             _ => false,
         }
     }
@@ -540,9 +571,17 @@ mod tests {
         menu.handle(Action::Down, &mut config);
         assert_eq!(menu.selected, ROW_FPS);
         menu.handle(Action::Down, &mut config);
+        assert_eq!(menu.selected, ROW_PAGE_PLUGINS);
+        menu.handle(Action::Down, &mut config);
+        assert_eq!(menu.selected, ROW_PAGE_OWN);
+        menu.handle(Action::Down, &mut config);
+        assert_eq!(menu.selected, ROW_PAGE_PERF);
+        menu.handle(Action::Down, &mut config);
+        assert_eq!(menu.selected, ROW_PERF_VIEW);
+        menu.handle(Action::Down, &mut config);
         assert_eq!(menu.selected, ROW_PEER);
         menu.handle(Action::Up, &mut config);
-        assert_eq!(menu.selected, ROW_FPS);
+        assert_eq!(menu.selected, ROW_PERF_VIEW);
         menu.selected = ROW_NET_LATENCY;
         assert!(!menu.handle(Action::Left, &mut config));
         for _ in 0..26 {
@@ -720,6 +759,49 @@ mod tests {
     }
 
     #[test]
+    fn page_rows_toggle_the_hidden_pages_and_perf_view_swaps_graph_and_number() {
+        use crate::config::{HiddenPages, PerfView};
+        let mut menu = Menu {
+            open: true,
+            selected: ROW_PAGE_PLUGINS,
+        };
+        let mut config = Config::default();
+        for platform in [Platform::Console, Platform::Emulator] {
+            let gate = row_gate(false, platform);
+            for row in [ROW_PAGE_PLUGINS, ROW_PAGE_OWN, ROW_PAGE_PERF, ROW_PERF_VIEW] {
+                assert!(row_visible(row, gate), "{row} on {platform:?}");
+            }
+        }
+        assert!(menu.handle(Action::Right, &mut config));
+        assert!(config.hide_pages.plugins);
+        assert!(menu.handle(Action::Left, &mut config));
+        assert_eq!(config.hide_pages, HiddenPages::NONE);
+        menu.selected = ROW_PAGE_OWN;
+        assert!(menu.handle(Action::Right, &mut config));
+        assert!(config.hide_pages.own_pages);
+        menu.selected = ROW_PAGE_PERF;
+        assert!(menu.handle(Action::Right, &mut config));
+        assert_eq!(
+            config.hide_pages,
+            HiddenPages {
+                plugins: false,
+                own_pages: true,
+                performance: true
+            }
+        );
+        menu.selected = ROW_PERF_VIEW;
+        assert_eq!(config.perf_view, PerfView::Graph);
+        assert!(menu.handle(Action::Right, &mut config));
+        assert_eq!(config.perf_view, PerfView::Number);
+        assert!(menu.handle(Action::Left, &mut config));
+        assert_eq!(config.perf_view, PerfView::Graph);
+        // Closed, nothing edits.
+        menu.open = false;
+        assert!(!menu.handle(Action::Right, &mut config));
+        assert_eq!(config.perf_view, PerfView::Graph);
+    }
+
+    #[test]
     fn native_edges_keep_saved_manual_modes_and_do_not_repeat() {
         assert!(!native_banner_allowed(
             false,
@@ -795,7 +877,16 @@ mod tests {
         let mut config = Config::default();
         assert!(!menu.handle_peers(Action::Toggle, &mut config, false));
         assert_eq!(menu.selected, ROW_NET_LATENCY);
-        // Console: UltraRes is the last row; FPS++ is hidden.
+        // The page and PerfView rows close the list on both platforms.
+        menu.handle_peers(Action::Up, &mut config, false);
+        assert_eq!(menu.selected, ROW_PERF_VIEW);
+        menu.handle_peers(Action::Up, &mut config, false);
+        assert_eq!(menu.selected, ROW_PAGE_PERF);
+        menu.handle_peers(Action::Up, &mut config, false);
+        assert_eq!(menu.selected, ROW_PAGE_OWN);
+        menu.handle_peers(Action::Up, &mut config, false);
+        assert_eq!(menu.selected, ROW_PAGE_PLUGINS);
+        // Console: UltraRes is above them; FPS++ is hidden.
         menu.handle_peers(Action::Up, &mut config, false);
         assert_eq!(menu.selected, ROW_ULTRA_RES);
         assert!(menu.handle_peers(Action::Right, &mut config, false));
@@ -810,17 +901,20 @@ mod tests {
         );
         menu.handle_peers(Action::Up, &mut config, false);
         assert_eq!(menu.selected, ROW_STREAMER);
-        menu.handle_peers(Action::Down, &mut config, false);
-        menu.handle_peers(Action::Down, &mut config, false);
+        for _ in 0..6 {
+            menu.handle_peers(Action::Down, &mut config, false);
+        }
         assert_eq!(menu.selected, ROW_NET_LATENCY);
-        // Emulator: FPS++ is the last row; UltraRes is hidden.
+        // Emulator: FPS++ sits above the page rows; UltraRes is hidden.
         config.platform = Platform::Emulator;
         assert!(!row_visible(
             ROW_ULTRA_RES,
             row_gate(false, Platform::Emulator)
         ));
+        menu.selected = ROW_PAGE_PLUGINS;
         menu.handle_peers(Action::Up, &mut config, false);
         assert_eq!(menu.selected, ROW_FPS);
+        menu.selected = ROW_PERF_VIEW;
         menu.handle_peers(Action::Down, &mut config, false);
         assert_eq!(menu.selected, ROW_NET_LATENCY);
         config.platform = Platform::Console;

@@ -1,6 +1,6 @@
 //! Scene-independent controller UX and bounded frame statistics.
 use crate::{
-    config::Config,
+    config::{Config, HiddenPages},
     menu::{Action, Menu, NativePads},
 };
 
@@ -34,27 +34,36 @@ pub enum View {
 /// Chord + Down walks Hidden → Settings → Plugins → each own page →
 /// Performance → Hidden. The shared Plugins page is skipped while no plugin
 /// has rows on it, and the own pages are the `page_count` plugins that asked
-/// for one (`page` is the current index). Plus/Minus held with the chord
-/// opens Debug from Settings, Plugins or an own page and keeps Debug open
-/// while it stays held; Debug then continues to Performance on a plain chord.
-/// Returns the next view and own-page index.
+/// for one (`page` is the current index). `hidden` (the INI's `hide_pages`,
+/// 0.5.3) drops the shared Plugins page and/or Performance from the walk, so
+/// a plugin's own page sits right after Settings and the window hides right
+/// after it. Plus/Minus held with the chord opens Debug from Settings,
+/// Plugins or an own page and keeps Debug open while it stays held; Debug
+/// then continues to Performance (or hides) on a plain chord. Returns the
+/// next view and own-page index.
 pub fn next_view(
     view: View,
     page: usize,
     debug_modifier: bool,
     shared_available: bool,
     page_count: usize,
+    hidden: HiddenPages,
 ) -> (View, usize) {
+    let after_pages = if hidden.performance {
+        (View::Hidden, 0)
+    } else {
+        (View::Performance, 0)
+    };
     match (view, debug_modifier) {
         (View::Hidden, _) => (View::Settings, 0),
         (View::Settings | View::Plugins | View::PluginPage, true) => (View::Debug, page),
         (View::Debug, true) => (View::Debug, page),
-        (View::Settings, false) if shared_available => (View::Plugins, 0),
-        (View::Settings | View::Plugins, false) if page_count > 0 => (View::PluginPage, 0),
-        (View::PluginPage, false) if page + 1 < page_count => (View::PluginPage, page + 1),
-        (View::Settings | View::Plugins | View::PluginPage | View::Debug, _) => {
-            (View::Performance, 0)
+        (View::Settings, false) if shared_available && !hidden.plugins => (View::Plugins, 0),
+        (View::Settings | View::Plugins, false) if page_count > 0 && !hidden.own_pages => {
+            (View::PluginPage, 0)
         }
+        (View::PluginPage, false) if page + 1 < page_count => (View::PluginPage, page + 1),
+        (View::Settings | View::Plugins | View::PluginPage | View::Debug, _) => after_pages,
         (View::Performance, _) => (View::Hidden, 0),
     }
 }
@@ -217,6 +226,7 @@ impl Overlay {
                         debug_modifier,
                         !crate::plugin_api::plugin_rows(&snapshot).is_empty(),
                         crate::plugin_api::page_plugins(&snapshot).len(),
+                        config.hide_pages,
                     )
                 }
                 Command::Debug if self.view == View::Debug => (View::Hidden, 0),
@@ -526,66 +536,182 @@ mod tests {
 
     #[test]
     fn plugins_view_enters_the_cycle_only_after_a_registration() {
+        let none = HiddenPages::NONE;
         for debug in [false, true] {
             assert_eq!(
-                next_view(View::Hidden, 0, debug, false, 0),
+                next_view(View::Hidden, 0, debug, false, 0, none),
                 (View::Settings, 0)
             );
             assert_eq!(
-                next_view(View::Hidden, 0, debug, true, 2),
+                next_view(View::Hidden, 0, debug, true, 2, none),
                 (View::Settings, 0)
             );
             assert_eq!(
-                next_view(View::Performance, 0, debug, true, 2),
+                next_view(View::Performance, 0, debug, true, 2, none),
                 (View::Hidden, 0)
             );
         }
         assert_eq!(
-            next_view(View::Debug, 1, false, true, 2),
-            (View::Performance, 0)
-        );
-        assert_eq!(next_view(View::Debug, 1, true, true, 2), (View::Debug, 1));
-        assert_eq!(
-            next_view(View::Settings, 0, false, false, 0),
+            next_view(View::Debug, 1, false, true, 2, none),
             (View::Performance, 0)
         );
         assert_eq!(
-            next_view(View::Settings, 0, false, true, 0),
+            next_view(View::Debug, 1, true, true, 2, none),
+            (View::Debug, 1)
+        );
+        assert_eq!(
+            next_view(View::Settings, 0, false, false, 0, none),
+            (View::Performance, 0)
+        );
+        assert_eq!(
+            next_view(View::Settings, 0, false, true, 0, none),
             (View::Plugins, 0)
         );
         assert_eq!(
-            next_view(View::Settings, 0, true, true, 0),
+            next_view(View::Settings, 0, true, true, 0, none),
             (View::Debug, 0)
         );
         // Own pages follow the shared page, or Settings when nothing is shared.
         assert_eq!(
-            next_view(View::Settings, 0, false, false, 2),
+            next_view(View::Settings, 0, false, false, 2, none),
             (View::PluginPage, 0)
         );
         assert_eq!(
-            next_view(View::Plugins, 0, false, true, 2),
+            next_view(View::Plugins, 0, false, true, 2, none),
             (View::PluginPage, 0)
         );
         assert_eq!(
-            next_view(View::PluginPage, 0, false, true, 2),
+            next_view(View::PluginPage, 0, false, true, 2, none),
             (View::PluginPage, 1)
         );
         assert_eq!(
-            next_view(View::PluginPage, 1, false, true, 2),
+            next_view(View::PluginPage, 1, false, true, 2, none),
             (View::Performance, 0)
         );
         assert_eq!(
-            next_view(View::Plugins, 0, false, true, 0),
+            next_view(View::Plugins, 0, false, true, 0, none),
             (View::Performance, 0)
         );
         assert_eq!(
-            next_view(View::PluginPage, 1, true, true, 2),
+            next_view(View::PluginPage, 1, true, true, 2, none),
             (View::Debug, 1)
         );
-        assert_eq!(next_view(View::Plugins, 0, true, true, 0), (View::Debug, 0));
+        assert_eq!(
+            next_view(View::Plugins, 0, true, true, 0, none),
+            (View::Debug, 0)
+        );
         assert_eq!(View::Plugins as u8, 4);
         assert_eq!(View::PluginPage as u8, 5);
         assert_eq!(View::Debug as u8, 3);
+    }
+
+    #[test]
+    fn hide_pages_drops_the_shared_page_and_performance_from_the_walk() {
+        let both = HiddenPages {
+            plugins: true,
+            own_pages: false,
+            performance: true,
+        };
+        // Settings → own page → Hidden, even with shared rows registered.
+        assert_eq!(
+            next_view(View::Hidden, 0, false, true, 1, both),
+            (View::Settings, 0)
+        );
+        assert_eq!(
+            next_view(View::Settings, 0, false, true, 1, both),
+            (View::PluginPage, 0)
+        );
+        assert_eq!(
+            next_view(View::PluginPage, 0, false, true, 1, both),
+            (View::Hidden, 0)
+        );
+        // Without an own page Settings hides at once; Debug hides too.
+        assert_eq!(
+            next_view(View::Settings, 0, false, true, 0, both),
+            (View::Hidden, 0)
+        );
+        assert_eq!(
+            next_view(View::Debug, 0, false, true, 0, both),
+            (View::Hidden, 0)
+        );
+        // Debug stays reachable from Settings and an own page.
+        assert_eq!(
+            next_view(View::Settings, 0, true, true, 1, both),
+            (View::Debug, 0)
+        );
+        assert_eq!(
+            next_view(View::PluginPage, 0, true, true, 1, both),
+            (View::Debug, 0)
+        );
+        // Each flag alone.
+        let plugins = HiddenPages {
+            plugins: true,
+            ..HiddenPages::NONE
+        };
+        assert_eq!(
+            next_view(View::Settings, 0, false, true, 0, plugins),
+            (View::Performance, 0)
+        );
+        assert_eq!(
+            next_view(View::Settings, 0, false, true, 2, plugins),
+            (View::PluginPage, 0)
+        );
+        let own = HiddenPages {
+            own_pages: true,
+            ..HiddenPages::NONE
+        };
+        assert_eq!(
+            next_view(View::Settings, 0, false, false, 2, own),
+            (View::Performance, 0)
+        );
+        assert_eq!(
+            next_view(View::Plugins, 0, false, true, 2, own),
+            (View::Performance, 0)
+        );
+        let everything = HiddenPages {
+            plugins: true,
+            own_pages: true,
+            performance: true,
+        };
+        assert_eq!(
+            next_view(View::Settings, 0, false, true, 2, everything),
+            (View::Hidden, 0),
+            "Settings stays; everything else is skipped"
+        );
+        let performance = HiddenPages {
+            performance: true,
+            ..HiddenPages::NONE
+        };
+        assert_eq!(
+            next_view(View::Settings, 0, false, true, 0, performance),
+            (View::Plugins, 0)
+        );
+        assert_eq!(
+            next_view(View::Plugins, 0, false, true, 0, performance),
+            (View::Hidden, 0)
+        );
+        // A stale Performance view still hides.
+        assert_eq!(
+            next_view(View::Performance, 0, false, true, 0, both),
+            (View::Hidden, 0)
+        );
+
+        // Through the overlay: the INI value drives the walk.
+        let _gate = crate::peer_transport::global_gate();
+        crate::peer_transport::clear_session();
+        let registry = crate::plugin_api::Registry::new();
+        let mut ui = Overlay::default();
+        let mut config = Config {
+            hide_pages: both,
+            ..Config::default()
+        };
+        let none = crate::menu::NativePads::off();
+        ui.poll_with(L | R | DOWN, &mut config, none, &registry);
+        assert_eq!(ui.view, View::Settings);
+        ui.poll_with(L | R, &mut config, none, &registry);
+        ui.poll_with(L | R | DOWN, &mut config, none, &registry);
+        assert_eq!(ui.view, View::Hidden, "no Performance page");
+        assert_eq!(config.hide_pages, both, "the chord never edits the key");
     }
 
     static PLUGIN_STATE: crate::plugin_api::testing::FakePlugin =

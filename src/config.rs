@@ -123,6 +123,116 @@ pub struct Config {
     /// (`576`, the fork's choice and the default, or `720`). Dynamic
     /// resolution still steps down from it. Emulator profiles ignore it.
     pub ultra_resolution: UltraResolution,
+    /// 0.5.3: window pages the chord cycle skips (`hide_pages`), so a
+    /// measurement session reaches a plugin's own page in one tap. Default
+    /// none. The Settings rows PluginsPage / OwnPages / PerfPage toggle them
+    /// live; Settings itself is always in the cycle.
+    pub hide_pages: HiddenPages,
+    /// 0.5.3: how the window shows frame time (`perf_view`): the plot, or a
+    /// number only (less draw work while measuring). Default graph.
+    pub perf_view: PerfView,
+}
+
+/// Pages left out of the window cycle (`hide_pages=none` or a comma list of
+/// `plugins`, `own_pages`, `performance`). Settings is always in the cycle;
+/// Debug keeps its own chord.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct HiddenPages {
+    /// The shared Plugins page.
+    pub plugins: bool,
+    /// Every plugin's own page (FX Control).
+    pub own_pages: bool,
+    pub performance: bool,
+}
+
+impl HiddenPages {
+    pub const NONE: Self = Self {
+        plugins: false,
+        own_pages: false,
+        performance: false,
+    };
+
+    fn parse(value: &str) -> Option<Self> {
+        if value == "none" {
+            return Some(Self::NONE);
+        }
+        let mut pages = Self::NONE;
+        for name in value.split(',') {
+            match name.trim() {
+                "plugins" if !pages.plugins => pages.plugins = true,
+                "own_pages" if !pages.own_pages => pages.own_pages = true,
+                "performance" if !pages.performance => pages.performance = true,
+                _ => return None,
+            }
+        }
+        Some(pages)
+    }
+
+    pub fn key(self) -> String {
+        let names: Vec<&str> = [
+            (self.plugins, "plugins"),
+            (self.own_pages, "own_pages"),
+            (self.performance, "performance"),
+        ]
+        .into_iter()
+        .filter_map(|(hidden, name)| hidden.then_some(name))
+        .collect();
+        if names.is_empty() {
+            "none".to_owned()
+        } else {
+            names.join(",")
+        }
+    }
+}
+
+/// Frame-time presentation in the window (`perf_view`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PerfView {
+    #[default]
+    Graph,
+    Number,
+}
+
+impl PerfView {
+    pub const fn key(self) -> &'static str {
+        match self {
+            Self::Graph => "graph",
+            Self::Number => "number",
+        }
+    }
+
+    fn parse(value: &str) -> Option<Self> {
+        Some(match value {
+            "graph" => Self::Graph,
+            "number" => Self::Number,
+            _ => return None,
+        })
+    }
+
+    /// Settings-row label.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Graph => "Graph",
+            Self::Number => "Number",
+        }
+    }
+
+    /// Left or Right swaps the two.
+    pub const fn cycle(self) -> Self {
+        match self {
+            Self::Graph => Self::Number,
+            Self::Number => Self::Graph,
+        }
+    }
+}
+
+/// Settings-row value of a page toggle.
+pub const fn page_label(hidden: bool) -> &'static str {
+    if hidden {
+        "Hidden"
+    } else {
+        "Shown"
+    }
 }
 
 /// Console LLUltra base resolution (`ultra_resolution`).
@@ -187,6 +297,8 @@ impl Default for Config {
             drs_moves: MoveSet::NONE,
             drs_adaptive: AdaptiveSettings::default(),
             ultra_resolution: UltraResolution::P576,
+            hide_pages: HiddenPages::NONE,
+            perf_view: PerfView::Graph,
         }
     }
 }
@@ -205,7 +317,7 @@ fn parse_count<T: TryFrom<u32>>(value: &str, max: u32, message: &str) -> Result<
 
 pub fn parse(text: &str) -> Result<Config, String> {
     let mut config = Config::default();
-    let mut seen = [false; 15];
+    let mut seen = [false; 17];
     for (index, raw) in text.lines().enumerate() {
         let line = raw.split('#').next().unwrap_or_default().trim();
         if line.is_empty() {
@@ -237,6 +349,8 @@ pub fn parse(text: &str) -> Result<Config, String> {
             "drs_adaptive_trigger_frames" => 12,
             "drs_adaptive_release_frames" => 13,
             "ultra_resolution" => 14,
+            "hide_pages" => 15,
+            "perf_view" => 16,
             _ => return Err(error(&format!("unknown key '{key}'"))),
         };
         if seen[slot] {
@@ -337,6 +451,15 @@ pub fn parse(text: &str) -> Result<Config, String> {
                 config.ultra_resolution = UltraResolution::parse(value)
                     .ok_or_else(|| error("ultra_resolution must be 576 or 720"))?;
             }
+            "hide_pages" => {
+                config.hide_pages = HiddenPages::parse(value).ok_or_else(|| {
+                    error("hide_pages must be none or a comma list of plugins, own_pages, performance")
+                })?;
+            }
+            "perf_view" => {
+                config.perf_view = PerfView::parse(value)
+                    .ok_or_else(|| error("perf_view must be graph or number"))?;
+            }
             "input_buffer" => {
                 config.input_buffer = if value == "auto" {
                     -1
@@ -391,7 +514,7 @@ pub fn serialize(config: &Config) -> String {
         "false"
     };
     format!(
-        "# Online Deluxe settings\nversion=1\ninput_buffer={input_buffer}\nrender_mode={}\nauto_profile={auto_profile}\nplatform={}\npeer_observer={peer_observer}\nstealth={stealth}\nstreamer={streamer}\nfps_boost={fps_boost}\ndrs_moves={}\ndrs_adaptive={drs_adaptive}\ndrs_adaptive_threshold_ms={}\ndrs_adaptive_trigger_frames={}\ndrs_adaptive_release_frames={}\nultra_resolution={}\n",
+        "# Online Deluxe settings\nversion=1\ninput_buffer={input_buffer}\nrender_mode={}\nauto_profile={auto_profile}\nplatform={}\npeer_observer={peer_observer}\nstealth={stealth}\nstreamer={streamer}\nfps_boost={fps_boost}\ndrs_moves={}\ndrs_adaptive={drs_adaptive}\ndrs_adaptive_threshold_ms={}\ndrs_adaptive_trigger_frames={}\ndrs_adaptive_release_frames={}\nultra_resolution={}\nhide_pages={}\nperf_view={}\n",
         config.render_mode.key(),
         config.platform.key(),
         config.drs_moves.serialize(),
@@ -399,6 +522,8 @@ pub fn serialize(config: &Config) -> String {
         config.drs_adaptive.trigger_frames,
         config.drs_adaptive.release_frames,
         config.ultra_resolution.key(),
+        config.hide_pages.key(),
+        config.perf_view.key(),
     )
 }
 
@@ -448,9 +573,86 @@ mod tests {
                 drs_moves: MoveSet::NONE,
                 drs_adaptive: AdaptiveSettings::default(),
                 ultra_resolution: UltraResolution::P576,
+                hide_pages: HiddenPages::NONE,
+                perf_view: PerfView::Graph,
             };
             assert_eq!(parse(&config.serialize()).unwrap(), config);
         }
+    }
+
+    #[test]
+    fn hide_pages_defaults_to_none_round_trips_and_rejects_other_values() {
+        let defaults = parse("version=1").unwrap();
+        assert_eq!(defaults.hide_pages, HiddenPages::NONE);
+        assert!(defaults.serialize().contains("hide_pages=none\n"));
+        for (value, plugins, own_pages, performance) in [
+            ("none", false, false, false),
+            ("plugins", true, false, false),
+            ("own_pages", false, true, false),
+            ("performance", false, false, true),
+            ("plugins,performance", true, false, true),
+            ("performance, plugins", true, false, true),
+            ("plugins,own_pages,performance", true, true, true),
+        ] {
+            let config = parse(&format!("version=1\nhide_pages={value}")).unwrap();
+            assert_eq!(
+                config.hide_pages,
+                HiddenPages {
+                    plugins,
+                    own_pages,
+                    performance
+                },
+                "{value}"
+            );
+            assert_eq!(parse(&config.serialize()).unwrap(), config);
+        }
+        assert_eq!(
+            HiddenPages {
+                plugins: true,
+                own_pages: true,
+                performance: true
+            }
+            .key(),
+            "plugins,own_pages,performance"
+        );
+        for bad in [
+            "",
+            "settings",
+            "plugins,plugins",
+            "plugins,none",
+            "all",
+            "true",
+            "fx_control",
+        ] {
+            assert!(
+                parse(&format!("version=1\nhide_pages={bad}")).is_err(),
+                "{bad:?} accepted"
+            );
+        }
+        assert!(parse("version=1\nhide_pages=none\nhide_pages=plugins").is_err());
+        assert_eq!(page_label(true), "Hidden");
+        assert_eq!(page_label(false), "Shown");
+    }
+
+    #[test]
+    fn perf_view_defaults_to_graph_round_trips_and_rejects_other_values() {
+        let defaults = parse("version=1").unwrap();
+        assert_eq!(defaults.perf_view, PerfView::Graph);
+        assert!(defaults.serialize().contains("perf_view=graph\n"));
+        let number = parse("version=1\nperf_view=number").unwrap();
+        assert_eq!(number.perf_view, PerfView::Number);
+        assert_eq!(parse(&number.serialize()).unwrap(), number);
+        assert_eq!(PerfView::Graph.cycle(), PerfView::Number);
+        assert_eq!(PerfView::Number.cycle(), PerfView::Graph);
+        assert_eq!(PerfView::Graph.label(), "Graph");
+        assert_eq!(PerfView::Number.label(), "Number");
+        for bad in ["", "plot", "Graph", "true", "0"] {
+            assert!(
+                parse(&format!("version=1\nperf_view={bad}")).is_err(),
+                "{bad:?} accepted"
+            );
+        }
+        assert!(parse("version=1\nperf_view=graph\nperf_view=number").is_err());
     }
 
     #[test]

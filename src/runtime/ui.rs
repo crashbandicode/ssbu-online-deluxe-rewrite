@@ -155,6 +155,9 @@ fn timing_line(frames: &FrameTimes) -> (String, Vec4) {
     (crate::menu::compact_timing_line(mean, latest), color)
 }
 
+/// The frame-time block of the vertical window. `graph` false (`perf_view=number`)
+/// prints the mean as text instead of the 180-sample plot, which is the one
+/// ImGui primitive here that scales with the sample count.
 unsafe fn performance(
     frames: &FrameTimes,
     width: f32,
@@ -162,6 +165,7 @@ unsafe fn performance(
     sx: f32,
     sy: f32,
     ping: &crate::pia_rtt::PresentedPing,
+    graph: bool,
 ) {
     if !begin_table(b"fps_info\0", 100.0 * sx) {
         return;
@@ -224,13 +228,20 @@ unsafe fn performance(
             .unwrap_or_else(|| "---".into()),
     );
     igPopStyleColor(1);
+    let label = mean
+        .map(|ms| format!("{ms:.2} ms\0"))
+        .unwrap_or_else(|| "---\0".into());
+    if !graph {
+        igPushStyleColor_Vec4(TEXT, color);
+        row("FrameTime", label.trim_end_matches('\0'));
+        igPopStyleColor(1);
+        igEndTable();
+        return;
+    }
     igTableNextRow(0, 65.0 * sy);
     igTableNextColumn();
     text("FrameTime");
     igTableNextColumn();
-    let label = mean
-        .map(|ms| format!("{ms:.2} ms\0"))
-        .unwrap_or_else(|| "---\0".into());
     igPushStyleColor_Vec4(PLOT_LINES, color);
     igPushStyleColor_Vec4(PLOT_LINES_HOVERED, color);
     let available = igGetContentRegionAvail();
@@ -516,6 +527,51 @@ fn setting_cells(
                 label: "UltraRes",
                 value: ultra,
                 selected: selected == crate::menu::ROW_ULTRA_RES,
+            }),
+        });
+    }
+    // Window pages in the chord cycle and the frame-time presentation
+    // (0.5.3). Settings has no toggle: it is always in the cycle.
+    let pages = [
+        (
+            crate::menu::ROW_PAGE_PLUGINS,
+            "PluginsPage",
+            "PlugPg",
+            crate::config::page_label(config.hide_pages.plugins),
+        ),
+        (
+            crate::menu::ROW_PAGE_OWN,
+            "OwnPages",
+            "OwnPg",
+            crate::config::page_label(config.hide_pages.own_pages),
+        ),
+        (
+            crate::menu::ROW_PAGE_PERF,
+            "PerfPage",
+            "PerfPg",
+            crate::config::page_label(config.hide_pages.performance),
+        ),
+        (
+            crate::menu::ROW_PERF_VIEW,
+            "PerfView",
+            "PerfView",
+            config.perf_view.label(),
+        ),
+    ];
+    for (row, label, short, value) in pages {
+        cells.push(SettingCell {
+            label: marked(selected == row, label),
+            local: value.to_owned(),
+            remote: if show_remote {
+                "---".to_owned()
+            } else {
+                String::new()
+            },
+            ping: false,
+            compact: Some(CompactField {
+                label: short,
+                value: value.to_owned(),
+                selected: selected == row,
             }),
         });
     }
@@ -1179,6 +1235,7 @@ unsafe extern "C" fn draw() {
                     sx,
                     sy,
                     if show_remote { &ping } else { &quiet_ping },
+                    config.perf_view == crate::config::PerfView::Graph,
                 );
             }
         }
