@@ -1,6 +1,6 @@
 # Controls and settings
 
-Hold **L+R** or **ZL+ZR**, then tap **D-pad Down** to cycle
+Hold **L+R**, then tap **D-pad Down** to cycle
 **settings → performance → hidden**. When a separately installed plugin NRO has
 registered options, a **plugins** page sits between settings and performance,
 and a plugin with its own page (since 0.5.0) follows it (see [Plugins](PLUGINS.md)).
@@ -18,14 +18,14 @@ fork's room-ID path, but still needs an NSO test. See [native display](NATIVE_DI
 
 | Control | Action |
 | --- | --- |
-| L+R (or ZL+ZR) + Down | Cycle settings → (plugins) → (own plugin pages) → performance → hidden. The Settings rows PluginsPage, OwnPages and PerfPage (or `hide_pages` in the INI, 0.5.3) take pages out of the cycle, e.g. settings → FX Control → hidden; Settings is always in it. See [Configuration](CONFIGURATION.md) |
+| L+R + Down | Cycle settings → (plugins) → (own plugin pages) → performance → hidden. The Settings rows PluginsPage, OwnPages and PerfPage (or `hide_pages` in the INI, 0.5.3) take pages out of the cycle, e.g. settings → FX Control → hidden; Settings is always in it. See [Configuration](CONFIGURATION.md) |
 | Up / Down | Select Peer, NetLatency, NetProfile, Stealth, Streamer, FPS++ (emulator) or UltraRes (console, 0.5.3: LLUltra's internal resolution, 576p or 720p), then PluginsPage / OwnPages / PerfPage (Shown or Hidden) and PerfView (Graph or Number, 0.5.3) (or a plugin row on a plugin page) |
 | Left / Right | Change the selected value (in menus and on the character select) |
 | ZR + Left / Right | Change the selected value while a fight is live (Training, Singles, Doubles; since 0.5.3). A plain Left/Right is ignored there, so a taunt or a stray press cannot change a setting mid-game; Up/Down still move the selection. ZR rather than ZL because ZL + D-pad Left/Right in Training swaps the controlled fighter |
 | Shoulder chord + Left / Right outside settings | Cycle the selected remote peer |
 | ZL + Left / Right or Up / Down on an online character select or arena pane, window closed | Edit the input buffer or the profile on the native status (since 0.4.1 the D-pad alone only moves the hand) |
 | L+R + either ZL or ZR + Y | Toggle Streamer |
-| L+R (or ZL+ZR) + Plus or Minus | Open the debug view; again to hide it |
+| L+R + Plus or Minus | Open the debug view; again to hide it. ZL+ZR stopped being a window chord in 0.5.3, so a trigger chord during play cannot open the window |
 | L+R + Up in the Debug view | Start a 30 s timing capture (see [Captures](CAPTURES.md)) |
 | L+R + Left in the Debug view | Coverage build only: write a `manual-NNN.profraw` snapshot (see [Coverage build](DEBUGGING.md#coverage-build-052)) |
 
@@ -37,8 +37,8 @@ opens Settings and from Performance it still hides the window.
 
 The first controller operates the window. Input also reaches the game. If
 Elite's menu is open too, D-pad edits can affect both menus; close one before
-changing settings. With the current Eden keyboard mapping, **Q+E+Down Arrow**
-is the window chord.
+changing settings. On Eden the chord is the two keys mapped to L and R plus
+Down Arrow (the ZL/ZR keys no longer work since 0.5.3).
 
 ## Rows
 

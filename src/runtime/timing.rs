@@ -368,16 +368,23 @@ impl Service {
         // rows, so a full SD card or a name clash refuses the capture here
         // instead of losing it at the end.
         let build = crate::build_info::BUILD_ID;
+        // Clock state at arm time (0.5.3): the ledger refuses an `oc` capture.
+        let clock = crate::clock_probe::header_lines(
+            super::clock_probe::mhz(),
+            super::clock_probe::hoc(),
+        );
         let api_path = Path::new(DATA_DIR).join(format!("api-{id}.csv"));
         let timing_path = Path::new(DATA_DIR).join(format!("timing-{id}.csv"));
         let api = create_export_file(&api_path).and_then(|file| {
             let mut out = BufWriter::with_capacity(EXPORT_BUFFER_BYTES, file);
             crate::render_trace::write_csv_header(&mut out, id, build, &label)?;
+            writeln!(out, "{clock}")?;
             Ok(out)
         });
         let timing = create_export_file(&timing_path).and_then(|file| {
             let mut out = BufWriter::with_capacity(EXPORT_BUFFER_BYTES, file);
             crate::timing::write_csv_header(&mut out, id, duration_ticks, build, &label)?;
+            writeln!(out, "{clock}")?;
             Ok(out)
         });
         let failure = match (api, timing) {

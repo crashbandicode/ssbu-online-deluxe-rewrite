@@ -107,7 +107,8 @@ frame 100 takes the same CPU time in each.
 
 ## Controls
 
-Hold **L+R** (or **ZL+ZR**) and tap **D-pad Down** to cycle the window:
+Hold **L+R** and tap **D-pad Down** to cycle the window (ZL+ZR no longer
+opens it since 0.5.3):
 settings → plugins (when any registered) → own plugin pages, such as FX
 Control when that plugin is installed → performance → hidden. In the window
 **Up/Down** selects a row and **Left/Right** changes it; while a fight is live

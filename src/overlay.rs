@@ -90,7 +90,9 @@ pub struct CommandLatch {
 
 impl CommandLatch {
     pub fn sample(&mut self, buttons: u64) -> Option<Command> {
-        let chord = buttons & (L | R) == L | R || buttons & (ZL | ZR) == ZL | ZR;
+        // L+R only (0.5.3): ZL+ZR no longer opens the window, so a trigger
+        // chord during play cannot bring it up and ZR stays the edit hold.
+        let chord = buttons & (L | R) == L | R;
         let cycle = chord && buttons & DOWN != 0;
         let debug = chord && buttons & PLUS_MINUS != 0 && buttons & DOWN == 0;
         let fire_cycle = cycle && !self.cycle_held;
@@ -132,7 +134,8 @@ pub struct Overlay {
 }
 
 /// The hold that unlocks a native pane edit (character select, window
-/// closed): ZL alone (ZL+ZR is the window chord).
+/// closed): ZL alone (ZR is the in-window edit hold; ZL+ZR together is
+/// neither, and since 0.5.3 it is not the window chord either).
 const fn native_modifier(buttons: u64) -> bool {
     buttons & ZL != 0 && buttons & ZR == 0
 }
@@ -150,9 +153,9 @@ impl Overlay {
     /// a relevant release/chord completion, not an input action.
     #[cfg(any(target_os = "switch", test))]
     pub(crate) fn command_edge(&self, buttons: u64) -> Option<u8> {
-        const COMMAND: u64 = L | R | ZL | ZR | PLUS_MINUS | DOWN;
+        const COMMAND: u64 = L | R | PLUS_MINUS | DOWN;
         let previous = self.previous_buttons;
-        let chord = |value: u64| value & (L | R) == L | R || value & (ZL | ZR) == ZL | ZR;
+        let chord = |value: u64| value & (L | R) == L | R;
         if (buttons ^ previous) & COMMAND == 0
             || !(chord(buttons) || chord(previous))
             || (buttons | previous) & (PLUS_MINUS | DOWN) == 0
@@ -186,7 +189,6 @@ impl Overlay {
         let pressed = buttons & !self.previous_buttons;
         self.previous_buttons = buttons;
         let shoulders = buttons & (L | R) == L | R;
-        let triggers = buttons & (ZL | ZR) == ZL | ZR;
         if shoulders && buttons & (ZL | ZR) != 0 && pressed & Y != 0 {
             config.streamer = !config.streamer;
             return true;
@@ -203,7 +205,7 @@ impl Overlay {
             config.fps_boost = next;
             return true;
         }
-        if self.view != View::Settings && (shoulders || triggers) {
+        if self.view != View::Settings && shoulders {
             if pressed & LEFT != 0 {
                 crate::peer_transport::cycle_peer(-1);
                 return false;
@@ -213,7 +215,7 @@ impl Overlay {
                 return false;
             }
         }
-        let chord = shoulders || triggers;
+        let chord = shoulders;
         let command = self.latch.sample(buttons);
         if let Some(command) = command {
             let previous = (self.view, self.page);
@@ -414,9 +416,16 @@ mod tests {
         let _gate = crate::peer_transport::global_gate();
         let mut ui = Overlay::default();
         let mut config = Config::default();
+        // ZL+ZR is not a window chord any more (0.5.3).
         ui.poll(ZL | ZR | DOWN, &mut config);
+        assert_eq!(ui.view, View::Hidden);
         ui.poll(0, &mut config);
         ui.poll(ZL | ZR | DOWN | PLUS_MINUS, &mut config);
+        assert_eq!(ui.view, View::Hidden);
+        ui.poll(0, &mut config);
+        ui.poll(L | R | DOWN, &mut config);
+        ui.poll(0, &mut config);
+        ui.poll(L | R | DOWN | PLUS_MINUS, &mut config);
         assert_eq!(ui.view, View::Debug);
         assert_eq!(config, Config::default());
     }
@@ -425,7 +434,14 @@ mod tests {
     fn individual_debug_modifiers_work_with_down_release_and_held_shoulders() {
         let _gate = crate::peer_transport::global_gate();
         crate::peer_transport::clear_session();
-        for chord in [L | R, ZL | ZR] {
+        for modifier in [1 << 10, 1 << 11] {
+            let mut ui = Overlay::default();
+            let mut config = Config::default();
+            ui.poll(ZL | ZR | modifier, &mut config);
+            assert_eq!(ui.view, View::Hidden, "triggers never open Debug");
+            ui.poll(0, &mut config);
+        }
+        for chord in [L | R] {
             for modifier in [1 << 10, 1 << 11] {
                 let mut ui = Overlay::default();
                 let mut config = Config::default();
@@ -515,10 +531,14 @@ mod tests {
         ui.poll(L | R | (1 << 11), &mut config);
         assert_eq!(ui.view, View::Hidden);
         ui.poll(0, &mut config);
-        // Triggers behave the same, in the other order.
+        // Triggers do nothing, in either order.
         ui.poll(ZL | ZR, &mut config);
         ui.poll(ZL | ZR | DOWN, &mut config);
-        assert_eq!(ui.view, View::Settings);
+        assert_eq!(ui.view, View::Hidden);
+        ui.poll(0, &mut config);
+        ui.poll(DOWN, &mut config);
+        ui.poll(ZL | ZR | DOWN, &mut config);
+        assert_eq!(ui.view, View::Hidden);
         assert_eq!(config, Config::default());
         let mut latch = CommandLatch::default();
         assert_eq!(latch.sample(L | R), None);
@@ -743,7 +763,7 @@ mod tests {
         assert!(ui.poll_with(ZR | RIGHT, &mut config, none, &registry));
         assert_eq!(config.input_buffer, 0);
         ui.poll_with(ZR, &mut config, none, &registry);
-        // ZL+ZR is the window chord, not the edit hold.
+        // ZL+ZR is not the edit hold (and no longer a window chord).
         assert!(!ui.poll_with(ZL | ZR | RIGHT, &mut config, none, &registry));
         ui.poll_with(0, &mut config, none, &registry);
         let before = ui.menu.selected;

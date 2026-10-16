@@ -218,6 +218,10 @@ unsafe fn performance(
         "Memory",
         &crate::hang_trace::memory_label(super::hang_trace::memory()),
     );
+    row(
+        "Clock",
+        &crate::clock_probe::status_label(super::clock_probe::mhz(), super::clock_probe::hoc()),
+    );
     let mean = frames.average();
     let color = frame_color(mean);
     igPushStyleColor_Vec4(TEXT, color);

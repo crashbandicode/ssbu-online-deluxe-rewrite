@@ -1,6 +1,7 @@
 mod adaptive_drs;
 mod api_trace;
 mod auto_driver;
+mod clock_probe;
 #[cfg(feature = "coverage")]
 mod coverage;
 mod css_capture;
@@ -214,6 +215,8 @@ pub fn main() {
     }
     // Liveness log first: a hang during hook installation still leaves it.
     hang_trace::install();
+    // Clock state for the ledger (Horizon-OC files, CPU calibration); no hooks.
+    clock_probe::install();
     // Scene entries are observed only (Auto profile, banners, captures and
     // the exported online context); no scene mutation, global Layout::Draw,
     // fighter-frame or Training input-delay hook. Native titles are the CSS

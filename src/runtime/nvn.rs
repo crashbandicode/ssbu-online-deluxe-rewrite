@@ -538,6 +538,11 @@ pub(super) fn write_status() {
         );
         let _ = writeln!(
             file,
+            "{}",
+            crate::clock_probe::status_lines(super::clock_probe::mhz(), super::clock_probe::hoc())
+        );
+        let _ = writeln!(
+            file,
             "early_presents={}\nearly_present_skips={}\nearly_present_mismatches={}",
             EARLY_PRESENTS.load(Ordering::Relaxed),
             EARLY_SKIPS.load(Ordering::Relaxed),

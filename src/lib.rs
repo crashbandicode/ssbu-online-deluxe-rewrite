@@ -1,5 +1,6 @@
 //! Portable settings, policy and diagnostics; Switch hooks are isolated.
 pub mod auto_policy;
+pub mod clock_probe;
 pub mod config;
 pub mod config_store;
 pub mod coverage_profile;
