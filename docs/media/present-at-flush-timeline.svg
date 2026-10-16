@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="504" viewBox="0 0 760 504" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect x="0.5" y="0.5" width="759" height="503" rx="16" fill="#1b1c20" stroke="#3a3c42" stroke-width="1"/>
+  <text x="28" y="39" fill="#ffffff" font-size="18">Same frame, earlier presentation request</text>
+  <text x="28" y="63" fill="#9aa0a6" font-size="13">Same rendering profile, before and after present-at-flush.</text>
+  <g transform="translate(0 24)">
+
+  <g fill="#9aa0a6" font-size="14" text-anchor="middle">
+    <text x="174" y="78">0 ms</text>
+    <text x="255" y="78">5 ms</text>
+    <text x="443" y="78">16.7 ms</text>
+    <text x="710" y="78">33.3 ms</text>
+  </g>
+  <g stroke="#6b6f78" stroke-width="1" stroke-dasharray="4 4">
+    <line x1="443" y1="94" x2="443" y2="222"/>
+    <line x1="710" y1="94" x2="710" y2="222"/>
+    <line x1="443" y1="252" x2="443" y2="363"/>
+    <line x1="710" y1="252" x2="710" y2="363"/>
+  </g>
+  <g fill="#ffffff" font-size="18" font-weight="600">
+    <text x="28" y="125">Original</text>
+    <text x="28" y="265">Optimized</text>
+  </g>
+
+  <!-- Identical CPU work in both rows: 5 ms to 18.7 ms. -->
+  <g fill="#6f9bd1">
+    <rect x="255" y="140" width="220" height="34" rx="6"/>
+    <rect x="255" y="280" width="220" height="34" rx="6"/>
+  </g>
+  <g fill="#0f1a2b" font-size="15" text-anchor="middle">
+    <text x="365" y="162">CPU frame 100</text>
+    <text x="365" y="302">CPU frame 100</text>
+  </g>
+  <g stroke="#9aa0a6" stroke-width="1">
+    <line x1="475" y1="176" x2="475" y2="186"/>
+    <line x1="255" y1="316" x2="255" y2="326"/>
+  </g>
+
+  <!-- Request badges mark instants, not presentation-call durations. -->
+  <rect x="451" y="188" width="48" height="30" rx="6" fill="#d9a441"/>
+  <text x="475" y="208" fill="#0f1a2b" font-size="14" text-anchor="middle">P99</text>
+  <line x1="499" y1="203" x2="710" y2="203" stroke="#d9a441" stroke-width="2" stroke-dasharray="5 4"/>
+  <circle cx="710" cy="203" r="5" fill="#d9a441"/>
+  <text x="475" y="240" fill="#c9ccd2" font-size="14" text-anchor="end">Requested at 18.7 ms</text>
+  <text x="710" y="240" fill="#c9ccd2" font-size="14" text-anchor="end">99 appears</text>
+
+  <rect x="231" y="328" width="48" height="30" rx="6" fill="#2f8f6f"/>
+  <text x="255" y="348" fill="#ffffff" font-size="14" text-anchor="middle">P99</text>
+  <line x1="279" y1="343" x2="443" y2="343" stroke="#2f8f6f" stroke-width="2" stroke-dasharray="5 4"/>
+  <circle cx="443" cy="343" r="5" fill="#2f8f6f"/>
+  <text x="255" y="380" fill="#c9ccd2" font-size="14" text-anchor="end">Requested at 5 ms</text>
+  <text x="443" y="380" fill="#c9ccd2" font-size="14" text-anchor="middle">99 appears</text>
+
+  <text x="28" y="412" fill="#c9ccd2" font-size="14">P99 = request to display frame 99. Dots mark when frame 99 appears.</text>
+  <g fill="#9aa0a6" font-size="13">
+    <text x="28" y="439">Illustrative times, not a measured trace. Frame 99 commands are submitted at 5 ms.</text>
+    <text x="28" y="461">Shown refreshes assume GPU completion and display acceptance in time.</text>
+  </g>
+  </g>
+</svg>

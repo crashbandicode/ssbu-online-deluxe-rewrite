@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="356" viewBox="0 0 760 356" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect x="0.5" y="0.5" width="759" height="355" rx="16" fill="#1b1c20" stroke="#3a3c42"/>
+  <text x="28" y="39" fill="#ffffff" font-size="18">Captured frames from the press to the first visible response</text>
+  <text x="28" y="63" fill="#9aa0a6" font-size="13">Measured in Eden on 0.5.2. Captured images, not controller-to-photon timing.</text>
+
+  <text x="150" y="96" fill="#9aa0a6" font-size="12" text-anchor="middle">press</text>
+  <line x1="150" y1="102" x2="150" y2="296" stroke="#6b6f78" stroke-dasharray="4 4"/>
+
+  <g fill="#ffffff" font-size="16" font-weight="600">
+    <text x="28" y="137">Vanilla</text>
+    <text x="28" y="207">LessLag</text>
+    <text x="28" y="277">LLUltra</text>
+  </g>
+
+  <!-- Vanilla: six captured frames -->
+  <g fill="#33455b">
+    <rect x="162" y="112" width="62" height="40" rx="8"/>
+    <rect x="232" y="112" width="62" height="40" rx="8"/>
+    <rect x="302" y="112" width="62" height="40" rx="8"/>
+    <rect x="372" y="112" width="62" height="40" rx="8"/>
+    <rect x="442" y="112" width="62" height="40" rx="8"/>
+  </g>
+  <rect x="512" y="112" width="62" height="40" rx="8" fill="#2f8f6f"/>
+
+  <!-- LessLag: three -->
+  <g fill="#214a40">
+    <rect x="162" y="182" width="62" height="40" rx="8"/>
+    <rect x="232" y="182" width="62" height="40" rx="8"/>
+  </g>
+  <rect x="302" y="182" width="62" height="40" rx="8" fill="#2f8f6f"/>
+
+  <!-- LLUltra: two, sometimes three for a later press -->
+  <rect x="162" y="252" width="62" height="40" rx="8" fill="#4a3a28"/>
+  <rect x="232" y="252" width="62" height="40" rx="8" fill="#2f8f6f"/>
+  <rect x="302" y="252" width="62" height="40" rx="8" fill="none" stroke="#2f8f6f" stroke-dasharray="4 4"/>
+
+  <g font-size="15" text-anchor="middle" fill="#c9ccd2">
+    <text x="193" y="137">1</text>
+    <text x="263" y="137">2</text>
+    <text x="333" y="137">3</text>
+    <text x="403" y="137">4</text>
+    <text x="473" y="137">5</text>
+    <text x="193" y="207">1</text>
+    <text x="263" y="207">2</text>
+    <text x="193" y="277">1</text>
+  </g>
+  <g font-size="15" text-anchor="middle" fill="#ffffff" font-weight="600">
+    <text x="543" y="137">6</text>
+    <text x="333" y="207">3</text>
+    <text x="263" y="277">2</text>
+  </g>
+  <text x="333" y="277" fill="#9aa0a6" font-size="15" text-anchor="middle">3</text>
+
+  <g fill="#ffffff" font-size="15">
+    <text x="590" y="137">6 frames</text>
+    <text x="380" y="207">3 frames</text>
+    <text x="380" y="277">2 frames, 2 to 3 for a later press</text>
+  </g>
+
+  <g fill="#9aa0a6" font-size="13">
+    <text x="28" y="320">Each box is one captured image after the press. Green: the first image showing the response.</text>
+    <text x="28" y="340">Dashed: when the press lands later in the frame, LLUltra sometimes needs a third image.</text>
+  </g>
+</svg>

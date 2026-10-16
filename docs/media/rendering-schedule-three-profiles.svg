@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="426" viewBox="0 0 760 426" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect x="0.5" y="0.5" width="759" height="425" rx="16" fill="#1b1c20" stroke="#3a3c42"/>
+  <text x="28" y="39" fill="#ffffff" font-size="18">Where the rendering work moves</text>
+  <text x="28" y="65" fill="#9aa0a6" font-size="13">Selected steps in steady operation, not a complete frame timeline.</text>
+
+  <g fill="#ffffff" font-size="18" font-weight="600">
+    <text x="28" y="139">Vanilla</text>
+    <text x="28" y="241">LessLag</text>
+    <text x="28" y="343">LLUltra</text>
+  </g>
+  <g fill="#26272c">
+    <rect x="148" y="100" width="248" height="64" rx="10"/>
+    <rect x="148" y="202" width="248" height="64" rx="10"/>
+    <rect x="148" y="304" width="248" height="64" rx="10"/>
+  </g>
+  <g fill="#33455b">
+    <rect x="424" y="100" width="132" height="64" rx="10"/>
+    <rect x="424" y="202" width="132" height="64" rx="10"/>
+  </g>
+  <rect x="424" y="304" width="132" height="64" rx="10" fill="#4a3a28"/>
+  <rect x="584" y="100" width="148" height="64" rx="10" fill="#4a3a28"/>
+  <g fill="#214a40">
+    <rect x="584" y="202" width="148" height="64" rx="10"/>
+    <rect x="584" y="304" width="148" height="64" rx="10"/>
+  </g>
+
+  <g fill="#ffffff" font-size="14" text-anchor="middle">
+    <text x="272" y="126">Original model / fighter work</text>
+    <text x="272" y="228">Model + fighter work</text>
+    <text x="272" y="330">Model + fighter work</text>
+    <text x="490" y="126">Normal flush</text>
+    <text x="490" y="228">Normal flush</text>
+    <text x="490" y="330">Earlier flush</text>
+    <text x="658" y="126">Queue image</text>
+    <text x="658" y="228">Queue image</text>
+    <text x="658" y="330">Queue image</text>
+  </g>
+  <g fill="#c9ccd2" font-size="13" text-anchor="middle">
+    <text x="272" y="150">Game order</text>
+    <text x="272" y="252">Moved after scene update</text>
+    <text x="272" y="354">Moved after scene update</text>
+    <text x="490" y="150">Later site</text>
+    <text x="490" y="252">Later site</text>
+    <text x="490" y="354">Present-entry site</text>
+    <text x="658" y="150">Later in game loop</text>
+    <text x="658" y="252">At this flush</text>
+    <text x="658" y="354">At this flush</text>
+  </g>
+  <g fill="#9aa0a6" font-size="22" text-anchor="middle">
+    <text x="410" y="139">→</text>
+    <text x="570" y="139">→</text>
+    <text x="410" y="241">→</text>
+    <text x="570" y="241">→</text>
+    <text x="410" y="343">→</text>
+    <text x="570" y="343">→</text>
+  </g>
+  <text x="28" y="404" fill="#9aa0a6" font-size="13">LLUltra skips its later flush. Queueing an image is not the same as displaying it.</text>
+</svg>

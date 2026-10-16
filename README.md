@@ -17,6 +17,9 @@ character select on the console). 0.5.0 moved character FX out to the separate
 lets plugins add their own pages to the window cycle. Every release on Forgejo
 carries the NRO and its manifest. Install notes: [docs/INSTALL.md](docs/INSTALL.md).
 
+This README also describes development changes marked 0.5.2 and 0.5.3,
+which are not included in the published 0.5.1 release.
+
 > **Install only this NRO.** The rewrite replaces the original Online Deluxe
 > fork (`libssbu_online_deluxe*.nro`), SsbuSync (`libssbusync.nro`) and the
 > PIA manager (`libssbu_pia_manager.nro`). Remove those three; do not run them
@@ -36,6 +39,46 @@ carries the NRO and its manifest. Install notes: [docs/INSTALL.md](docs/INSTALL.
 | ![Match with the compact strip](docs/media/match-settings-strip.png) <br> In a match the window becomes a compact two-row strip at the top left. | ![Character select after a match](docs/media/smash-css-after-match.png) <br> After a match the manual profile is held at Vanilla and the line reads `Vanilla*`. |
 
 More in [Screenshots](docs/SCREENSHOTS.md).
+
+## Optimizations added by this rewrite
+
+For the rendering basics, see [How Deluxe LessLag and LLUltra work](docs/LESSLAG_LLULTRA.md).
+
+Two things this rewrite does that the original Online Deluxe does not:
+
+### Dispatcher backoff (smarter CPU waiting)
+
+The game's main CPU task can waste time checking lists of work while another
+task finishes. After enough checks find no work it can do, the rewrite briefly
+sleeps, giving other CPU tasks a chance to run. Pauses grow to a small limit;
+the game's locks (which keep tasks from interfering) and checks stay in place.
+
+![Dispatcher backoff, before and after](docs/media/dispatcher-backoff-before-after.svg)
+
+[How dispatcher backoff works](docs/DISPATCHER_BACKOFF.md).
+
+### Present at the flush
+
+Smash prepares frames ahead of when they appear on screen. Once a frame's
+graphics commands are submitted (flushed), the CPU can start preparing the
+next frame while the GPU finishes the previous one.
+
+Originally, Smash waited until after the next frame's CPU update before
+requesting presentation of the previous frame. That delay could miss a screen
+refresh. In the affected rendering profiles, this rewrite queues presentation
+right after the commands are submitted, giving the display system more time
+to show the frame on schedule.
+
+This does not make the CPU or GPU calculate frames faster. A presentation
+request queues the image; the GPU may still be finishing it, and the screen
+shows it at a later eligible refresh.
+
+![Presenting frame 99 before or after CPU work on frame 100](docs/media/present-at-flush-timeline.svg)
+
+Conceptual timing diagram, not a measured trace. Both rows follow frame 99;
+frame 100 takes the same CPU time in each.
+
+[How present at the flush works](docs/RENDERING.md#present-at-the-flush-040).
 
 ## What it does
 
@@ -91,12 +134,13 @@ fighters get LLDoubles. How Auto recognises an online match, the cleanup hold
 
 Captured-response trials in Eden: frames from a synthetic input to the first
 visible response, three trials per cell, at two injection phases. The earlier
-columns are build `b19b7d94ae136e55`; the 0.5.2 columns are the 0.5.2
+build is identified by its binary hash, `b19b7d94ae136e55…`. The 0.5.2
+columns are the 0.5.2
 NRO `1525e3e0` (build `0.5.2-ce0145a2155c`), measured on 2026-10-15
 with the same method, after LLUltra and LLDoubles started presenting at the
 flush as LessLag does.
 
-| Profile | Normal phase (b19) | Later phase (b19) | Normal phase (0.5.2) | Later phase (0.5.2) | Frames saved vs Vanilla (0.5.2) |
+| Profile | Normal phase ([earlier build](docs/PERFORMANCE.md#final-renderer-regression-2026-10-07)) | Later phase ([earlier build](docs/PERFORMANCE.md#final-renderer-regression-2026-10-07)) | Normal phase (0.5.2) | Later phase (0.5.2) | Frames saved vs Vanilla (0.5.2) |
 | --- | --- | --- | --- | --- | --- |
 | Vanilla | 6, 6, 6 | 6, 6, 6 | 6, 6, 6 | 6, 6, 6 | — |
 | LessLag | 3, 3, 3 | 3, 3, 3 | 3, 3, 3 | 3, 3, 3 | **3** |
@@ -124,17 +168,15 @@ shows the Down bit.
 | ![Vanilla input to crouch](docs/media/latency-vanilla.gif) | ![LessLag input to crouch](docs/media/latency-lesslag.gif) | ![LLUltra input to crouch](docs/media/latency-llultra.gif) | ![LLUltra input to crouch, input late in the frame](docs/media/latency-llultra-later.gif) |
 
 The fourth clip is LLUltra again, with the stick pressed about 8 ms later
-inside the same frame (later phase, trial 2). In plain terms: the game checks
-the controller once per frame, every 16.7 ms. Press early in that window and
-LLUltra shows the crouch 4 frames sooner than Vanilla. Press late in it and
-the game has already moved on, so your press rides the next frame and LLUltra
-saves 3 frames instead of 4, the same as LessLag. Which case you get depends on
-where in the frame your press happens to land, not on anything you can control;
-LLUltra's 2-frame result came up in 4 of 6 trials and the 3-frame result in 2.
+(later phase, trial 2). The crouch appears after 3 captured frames rather than
+2 in the normal-phase trial, saving 3 frames against Vanilla instead of 4.
+Later input may miss a processing deadline, but these captures do not establish
+that cause or locate the game's first input read. Across the six 0.5.2 LLUltra
+trials, the 2-frame result occurred four times and the 3-frame result twice.
 
 LLDoubles was measured as a manual profile in two-fighter Training. These are
 emulator screenshots with synthetic input, not Switch input-to-photon
-measurements. The b19 columns predate 0.4.0's present-at-flush change to
+measurements. The earlier columns predate 0.4.0's present-at-flush change to
 LessLag, which removed the console's character-select stall (49.9 → 59.85 fps
 on the hand sweep) without changing the frame count claim; the 0.5.0 release
 NRO re-measured on 2026-10-15 gave Vanilla 6, LessLag 3, LLUltra 2 (normal) and
