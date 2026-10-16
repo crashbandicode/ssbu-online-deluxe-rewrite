@@ -50,6 +50,10 @@ static STREAMER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::
 static FPS_BOOST: AtomicBool = AtomicBool::new(false);
 /// `ultra_resolution` (0.5.3): true = 720p, false = 576p.
 static ULTRA_720: AtomicBool = AtomicBool::new(false);
+/// `hide_pages` (0.5.3) as bits: 1 plugins, 2 own pages, 4 performance.
+static HIDE_PAGES: AtomicU8 = AtomicU8::new(0);
+/// `perf_view` (0.5.3): true = number, false = graph.
+static PERF_NUMBER: AtomicBool = AtomicBool::new(false);
 static DRS_MOVES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 static DRS_ADAPTIVE: AtomicBool = AtomicBool::new(false);
 static DRS_THRESHOLD: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(1750);
@@ -82,6 +86,19 @@ pub(super) fn settings() -> Config {
             crate::config::UltraResolution::P720
         } else {
             crate::config::UltraResolution::P576
+        },
+        hide_pages: {
+            let bits = HIDE_PAGES.load(Ordering::Acquire);
+            crate::config::HiddenPages {
+                plugins: bits & 1 != 0,
+                own_pages: bits & 2 != 0,
+                performance: bits & 4 != 0,
+            }
+        },
+        perf_view: if PERF_NUMBER.load(Ordering::Acquire) {
+            crate::config::PerfView::Number
+        } else {
+            crate::config::PerfView::Graph
         },
     }
 }
@@ -121,6 +138,16 @@ pub(super) fn publish(config: &Config) {
     FPS_BOOST.store(config.fps_boost, Ordering::Release);
     ULTRA_720.store(
         config.ultra_resolution == crate::config::UltraResolution::P720,
+        Ordering::Release,
+    );
+    HIDE_PAGES.store(
+        u8::from(config.hide_pages.plugins)
+            | u8::from(config.hide_pages.own_pages) << 1
+            | u8::from(config.hide_pages.performance) << 2,
+        Ordering::Release,
+    );
+    PERF_NUMBER.store(
+        config.perf_view == crate::config::PerfView::Number,
         Ordering::Release,
     );
     DRS_MOVES.store(config.drs_moves.0, Ordering::Release);
