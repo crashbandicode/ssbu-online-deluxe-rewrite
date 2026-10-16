@@ -37,6 +37,46 @@ carries the NRO and its manifest. Install notes: [docs/INSTALL.md](docs/INSTALL.
 
 More in [Screenshots](docs/SCREENSHOTS.md).
 
+## Additional optimizations not yet present in Deluxe
+
+For the rendering basics, see [How Deluxe LessLag and LLUltra work](docs/LESSLAG_LLULTRA.md).
+
+Two things this rewrite does that the original Online Deluxe does not:
+
+### Dispatcher backoff (smarter CPU waiting)
+
+The game's main CPU task can waste time checking lists of work while another
+task finishes. After enough checks find no work it can do, the rewrite briefly
+sleeps, giving other CPU tasks a chance to run. Pauses grow to a small limit;
+the game's locks (which keep tasks from interfering) and checks stay in place.
+
+![Dispatcher backoff, before and after](docs/media/dispatcher-backoff-before-after.svg)
+
+[How dispatcher backoff works](docs/DISPATCHER_BACKOFF.md).
+
+### Present at the flush
+
+Smash prepares frames ahead of when they appear on screen. Once a frame's
+graphics commands are submitted (flushed), the CPU can start preparing the
+next frame while the GPU finishes the previous one.
+
+Originally, Smash waited until after the next frame's CPU update before
+requesting presentation of the previous frame. That delay could miss a screen
+refresh. In the affected rendering profiles, this rewrite queues presentation
+right after the commands are submitted, giving the display system more time
+to show the frame on schedule.
+
+This does not make the CPU or GPU calculate frames faster. A presentation
+request queues the image; the GPU may still be finishing it, and the screen
+shows it at a later eligible refresh.
+
+![Presenting frame 99 before or after CPU work on frame 100](docs/media/present-at-flush-timeline.svg)
+
+Conceptual timing diagram, not a measured trace. Both rows follow frame 99;
+frame 100 takes the same CPU time in each.
+
+[How present at the flush works](docs/RENDERING.md#present-at-the-flush-040).
+
 ## What it does
 
 - **Rendering profiles.** Vanilla, LessLag, LLUltra and LLDoubles trade
@@ -124,13 +164,11 @@ shows the Down bit.
 | ![Vanilla input to crouch](docs/media/latency-vanilla.gif) | ![LessLag input to crouch](docs/media/latency-lesslag.gif) | ![LLUltra input to crouch](docs/media/latency-llultra.gif) | ![LLUltra input to crouch, input late in the frame](docs/media/latency-llultra-later.gif) |
 
 The fourth clip is LLUltra again, with the stick pressed about 8 ms later
-inside the same frame (later phase, trial 2). In plain terms: the game checks
-the controller once per frame, every 16.7 ms. Press early in that window and
-LLUltra shows the crouch 4 frames sooner than Vanilla. Press late in it and
-the game has already moved on, so your press rides the next frame and LLUltra
-saves 3 frames instead of 4, the same as LessLag. Which case you get depends on
-where in the frame your press happens to land, not on anything you can control;
-LLUltra's 2-frame result came up in 4 of 6 trials and the 3-frame result in 2.
+(later phase, trial 2). The crouch appears after 3 captured frames rather than
+2 in the normal-phase trial, saving 3 frames against Vanilla instead of 4.
+Later input may miss a processing deadline, but these captures do not establish
+that cause or locate the game's first input read. Across the six 0.5.2 LLUltra
+trials, the 2-frame result occurred four times and the 3-frame result twice.
 
 LLDoubles was measured as a manual profile in two-fighter Training. These are
 emulator screenshots with synthetic input, not Switch input-to-photon

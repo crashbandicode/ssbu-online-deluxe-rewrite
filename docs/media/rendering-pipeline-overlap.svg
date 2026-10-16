@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="430" viewBox="0 0 760 430" font-family="Segoe UI, Helvetica, Arial, sans-serif" role="img" aria-labelledby="title desc">
+  <title id="title">From input to a visible frame</title>
+  <desc id="desc">Illustrative asynchronous pipeline, not a measured profile schedule. Input precedes CPU update N. Drawing commands and a presentation request for N are submitted before GPU drawing finishes. CPU update N+1 overlaps GPU drawing N. Frame N appears at a later refresh.</desc>
+  <rect x="0.5" y="0.5" width="759" height="429" rx="16" fill="#1b1c20" stroke="#3a3c42"/>
+  <text x="28" y="39" fill="#ffffff" font-size="18">Follow one frame from input to display</text>
+  <text x="28" y="63" fill="#9aa0a6" font-size="13">Illustrative, not measured. Highlighted boxes follow frame N; time runs left to right.</text>
+  <g fill="#9aa0a6" font-size="12" text-anchor="middle">
+    <text x="180" y="88">refresh</text><text x="315" y="88">refresh</text>
+    <text x="450" y="88">refresh</text><text x="585" y="88">refresh</text><text x="720" y="88">refresh</text>
+  </g>
+  <g stroke="#6b6f78" stroke-dasharray="4 4">
+    <path d="M180 94V332 M315 94V332 M450 94V332 M585 94V332 M720 94V332"/>
+  </g>
+  <g fill="#ffffff" font-size="14" font-weight="600">
+    <text x="28" y="122">Input</text><text x="28" y="174">CPU update</text>
+    <text x="28" y="224">GPU drawing</text><text x="28" y="274">Present request</text><text x="28" y="322">Display controller</text>
+  </g>
+  <circle cx="190" cy="117" r="6" fill="#ffffff"/>
+  <text x="205" y="122" fill="#c9ccd2" font-size="13">button press</text>
+  <path d="M190 125V139H200V150" fill="none" stroke="#c9ccd2"/>
+  <rect x="200" y="152" width="100" height="34" rx="6" fill="#6f9bd1" stroke="#ffffff" stroke-width="1.5"/>
+  <g fill="#6f9bd1" opacity="0.5">
+    <rect x="330" y="152" width="100" height="34" rx="6"/>
+    <rect x="465" y="152" width="100" height="34" rx="6"/>
+    <rect x="600" y="152" width="100" height="34" rx="6"/>
+  </g>
+  <g font-size="14" text-anchor="middle">
+    <text x="250" y="174" fill="#0f1a2b">Update N</text>
+    <text x="380" y="174" fill="#dfe6f0">Update N+1</text>
+    <text x="515" y="174" fill="#dfe6f0">Update N+2</text>
+    <text x="650" y="174" fill="#dfe6f0">Update N+3</text>
+  </g>
+  <g fill="#2f8f6f" opacity="0.5">
+    <rect x="180" y="202" width="100" height="34" rx="6"/>
+    <rect x="430" y="202" width="115" height="34" rx="6"/>
+    <rect x="565" y="202" width="115" height="34" rx="6"/>
+  </g>
+  <rect x="300" y="202" width="115" height="34" rx="6" fill="#2f8f6f" stroke="#ffffff" stroke-width="1.5"/>
+  <g font-size="14" text-anchor="middle">
+    <text x="230" y="224" fill="#d7efe6">Draw N−1</text>
+    <text x="357" y="224" fill="#ffffff">Draw N</text>
+    <text x="487" y="224" fill="#d7efe6">Draw N+1</text>
+    <text x="622" y="224" fill="#d7efe6">Draw N+2</text>
+  </g>
+  <path d="M300 186V200" stroke="#ffffff"/>
+  <g fill="#d9a441">
+    <circle cx="300" cy="268" r="6" stroke="#ffffff" stroke-width="1.5"/>
+    <circle cx="430" cy="268" r="5" opacity="0.5"/>
+    <circle cx="565" cy="268" r="5" opacity="0.5"/>
+  </g>
+  <g fill="#f3e2bd" font-size="13">
+    <text x="311" y="273">queue N</text><text x="441" y="273">queue N+1</text><text x="576" y="273">queue N+2</text>
+  </g>
+  <g fill="#33455b" opacity="0.5">
+    <rect x="180" y="300" width="135" height="32" rx="6"/>
+    <rect x="315" y="300" width="135" height="32" rx="6"/>
+    <rect x="585" y="300" width="135" height="32" rx="6"/>
+  </g>
+  <rect x="450" y="300" width="135" height="32" rx="6" fill="#33455b" stroke="#ffffff" stroke-width="1.5"/>
+  <g font-size="14" text-anchor="middle">
+    <text x="247" y="322" fill="#c9ccd2">Shows N−2</text><text x="382" y="322" fill="#c9ccd2">Shows N−1</text>
+    <text x="517" y="322" fill="#ffffff">Shows N</text><text x="652" y="322" fill="#c9ccd2">Shows N+1</text>
+  </g>
+  <g fill="#c9ccd2" font-size="13">
+    <text x="28" y="362">CPU work on N+1 overlaps GPU work on N: more work moves through the pipeline.</text>
+    <text x="28" y="384">The screen still shows an older frame until N is ready and a refresh can display it.</text>
+  </g>
+  <text x="28" y="411" fill="#9aa0a6" font-size="13">Queuing is a CPU request, not a display event. A queued image can still be drawing.</text>
+</svg>

@@ -1,0 +1,140 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="710" viewBox="0 0 760 710" font-family="Segoe UI, Helvetica, Arial, sans-serif" role="img" aria-labelledby="title desc">
+  <title id="title">The same button press across six captured frames</title>
+  <desc id="desc">Six dashed vertical guides mark captured frames after input. Visible-response endpoints use the Eden 0.5.2 measurements: Vanilla six, LessLag three, LLUltra two normally and two to three for later-phase input. CPU and GPU stage positions and durations are schematic, not measured. A separate GPU activity track highlights rendering of N and uses dimmer bars for other frames, without treating the buffer snapshots as time intervals. The outlined LLUltra marker at frame three is an alternative trial result, not a second display event. A presentation request is separate from visible response. Outside the time axis, separate occupancy insets show Vanilla with three reusable images, shown, queued and rendering, and LessLag and LLUltra with two, shown and rendering. These are conceptual roles, not exact contents or frame identities. Vanilla keeps its later presentation request and older pictures remain visible longer.</desc>
+  <rect x="0.5" y="0.5" width="759" height="709" rx="16" fill="#1b1c20" stroke="#3a3c42"/>
+  <text x="28" y="39" fill="#ffffff" font-size="18">The same input, reflected on screen sooner</text>
+  <text x="28" y="63" fill="#9aa0a6" font-size="13">Response endpoints: measured in Eden. CPU/GPU stage placement: schematic, not traced.</text>
+  <text x="28" y="91" fill="#c9ccd2" font-size="13">Captured frame</text>
+  <g fill="#9aa0a6" font-size="13" text-anchor="middle">
+    <text x="196" y="91" fill="#ffffff">Press</text>
+    <text x="284" y="91">1</text><text x="372" y="91">2</text><text x="460" y="91">3</text>
+    <text x="548" y="91">4</text><text x="636" y="91">5</text><text x="724" y="91">6</text>
+  </g>
+  <path d="M196 102H724 M718 98L724 102L718 106" stroke="#9aa0a6" fill="none"/>
+  <g stroke="#6b6f78" stroke-dasharray="4 5" opacity="0.65">
+    <line x1="284" y1="104" x2="284" y2="562"/><line x1="372" y1="104" x2="372" y2="562"/>
+    <line x1="460" y1="104" x2="460" y2="562"/><line x1="548" y1="104" x2="548" y2="562"/>
+    <line x1="636" y1="104" x2="636" y2="562"/><line x1="724" y1="104" x2="724" y2="562"/>
+  </g>
+  <path d="M196 102V562" stroke="#c9ccd2" stroke-dasharray="4 4"/>
+  <circle cx="196" cy="102" r="5" fill="#ffffff"/>
+  <g fill="#ffffff" font-size="16" font-weight="600">
+    <text x="28" y="139">Vanilla</text><text x="28" y="299">LessLag</text><text x="28" y="459">LLUltra</text>
+  </g>
+  <g fill="#9aa0a6" font-size="12">
+    <text x="28" y="160">3 slots · more headroom</text><text x="28" y="320">2 slots · shorter path</text><text x="28" y="480">2 slots · less slack</text>
+  </g>
+  <!-- Equal work sizes explain the concept; their positions are not measured spans. -->
+  <g fill="#6f9bd1">
+    <rect x="204" y="118" width="70" height="28" rx="6"/>
+    <rect x="204" y="278" width="70" height="28" rx="6"/>
+    <rect x="204" y="438" width="70" height="28" rx="6"/>
+  </g>
+  <g fill="#6f9bd1" opacity="0.25">
+    <rect x="294" y="118" width="420" height="28" rx="6"/>
+    <rect x="294" y="278" width="420" height="28" rx="6"/>
+    <rect x="294" y="438" width="420" height="28" rx="6"/>
+  </g>
+  <g fill="#0f1a2b" font-size="12" text-anchor="middle">
+    <text x="239" y="137">CPU · N</text><text x="239" y="297">CPU · N</text><text x="239" y="457">CPU · N</text>
+  </g>
+  <g fill="#c9ccd2" font-size="12" text-anchor="middle">
+    <text x="504" y="137">other CPU updates continue</text>
+    <text x="504" y="297">other CPU updates continue</text>
+    <text x="504" y="457">other CPU updates continue</text>
+  </g>
+  <!-- Occupancy snapshots sit outside the time axis: slots are images, not intervals. -->
+  <g id="vanilla-occupancy">
+    <rect x="26" y="174" width="148" height="84" rx="9" fill="#26272c" stroke="#3a3c42"/>
+    <rect x="32" y="180" width="136" height="20" rx="5" fill="#33455b"/>
+    <rect x="32" y="206" width="136" height="20" rx="5" fill="#3a3c42"/>
+    <rect x="32" y="232" width="136" height="20" rx="5" fill="#214a40"/>
+    <g fill="#c9ccd2" font-size="12" text-anchor="middle">
+      <text x="100" y="194">shown</text><text x="100" y="220">queued</text><text x="100" y="246">rendering</text>
+    </g>
+  </g>
+  <g id="lesslag-occupancy">
+    <rect x="26" y="334" width="148" height="58" rx="9" fill="#26272c" stroke="#3a3c42"/>
+    <rect x="32" y="340" width="136" height="20" rx="5" fill="#33455b"/>
+    <rect x="32" y="366" width="136" height="20" rx="5" fill="#214a40"/>
+    <g fill="#c9ccd2" font-size="12" text-anchor="middle">
+      <text x="100" y="354">shown</text><text x="100" y="380">rendering</text>
+    </g>
+  </g>
+  <g id="llultra-occupancy">
+    <rect x="26" y="494" width="148" height="58" rx="9" fill="#26272c" stroke="#3a3c42"/>
+    <rect x="32" y="500" width="136" height="20" rx="5" fill="#33455b"/>
+    <rect x="32" y="526" width="136" height="20" rx="5" fill="#214a40"/>
+    <g fill="#c9ccd2" font-size="12" text-anchor="middle">
+      <text x="100" y="514">shown</text><text x="100" y="540">rendering</text>
+    </g>
+  </g>
+  <g fill="#9aa0a6" font-size="10" text-anchor="middle">
+    <text x="100" y="271">occupancy snapshot</text><text x="100" y="405">occupancy snapshot</text>
+    <text x="100" y="565">occupancy snapshot</text>
+  </g>
+  <!-- GPU activity uses the time axis; occupancy insets remain independent snapshots. -->
+  <g id="gpu-activity-tracks">
+    <g fill="#214a40" opacity="0.35">
+      <rect x="196" y="152" width="528" height="36" rx="7"/>
+      <rect x="196" y="312" width="528" height="36" rx="7"/>
+      <rect x="196" y="472" width="528" height="36" rx="7"/>
+    </g>
+    <g fill="#2f8f6f" opacity="0.4">
+      <rect x="204" y="156" width="406" height="28" rx="6"/>
+      <rect x="204" y="316" width="136" height="28" rx="6"/>
+      <rect x="470" y="316" width="244" height="28" rx="6"/>
+      <rect x="382" y="476" width="332" height="28" rx="6"/>
+    </g>
+    <g fill="#c9ccd2" font-size="12" text-anchor="middle">
+      <text x="407" y="175">GPU · other frames</text>
+      <text x="272" y="335">GPU · older frames</text>
+      <text x="592" y="335">GPU · other frames</text>
+      <text x="548" y="495">GPU · other frames</text>
+    </g>
+  </g>
+  <g fill="#2f8f6f" stroke="#ffffff" stroke-width="1.5">
+    <rect x="620" y="156" width="70" height="28" rx="6"/>
+    <rect x="350" y="316" width="70" height="28" rx="6"/>
+    <rect x="274" y="476" width="70" height="28" rx="6"/>
+  </g>
+  <g fill="#ffffff" font-size="12" text-anchor="middle">
+    <text x="655" y="175">GPU · N</text><text x="385" y="335">GPU · N</text><text x="309" y="495">GPU · N</text>
+  </g>
+  <!-- The band represents older visible pictures, not more reusable image slots. -->
+  <g fill="#33455b" opacity="0.35">
+    <rect x="196" y="210" width="528" height="14" rx="4"/>
+    <rect x="196" y="370" width="264" height="14" rx="4"/>
+    <rect x="196" y="530" width="176" height="14" rx="4"/>
+  </g>
+  <g fill="#9aa0a6" font-size="11">
+    <text x="204" y="240">older pictures remain visible</text>
+    <text x="204" y="400">older pictures</text>
+  </g>
+  <!-- Requests and first captured responses remain separate events. -->
+  <g stroke="#9aa0a6" stroke-dasharray="3 4">
+    <path d="M695 195H724V217 M350 355H460V377 M274 515H372V537" fill="none"/>
+  </g>
+  <g fill="#d9a441"><circle cx="695" cy="195" r="5"/><circle cx="350" cy="355" r="5"/><circle cx="274" cy="515" r="5"/></g>
+  <g fill="#f3e2bd" font-size="12">
+    <text x="685" y="199" text-anchor="end">P · queue N later</text><text x="340" y="359" text-anchor="end">P · queue N</text><text x="264" y="519" text-anchor="end">P · queue N</text>
+  </g>
+  <g fill="#2f8f6f"><circle cx="724" cy="217" r="6"/><circle cx="460" cy="377" r="6"/><circle cx="372" cy="537" r="6"/></g>
+  <line x1="381" y1="537" x2="450" y2="537" stroke="#2f8f6f" stroke-dasharray="3 4"/>
+  <circle cx="460" cy="537" r="7" fill="#1b1c20" stroke="#2f8f6f" stroke-width="2" stroke-dasharray="3 2"/>
+  <g fill="#ffffff" font-size="13">
+    <text x="714" y="241" text-anchor="end">N visible: frame 6</text>
+    <text x="450" y="401" text-anchor="end">N visible: frame 3</text>
+    <text x="362" y="561" text-anchor="end">N visible: frame 2</text>
+  </g>
+  <text x="474" y="541" fill="#9aa0a6" font-size="12">or frame 3 with later input</text>
+  <text x="28" y="590" fill="#c9ccd2" font-size="13">The same input-related work takes a shorter path to its visible response.</text>
+  <g fill="#9aa0a6" font-size="12">
+    <text x="28" y="610">Conceptual buffer occupancy, not an exact trace.</text>
+    <text x="28" y="630">Left insets count reusable images, not time steps; roles can move between slots.</text>
+    <text x="28" y="648">Blue: CPU. Bright green: GPU drawing N. Dim green: GPU work on other frames.</text>
+    <text x="28" y="666">Yellow P: request. Green dots: first captured response, not controller-to-photon timing.</text>
+    <text x="28" y="684">Outlined dot: alternative LLUltra result with later input, not a second display of N.</text>
+    <text x="28" y="702">Eden response counts are measured; GPU activity and request placement are illustrative.</text>
+  </g>
+</svg>
