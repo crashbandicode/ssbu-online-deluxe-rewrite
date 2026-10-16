@@ -54,21 +54,24 @@ the game's locks (which keep tasks from interfering) and checks stay in place.
 
 ### Present at the flush
 
-The game used to hand a finished frame to the screen after doing the next
-frame's CPU work. A slow update could miss the screen's 16.7 ms deadline,
-leaving the picture waiting a whole extra refresh. The rewrite hands it over
-as soon as it is finished, at the flush, so it can catch that refresh.
+Smash prepares frames ahead of when they appear on screen. Once a frame's
+graphics commands are submitted (flushed), the CPU can start preparing the
+next frame while the GPU finishes the previous one.
 
-![Present at the flush, late and early present on a 16.7 ms timeline](docs/media/present-at-flush-timeline.svg)
+Originally, Smash waited until after the next frame's CPU update before
+requesting presentation of the previous frame. That delay could miss a screen
+refresh. In the affected rendering profiles, this rewrite queues presentation
+right after the commands are submitted, giving the display system more time
+to show the frame on schedule.
 
-P is Present: handing a finished frame to the screen. Top row: the CPU
-finishes frame N (t0 to t1), then asks for presentation (t1 to t2). That lands
-after the 16.7 ms refresh, so frame N is not shown until 33.3 ms.
+This does not make the CPU or GPU calculate frames faster. A presentation
+request queues the image; the GPU may still be finishing it, and the screen
+shows it at a later eligible refresh.
 
-Bottom row: at t0 the P presents the previous frame, N−1, which is already
-finished. CPU work on frame N starts right after (t1) and overlaps that
-presentation; it ends at t2, and the next P at 16.7 ms (t3) shows frame N on
-time. Conceptual timing diagram, not a measured trace.
+![Presenting frame 99 before or after CPU work on frame 100](docs/media/present-at-flush-timeline.svg)
+
+Conceptual timing diagram, not a measured trace. Both rows follow frame 99;
+frame 100 takes the same CPU time in each.
 
 [How present at the flush works](docs/RENDERING.md#present-at-the-flush-040).
 
