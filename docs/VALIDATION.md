@@ -2534,7 +2534,10 @@ shutdown log), the known shutdown behaviour. Evidence outside Git:
 `latency-052-1015/` (NOTES.md, per-trial analysis, 480 images, traces with
 partial-copy verification, staging receipt); annotated GIFs
 `docs/media/latency-{vanilla,lesslag,llultra}.gif` (normal-phase trial 1 of
-each, frame counter from the first image after the injection to the crouch).
+each, frame counter from the first image after the injection to the crouch)
+and, added 2026-10-16 on the operator's request, `latency-llultra-later.gif`
+(LLUltra delayed-phase trial 2, `R` = 3: the case where LLUltra saves 3
+frames rather than 4, with a plain-language note in the README).
 
 ### 0.5.2 — 2026-10-15: present at the flush for LLUltra and LLDoubles (candidate for the console LLUltra drop)
 

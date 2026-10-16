@@ -335,7 +335,11 @@ Each included trial's native images are annotated in
 [latency-lesslag.gif](media/latency-lesslag.gif) and
 [latency-llultra.gif](media/latency-llultra.gif) (normal-phase trial 1 of each;
 the counter starts at the first image after the injection and reaches `R` on the
-first crouch image). Evidence, including all 480 images, per-trial analysis, the
+first crouch image). [latency-llultra-later.gif](media/latency-llultra-later.gif)
+is the LLUltra delayed-phase trial 2 (`R` = 3, `M` = 2, `D` = 1, API-covered):
+the Down marker lights on the same image as in the normal phase, the crouch
+appears one image later, so the saving against Vanilla is 3 frames instead of
+4. Evidence, including all 480 images, per-trial analysis, the
 adapted helpers, partial-copy verification and the staging receipt, is retained
 outside Git in the operator's evidence root under `latency-052-1015/`, which
 also holds the helper scripts. Deviations from the 0.5.0 run: a private copy of

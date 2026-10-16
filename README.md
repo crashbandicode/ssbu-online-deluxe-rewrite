@@ -117,9 +117,18 @@ the first image showing the crouch (green); INPUT lights from that first image,
 and the small "plugin saw it" lamp lights when the in-game input marker first
 shows the Down bit.
 
-| Vanilla: 6 frames | LessLag: 3 frames | LLUltra: 2 frames |
-| --- | --- | --- |
-| ![Vanilla input to crouch](docs/media/latency-vanilla.gif) | ![LessLag input to crouch](docs/media/latency-lesslag.gif) | ![LLUltra input to crouch](docs/media/latency-llultra.gif) |
+| Vanilla: 6 frames | LessLag: 3 frames | LLUltra: 2 frames | LLUltra, late press: 3 frames |
+| --- | --- | --- | --- |
+| ![Vanilla input to crouch](docs/media/latency-vanilla.gif) | ![LessLag input to crouch](docs/media/latency-lesslag.gif) | ![LLUltra input to crouch](docs/media/latency-llultra.gif) | ![LLUltra input to crouch, input late in the frame](docs/media/latency-llultra-later.gif) |
+
+The fourth clip is LLUltra again, with the stick pressed about 8 ms later
+inside the same frame (later phase, trial 2). In plain terms: the game checks
+the controller once per frame, every 16.7 ms. Press early in that window and
+LLUltra shows the crouch 4 frames sooner than Vanilla. Press late in it and
+the game has already moved on, so your press rides the next frame and LLUltra
+saves 3 frames instead of 4, the same as LessLag. Which case you get depends on
+where in the frame your press happens to land, not on anything you can control;
+LLUltra's 2-frame result came up in 4 of 6 trials and the 3-frame result in 2.
 
 LLDoubles was measured as a manual profile in two-fighter Training. These are
 emulator screenshots with synthetic input, not Switch input-to-photon
