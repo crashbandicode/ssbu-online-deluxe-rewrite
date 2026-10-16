@@ -1,5 +1,15 @@
 # How Deluxe LessLag and LLUltra work
 
+## In Brief
+
+Vanilla Smash prioritizes smooth performance by preparing and rendering frames ahead of time, keeping multiple images in circulation across three buffers. This gives the CPU and GPU breathing room, but also means frames can appear on screen later than necessary after you press a button.
+
+**LessLag** reduces the buffers from three to two, changes which frame gets rendered, and eliminates unnecessary waiting, allowing newer frames to reach the screen sooner. Together, these changes reduce input delay by approximately **three frames**.
+
+**LLUltra** pushes this further, potentially saving a fourth frame by using a more immediate rendering schedule, at the cost of giving the CPU and GPU less time to finish their work. Particularly demanding frames can exceed this tighter deadline, causing FPS drops. Overclocking or reducing rendering resolution can help recover the lost performance headroom.
+
+Finally, **dispatcher backoff** reduces wasted CPU work from repeatedly checking for completed tasks, while **present-at-flush** requests presentation earlier, allowing the GPU to finish rendering while the CPU prepares subsequent frames. Together, these optimizations help maintain a smoother 60 FPS.
+
 When you press a button, Smash processes the input long before you see the result. The CPU must update the game, the GPU must render the image into a buffer, and the display system must show it.
 
 ![Input, CPU update, GPU draw, presentation request and screen refresh for overlapping frames](media/rendering-pipeline-overlap.svg)
