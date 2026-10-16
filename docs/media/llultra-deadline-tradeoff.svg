@@ -1,68 +1,73 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="760" height="650" viewBox="0 0 760 650" font-family="Segoe UI, Helvetica, Arial, sans-serif" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="674" viewBox="0 0 760 674" font-family="Segoe UI, Helvetica, Arial, sans-serif" role="img" aria-labelledby="title desc">
   <title id="title">Rendering headroom in Vanilla, LessLag and LLUltra</title>
-  <desc id="desc">Selected work near refreshes, not total input latency. Vanilla and LessLag overlap CPU work on B with GPU work on A. Vanilla requests presentation later; LessLag queues it at submission. LLUltra aims to display B sooner. Heavy GPU work misses that earlier refresh. CPU durations match in every row; the heavy GPU durations match in Vanilla, LessLag and the heavy LLUltra example. All timings are illustrative.</desc>
-  <rect x="0.5" y="0.5" width="759" height="649" rx="16" fill="#1b1c20" stroke="#3a3c42"/>
-  <text x="28" y="39" fill="#ffffff" font-size="18">Headroom across all three profiles</text>
-  <text x="28" y="63" fill="#9aa0a6" font-size="13">Selected work near refreshes, not total input delay. Illustrative timings, not a trace.</text>
+  <desc id="desc">At the same conceptual CPU simulation point N, Vanilla TwoBehind illustrates GPU content N−2, LessLag OneBehind illustrates N−1, and LLUltra Immediate illustrates N after the CPU update. These are conceptual relative content ages, not measured frame ages or buffer IDs; cyclic index offsets alone do not establish ages. Yellow P markers queue each labeled image; green dots show it at a later eligible refresh. Heavy GPU work in LLUltra misses the first refresh and waits for the following one. All timings are illustrative.</desc>
+  <rect x="0.5" y="0.5" width="759" height="673" rx="16" fill="#1b1c20" stroke="#3a3c42"/>
+  <text x="28" y="39" fill="#ffffff" font-size="18">Same simulation point, different rendering depth</text>
+  <text x="28" y="63" fill="#9aa0a6" font-size="13">At CPU simulation N: conceptual image ages, not measured ages. Timings are illustrative.</text>
   <g fill="#9aa0a6" font-size="12" text-anchor="middle">
-    <text x="196" y="88">start</text><text x="462" y="88">next refresh</text><text x="728" y="88">following</text>
+    <text x="196" y="88">start of N</text><text x="462" y="88">next refresh</text><text x="728" y="88">following</text>
   </g>
   <g stroke="#6b6f78" stroke-dasharray="4 4"><path d="M196 94V562 M462 94V562 M728 94V562"/></g>
   <!-- Vanilla: the same pipelined work, with the game's later presentation request. -->
   <text x="28" y="132" fill="#ffffff" font-size="15" font-weight="600">Vanilla</text>
-  <text x="28" y="153" fill="#9aa0a6" font-size="13">heavy work</text>
+  <text x="28" y="153" fill="#9aa0a6" font-size="13">TwoBehind</text>
+  <text x="28" y="173" fill="#9aa0a6" font-size="12">heavy GPU work</text>
   <rect x="204" y="104" width="140" height="26" rx="6" fill="#6f9bd1"/>
   <rect x="470" y="104" width="140" height="26" rx="6" fill="#6f9bd1" opacity="0.5"/>
-  <g fill="#0f1a2b" font-size="13" text-anchor="middle"><text x="274" y="122">CPU · B</text><text x="540" y="122">CPU · C</text></g>
+  <g fill="#0f1a2b" font-size="13" text-anchor="middle"><text x="274" y="122">CPU · N</text><text x="540" y="122">CPU · N+1</text></g>
   <rect x="204" y="138" width="190" height="26" rx="6" fill="#2f8f6f" opacity="0.5"/>
   <rect x="470" y="138" width="190" height="26" rx="6" fill="#2f8f6f"/>
-  <g fill="#ffffff" font-size="13" text-anchor="middle"><text x="299" y="156">GPU · A</text><text x="565" y="156">GPU · B</text></g>
+  <g fill="#ffffff" font-size="13" text-anchor="middle"><text x="299" y="156">GPU · N−2</text><text x="565" y="156">GPU · N−1</text></g>
   <g fill="#d9a441"><circle cx="344" cy="177" r="5"/><circle cx="610" cy="177" r="5"/></g>
-  <g fill="#f3e2bd" font-size="12"><text x="354" y="181">P A</text><text x="620" y="181">P B</text></g>
+  <g fill="#f3e2bd" font-size="12"><text x="354" y="181">P N−2</text><text x="620" y="181">P N−1</text></g>
   <g fill="#2f8f6f"><circle cx="462" cy="197" r="5"/><circle cx="728" cy="197" r="5"/></g>
-  <g fill="#c9ccd2" font-size="12"><text x="452" y="201" text-anchor="end">A shown</text><text x="718" y="201" text-anchor="end">B shown</text></g>
+  <g fill="#c9ccd2" font-size="12"><text x="452" y="201" text-anchor="end">N−2 shown</text><text x="718" y="201" text-anchor="end">N−1 shown</text></g>
   <!-- LessLag: overlap remains; the request moves to the image's submission. -->
   <text x="28" y="252" fill="#ffffff" font-size="15" font-weight="600">LessLag</text>
-  <text x="28" y="273" fill="#9aa0a6" font-size="13">same heavy work</text>
+  <text x="28" y="273" fill="#9aa0a6" font-size="13">OneBehind</text>
+  <text x="28" y="293" fill="#9aa0a6" font-size="12">same heavy work</text>
   <rect x="204" y="224" width="140" height="26" rx="6" fill="#6f9bd1"/>
   <rect x="470" y="224" width="140" height="26" rx="6" fill="#6f9bd1" opacity="0.5"/>
-  <g fill="#0f1a2b" font-size="13" text-anchor="middle"><text x="274" y="242">CPU · B</text><text x="540" y="242">CPU · C</text></g>
+  <g fill="#0f1a2b" font-size="13" text-anchor="middle"><text x="274" y="242">CPU · N</text><text x="540" y="242">CPU · N+1</text></g>
   <rect x="204" y="258" width="190" height="26" rx="6" fill="#2f8f6f" opacity="0.5"/>
   <rect x="470" y="258" width="190" height="26" rx="6" fill="#2f8f6f"/>
-  <g fill="#ffffff" font-size="13" text-anchor="middle"><text x="299" y="276">GPU · A</text><text x="565" y="276">GPU · B</text></g>
+  <g fill="#ffffff" font-size="13" text-anchor="middle"><text x="299" y="276">GPU · N−1</text><text x="565" y="276">GPU · N</text></g>
   <g fill="#d9a441"><circle cx="204" cy="297" r="5"/><circle cx="470" cy="297" r="5"/></g>
-  <g fill="#f3e2bd" font-size="12"><text x="214" y="301">P A</text><text x="480" y="301">P B</text></g>
+  <g fill="#f3e2bd" font-size="12"><text x="214" y="301">P N−1</text><text x="480" y="301">P N</text></g>
   <g fill="#2f8f6f"><circle cx="462" cy="317" r="5"/><circle cx="728" cy="317" r="5"/></g>
-  <g fill="#c9ccd2" font-size="12"><text x="452" y="321" text-anchor="end">A shown</text><text x="718" y="321" text-anchor="end">B shown</text></g>
+  <g fill="#c9ccd2" font-size="12"><text x="452" y="321" text-anchor="end">N−1 shown</text><text x="718" y="321" text-anchor="end">N shown</text></g>
   <!-- LLUltra: the same CPU work and a lighter draw fit before the next refresh. -->
   <text x="28" y="372" fill="#ffffff" font-size="15" font-weight="600">LLUltra</text>
-  <text x="28" y="393" fill="#9aa0a6" font-size="13">lighter draw</text>
+  <text x="28" y="393" fill="#9aa0a6" font-size="13">Immediate</text>
+  <text x="28" y="413" fill="#9aa0a6" font-size="12">lighter GPU draw</text>
   <rect x="204" y="344" width="140" height="26" rx="6" fill="#6f9bd1"/>
-  <text x="274" y="362" fill="#0f1a2b" font-size="13" text-anchor="middle">CPU · B</text>
+  <text x="274" y="362" fill="#0f1a2b" font-size="13" text-anchor="middle">CPU · N</text>
   <rect x="344" y="378" width="100" height="26" rx="6" fill="#2f8f6f"/>
-  <text x="394" y="396" fill="#ffffff" font-size="13" text-anchor="middle">GPU · B</text>
+  <text x="394" y="396" fill="#ffffff" font-size="13" text-anchor="middle">GPU · N</text>
   <circle cx="344" cy="417" r="5" fill="#d9a441"/>
-  <text x="354" y="421" fill="#f3e2bd" font-size="12">P B</text>
+  <text x="354" y="421" fill="#f3e2bd" font-size="12">P N</text>
   <circle cx="462" cy="437" r="5" fill="#2f8f6f"/>
-  <text x="472" y="441" fill="#c9ccd2" font-size="12">B shown sooner</text>
+  <text x="472" y="441" fill="#c9ccd2" font-size="12">N shown sooner</text>
   <g fill="#9aa0a6" font-size="13"><text x="482" y="365">CPU + GPU finish</text><text x="482" y="387">before the next refresh.</text></g>
   <!-- Heavy work that fits separately no longer fits before that earlier refresh. -->
   <text x="28" y="492" fill="#ffffff" font-size="15" font-weight="600">LLUltra</text>
-  <text x="28" y="513" fill="#9aa0a6" font-size="13">same heavy work</text>
+  <text x="28" y="513" fill="#9aa0a6" font-size="13">Immediate</text>
+  <text x="28" y="533" fill="#9aa0a6" font-size="12">same heavy work</text>
   <rect x="204" y="464" width="140" height="26" rx="6" fill="#6f9bd1"/>
-  <text x="274" y="482" fill="#0f1a2b" font-size="13" text-anchor="middle">CPU · B</text>
+  <text x="274" y="482" fill="#0f1a2b" font-size="13" text-anchor="middle">CPU · N</text>
   <rect x="344" y="498" width="190" height="26" rx="6" fill="#2f8f6f"/>
-  <text x="439" y="516" fill="#ffffff" font-size="13" text-anchor="middle">GPU · B</text>
+  <text x="439" y="516" fill="#ffffff" font-size="13" text-anchor="middle">GPU · N</text>
   <circle cx="344" cy="537" r="5" fill="#d9a441"/>
-  <text x="354" y="541" fill="#f3e2bd" font-size="12">P B</text>
+  <text x="354" y="541" fill="#f3e2bd" font-size="12">P N</text>
   <circle cx="462" cy="557" r="5" fill="#c0564f"/>
   <text x="472" y="561" fill="#e0a09a" font-size="12">missed</text>
   <circle cx="728" cy="557" r="5" fill="#2f8f6f"/>
-  <text x="718" y="561" fill="#c9ccd2" font-size="12" text-anchor="end">B shown</text>
+  <text x="718" y="561" fill="#c9ccd2" font-size="12" text-anchor="end">N shown</text>
   <text x="548" y="516" fill="#9aa0a6" font-size="13">GPU runs past deadline</text>
-  <text x="28" y="592" fill="#c9ccd2" font-size="13">Vanilla and LessLag both retain overlap; their full input-to-display delay differs.</text>
+  <text x="28" y="592" fill="#c9ccd2" font-size="13">N−2, N−1 and N illustrate progressively newer content at the same simulation point.</text>
   <g fill="#9aa0a6" font-size="12">
-    <text x="28" y="618">Blue: CPU. Green bars: GPU. P: CPU request, not the moment an image becomes visible.</text>
-    <text x="28" y="638">Green dots: assumed display events after GPU completion and timely display acceptance.</text>
+    <text x="28" y="614">These are not buffer IDs or measured ages; cyclic image-index offsets do not establish ages.</text>
+    <text x="28" y="636">Blue: CPU. Green bars: GPU. P: CPU request, not the moment an image becomes visible.</text>
+    <text x="28" y="656">Green dots: assumed display events after GPU completion and timely display acceptance.</text>
   </g>
 </svg>

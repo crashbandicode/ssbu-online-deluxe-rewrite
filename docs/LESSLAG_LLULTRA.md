@@ -26,7 +26,9 @@ A framebuffer is reusable memory; a frame is the picture drawn into it. The pres
 
 Measured in Eden on 0.5.2 as captured images from an injected input to the first image showing the response. They are captured-response frames, not controller-to-photon timings. Full tables and clips: [Measured input delay](../README.md#measured-input-delay). Method: [Measuring frames removed by LessLag and LLUltra](LATENCY_METHODOLOGY.md).
 
-![Vanilla and LessLag retain rendering overlap; LLUltra can show the result sooner but heavy work can miss a refresh](media/llultra-deadline-tradeoff.svg)
+![At CPU simulation N, Vanilla conceptually renders N−2, LessLag N−1 and LLUltra N; heavy GPU work can make LLUltra miss its next refresh](media/llultra-deadline-tradeoff.svg)
+
+At the same CPU simulation point N, the image labels N−2, N−1 and N illustrate the relative depth of TwoBehind, OneBehind and Immediate. These are conceptual content ages, not measured frame ages or fixed buffer identities. The implementation uses cyclic image selection; its offsets alone do not establish those ages.
 
 Illustrative timings. In console Training captures on 0.5.2, expensive moves caused FPS drops in LLUltra while Vanilla and LessLag held their frame rate in those sessions. This is a scoped observation, not a guarantee for every scene or device. See [Implementation and timing tradeoffs](RENDERING.md#implementation-and-timing-tradeoffs).
 
