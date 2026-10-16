@@ -2487,6 +2487,40 @@ gaps stated there: no NSO session, no first boot without `config.ini`, no
 plugin option edit, no own-page plugin, no console run. Both Eden profiles
 were restored afterwards (journal `RESTORED`, SHA-256 verified).
 
+### 0.5.3 — 2026-10-16: clock probe for the ledger, L+R-only window chord, bundle tool (host tests only)
+
+Operator: the LLUltra work must run at stock clocks, and after Horizon OC
+2.6.0 went back on the card ("did you add oc detection just in case we
+accidentally keep it enabled?") nothing recorded the clock state; also "I
+don't want ZL+ZR to activate it, just L+R". Commit 8dde0f2:
+`clock_probe` checks the Horizon-OC files at boot (`atmosphere/kips/hoc.kip`,
+hoc-clk `boot2.flag`, a `[01006A800016E000]` section and `uncapped_clocks`
+in `config/horizon-oc/config.ini`) and times 2^20 dependent adds against the
+system tick every 5 s on the diagnostics thread (one cycle per dependent add
+on the A57: about 1020 MHz stock, 1785 under the game's loading boost or an
+OC profile; a preempted sample reads lower, never higher). Event code 111
+(a = MHz, b = HOC bits) at boot, on every stock/OC change and once a minute;
+`# clock_mhz` / `# clock` / `# hoc` header lines in both capture CSVs
+(`tools/analyze_timing.py` reads `# key=value` anywhere); `clock_mhz` /
+`clock` / `hoc` in `renderer-status.txt`; Performance row **Clock**. The
+window chord is L+R only: ZL+ZR no longer cycles the window, opens Debug or
+cycles the peer. `tools/bundle.py` assembles the two SD-layout release zips
+(plugins only; plugins + Horizon OC from the upstream release asset with a
+hekate snippet, README and hashed manifest) outside the repository.
+Evidence: 309 lib tests (HOC bits/labels, config parse, MHz estimate and
+classification at 1020/1785/1224, header and status lines, overlay tests
+asserting the triggers do nothing), clippy `-D warnings`,
+`--no-default-features`, Skyline release build (the asm loop compiles for
+aarch64); package `artifacts/e4718545d048c434/` (build
+`0.5.3-8dde0f28167c-1792175817`, NRO 1,486,848 B, SHA-256
+`e4718545d048c4347d04288ca80b3f24e52e52ff8c8282d722527c2db353f12e`)
+deployed to the card over DBI MTP next to FX Control `0.2.0-0cffbac9d16e`.
+Bundles `bundles-1016/ssbu-online-deluxe-0.5.3-8dde0f2-bundle.zip` (4 files)
+and `…-bundle-hoc.zip` (33 files, Horizon OC 2.6.0-rel for Atmosphère
+1.12.1) in the evidence root, not attached to a release. **Not yet booted;
+the 1020/1785 reading is a calculation from the A57 add latency, not a
+console measurement until the first boot's event 111 is read.**
+
 ### 0.5.3 — 2026-10-16: `hide_pages` + page rows, `perf_view` + PerfView row (host tests only)
 
 Operator requests after the first good 0.5.3 boot (Kirby Hammer cells 1–4
