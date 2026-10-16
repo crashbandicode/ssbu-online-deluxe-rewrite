@@ -17,6 +17,9 @@ character select on the console). 0.5.0 moved character FX out to the separate
 lets plugins add their own pages to the window cycle. Every release on Forgejo
 carries the NRO and its manifest. Install notes: [docs/INSTALL.md](docs/INSTALL.md).
 
+This README also describes development changes marked 0.5.2 and 0.5.3,
+which are not included in the published 0.5.1 release.
+
 > **Install only this NRO.** The rewrite replaces the original Online Deluxe
 > fork (`libssbu_online_deluxe*.nro`), SsbuSync (`libssbusync.nro`) and the
 > PIA manager (`libssbu_pia_manager.nro`). Remove those three; do not run them
@@ -37,7 +40,7 @@ carries the NRO and its manifest. Install notes: [docs/INSTALL.md](docs/INSTALL.
 
 More in [Screenshots](docs/SCREENSHOTS.md).
 
-## Additional optimizations not yet present in Deluxe
+## Optimizations added by this rewrite
 
 For the rendering basics, see [How Deluxe LessLag and LLUltra work](docs/LESSLAG_LLULTRA.md).
 
@@ -131,12 +134,13 @@ fighters get LLDoubles. How Auto recognises an online match, the cleanup hold
 
 Captured-response trials in Eden: frames from a synthetic input to the first
 visible response, three trials per cell, at two injection phases. The earlier
-columns are build `b19b7d94ae136e55`; the 0.5.2 columns are the 0.5.2
+build is identified by its binary hash, `b19b7d94ae136e55…`. The 0.5.2
+columns are the 0.5.2
 NRO `1525e3e0` (build `0.5.2-ce0145a2155c`), measured on 2026-10-15
 with the same method, after LLUltra and LLDoubles started presenting at the
 flush as LessLag does.
 
-| Profile | Normal phase (b19) | Later phase (b19) | Normal phase (0.5.2) | Later phase (0.5.2) | Frames saved vs Vanilla (0.5.2) |
+| Profile | Normal phase ([earlier build](docs/PERFORMANCE.md#final-renderer-regression-2026-10-07)) | Later phase ([earlier build](docs/PERFORMANCE.md#final-renderer-regression-2026-10-07)) | Normal phase (0.5.2) | Later phase (0.5.2) | Frames saved vs Vanilla (0.5.2) |
 | --- | --- | --- | --- | --- | --- |
 | Vanilla | 6, 6, 6 | 6, 6, 6 | 6, 6, 6 | 6, 6, 6 | — |
 | LessLag | 3, 3, 3 | 3, 3, 3 | 3, 3, 3 | 3, 3, 3 | **3** |
@@ -172,7 +176,7 @@ trials, the 2-frame result occurred four times and the 3-frame result twice.
 
 LLDoubles was measured as a manual profile in two-fighter Training. These are
 emulator screenshots with synthetic input, not Switch input-to-photon
-measurements. The b19 columns predate 0.4.0's present-at-flush change to
+measurements. The earlier columns predate 0.4.0's present-at-flush change to
 LessLag, which removed the console's character-select stall (49.9 → 59.85 fps
 on the hand sweep) without changing the frame count claim; the 0.5.0 release
 NRO re-measured on 2026-10-15 gave Vanilla 6, LessLag 3, LLUltra 2 (normal) and

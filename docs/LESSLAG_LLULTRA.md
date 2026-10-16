@@ -59,4 +59,4 @@ Finally, **dispatcher backoff and present-at-flush** reduce wasted CPU work and 
 
 Dispatcher backoff briefly sleeps instead of repeatedly checking empty work queues; it runs in every profile, Vanilla included. Present-at-flush queues an image as soon as its final drawing commands are submitted, before the next CPU update. Submission does not mean the GPU has finished or the image is on screen. These additions support smoothness rather than independently explaining the original latency reduction; the captured-response counts were unchanged after present-at-flush.
 
-See the diagrams under [Additional optimizations not yet present in Deluxe](../README.md#additional-optimizations-not-yet-present-in-deluxe), [Dispatcher backoff](DISPATCHER_BACKOFF.md) and [Present at the flush](RENDERING.md#present-at-the-flush-040). Full profile behavior is in [Rendering profiles](RENDERING.md).
+See the diagrams under [Optimizations added by this rewrite](../README.md#optimizations-added-by-this-rewrite), [Dispatcher backoff](DISPATCHER_BACKOFF.md) and [Present at the flush](RENDERING.md#present-at-the-flush-040). Full profile behavior is in [Rendering profiles](RENDERING.md).

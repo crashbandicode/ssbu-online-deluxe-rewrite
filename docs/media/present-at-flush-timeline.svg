@@ -1,6 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="760" height="480" viewBox="0 0 760 480" font-family="Segoe UI, Helvetica, Arial, sans-serif">
-  <rect x="0.5" y="0.5" width="759" height="479" rx="16" fill="#1b1c20" stroke="#3a3c42" stroke-width="1"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="504" viewBox="0 0 760 504" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect x="0.5" y="0.5" width="759" height="503" rx="16" fill="#1b1c20" stroke="#3a3c42" stroke-width="1"/>
   <text x="28" y="39" fill="#ffffff" font-size="18">Same frame, earlier presentation request</text>
+  <text x="28" y="63" fill="#9aa0a6" font-size="13">Same rendering profile, before and after present-at-flush.</text>
+  <g transform="translate(0 24)">
 
   <g fill="#9aa0a6" font-size="14" text-anchor="middle">
     <text x="174" y="78">0 ms</text>
@@ -52,5 +54,6 @@
   <g fill="#9aa0a6" font-size="13">
     <text x="28" y="439">Illustrative times, not a measured trace. Frame 99 commands are submitted at 5 ms.</text>
     <text x="28" y="461">Shown refreshes assume GPU completion and display acceptance in time.</text>
+  </g>
   </g>
 </svg>
