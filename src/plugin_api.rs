@@ -28,13 +28,24 @@ pub struct PluginOption {
     pub tones: Option<Vec<u8>>,
     /// `OPTION_FLAG_READ_ONLY`: a status row whose value follows `current`.
     pub locked: bool,
+    /// `OPTION_FLAG_HEADER` (version 4): label only, no choices, skipped by
+    /// Up/Down, never persisted, callbacks never called.
+    pub header: bool,
+    /// `OPTION_FLAG_INLINE` (version 4): every choice drawn on the row with
+    /// the current one marked.
+    pub inline: bool,
 }
 
 impl PluginOption {
-    /// A single choice, or a row flagged read-only, is a status row:
+    /// A single choice, a row flagged read-only, or a header is a status row:
     /// Left/Right do nothing and `request` is never called.
     pub fn read_only(&self) -> bool {
-        self.locked || self.choices.len() <= 1
+        self.header || self.locked || self.choices.len() <= 1
+    }
+
+    /// Whether Up/Down may land on this row.
+    pub fn selectable(&self) -> bool {
+        !self.header
     }
 
     /// Tone for `choice`; neutral when the plugin declared none.
@@ -289,10 +300,10 @@ pub unsafe fn parse_descriptor(desc: *const abi::PluginDesc) -> Result<ParsedPlu
         )?)
     };
     let option_count = desc.option_count as usize;
-    let max_options = if desc.abi_version >= 3 {
-        abi::MAX_OPTIONS
-    } else {
-        abi::MAX_OPTIONS_V2
+    let max_options = match desc.abi_version {
+        4.. => abi::MAX_OPTIONS,
+        3 => abi::MAX_OPTIONS_V3,
+        _ => abi::MAX_OPTIONS_V2,
     };
     if option_count == 0 || option_count > max_options {
         return Err(abi::REGISTER_ERR_INVALID);
@@ -309,14 +320,24 @@ pub unsafe fn parse_descriptor(desc: *const abi::PluginDesc) -> Result<ParsedPlu
     } else {
         std::slice::from_raw_parts(desc.options, option_count).to_vec()
     };
-    let allowed_flags = if desc.abi_version >= 2 {
-        abi::OPTION_FLAG_NO_PERSIST | abi::OPTION_FLAG_READ_ONLY
-    } else {
-        abi::OPTION_FLAG_NO_PERSIST
+    let allowed_flags = match desc.abi_version {
+        4.. => {
+            abi::OPTION_FLAG_NO_PERSIST
+                | abi::OPTION_FLAG_READ_ONLY
+                | abi::OPTION_FLAG_HEADER
+                | abi::OPTION_FLAG_INLINE
+        }
+        2 | 3 => abi::OPTION_FLAG_NO_PERSIST | abi::OPTION_FLAG_READ_ONLY,
+        _ => abi::OPTION_FLAG_NO_PERSIST,
     };
     let mut options = Vec::with_capacity(option_count);
     for raw in &raw_options {
         if raw.flags & !allowed_flags != 0 {
+            return Err(abi::REGISTER_ERR_INVALID);
+        }
+        let header = raw.flags & abi::OPTION_FLAG_HEADER != 0;
+        let inline = raw.flags & abi::OPTION_FLAG_INLINE != 0;
+        if header && inline {
             return Err(abi::REGISTER_ERR_INVALID);
         }
         let option_id = owned_id(raw.id)?;
@@ -325,6 +346,29 @@ pub unsafe fn parse_descriptor(desc: *const abi::PluginDesc) -> Result<ParsedPlu
         }
         let option_label = owned_label(raw.label)?;
         let choice_count = raw.choice_count as usize;
+        if header {
+            // A header carries its label and nothing else.
+            if choice_count != 0
+                || !raw.choices.is_null()
+                || !raw.choice_values.is_null()
+                || !raw.choice_tones.is_null()
+            {
+                return Err(abi::REGISTER_ERR_INVALID);
+            }
+            options.push(PluginOption {
+                id: option_id,
+                label: option_label,
+                choices: Vec::new(),
+                config_key: String::new(),
+                values: None,
+                persist: false,
+                tones: None,
+                locked: true,
+                header: true,
+                inline: false,
+            });
+            continue;
+        }
         if choice_count == 0 || choice_count > abi::MAX_CHOICES {
             return Err(abi::REGISTER_ERR_INVALID);
         }
@@ -371,6 +415,8 @@ pub unsafe fn parse_descriptor(desc: *const abi::PluginDesc) -> Result<ParsedPlu
             persist: raw.flags & abi::OPTION_FLAG_NO_PERSIST == 0 && !locked,
             tones,
             locked,
+            header: false,
+            inline,
         });
     }
     if options
@@ -707,6 +753,46 @@ pub fn move_plugin_row(selected: usize, direction: i8, total: usize) -> usize {
     ((selected.min(total as usize - 1) as i64 + i64::from(direction)).rem_euclid(total)) as usize
 }
 
+/// Whether each row of `rows` may hold the selection (headers may not).
+pub fn row_selectable(plugins: &[Arc<Plugin>], rows: &[PluginRow]) -> Vec<bool> {
+    rows.iter()
+        .map(|row| {
+            plugins
+                .get(row.plugin)
+                .and_then(|plugin| plugin.options.get(row.option))
+                .is_none_or(PluginOption::selectable)
+        })
+        .collect()
+}
+
+/// Steps to the adjacent selectable row, wrapping and skipping headers. A
+/// list without a selectable row behaves like [`move_plugin_row`].
+pub fn move_selectable_row(selected: usize, direction: i8, selectable: &[bool]) -> usize {
+    let total = selectable.len();
+    let mut row = move_plugin_row(selected, direction, total);
+    for _ in 0..total {
+        if selectable.get(row).copied().unwrap_or(true) {
+            break;
+        }
+        row = move_plugin_row(row, direction, total);
+    }
+    row
+}
+
+/// `selected` clamped into the list and moved forward (wrapping) onto the
+/// first selectable row, so a header never holds the selection.
+pub fn clamp_selectable_row(selected: usize, selectable: &[bool]) -> usize {
+    let total = selectable.len();
+    if total == 0 {
+        return 0;
+    }
+    let start = selected.min(total - 1);
+    if selectable[start] {
+        return start;
+    }
+    move_selectable_row(start, 1, selectable)
+}
+
 /// Fields shown per compact-strip page. The strip never scales text below
 /// readability for a long plugin list; it pages instead.
 pub const COMPACT_PAGE: usize = 4;
@@ -759,13 +845,19 @@ pub fn compact_line(fields: &[(String, ValueText, bool)]) -> String {
 
 /// The same row split into `(text, tone)` segments so the renderer can colour
 /// each value: `>Label:` and the separators stay neutral, the value and its
-/// pending marker take the choice's tone. Concatenating the texts gives
-/// [`compact_line`] exactly, so font fitting can use the joined string.
+/// pending marker take the choice's tone. A header field (empty value label;
+/// choice labels are never empty) is its label alone, without the colon.
+/// Concatenating the texts gives [`compact_line`] exactly, so font fitting
+/// can use the joined string.
 pub fn compact_segments(fields: &[(String, ValueText, bool)]) -> Vec<(String, u8)> {
     let mut segments = Vec::with_capacity(fields.len() * 3);
     for (index, (label, value, selected)) in fields.iter().enumerate() {
         if index > 0 {
             segments.push(("   ".to_owned(), abi::TONE_NEUTRAL));
+        }
+        if value.label.is_empty() {
+            segments.push((label.clone(), abi::TONE_NEUTRAL));
+            continue;
         }
         segments.push((
             format!("{}{label}:", if *selected { ">" } else { "" }),
@@ -777,6 +869,33 @@ pub fn compact_segments(fields: &[(String, ValueText, bool)]) -> Vec<(String, u8
         ));
     }
     segments
+}
+
+/// The value column of an inline row as `(text, tone, marked)` pieces: every
+/// choice in order, two spaces apart, the current one as `[Choice]` in its
+/// tone (plus `~` while a request is pending), the others neutral. With no
+/// current choice nothing is marked.
+pub fn inline_pieces(
+    option: &PluginOption,
+    current: Option<usize>,
+    pending: bool,
+) -> Vec<(String, u8, bool)> {
+    let mut pieces = Vec::with_capacity(option.choices.len() * 2);
+    for (index, choice) in option.choices.iter().enumerate() {
+        if index > 0 {
+            pieces.push(("  ".to_owned(), abi::TONE_NEUTRAL, false));
+        }
+        if current == Some(index) {
+            pieces.push((
+                format!("[{choice}]{}", if pending { "~" } else { "" }),
+                option.tone_of(index),
+                true,
+            ));
+        } else {
+            pieces.push((choice.clone(), abi::TONE_NEUTRAL, false));
+        }
+    }
+    pieces
 }
 
 /// Process-wide registry used by the runtime export and the overlay.
@@ -827,6 +946,11 @@ pub(crate) mod testing {
         pub no_persist: bool,
         pub tones: Option<&'static [u8]>,
         pub read_only: bool,
+        /// Version 4 header row: the choice list is ignored and sent as 0
+        /// choices with null tables.
+        pub header: bool,
+        /// Version 4 inline row.
+        pub inline: bool,
     }
 
     pub fn descriptor(
@@ -897,6 +1021,25 @@ pub(crate) mod testing {
             }
             if settings.read_only {
                 flags |= abi::OPTION_FLAG_READ_ONLY;
+            }
+            if settings.header {
+                flags |= abi::OPTION_FLAG_HEADER;
+            }
+            if settings.inline {
+                flags |= abi::OPTION_FLAG_INLINE;
+            }
+            if settings.header {
+                raw_options.push(abi::OptionDesc {
+                    id: oid_ptr,
+                    label: olabel_ptr,
+                    choices: std::ptr::null(),
+                    choice_count: 0,
+                    flags,
+                    config_key: key_ptr,
+                    choice_values: std::ptr::null(),
+                    choice_tones: std::ptr::null(),
+                });
+                continue;
             }
             raw_options.push(abi::OptionDesc {
                 id: oid_ptr,
@@ -1870,5 +2013,197 @@ mod tests {
         ]);
         assert_eq!(line, ">Replay:On~   Demo.Mode:B");
         assert!(!line.contains('\n'));
+    }
+
+    static GROUPED: FakePlugin = FakePlugin::new([1, 0, 2, 0], abi::REQUEST_APPLIED);
+
+    fn grouped_descriptor(version: u32) -> DescHolder {
+        let user = &GROUPED as *const FakePlugin as *mut c_void;
+        let mut holder = descriptor_with(
+            "fx",
+            "FX",
+            &[
+                ("kirby", "Kirby", &["On", "Off", "Reduced"]),
+                ("hdr_kirby", "Kirby", &[]),
+                (
+                    "kirby_hammer",
+                    "Hammer",
+                    &["Original", "Variant 1", "Variant 2", "Variant 3"],
+                ),
+                ("status", "EFF variants", &["Ready", "Pending"]),
+            ],
+            None,
+            &[
+                Persist::default(),
+                Persist {
+                    header: true,
+                    no_persist: true,
+                    read_only: true,
+                    ..Persist::default()
+                },
+                Persist {
+                    inline: true,
+                    no_persist: true,
+                    tones: Some(&[
+                        abi::TONE_NEUTRAL,
+                        abi::TONE_WARN,
+                        abi::TONE_WARN,
+                        abi::TONE_WARN,
+                    ]),
+                    ..Persist::default()
+                },
+                Persist {
+                    read_only: true,
+                    ..Persist::default()
+                },
+            ],
+            user,
+            Some(fake_current),
+            Some(fake_request),
+        );
+        holder.desc.abi_version = version;
+        holder
+    }
+
+    #[test]
+    fn version_four_header_and_inline_rows_parse_navigate_and_render() {
+        let registry = Registry::new();
+        let holder = grouped_descriptor(abi::ABI_VERSION);
+        assert_eq!(unsafe { registry.register_raw(&holder.desc) }, 0);
+        let plugins = registry.snapshot();
+        let plugin = plugins[0].clone();
+        let header = &plugin.options[1];
+        assert!(header.header && !header.inline);
+        assert!(header.choices.is_empty() && !header.persist && header.read_only());
+        assert!(!header.selectable());
+        let hammer = &plugin.options[2];
+        assert!(hammer.inline && !hammer.header && hammer.selectable());
+        assert!(!hammer.read_only());
+        assert_eq!(hammer.choices.len(), 4);
+        // The header answers nothing; nothing is asked of it.
+        assert_eq!(plugin.current(1), None);
+        assert_eq!(registry.step(0, 1, 1), None);
+        assert!(GROUPED.requests.lock().unwrap().is_empty());
+        // The inline row steps like any row and keeps its tone.
+        assert_eq!(registry.step(0, 2, 1).unwrap().requested, 3);
+        assert_eq!(GROUPED.requests.lock().unwrap().as_slice(), &[(2, 3)]);
+        GROUPED.values[2].store(3, Ordering::Relaxed);
+        let pieces = inline_pieces(hammer, plugin.current(2), false);
+        assert_eq!(
+            pieces,
+            vec![
+                ("Original".to_owned(), abi::TONE_NEUTRAL, false),
+                ("  ".to_owned(), abi::TONE_NEUTRAL, false),
+                ("Variant 1".to_owned(), abi::TONE_NEUTRAL, false),
+                ("  ".to_owned(), abi::TONE_NEUTRAL, false),
+                ("Variant 2".to_owned(), abi::TONE_NEUTRAL, false),
+                ("  ".to_owned(), abi::TONE_NEUTRAL, false),
+                ("[Variant 3]".to_owned(), abi::TONE_WARN, true),
+            ]
+        );
+        assert_eq!(
+            inline_pieces(hammer, Some(0), true)[0],
+            ("[Original]~".to_owned(), abi::TONE_NEUTRAL, true)
+        );
+        assert!(inline_pieces(hammer, None, false)
+            .iter()
+            .all(|(_, _, marked)| !marked));
+
+        // Navigation skips the header in both directions and never clamps
+        // onto it.
+        let rows = rows_for(&plugins, None);
+        assert_eq!(rows.len(), 4);
+        let selectable = row_selectable(&plugins, &rows);
+        assert_eq!(selectable, vec![true, false, true, true]);
+        assert_eq!(move_selectable_row(0, 1, &selectable), 2);
+        assert_eq!(move_selectable_row(2, -1, &selectable), 0);
+        assert_eq!(move_selectable_row(3, 1, &selectable), 0);
+        assert_eq!(clamp_selectable_row(1, &selectable), 2);
+        assert_eq!(clamp_selectable_row(9, &selectable), 3);
+        assert_eq!(clamp_selectable_row(0, &[]), 0);
+        assert_eq!(move_selectable_row(0, 1, &[false, false]), 1);
+
+        // The compact strip prints a header as its label alone.
+        let fields = vec![
+            (
+                "Kirby".to_owned(),
+                ValueText {
+                    label: String::new(),
+                    pending: false,
+                    tone: abi::TONE_NEUTRAL,
+                },
+                false,
+            ),
+            ("Hammer".to_owned(), registry.value(0, &plugin, 2), true),
+        ];
+        assert_eq!(compact_line(&fields), "Kirby   >Hammer:Variant 3");
+        assert_eq!(
+            compact_segments(&fields)[0],
+            ("Kirby".to_owned(), abi::TONE_NEUTRAL)
+        );
+    }
+
+    #[test]
+    fn version_four_rows_are_refused_by_older_descriptors_and_validated() {
+        // Version 3 knows neither flag.
+        let registry = Registry::new();
+        let holder = grouped_descriptor(3);
+        assert_eq!(
+            unsafe { registry.register_raw(&holder.desc) },
+            abi::REGISTER_ERR_INVALID
+        );
+        // A header must come without choices.
+        let mut holder = grouped_descriptor(abi::ABI_VERSION);
+        let borrowed_choices = holder._options[0].choices;
+        holder._options[1].choice_count = 1;
+        holder._options[1].choices = borrowed_choices;
+        assert_eq!(
+            unsafe { registry.register_raw(&holder.desc) },
+            abi::REGISTER_ERR_INVALID
+        );
+        // Header and inline together are refused.
+        let mut holder = grouped_descriptor(abi::ABI_VERSION);
+        holder._options[2].flags |= abi::OPTION_FLAG_HEADER;
+        assert_eq!(
+            unsafe { registry.register_raw(&holder.desc) },
+            abi::REGISTER_ERR_INVALID
+        );
+        // Option limits: 33 rows need version 4; 65 are too many for anyone.
+        let user = &GROUPED as *const FakePlugin as *mut c_void;
+        let ids: Vec<String> = (0..65).map(|index| format!("o{index}")).collect();
+        let choices: &[&str] = &["A", "B"];
+        let rows: Vec<(&str, &str, &[&str])> =
+            ids.iter().map(|id| (id.as_str(), "x", choices)).collect();
+        let mut wide = descriptor_with(
+            "wide",
+            "Wide",
+            &rows[..33],
+            None,
+            &[],
+            user,
+            Some(fake_current),
+            Some(fake_request),
+        );
+        wide.desc.abi_version = 3;
+        assert_eq!(
+            unsafe { registry.register_raw(&wide.desc) },
+            abi::REGISTER_ERR_INVALID
+        );
+        wide.desc.abi_version = abi::ABI_VERSION;
+        assert_eq!(unsafe { registry.register_raw(&wide.desc) }, 0);
+        let too_wide = descriptor_with(
+            "wider",
+            "Wider",
+            &rows,
+            None,
+            &[],
+            user,
+            Some(fake_current),
+            Some(fake_request),
+        );
+        assert_eq!(
+            unsafe { registry.register_raw(&too_wide.desc) },
+            abi::REGISTER_ERR_INVALID
+        );
     }
 }

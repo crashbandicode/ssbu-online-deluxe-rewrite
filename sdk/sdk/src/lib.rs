@@ -33,13 +33,15 @@
 //!
 //! # Descriptor version
 //!
-//! [`register`] sends descriptor version [`abi::ABI_VERSION`] (2). Each option
-//! is an [`abi::OptionDesc`] (56 bytes) with optional [`Tone`] bytes and the
-//! read-only flag. The exported host table stays version [`abi::TABLE_VERSION`]
-//! (1) under the same symbol. A host that answers `REGISTER_ERR_ABI` is retried
-//! once with descriptor version 1 ([`abi::OptionDescV1`], 48 bytes, no tones,
-//! read-only bit omitted). [`negotiated_descriptor_version`] reports which
-//! revision that host accepted.
+//! [`register`] sends descriptor version [`abi::ABI_VERSION`] (4). Each option
+//! is an [`abi::OptionDesc`] (56 bytes) with optional [`Tone`] bytes, the
+//! read-only flag and, in version 4, a [`RowLayout`] (header or inline row).
+//! The exported host table stays version [`abi::TABLE_VERSION`] (1) under the
+//! same symbol. A host that answers `REGISTER_ERR_ABI` is retried with
+//! descriptor version 3 (same rows, 32 options; not when a row needs version
+//! 4), then 2 (no own page, 8 options), then 1 ([`abi::OptionDescV1`],
+//! 48 bytes, no tones, read-only bit omitted). [`negotiated_descriptor_version`]
+//! reports which revision that host accepted.
 
 use std::ffi::{c_char, c_void, CString};
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -103,11 +105,29 @@ pub struct OptionSpec {
     /// If a host calls `request` anyway, the SDK answers
     /// [`RequestStatus::Rejected`].
     pub read_only: bool,
+    /// How the host draws the row (descriptor version 4). A spec with any row
+    /// other than [`RowLayout::Value`] needs a version 4 host: the SDK does
+    /// not retry it with an older descriptor.
+    pub layout: RowLayout,
+}
+
+/// Row presentation (descriptor version 4 flags).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum RowLayout {
+    /// `Label: current choice`, Left/Right cycle the choice.
+    #[default]
+    Value,
+    /// Every choice on the row's line with the current one marked
+    /// (`OPTION_FLAG_INLINE`); Left/Right cycle as usual.
+    Inline,
+    /// Label only, no choices, skipped by Up/Down, never persisted, callbacks
+    /// never called (`OPTION_FLAG_HEADER`). Use [`OptionSpec::header`].
+    Header,
 }
 
 impl OptionSpec {
-    /// An option with persistence, tone and read-only fields defaulted
-    /// (`None`/`false`).
+    /// An option with persistence, tone, read-only and layout fields defaulted
+    /// (`None`/`false`/[`RowLayout::Value`]).
     pub const fn new(
         id: &'static str,
         label: &'static str,
@@ -122,7 +142,28 @@ impl OptionSpec {
             no_persist: false,
             tones: None,
             read_only: false,
+            layout: RowLayout::Value,
         }
+    }
+
+    /// A header row: `label` alone, not selectable (descriptor version 4).
+    pub const fn header(id: &'static str, label: &'static str) -> Self {
+        Self {
+            id,
+            label,
+            choices: &[],
+            config_key: None,
+            values: None,
+            no_persist: true,
+            tones: None,
+            read_only: true,
+            layout: RowLayout::Header,
+        }
+    }
+
+    /// Whether this row needs a version 4 host.
+    pub const fn needs_version_4(&self) -> bool {
+        !matches!(self.layout, RowLayout::Value)
     }
 }
 
@@ -251,12 +292,13 @@ fn remember_negotiated(handle: i32, version: u32) {
 
 /// Descriptor revision the host accepted for `handle`.
 ///
-/// `Some(2)` is the current [`abi::OptionDesc`] layout (tones and the read-only
-/// flag). `Some(1)` means the host answered [`abi::REGISTER_ERR_ABI`] and the
-/// SDK retried once with [`abi::OptionDescV1`]: tones are omitted and
-/// [`abi::OPTION_FLAG_READ_ONLY`] is not set, because a version 1 host rejects
-/// unknown flag bits. `None` when this process did not register `handle`
-/// (or the record lock was poisoned).
+/// `Some(4)` is the current revision (header and inline rows, 64 options).
+/// `Some(3)` and `Some(2)` are the same [`abi::OptionDesc`] layout accepted by
+/// an older host (3: own page and 32 options; 2: tones and the read-only flag
+/// only). `Some(1)` means the host answered [`abi::REGISTER_ERR_ABI`] down to
+/// [`abi::OptionDescV1`]: tones are omitted and [`abi::OPTION_FLAG_READ_ONLY`]
+/// is not set, because a version 1 host rejects unknown flag bits. `None` when
+/// this process did not register `handle` (or the record lock was poisoned).
 pub fn negotiated_descriptor_version(handle: Handle) -> Option<u32> {
     NEGOTIATED_VERSIONS
         .lock()
@@ -353,11 +395,12 @@ pub fn register<H: PluginHandler>(spec: &PluginSpec, handler: H) -> Result<Handl
 /// is leaked for the life of the process because the host keeps its pointer.
 ///
 /// The first descriptor is version [`abi::ABI_VERSION`]. If the host returns
-/// [`abi::REGISTER_ERR_ABI`], this retries once with a version 1 descriptor
-/// (no tones, and without [`abi::OPTION_FLAG_READ_ONLY`], which a version 1
-/// host rejects). Only that final result decides whether the handler is leaked
-/// or reclaimed. The accepted revision is recorded for
-/// [`negotiated_descriptor_version`].
+/// [`abi::REGISTER_ERR_ABI`], this retries as version 3, 2 and finally 1 (no
+/// tones, and without [`abi::OPTION_FLAG_READ_ONLY`], which a version 1 host
+/// rejects), each step only while the spec fits that revision (a header or
+/// inline row needs version 4; more than 8 options need version 3). Only the
+/// final result decides whether the handler is leaked or reclaimed. The
+/// accepted revision is recorded for [`negotiated_descriptor_version`].
 ///
 /// # Safety
 ///
@@ -384,7 +427,7 @@ pub unsafe fn register_with<H: PluginHandler>(
             label: option.label.as_ptr(),
             choices: option.choice_ptrs.as_ptr(),
             choice_count: option.choice_ptrs.len() as u32,
-            flags: option_flags(option_spec, true),
+            flags: option_flags(option_spec, abi::ABI_VERSION),
             config_key: option
                 .config_key
                 .as_ref()
@@ -436,17 +479,34 @@ pub unsafe fn register_with<H: PluginHandler>(
     // caller guarantees `api.register` follows the ABI.
     let mut result = unsafe { (api.register)(&desc) };
     let mut accepted = abi::ABI_VERSION;
-    // A host before 0.5.0 answers REGISTER_ERR_ABI to version 3. Retry as
-    // version 2 (same rows, no own page, old option limit), then as version 1.
-    if result == abi::REGISTER_ERR_ABI && spec.options.len() <= abi::MAX_OPTIONS_V2 {
+    // A host before version 4 answers REGISTER_ERR_ABI. Retry as version 3
+    // (same rows, 32 options) unless a row needs version 4, then as version 2
+    // (no own page, 8 options), then as version 1.
+    let fits_version_3 = spec.options.len() <= abi::MAX_OPTIONS_V3
+        && !spec.options.iter().any(OptionSpec::needs_version_4);
+    if result == abi::REGISTER_ERR_ABI && fits_version_3 {
+        desc.abi_version = 3;
+        // Row flags are identical: no row carries a version 4 bit here.
+        // SAFETY: same contract as the first call; the handler box is still
+        // ours because the host refused the version 4 descriptor.
+        result = unsafe { (api.register)(&desc) };
+        accepted = 3;
+    }
+    if result == abi::REGISTER_ERR_ABI
+        && fits_version_3
+        && spec.options.len() <= abi::MAX_OPTIONS_V2
+    {
         desc.abi_version = 2;
         desc.flags = 0;
         // SAFETY: same contract as the first call; the handler box is still
-        // ours because the host refused the version 3 descriptor.
+        // ours because the host refused the earlier descriptors.
         result = unsafe { (api.register)(&desc) };
         accepted = 2;
     }
-    if result == abi::REGISTER_ERR_ABI && spec.options.len() <= abi::MAX_OPTIONS_V2 {
+    if result == abi::REGISTER_ERR_ABI
+        && fits_version_3
+        && spec.options.len() <= abi::MAX_OPTIONS_V2
+    {
         let v1_options = v1_option_descs(&strings, spec);
         desc.abi_version = 1;
         desc.flags = 0;
@@ -569,7 +629,13 @@ fn spec_is_valid(spec: &PluginSpec) -> bool {
     spec.options.iter().enumerate().all(|(index, option)| {
         abi::valid_id(option.id.as_bytes())
             && abi::valid_label(option.label.as_bytes())
-            && !option.choices.is_empty()
+            // A header carries no choices, values or tones; every other row
+            // has 1 to MAX_CHOICES choices.
+            && (if option.layout == RowLayout::Header {
+                option.choices.is_empty() && option.values.is_none() && option.tones.is_none()
+            } else {
+                !option.choices.is_empty()
+            })
             && option.choices.len() <= abi::MAX_CHOICES
             && option
                 .choices
@@ -638,15 +704,23 @@ unsafe extern "C" fn request_tramp<H: PluginHandler>(
     }
 }
 
-/// `OPTION_FLAG_*` bits for one option. Version 1 hosts reject unknown bits, so
-/// the read-only flag is included only for a version 2 descriptor.
-fn option_flags(spec: &OptionSpec, include_read_only: bool) -> u32 {
+/// `OPTION_FLAG_*` bits for one option in a descriptor of `version`. Hosts
+/// reject unknown bits, so the read-only flag needs version 2 and the row
+/// kinds version 4.
+fn option_flags(spec: &OptionSpec, version: u32) -> u32 {
     let mut flags = 0;
     if spec.no_persist {
         flags |= abi::OPTION_FLAG_NO_PERSIST;
     }
-    if include_read_only && spec.read_only {
+    if version >= 2 && spec.read_only {
         flags |= abi::OPTION_FLAG_READ_ONLY;
+    }
+    if version >= 4 {
+        match spec.layout {
+            RowLayout::Value => {}
+            RowLayout::Inline => flags |= abi::OPTION_FLAG_INLINE,
+            RowLayout::Header => flags |= abi::OPTION_FLAG_HEADER,
+        }
     }
     flags
 }
@@ -663,7 +737,7 @@ fn v1_option_descs(strings: &DescStrings, spec: &PluginSpec) -> Vec<abi::OptionD
             label: option.label.as_ptr(),
             choices: option.choice_ptrs.as_ptr(),
             choice_count: option.choice_ptrs.len() as u32,
-            flags: option_flags(option_spec, false),
+            flags: option_flags(option_spec, 1),
             config_key: option
                 .config_key
                 .as_ref()
@@ -780,6 +854,7 @@ mod tests {
         static CALLS: Cell<u32> = const { Cell::new(0) };
         static REJECT_V2: Cell<bool> = const { Cell::new(false) };
         static REJECT_V3: Cell<bool> = const { Cell::new(false) };
+        static REJECT_V4: Cell<bool> = const { Cell::new(false) };
         static VERSIONS: RefCell<Vec<u32>> = const { RefCell::new(Vec::new()) };
     }
 
@@ -874,11 +949,16 @@ mod tests {
         };
         SEEN.with(|slot| *slot.borrow_mut() = Some(seen));
         // REJECT_V2: a version 1 host (refuses every newer descriptor).
-        // REJECT_V3: a version 2 host (refuses only the current descriptor).
+        // REJECT_V3: a version 2 host (refuses version 3 and newer).
+        // REJECT_V4: a version 3 host, Deluxe 0.5.0 to 0.5.2 (refuses the
+        // current descriptor only).
         if REJECT_V2.with(Cell::get) && desc.abi_version >= 2 {
             return abi::REGISTER_ERR_ABI;
         }
-        if REJECT_V3.with(Cell::get) && desc.abi_version == abi::ABI_VERSION {
+        if REJECT_V3.with(Cell::get) && desc.abi_version >= 3 {
+            return abi::REGISTER_ERR_ABI;
+        }
+        if REJECT_V4.with(Cell::get) && desc.abi_version == abi::ABI_VERSION {
             return abi::REGISTER_ERR_ABI;
         }
         RESULT.with(Cell::get)
@@ -908,6 +988,7 @@ mod tests {
         SEEN.with(|slot| *slot.borrow_mut() = None);
         REJECT_V2.with(|cell| cell.set(false));
         REJECT_V3.with(|cell| cell.set(false));
+        REJECT_V4.with(|cell| cell.set(false));
         VERSIONS.with(|slot| slot.borrow_mut().clear());
     }
 
@@ -941,6 +1022,7 @@ mod tests {
             no_persist: false,
             tones: None,
             read_only: false,
+            layout: RowLayout::Value,
         },
         OptionSpec {
             id: "mode",
@@ -951,6 +1033,7 @@ mod tests {
             no_persist: false,
             tones: None,
             read_only: false,
+            layout: RowLayout::Value,
         },
         OptionSpec {
             id: "status",
@@ -961,6 +1044,7 @@ mod tests {
             no_persist: true,
             tones: None,
             read_only: false,
+            layout: RowLayout::Value,
         },
     ];
 
@@ -1463,10 +1547,10 @@ mod tests {
             let state = Arc::new(State::default());
             let result = unsafe { register_with(&table, &SPEC, Probe(state.clone())) };
             assert_eq!(result, Err(expected), "code {code}");
-            let expected_calls = if code == abi::REGISTER_ERR_ABI { 3 } else { 1 };
+            let expected_calls = if code == abi::REGISTER_ERR_ABI { 4 } else { 1 };
             assert_eq!(calls(), expected_calls, "code {code}");
             if code == abi::REGISTER_ERR_ABI {
-                assert_eq!(versions(), vec![abi::ABI_VERSION, 2, 1]);
+                assert_eq!(versions(), vec![abi::ABI_VERSION, 3, 2, 1]);
             }
             assert_eq!(
                 Arc::strong_count(&state),
@@ -1616,8 +1700,8 @@ mod tests {
         let state = Arc::new(State::default());
         let result = unsafe { register_with(&table, &spec, Probe(state.clone())) };
         assert_eq!(result, Ok(Handle(23)));
-        assert_eq!(calls(), 2);
-        assert_eq!(versions(), vec![abi::ABI_VERSION, 2]);
+        assert_eq!(calls(), 3);
+        assert_eq!(versions(), vec![abi::ABI_VERSION, 3, 2]);
         assert_eq!(negotiated_descriptor_version(Handle(23)), Some(2));
         let seen = seen();
         assert_eq!(seen.abi_version, 2);
@@ -1647,10 +1731,137 @@ mod tests {
         let table = fake_table(abi::TABLE_VERSION);
         let state = Arc::new(State::default());
         let result = unsafe { register_with(&table, &spec, Probe(state.clone())) };
-        // Nine options need a version 3 host; the old host's refusal stands.
+        // Nine options need a version 3 host: version 3 is tried, version 2
+        // is not, and the old host's refusal stands.
+        assert_eq!(result, Err(RegisterError::Abi));
+        assert_eq!(calls(), 2);
+        assert_eq!(versions(), vec![abi::ABI_VERSION, 3]);
+        assert_eq!(Arc::strong_count(&state), 1);
+    }
+
+    #[test]
+    fn a_version_3_host_gets_the_version_3_retry_with_the_same_rows() {
+        static CHOICES: [&str; 2] = ["A", "B"];
+        static OPTIONS: [OptionSpec; 9] = [OptionSpec::new("o", "x", &CHOICES); 9];
+        static IDS: [&str; 9] = ["o0", "o1", "o2", "o3", "o4", "o5", "o6", "o7", "o8"];
+        let options: Vec<OptionSpec> = OPTIONS
+            .iter()
+            .zip(IDS)
+            .map(|(option, id)| OptionSpec { id, ..*option })
+            .collect();
+        let options: &'static [OptionSpec] = Box::leak(options.into_boxed_slice());
+        let spec = PluginSpec {
+            own_page: true,
+            ..PluginSpec::new("wide", "Wide", options)
+        };
+        reset(25);
+        REJECT_V4.with(|cell| cell.set(true));
+        let table = fake_table(abi::TABLE_VERSION);
+        let state = Arc::new(State::default());
+        let result = unsafe { register_with(&table, &spec, Probe(state.clone())) };
+        assert_eq!(result, Ok(Handle(25)));
+        assert_eq!(calls(), 2);
+        assert_eq!(versions(), vec![abi::ABI_VERSION, 3]);
+        assert_eq!(negotiated_descriptor_version(Handle(25)), Some(3));
+        let seen = seen();
+        assert_eq!(seen.abi_version, 3);
+        // Version 3 keeps the own page and the 9 rows.
+        assert_eq!(seen.flags, abi::PLUGIN_FLAG_OWN_PAGE);
+        assert_eq!(seen.options.len(), 9);
+        assert_eq!(Arc::strong_count(&state), 2);
+    }
+
+    #[test]
+    fn header_and_inline_rows_carry_version_4_flags_and_need_a_version_4_host() {
+        static CHOICES: [&str; 3] = ["Original", "Variant 1", "Variant 2"];
+        static TONES: [Tone; 3] = [Tone::Neutral, Tone::Warn, Tone::Warn];
+        static OPTIONS: [OptionSpec; 3] = [
+            OptionSpec::new("mode", "Mode", &["A", "B"]),
+            OptionSpec::header("kirby", "Kirby"),
+            OptionSpec {
+                layout: RowLayout::Inline,
+                tones: Some(&TONES),
+                no_persist: true,
+                ..OptionSpec::new("kirby_hammer", "Hammer", &CHOICES)
+            },
+        ];
+        let spec = PluginSpec {
+            own_page: true,
+            ..PluginSpec::new("fx", "FX", &OPTIONS)
+        };
+        assert!(OPTIONS[1].needs_version_4() && OPTIONS[2].needs_version_4());
+        assert!(!OPTIONS[0].needs_version_4());
+
+        // A version 4 host: the row kinds travel as flags, the header has no
+        // choices and no tables.
+        reset(26);
+        let table = fake_table(abi::TABLE_VERSION);
+        let state = Arc::new(State::default());
+        let result = unsafe { register_with(&table, &spec, Probe(state.clone())) };
+        assert_eq!(result, Ok(Handle(26)));
+        assert_eq!(versions(), vec![abi::ABI_VERSION]);
+        let seen = seen();
+        assert_eq!(seen.abi_version, abi::ABI_VERSION);
+        assert_eq!(seen.options[0].flags, 0);
+        assert_eq!(
+            seen.options[1].flags,
+            abi::OPTION_FLAG_HEADER | abi::OPTION_FLAG_READ_ONLY | abi::OPTION_FLAG_NO_PERSIST
+        );
+        assert!(seen.options[1].choices.is_empty());
+        assert_eq!(seen.options[1].values, None);
+        assert_eq!(seen.options[1].tones, None);
+        assert_eq!(
+            seen.options[2].flags,
+            abi::OPTION_FLAG_INLINE | abi::OPTION_FLAG_NO_PERSIST
+        );
+        assert_eq!(seen.options[2].choices, CHOICES);
+        assert_eq!(seen.options[2].tones.as_deref(), Some(&[0u8, 2, 2][..]));
+        // The header answers nothing and refuses everything; the inline row
+        // behaves like any other.
+        let current = seen.current.unwrap();
+        let request = seen.request.unwrap();
+        assert_eq!(unsafe { current(seen.user, 1) }, abi::CHOICE_UNAVAILABLE);
+        assert_eq!(unsafe { request(seen.user, 1, 0) }, abi::REQUEST_REJECTED);
+        assert_eq!(unsafe { request(seen.user, 2, 2) }, abi::REQUEST_APPLIED);
+        assert_eq!(state.requests.lock().unwrap().as_slice(), &[(2, 2)]);
+
+        // A version 3 host refuses version 4, and a spec with these rows is
+        // not retried: the refusal stands after one call.
+        reset(27);
+        REJECT_V4.with(|cell| cell.set(true));
+        let state = Arc::new(State::default());
+        let result = unsafe { register_with(&table, &spec, Probe(state.clone())) };
         assert_eq!(result, Err(RegisterError::Abi));
         assert_eq!(calls(), 1);
         assert_eq!(Arc::strong_count(&state), 1);
+
+        // A header with choices, values or tones is invalid before any call.
+        static BAD_HEADERS: [OptionSpec; 3] = [
+            OptionSpec {
+                choices: &["x"],
+                ..OptionSpec::header("h", "H")
+            },
+            OptionSpec {
+                values: Some(&[]),
+                ..OptionSpec::header("h", "H")
+            },
+            OptionSpec {
+                tones: Some(&[]),
+                ..OptionSpec::header("h", "H")
+            },
+        ];
+        for (index, bad) in BAD_HEADERS.iter().enumerate() {
+            reset(0);
+            let bad_options: &'static [OptionSpec] = Box::leak(Box::new([*bad]));
+            let bad_spec = PluginSpec::new("bad", "Bad", bad_options);
+            let state = Arc::new(State::default());
+            assert_eq!(
+                unsafe { register_with(&table, &bad_spec, Probe(state.clone())) },
+                Err(RegisterError::Invalid),
+                "header {index}"
+            );
+            assert_eq!(calls(), 0, "header {index}");
+        }
     }
 
     #[test]
@@ -1661,8 +1872,8 @@ mod tests {
         let state = Arc::new(State::default());
         let result = unsafe { register_with(&table, &TONE_SPEC, Probe(state.clone())) };
         assert_eq!(result, Ok(Handle(22)));
-        assert_eq!(calls(), 3);
-        assert_eq!(versions(), vec![abi::ABI_VERSION, 2, 1]);
+        assert_eq!(calls(), 4);
+        assert_eq!(versions(), vec![abi::ABI_VERSION, 3, 2, 1]);
         assert_eq!(negotiated_descriptor_version(Handle(22)), Some(1));
         let seen = seen();
         assert_eq!(seen.abi_version, 1);
@@ -1700,8 +1911,8 @@ mod tests {
         let state = Arc::new(State::default());
         let result = unsafe { register_with(&table, &TONE_SPEC, Probe(state.clone())) };
         assert_eq!(result, Err(RegisterError::Abi));
-        assert_eq!(calls(), 3);
-        assert_eq!(versions(), vec![abi::ABI_VERSION, 2, 1]);
+        assert_eq!(calls(), 4);
+        assert_eq!(versions(), vec![abi::ABI_VERSION, 3, 2, 1]);
         assert_eq!(Arc::strong_count(&state), 1);
         // The refused attempts stored a version 1 view; nothing was recorded.
         assert_eq!(seen().abi_version, 1);

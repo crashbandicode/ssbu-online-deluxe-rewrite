@@ -44,6 +44,7 @@ your NRO still loads when Deluxe is not installed.
            no_persist: false,
            tones: Some(&TONES),              // "On" draws green
            read_only: false,
+           layout: RowLayout::Value,         // or Inline; OptionSpec::header() for a title row
        }],
        config_path: Some("sd:/ultimate/my_plugin/config.ini"), // … into this file
        own_page: false,  // true = a page of the window cycle titled "Record"
@@ -72,9 +73,14 @@ your NRO still loads when Deluxe is not installed.
 
 That is the whole integration. A plugin with many rows (one per fighter, say)
 sets `own_page: true` and gets its own page in the window cycle, titled with
-its label and visited after the shared Plugins page; up to 32 options fit
-(Deluxe 0.5.0, descriptor version 3; older hosts show the rows on the shared
-page and accept 8). A plugin that scopes its behaviour to online play reads
+its label and visited after the shared Plugins page; up to 64 options fit
+(Deluxe 0.5.3, descriptor version 4; 32 on 0.5.0 to 0.5.2, and older hosts
+show the rows on the shared page and accept 8). Two row kinds group a long
+page (descriptor version 4): `OptionSpec::header(id, label)` is a title row
+that Up/Down skip, and `layout: RowLayout::Inline` draws every choice of a row
+on its one line with the current one bracketed, so a set such as
+`[Original]  Variant 1  Variant 2` is read at a glance. A plugin that scopes
+its behaviour to online play reads
 `deluxe_plugin_sdk::host_online_context()` instead of hooking the game's
 scene sites itself: it returns the host's ready / online / match / training
 bits, or `None` when Deluxe is absent or older than 0.5.0.
@@ -82,8 +88,9 @@ bits, or `None` when Deluxe is absent or older than 0.5.0.
 [FX Control](https://git.syntaxbyexample.com/intpa/ssbu-fx-control) is the
 first plugin built this way. It is the character-FX feature that Deluxe
 carried until 0.5.0, now a separate NRO: an own page titled **FX Control**
-with a scope row, an all-fighters row and one row per covered fighter. Its
-Online scope reads `host_online_context()`.
+with a scope row, an all-fighters row, one row per covered fighter and, under
+a header per fighter, an inline row per move selecting its Reduced variant.
+Its Online scope reads `host_online_context()`.
 
 `request` is a request, not a command: return
 `Pending` to apply a change later (the row shows `(pending)` until `current`

@@ -50,9 +50,11 @@ use core::ffi::{c_char, c_void};
 
 /// Descriptor revision carried in [`PluginDesc::abi_version`]. Version 2 adds
 /// [`OptionDesc::choice_tones`] and [`OPTION_FLAG_READ_ONLY`]; version 3 keeps
-/// the same layouts and adds [`PLUGIN_FLAG_OWN_PAGE`] and the larger
-/// [`MAX_OPTIONS`]. The host also accepts version 1 and 2 descriptors.
-pub const ABI_VERSION: u32 = 3;
+/// the same layouts and adds [`PLUGIN_FLAG_OWN_PAGE`] and [`MAX_OPTIONS_V3`];
+/// version 4 keeps the layouts again and adds the row kinds
+/// [`OPTION_FLAG_HEADER`] and [`OPTION_FLAG_INLINE`] and the larger
+/// [`MAX_OPTIONS`]. The host also accepts version 1 to 3 descriptors.
+pub const ABI_VERSION: u32 = 4;
 /// Oldest descriptor revision the host accepts.
 pub const MIN_ABI_VERSION: u32 = 1;
 /// Revision carried in [`PluginApiV1::abi_version`]. The exported table shape
@@ -67,10 +69,14 @@ pub const API_SYMBOL_C: &[u8] = b"ssbu_online_deluxe_plugin_api_v1\0";
 
 /// Most plugins one host accepts.
 pub const MAX_PLUGINS: usize = 16;
-/// Most options one plugin may declare with a version 3 descriptor (one row
-/// per fighter fits). Hosts read descriptor versions 1 and 2 against
+/// Most options one plugin may declare with a version 4 descriptor (a row per
+/// fighter plus a header and an inline row per move fits). Hosts read
+/// version 3 against [`MAX_OPTIONS_V3`] and versions 1 and 2 against
 /// [`MAX_OPTIONS_V2`].
-pub const MAX_OPTIONS: usize = 32;
+pub const MAX_OPTIONS: usize = 64;
+/// Option limit for descriptor version 3, and for every host that predates
+/// version 4.
+pub const MAX_OPTIONS_V3: usize = 32;
 /// Option limit for descriptor versions 1 and 2, and for every host that
 /// predates version 3.
 pub const MAX_OPTIONS_V2: usize = 8;
@@ -118,6 +124,17 @@ pub const OPTION_FLAG_NO_PERSIST: u32 = 1 << 0;
 /// `request` is never called, and the value shown is whatever `current`
 /// reports, so a multi-choice row can display state such as Ok/Warn/Fail.
 pub const OPTION_FLAG_READ_ONLY: u32 = 1 << 1;
+/// `OptionDesc::flags` (version 4): a header. The row shows only its label,
+/// flush with the page: Up/Down skip it, Left/Right never reach it, `current`
+/// and `request` are never called and nothing is persisted. `choice_count`
+/// must be 0 and `choices`, `choice_values` and `choice_tones` null. Cannot
+/// be combined with [`OPTION_FLAG_INLINE`].
+pub const OPTION_FLAG_HEADER: u32 = 1 << 2;
+/// `OptionDesc::flags` (version 4): draw every choice on the row's one line,
+/// in order, with the current choice marked (`[Choice]`, in its tone) instead
+/// of showing the current choice alone. Left/Right still move the choice and
+/// the compact strip still shows `Label:Value`.
+pub const OPTION_FLAG_INLINE: u32 = 1 << 3;
 
 /// `choice_tones` entry: default text colour.
 pub const TONE_NEUTRAL: u8 = 0;
@@ -168,7 +185,7 @@ pub type CurrentFn = unsafe extern "C" fn(user: *mut c_void, option: u32) -> u32
 /// assumes the change succeeded.
 pub type RequestFn = unsafe extern "C" fn(user: *mut c_void, option: u32, choice: u32) -> u32;
 
-/// One menu row (descriptor version 2, 56 bytes).
+/// One menu row (descriptor versions 2 to 4, 56 bytes).
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct OptionDesc {
@@ -337,8 +354,14 @@ mod tests {
         assert_eq!(core::mem::size_of::<PluginDesc>(), 72);
         assert_eq!(core::mem::size_of::<PluginApiV1>(), 32);
         assert_eq!(TABLE_VERSION, 1);
-        assert_eq!(ABI_VERSION, 3);
-        assert_eq!((MAX_OPTIONS, MAX_OPTIONS_V2), (32, 8));
+        assert_eq!(ABI_VERSION, 4);
+        assert_eq!((MAX_OPTIONS, MAX_OPTIONS_V3, MAX_OPTIONS_V2), (64, 32, 8));
+        assert_eq!(OPTION_FLAG_HEADER & OPTION_FLAG_INLINE, 0);
+        assert_eq!(
+            (OPTION_FLAG_HEADER | OPTION_FLAG_INLINE)
+                & (OPTION_FLAG_NO_PERSIST | OPTION_FLAG_READ_ONLY),
+            0
+        );
         assert_eq!(PLUGIN_FLAG_OWN_PAGE, 1);
         assert!(table_matches(32, 1));
         assert!(!table_matches(32, 2));
@@ -346,8 +369,9 @@ mod tests {
         assert!(descriptor_version_supported(1));
         assert!(descriptor_version_supported(2));
         assert!(descriptor_version_supported(3));
+        assert!(descriptor_version_supported(4));
         assert!(!descriptor_version_supported(0));
-        assert!(!descriptor_version_supported(4));
+        assert!(!descriptor_version_supported(5));
         assert_eq!(ONLINE_SYMBOL_C.len(), ONLINE_SYMBOL.len() + 1);
         assert_eq!(ONLINE_SYMBOL_C[ONLINE_SYMBOL.len()], 0);
         assert_eq!(

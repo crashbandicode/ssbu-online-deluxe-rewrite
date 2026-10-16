@@ -222,17 +222,20 @@ impl Overlay {
         if matches!(self.view, View::Plugins | View::PluginPage) {
             // Plugin rows never touch `Config`; the plugin owns the change.
             let page = (self.view == View::PluginPage).then_some(self.page);
-            let rows = crate::plugin_api::rows_for(&plugins.snapshot(), page);
+            let snapshot = plugins.snapshot();
+            let rows = crate::plugin_api::rows_for(&snapshot, page);
             if rows.is_empty() {
                 return false;
             }
-            self.plugin_row = self.plugin_row.min(rows.len() - 1);
+            // Header rows (descriptor version 4) never hold the selection.
+            let selectable = crate::plugin_api::row_selectable(&snapshot, &rows);
+            self.plugin_row = crate::plugin_api::clamp_selectable_row(self.plugin_row, &selectable);
             if pressed & UP != 0 {
                 self.plugin_row =
-                    crate::plugin_api::move_plugin_row(self.plugin_row, -1, rows.len());
+                    crate::plugin_api::move_selectable_row(self.plugin_row, -1, &selectable);
             } else if pressed & DOWN != 0 {
                 self.plugin_row =
-                    crate::plugin_api::move_plugin_row(self.plugin_row, 1, rows.len());
+                    crate::plugin_api::move_selectable_row(self.plugin_row, 1, &selectable);
             } else if !chord && pressed & (LEFT | RIGHT) != 0 {
                 let direction: i8 = if pressed & LEFT != 0 { -1 } else { 1 };
                 let row = rows[self.plugin_row];

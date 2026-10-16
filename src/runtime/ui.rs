@@ -295,6 +295,14 @@ fn tone_color(tone: u8) -> Option<Vec4> {
     }
 }
 
+/// Unselected choices of an inline plugin row.
+const INLINE_DIM: Vec4 = Vec4 {
+    x: 0.55,
+    y: 0.57,
+    z: 0.60,
+    w: 1.0,
+};
+
 fn marked(on: bool, label: &str) -> String {
     if on {
         format!("> {label}")
@@ -691,7 +699,17 @@ fn compact_plugin_lines(
                 } else {
                     compact_label(&plugin.label, &option.label, plugin.options.len())
                 },
-                registry.value(row.plugin, plugin, row.option),
+                if option.header {
+                    // A header has no value: the empty label makes
+                    // `compact_segments` print the label alone.
+                    crate::plugin_api::ValueText {
+                        label: String::new(),
+                        pending: false,
+                        tone: deluxe_plugin_abi::TONE_NEUTRAL,
+                    }
+                } else {
+                    registry.value(row.plugin, plugin, row.option)
+                },
                 start + offset == selected,
             )
         })
@@ -749,16 +767,39 @@ unsafe fn draw_plugins_vertical(
             previous_plugin = entry.plugin;
         }
         let option = &plugin.options[entry.option];
+        if option.header {
+            // Version 4 header: its label, flush with the page, never selected.
+            row(&option.label, "");
+            continue;
+        }
         let value = registry.value(entry.plugin, plugin, entry.option);
+        igTableNextRow(0, 0.0);
+        igTableNextColumn();
+        text(&marked(index == selected, &format!("  {}", option.label)));
+        igTableNextColumn();
+        if option.inline {
+            // Version 4 inline row: every choice on the line, the current one
+            // bracketed in its tone, the others dimmed.
+            let current = plugin.current(entry.option);
+            let pieces = crate::plugin_api::inline_pieces(option, current, value.pending);
+            for (piece, (piece_text, tone, current_piece)) in pieces.iter().enumerate() {
+                if piece > 0 {
+                    igSameLine(0.0, 0.0);
+                }
+                let color = if *current_piece {
+                    tone_color(*tone)
+                } else {
+                    Some(INLINE_DIM)
+                };
+                paint_text(piece_text, color);
+            }
+            continue;
+        }
         let value_text = if value.pending {
             format!("{} (pending)", value.label)
         } else {
             value.label
         };
-        igTableNextRow(0, 0.0);
-        igTableNextColumn();
-        text(&marked(index == selected, &format!("  {}", option.label)));
-        igTableNextColumn();
         paint_text(&value_text, tone_color(value.tone));
     }
     if end < rows.len() {

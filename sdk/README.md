@@ -4,25 +4,30 @@ A separately built Skyline NRO can add rows to the Online Deluxe menu without
 shipping any UI code. The plugin describes its options, the host draws them and
 asks the plugin to change them. The plugin owns its behavior and its saved state.
 
-Descriptor version is 3 (Deluxe 0.5.0): the `OptionDesc` and `PluginDesc`
+Descriptor version is 4 (Deluxe 0.5.3): the `OptionDesc` and `PluginDesc`
 layouts are those of version 2 (56 and 72 bytes; per-choice tones and a
-read-only flag), plus the plugin flag `PLUGIN_FLAG_OWN_PAGE` (a page of the
-window cycle titled with the plugin label instead of a group on the shared
-Plugins page) and an option limit of 32 instead of 8. The exported host table
-is still `PluginApiV1` at table version 1, under the unchanged symbol
-`ssbu_online_deluxe_plugin_api_v1`; `table_matches` compares the table against
-that table version, not against the descriptor version. A second export,
-`ssbu_online_deluxe_online_context_v1` (`extern "C" fn() -> u32`), returns the
-host's scene context as `ONLINE_CONTEXT_READY | ONLINE | MATCH | TRAINING`
-bits; the SDK wraps it as `host_online_context()`, `None` on older hosts. An
-old host answers `REGISTER_ERR_ABI` to a version 3 descriptor; the Rust SDK
-retries with version 2 (flag cleared) and then version 1 while the spec has at
-most 8 options.
+read-only flag), plus version 3's plugin flag `PLUGIN_FLAG_OWN_PAGE` (a page of
+the window cycle titled with the plugin label instead of a group on the shared
+Plugins page), and version 4's two row kinds, `OPTION_FLAG_HEADER` (a label-only
+row that Up/Down skip) and `OPTION_FLAG_INLINE` (every choice on the row's one
+line with the current one marked), with an option limit of 64 (32 in version 3,
+8 before). The exported host table is still `PluginApiV1` at table version 1,
+under the unchanged symbol `ssbu_online_deluxe_plugin_api_v1`; `table_matches`
+compares the table against that table version, not against the descriptor
+version. A second export, `ssbu_online_deluxe_online_context_v1`
+(`extern "C" fn() -> u32`), returns the host's scene context as
+`ONLINE_CONTEXT_READY | ONLINE | MATCH | TRAINING` bits; the SDK wraps it as
+`host_online_context()`, `None` on older hosts. An old host answers
+`REGISTER_ERR_ABI` to a version 4 descriptor; the Rust SDK retries with
+version 3 (same rows, at most 32 options, no header or inline row), then
+version 2 (page flag cleared) and version 1 while the spec has at most 8
+options.
 
 Pinned releases: git tag `v0.2.0` on the Forgejo repository
 (`intpa/ssbu-online-deluxe-rewrite`) carries `deluxe-plugin-abi` 2.0.0 and
 `deluxe-plugin-sdk` 2.0.0 (descriptor version 2); the 0.5.0 tag carries 3.0.0
-(descriptor version 3). Each tag is the tree the matching host NRO was built
+(descriptor version 3); 0.5.3 carries 4.0.0 (descriptor version 4: header and
+inline rows, 64 options). Each tag is the tree the matching host NRO was built
 from; the NRO's SHA-256 and size are recorded in `docs/VALIDATION.md`.
 Consumers depend on the crates by git tag (cargo finds the package by name
 anywhere in the repository) or clone the tag and depend by path.
@@ -164,6 +169,7 @@ Keep labels short. The strip is narrow and labels are limited to 24 bytes.
 
 | `abi_version` | Row type | Size | What it carries |
 | --- | --- | --- | --- |
+| 4 | `OptionDesc` | 56 | same rows as 3; `OptionDesc::flags` may carry `OPTION_FLAG_HEADER` or `OPTION_FLAG_INLINE`; 64 options |
 | 3 | `OptionDesc` | 56 | same rows as 2; `PluginDesc::flags` may carry `PLUGIN_FLAG_OWN_PAGE`; 32 options |
 | 2 | `OptionDesc` | 56 | `choice_tones` and `OPTION_FLAG_READ_ONLY` |
 | 1 | `OptionDescV1` | 48 | the same fields without tones |
@@ -173,21 +179,39 @@ bytes, its `abi_version` field is table version 1, and the symbol is still
 `ssbu_online_deluxe_plugin_api_v1`. A plugin built against the old table keeps
 resolving the same symbol.
 
-A host built before descriptor version 3 returns `REGISTER_ERR_ABI` for a
-version 3 descriptor. The Rust SDK then retries with `abi_version = 2` and
-`PluginDesc::flags = 0` (the own-page bit is unknown to that host), and if that
-is refused too, with `abi_version = 1`, an array of `OptionDescV1`, no tone
-pointer, and the read-only bit cleared (a version 1 host rejects unknown flag
-bits). Both retries happen only while the spec has at most 8 options; a wider
-spec needs a version 3 host and the refusal stands. `user` and the callbacks
-stay the same pointer. Only the final result leaks or drops the handler.
-`negotiated_descriptor_version(handle)` reports which descriptor was accepted
-(`Some(3)`, `Some(2)` or `Some(1)`). Other languages should do the same
-retries themselves. An own page needs a version 3 host; on the fallback the
-rows are still registered, on the shared Plugins page. Tones and read-only
-rows need a version 2 or later host; on the version 1 fallback the row is
-still registered, just without colour and without the read-only flag (a
-single-choice row is still read-only on every host).
+Version 4 row kinds (`OptionDesc::flags`, rejected as `REGISTER_ERR_INVALID`
+by older hosts):
+
+* `OPTION_FLAG_HEADER` (Rust `OptionSpec::header(id, label)`,
+  `RowLayout::Header`): the row shows only its label, flush with the page, as
+  a group title for the rows under it. Up/Down skip it, Left/Right never reach
+  it, `current` and `request` are never called for it and nothing is persisted.
+  `choice_count` must be 0 and `choices`, `choice_values` and `choice_tones`
+  null. In the compact strip it is its label alone, without a colon.
+* `OPTION_FLAG_INLINE` (Rust `RowLayout::Inline`): the value column shows every
+  choice in order, two spaces apart, the current one as `[Choice]` in its tone
+  (with `~` while a request is pending) and the others dimmed, so the whole set
+  is visible at once. Left/Right still move the choice, persistence is
+  unchanged, and the compact strip still shows `Label:Value`. A row cannot be
+  both header and inline.
+
+A host built before descriptor version 4 returns `REGISTER_ERR_ABI` for a
+version 4 descriptor. The Rust SDK then retries with `abi_version = 3` (the
+same rows) while the spec has at most 32 options and no header or inline row;
+then with `abi_version = 2` and `PluginDesc::flags = 0` (the own-page bit is
+unknown to that host), and if that is refused too, with `abi_version = 1`, an
+array of `OptionDescV1`, no tone pointer, and the read-only bit cleared (a
+version 1 host rejects unknown flag bits). The last two retries happen only
+while the spec has at most 8 options; a wider spec needs a version 3 host, a
+spec with a header or inline row needs a version 4 host, and the refusal
+stands. `user` and the callbacks stay the same pointer. Only the final result
+leaks or drops the handler. `negotiated_descriptor_version(handle)` reports
+which descriptor was accepted (`Some(4)` down to `Some(1)`). Other languages
+should do the same retries themselves. An own page needs a version 3 host; on
+the fallback the rows are still registered, on the shared Plugins page. Tones
+and read-only rows need a version 2 or later host; on the version 1 fallback
+the row is still registered, just without colour and without the read-only
+flag (a single-choice row is still read-only on every host).
 
 `choice_tones` is null for neutral text, or `choice_count` bytes, each
 `TONE_NEUTRAL` (0), `TONE_OK` (1), `TONE_WARN` (2) or `TONE_ERROR` (3). The Rust
@@ -425,21 +449,26 @@ The NRO lands at
 ## C sketch for other languages
 
 Everything is C layout with natural alignment on a 64-bit target. Sizes:
-`OptionDesc` 56 (descriptor version 2), `OptionDescV1` 48 (descriptor version 1),
-`PluginDesc` 72, `PluginApiV1` 32. `PluginDesc.abi_version` is 2 when `options`
-points at `OptionDesc`. The table's own `abi_version` stays 1. An old host
-returns `REGISTER_ERR_ABI` (-2) for version 2; retry once with version 1 and
-`OptionDescV1` (no `choice_tones`, and do not set `READ_ONLY`). Emulator and
-hardware behaviour of tones is not yet observed (Eden-verified 2026-10-12).
+`OptionDesc` 56 (descriptor versions 2 to 4), `OptionDescV1` 48 (descriptor
+version 1), `PluginDesc` 72, `PluginApiV1` 32. `PluginDesc.abi_version` is 2,
+3 or 4 when `options` points at `OptionDesc` (3 adds the own-page plugin flag
+and 32 options, 4 the header and inline row flags and 64 options). The
+table's own `abi_version` stays 1. An old host returns `REGISTER_ERR_ABI` (-2)
+for a version it predates; retry with the next lower version the spec fits,
+down to version 1 and `OptionDescV1` (no `choice_tones`, and do not set
+`READ_ONLY`). Emulator and hardware behaviour of tones is not yet observed
+(Eden-verified 2026-10-12).
 
 ```c
 #include <stdint.h>
 
-#define DELUXE_DESCRIPTOR_VERSION 2u
+#define DELUXE_DESCRIPTOR_VERSION 4u
 #define DELUXE_TABLE_VERSION 1u
 #define DELUXE_CHOICE_UNAVAILABLE 0xFFFFFFFFu
 #define DELUXE_OPTION_FLAG_NO_PERSIST (1u << 0)
-#define DELUXE_OPTION_FLAG_READ_ONLY (1u << 1) /* descriptor version 2 only */
+#define DELUXE_OPTION_FLAG_READ_ONLY (1u << 1) /* descriptor version 2 and later */
+#define DELUXE_OPTION_FLAG_HEADER (1u << 2)    /* version 4: label only, choice_count 0 */
+#define DELUXE_OPTION_FLAG_INLINE (1u << 3)    /* version 4: all choices on one line */
 #define DELUXE_TONE_NEUTRAL 0u
 #define DELUXE_TONE_OK 1u
 #define DELUXE_TONE_WARN 2u
@@ -452,7 +481,7 @@ typedef struct OptionDesc {
     const char *id;              /* NUL-terminated, [a-z0-9_]{1,32}, unique in plugin */
     const char *label;           /* NUL-terminated, 1..24 bytes */
     const char *const *choices;  /* choice_count NUL-terminated labels */
-    uint32_t choice_count;       /* 1..16 */
+    uint32_t choice_count;       /* 1..16; 0 for a HEADER row */
     uint32_t flags;              /* DELUXE_OPTION_FLAG_* bits, 0 when none */
     const char *config_key;      /* NULL = use id; else [a-z0-9_]{1,32} */
     const char *const *choice_values; /* NULL = write the decimal choice index; else
@@ -461,7 +490,7 @@ typedef struct OptionDesc {
     const uint8_t *choice_tones; /* NULL = neutral; else choice_count TONE_* bytes.
                                     The current choice is drawn in that colour in
                                     both the vertical table and the in-match strip. */
-} OptionDesc;                    /* sizeof == 56; PluginDesc.abi_version = 2 */
+} OptionDesc;                    /* sizeof == 56; PluginDesc.abi_version = 2, 3 or 4 */
 
 /* Descriptor version 1, for a host that returns REGISTER_ERR_ABI on version 2.
    Same prefix, no choice_tones. Do not set DELUXE_OPTION_FLAG_READ_ONLY.
@@ -478,7 +507,7 @@ typedef struct OptionDescV1 {
 
 typedef struct PluginDesc {
     uint32_t struct_size;        /* sizeof(PluginDesc) */
-    uint32_t abi_version;        /* 2 = OptionDesc, 1 = OptionDescV1 */
+    uint32_t abi_version;        /* 2, 3 or 4 = OptionDesc, 1 = OptionDescV1 */
     const char *id;              /* NUL-terminated, [a-z0-9_]{1,32}, unique across plugins */
     const char *label;           /* NUL-terminated, 1..24 bytes */
     const OptionDesc *options;   /* or OptionDescV1* when abi_version is 1 */

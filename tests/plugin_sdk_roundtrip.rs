@@ -5,7 +5,7 @@
 use core::ffi::c_char;
 use deluxe_plugin_sdk::{
     abi, negotiated_descriptor_version, register_with, AtomicOptions, OptionSpec, PluginSpec,
-    RegisterError, Tone,
+    RegisterError, RowLayout, Tone,
 };
 use ssbu_online_deluxe_rewrite::plugin_api::{plugin_rows, Registry, RequestStatus};
 
@@ -56,6 +56,7 @@ static REPLAY_SPEC: PluginSpec = PluginSpec {
             no_persist: false,
             tones: Some(&[Tone::Neutral, Tone::Ok]),
             read_only: false,
+            layout: RowLayout::Value,
         },
         OptionSpec {
             id: "quality",
@@ -66,6 +67,7 @@ static REPLAY_SPEC: PluginSpec = PluginSpec {
             no_persist: false,
             tones: None,
             read_only: false,
+            layout: RowLayout::Value,
         },
         OptionSpec {
             id: "health",
@@ -76,6 +78,7 @@ static REPLAY_SPEC: PluginSpec = PluginSpec {
             no_persist: true,
             tones: Some(&[Tone::Ok, Tone::Warn, Tone::Error]),
             read_only: true,
+            layout: RowLayout::Value,
         },
     ],
     config_path: Some("sd:/ultimate/replay/config.ini"),

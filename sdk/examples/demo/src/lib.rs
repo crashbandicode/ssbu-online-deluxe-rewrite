@@ -91,7 +91,7 @@ mod switch {
     use super::{parse_config, status_choice};
     use deluxe_plugin_sdk::{
         abi, host, negotiated_descriptor_version, register, AtomicOptions, OptionSpec,
-        PluginHandler, PluginSpec, RequestStatus, Tone,
+        PluginHandler, PluginSpec, RequestStatus, RowLayout, Tone,
     };
     use std::ffi::CStr;
     use std::sync::OnceLock;
@@ -121,6 +121,7 @@ mod switch {
                 no_persist: false,
                 tones: Some(&ENABLED_TONES),
                 read_only: false,
+                layout: RowLayout::Value,
             },
             OptionSpec {
                 id: "mode",
@@ -131,6 +132,7 @@ mod switch {
                 no_persist: false,
                 tones: None,
                 read_only: false,
+                layout: RowLayout::Value,
             },
             OptionSpec {
                 id: "status",
@@ -141,6 +143,7 @@ mod switch {
                 no_persist: true,
                 tones: Some(&STATUS_TONES),
                 read_only: true,
+                layout: RowLayout::Value,
             },
         ],
         config_path: Some(CONFIG_PATH),
