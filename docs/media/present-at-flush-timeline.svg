@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="760" height="300" viewBox="0 0 760 300" font-family="Segoe UI, Helvetica, Arial, sans-serif">
-  <rect x="0.5" y="0.5" width="759" height="299" rx="16" fill="#1b1c20" stroke="#3a3c42" stroke-width="1"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="360" viewBox="0 0 760 360" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect x="0.5" y="0.5" width="759" height="359" rx="16" fill="#1b1c20" stroke="#3a3c42" stroke-width="1"/>
   <text x="28" y="39" fill="#ffffff" font-size="18">Simplified timing illustration</text>
 
   <g fill="#9aa0a6" font-size="14" text-anchor="middle">
@@ -8,30 +8,59 @@
     <text x="710" y="78">33.3 ms</text>
   </g>
   <g stroke="#6b6f78" stroke-width="1" stroke-dasharray="4 4">
-    <line x1="178" y1="92" x2="178" y2="220"/>
-    <line x1="444" y1="92" x2="444" y2="220"/>
-    <line x1="710" y1="92" x2="710" y2="220"/>
+    <line x1="178" y1="92" x2="178" y2="282"/>
+    <line x1="444" y1="92" x2="444" y2="282"/>
+    <line x1="710" y1="92" x2="710" y2="282"/>
   </g>
   <g fill="#ffffff" font-size="15">
     <text x="28" y="130">Late present</text>
-    <text x="28" y="190">Early present</text>
+    <text x="28" y="224">Early present</text>
   </g>
 
   <rect x="178" y="108" width="218" height="34" rx="6" fill="#6f9bd1"/>
-  <rect x="396" y="108" width="64" height="34" rx="6" fill="#d9a441"/>
-  <rect x="460" y="108" width="250" height="34" rx="6" fill="#2b2d33"/>
+  <rect x="396" y="108" width="86" height="34" rx="6" fill="#d9a441"/>
+  <rect x="482" y="108" width="228" height="34" rx="6" fill="#2b2d33"/>
   <g font-size="14" text-anchor="middle">
-    <text x="287" y="130" fill="#0f1a2b">CPU work</text>
-    <text x="428" y="130" fill="#0f1a2b">Present</text>
-    <text x="585" y="130" fill="#c9ccd2">Wait</text>
+    <text x="287" y="130" fill="#0f1a2b">CPU work · frame N</text>
+    <text x="439" y="130" fill="#0f1a2b">Present N</text>
+    <text x="596" y="130" fill="#c9ccd2">Wait</text>
+  </g>
+  <g stroke="#9aa0a6" stroke-width="1">
+    <line x1="178" y1="146" x2="178" y2="154"/>
+    <line x1="396" y1="146" x2="396" y2="154"/>
+    <line x1="482" y1="146" x2="482" y2="154"/>
+  </g>
+  <g fill="#9aa0a6" font-size="13" text-anchor="middle">
+    <text x="178" y="173">t0</text>
+    <text x="396" y="173">t1</text>
+    <text x="482" y="173">t2</text>
   </g>
 
-  <rect x="178" y="168" width="28" height="34" rx="6" fill="#2f8f6f"/>
-  <rect x="206" y="168" width="218" height="34" rx="6" fill="#6f9bd1"/>
-  <rect x="424" y="168" width="20" height="34" rx="6" fill="#2b2d33"/>
+  <rect x="178" y="202" width="56" height="34" rx="6" fill="#2f8f6f"/>
+  <rect x="234" y="202" width="176" height="34" rx="6" fill="#6f9bd1"/>
+  <rect x="410" y="202" width="34" height="34" rx="6" fill="#2b2d33"/>
+  <rect x="444" y="202" width="50" height="34" rx="6" fill="#2f8f6f"/>
   <g font-size="14" text-anchor="middle">
-    <text x="192" y="190" fill="#ffffff">P</text>
-    <text x="315" y="190" fill="#0f1a2b">CPU work</text>
+    <text x="206" y="224" fill="#ffffff">P N−1</text>
+    <text x="322" y="224" fill="#0f1a2b">CPU work · frame N</text>
+    <text x="469" y="224" fill="#ffffff">P N</text>
   </g>
-  <text x="710" y="259" fill="#9aa0a6" font-size="14" text-anchor="end">Frame deadline missed above</text>
+  <g stroke="#9aa0a6" stroke-width="1">
+    <line x1="178" y1="240" x2="178" y2="248"/>
+    <line x1="234" y1="240" x2="234" y2="248"/>
+    <line x1="410" y1="240" x2="410" y2="248"/>
+    <line x1="444" y1="240" x2="444" y2="248"/>
+  </g>
+  <g fill="#9aa0a6" font-size="13" text-anchor="middle">
+    <text x="178" y="267">t0</text>
+    <text x="234" y="267">t1</text>
+    <text x="410" y="267">t2</text>
+    <text x="444" y="267">t3</text>
+  </g>
+  <g fill="#9aa0a6" font-size="13">
+    <text x="28" y="314">Top: t0 CPU work on frame N starts · t1 work ends, Present N requested · t2 Present N done, after the deadline</text>
+    <g transform="translate(28 340) scale(0.82 1)">
+      <text x="0" y="0">Bottom: t0 P presents frame N−1 · t1 CPU work on frame N starts (overlaps the present) · t2 work ends · t3 P presents frame N on time</text>
+    </g>
+  </g>
 </svg>

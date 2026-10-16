@@ -61,14 +61,14 @@ as soon as it is finished, at the flush, so it can catch that refresh.
 
 ![Present at the flush, late and early present on a 16.7 ms timeline](docs/media/present-at-flush-timeline.svg)
 
-The green P stands for Present, the step that queues a finished frame for
-display. In the top row the CPU does its work first and then asks for
-presentation, which can miss the 16.7 ms refresh. In the bottom row
-presentation is requested right after the previous frame's GPU commands are
-flushed, before the CPU starts the next frame. The P therefore presents the
-previous frame, not the one the CPU is about to work on, so presenting and the
-next frame's CPU work overlap instead of holding the finished picture back.
-Conceptual timing diagram, not a measured trace.
+P is Present: handing a finished frame to the screen. Top row: the CPU
+finishes frame N (t0 to t1), then asks for presentation (t1 to t2). That lands
+after the 16.7 ms refresh, so frame N is not shown until 33.3 ms.
+
+Bottom row: at t0 the P presents the previous frame, N−1, which is already
+finished. CPU work on frame N starts right after (t1) and overlaps that
+presentation; it ends at t2, and the next P at 16.7 ms (t3) shows frame N on
+time. Conceptual timing diagram, not a measured trace.
 
 [How present at the flush works](docs/RENDERING.md#present-at-the-flush-040).
 
