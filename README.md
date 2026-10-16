@@ -48,17 +48,7 @@ task finishes. After enough checks find no work it can do, the rewrite briefly
 sleeps, giving other CPU tasks a chance to run. Pauses grow to a small limit;
 the game's locks (which keep tasks from interfering) and checks stay in place.
 
-```text
-+---------------------------------+--------------------------------------+
-| Before                          | After                                |
-| Lock → Check → Unlock           | Check queues                         |
-| Lock → Check → Unlock           | Briefly sleep                        |
-| Lock → Check → Unlock           | Worker gets opportunity              |
-| (repeat)                        | Check queues again                   |
-| CPU repeatedly examines         | Less wasted CPU time;                |
-| empty queues                    | original checks remain intact        |
-+---------------------------------+--------------------------------------+
-```
+![Dispatcher backoff, before and after](docs/media/dispatcher-backoff-before-after.svg)
 
 [How dispatcher backoff works](docs/DISPATCHER_BACKOFF.md).
 
@@ -69,15 +59,7 @@ frame's CPU work. A slow update could miss the screen's 16.7 ms deadline,
 leaving the picture waiting a whole extra refresh. The rewrite hands it over
 as soon as it is finished, at the flush, so it can catch that refresh.
 
-```text
-                0 ms                    16.7 ms                 33.3 ms
-                |                       |                       |
-Late present    [CPU work.................]Present[Wait.........]shown
-                                        ^ missed                ^ shown
-Early present   P[CPU work.................]
-                                        ^ shown
-P / Present = hand the finished frame to the screen
-```
+![Present at the flush, late and early present on a 16.7 ms timeline](docs/media/present-at-flush-timeline.svg)
 Conceptual timing diagram, not a measured trace.
 
 [How present at the flush works](docs/RENDERING.md#present-at-the-flush-040).
