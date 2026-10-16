@@ -80,6 +80,24 @@ frame 100 takes the same CPU time in each.
 
 [How present at the flush works](docs/RENDERING.md#present-at-the-flush-040).
 
+### Before and after, on the emulator
+
+Both additions have an INI switch since 0.5.3 (`early_present` and
+`dispatcher_backoff`, default on; see [Configuration](docs/CONFIGURATION.md)),
+so the same build can run the way the original Online Deluxe does. The clips
+below were recorded in Eden under a CPU quota that reproduces the console's
+character-select dip, LessLag profile, with the Performance view open so the
+frame rate and the Backoff row are visible. Left: both switches off (the
+upstream behaviour). Right: both on.
+
+| Scene | Both off | Both on |
+| --- | --- | --- |
+| Character select, hand sweep | `docs/media/toggles-css-off.gif` (pending) | `docs/media/toggles-css-on.gif` (pending) |
+| Training, LessLag, effects (Pyra Blazing End) | `docs/media/toggles-effects-off.gif` (pending) | `docs/media/toggles-effects-on.gif` (pending) |
+
+Emulator clips show the mechanism, not console numbers; the console results
+are in [Rendering profiles](docs/RENDERING.md#measured-results).
+
 ## What it does
 
 - **Rendering profiles.** Vanilla, LessLag, LLUltra and LLDoubles trade

@@ -72,7 +72,10 @@ to 59.85 fps with 1.3 %; online matches run at 59.7–59.9 fps.
 `renderer-status.txt` counts `early_presents`, `early_present_skips` and
 `early_present_mismatches`; a mismatch is event log code 105. Evidence is in
 [validation](VALIDATION.md) ("Present-at-flush candidate" and "Console
-verdict and 0.4.0").
+verdict and 0.4.0"). `early_present=false` in `config.ini` (0.5.3) switches
+the early present off in every profile for a before/after against the game's
+own order; see [Configuration](CONFIGURATION.md) and the clips under
+[Optimizations added by this rewrite](../README.md#optimizations-added-by-this-rewrite).
 
 ## Dynamic resolution
 
