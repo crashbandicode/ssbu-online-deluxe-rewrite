@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="760" height="534" viewBox="0 0 760 534" font-family="Segoe UI, Helvetica, Arial, sans-serif">
   <rect x="0.5" y="0.5" width="759" height="533" rx="16" fill="#1b1c20" stroke="#3a3c42"/>
-  <text x="28" y="39" fill="#ffffff" font-size="18">Fewer active images, then an earlier schedule</text>
-  <text x="28" y="65" fill="#9aa0a6" font-size="13">Capacity and policy only, not frame ages or exact hardware timing.</text>
+  <text x="28" y="39" fill="#ffffff" font-size="18">Three profiles, different rendering headroom</text>
+  <text x="28" y="65" fill="#9aa0a6" font-size="13">Conceptual buffer capacity, not exact timing or completed frames.</text>
 
   <g fill="#ffffff" font-size="18" font-weight="600">
     <text x="28" y="104">Vanilla · three active buffers</text>
@@ -49,8 +49,8 @@
     <text x="620" y="458">Not active</text>
   </g>
   <g fill="#c9ccd2" font-size="14">
-    <text x="28" y="209">+2 index · TwoBehind · more room for rendering work in flight</text>
-    <text x="28" y="359">+1 index · OneBehind · a shorter buffered path</text>
-    <text x="28" y="509">+0 index · Immediate · earlier flush, tighter timing</text>
+    <text x="28" y="209">More room to keep work moving while older images wait.</text>
+    <text x="28" y="359">Less room for queued images; rendering work is reordered.</text>
+    <text x="28" y="509">Same two buffers; earlier submission, less timing headroom.</text>
   </g>
 </svg>

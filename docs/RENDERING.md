@@ -11,6 +11,43 @@ more than two fighters use LLDoubles. Local wireless counts as online here.
 | LLUltra | 2 | Immediate, earlier flush, presents at the flush (0.5.2) | 576p / on | 1080p / off |
 | LLDoubles | 3 | OneBehind, presents at the flush (0.5.2) | 1080p / on | 1080p / on |
 
+For a conceptual introduction and the short Eden results table, see
+[How Deluxe LessLag and LLUltra work](LESSLAG_LLULTRA.md).
+
+## Implementation and timing tradeoffs
+
+The following describes steady operation after the requested profile has been
+confirmed. Transitions and safety guards can retain the game's original path.
+
+| Part | Implementation | Code |
+| --- | --- | --- |
+| Active images | Vanilla uses three; LessLag and LLUltra use two. The count is applied through the window wrapper. | [`textures`](../src/config.rs#L64), [window setup](../src/runtime/nvn.rs#L152) |
+| Image selection | Vanilla adds 2 before the game's existing `% 3`; LessLag uses `(index + 1) % 2`; LLUltra uses `index % 2`. Additions wrap as unsigned arithmetic. | [`index_value`](../src/render_policy.rs#L348) |
+| Rendering wait | When the policy permits it, the wait hook returns `0` instead of calling the original function. | [wait hook](../src/runtime/renderer.rs#L116), [`skip_wait`](../src/render_policy.rs#L362) |
+| Work ordering | Model updates and fighter command recording move after the scene update, followed by the deferred rendering queue's dispatch. | [post-scene work](../src/runtime/render_sequence.rs#L148) |
+| LLUltra flush | The earlier present-entry hook flushes; steady operation suppresses the later flush. The flush plan calls the original function three times. | [early/late hooks](../src/runtime/render_ultra.rs#L27), [`plan_flush`](../src/render_policy.rs#L417) |
+| Presentation | The flush hook queues the acquired image when allowed. The later request for the same image is skipped. | [flush hook](../src/runtime/renderer.rs#L219), [presentation wrapper](../src/runtime/nvn.rs#L372) |
+
+These are cyclic image indices, not displayed frame numbers. `TwoBehind`,
+`OneBehind` and `Immediate` are the project's relative index-policy names,
+also used by the [crop-delay policy](../src/resolution.rs#L94). `Immediate`
+does not promise immediate visibility or GPU completion.
+
+![Selected rendering steps for Vanilla, LessLag and LLUltra](media/rendering-schedule-three-profiles.svg)
+
+This sketch omits other frame steps and waits. Image acquisition still calls
+the original function, and the relocated fighter work keeps its worker wait.
+The sequence hooks latch one decision per frame and keep the original ordering
+while the teardown guard is active. The hook families are
+[installed together after their checks](../src/runtime/renderer.rs#L265).
+
+The [0.5.2 console move captures](VALIDATION.md) observed less overlap headroom
+in LLUltra: CPU work and GPU completion had to fit before the same next
+refresh, while LessLag could overlap more GPU work with the next CPU update.
+Expensive moves exposed missed deadlines in LLUltra even at 576p while
+LessLag held its frame rate at 1080p in those sessions. This is a scoped
+observation, not a universal performance guarantee.
+
 ## How Auto knows it is online
 
 The online context comes from the game's scene entries (main menu, Online →
