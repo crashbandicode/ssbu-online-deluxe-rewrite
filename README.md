@@ -86,9 +86,11 @@ Both additions have an INI switch since 0.5.3 (`early_present` and
 `dispatcher_backoff`, default on; see [Configuration](docs/CONFIGURATION.md)),
 so the same build can run the way the original Online Deluxe does. The clips
 below were recorded in Eden under a CPU quota that reproduces the console's
-character-select dip, LessLag profile, with the Performance view open so the
-frame rate and the Backoff row are visible. Left: both switches off (the
-upstream behaviour). Right: both on.
+character-select dip (an unbiased desktop emulator never drops a frame here;
+[Mimicking the Switch in Eden](docs/EMULATOR_METHOD.md) explains the bias and
+its limits), LessLag profile, with the Performance view open so the frame
+rate and the Backoff row are visible. Left: both switches off (the upstream
+behaviour). Right: both on.
 
 | Scene | Both off | Both on |
 | --- | --- | --- |
@@ -236,6 +238,7 @@ Toolchain, native dependency and release steps: [Build](docs/BUILD.md).
 | Controls and the settings rows | [CONTROLS.md](docs/CONTROLS.md) |
 | Screenshots and GIFs | [SCREENSHOTS.md](docs/SCREENSHOTS.md) |
 | Rendering profiles, Auto, present-at-flush, measured results | [RENDERING.md](docs/RENDERING.md) |
+| Mimicking the Switch in Eden (CPU quota bias for clips and A/B runs) | [EMULATOR_METHOD.md](docs/EMULATOR_METHOD.md) |
 | Native character-select and arena display | [NATIVE_DISPLAY.md](docs/NATIVE_DISPLAY.md) |
 | Dispatcher backoff | [DISPATCHER_BACKOFF.md](docs/DISPATCHER_BACKOFF.md) |
 | How another plugin plugs in (menu rows, or its own ImGui windows) | [PLUGINS.md](docs/PLUGINS.md), [sdk/README.md](sdk/README.md) |
