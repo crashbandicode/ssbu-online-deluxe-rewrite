@@ -37,6 +37,51 @@ carries the NRO and its manifest. Install notes: [docs/INSTALL.md](docs/INSTALL.
 
 More in [Screenshots](docs/SCREENSHOTS.md).
 
+## Additional optimizations not yet present in Deluxe
+
+Two things this rewrite does that the original Online Deluxe does not:
+
+### Dispatcher backoff (smarter CPU waiting)
+
+The game's main CPU task can waste time checking lists of work while another
+task finishes. After enough checks find no work it can do, the rewrite briefly
+sleeps, giving other CPU tasks a chance to run. Pauses grow to a small limit;
+the game's locks (which keep tasks from interfering) and checks stay in place.
+
+```text
++---------------------------------+--------------------------------------+
+| Before                          | After                                |
+| Lock → Check → Unlock           | Check queues                         |
+| Lock → Check → Unlock           | Briefly sleep                        |
+| Lock → Check → Unlock           | Worker gets opportunity              |
+| (repeat)                        | Check queues again                   |
+| CPU repeatedly examines         | Less wasted CPU time;                |
+| empty queues                    | original checks remain intact        |
++---------------------------------+--------------------------------------+
+```
+
+[How dispatcher backoff works](docs/DISPATCHER_BACKOFF.md).
+
+### Present at the flush
+
+The game used to hand a finished frame to the screen after doing the next
+frame's CPU work. A slow update could miss the screen's 16.7 ms deadline,
+leaving the picture waiting a whole extra refresh. The rewrite hands it over
+as soon as it is finished, at the flush, so it can catch that refresh.
+
+```text
+                0 ms                    16.7 ms                 33.3 ms
+                |                       |                       |
+Late present    [CPU work.................]Present[Wait.........]shown
+                                        ^ missed                ^ shown
+Early present   P[CPU work.................]
+                                        ^ shown
+P / Present = hand the finished frame to the screen
+```
+Conceptual timing diagram, not a measured trace.
+
+[How present at the flush works](docs/RENDERING.md#present-at-the-flush-040).
+
 ## What it does
 
 - **Rendering profiles.** Vanilla, LessLag, LLUltra and LLDoubles trade
