@@ -32,9 +32,9 @@ Illustrative timings. In console Training captures on 0.5.2, expensive moves cau
 
 ### Following the same input
 
-![The same button press reaches the CPU at the same point in all three profiles, but its picture reaches the screen sooner with a shorter pipeline](media/same-input-earlier-response.svg)
+![Six dashed captured-frame guides show the same input responding at frame 6 in Vanilla, frame 3 in LessLag and frame 2 or 3 in LLUltra; CPU and GPU stages are schematic](media/same-input-earlier-response.svg)
 
-Follow N, the picture carrying the same button press. This schematic holds the input-related CPU work and GPU draw sizes constant: the benefit comes from a shorter path to display, while other CPU updates can overlap drawing. Stage positions are illustrative, not measured timings or frame counts. The Eden comparison above reports the measured response.
+Follow N, the picture carrying the same button press. The six dashed guides count captured frames after input: Vanilla first responds at 6, LessLag at 3, and LLUltra at 2 or 3 in the Eden trials. LLUltra's outlined marker is an alternative result with later input. CPU/GPU work sizes and positions remain illustrative; only the response counts are measured.
 
 ## Recovering smoothness
 
