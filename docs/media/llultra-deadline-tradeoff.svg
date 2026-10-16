@@ -1,72 +1,61 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="760" height="460" viewBox="0 0 760 460" font-family="Segoe UI, Helvetica, Arial, sans-serif">
-  <rect x="0.5" y="0.5" width="759" height="459" rx="16" fill="#1b1c20" stroke="#3a3c42"/>
-  <text x="28" y="39" fill="#ffffff" font-size="18">Why LLUltra can miss a refresh</text>
-  <text x="28" y="63" fill="#9aa0a6" font-size="13">Illustrative timing, not a measured trace. Dashed lines are display refreshes.</text>
-
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="508" viewBox="0 0 760 508" font-family="Segoe UI, Helvetica, Arial, sans-serif" role="img" aria-labelledby="title desc">
+  <title id="title">Rendering headroom and missed refreshes</title>
+  <desc id="desc">Illustrative schedules, not measured durations. LessLag overlaps CPU work on B with GPU work on A and shows B later. LLUltra aims to show B sooner. A short GPU draw fits; a long draw misses the target refresh. The heavy example uses the same CPU and GPU durations as the LessLag row. P is a CPU presentation request; dots are later display events.</desc>
+  <rect x="0.5" y="0.5" width="759" height="507" rx="16" fill="#1b1c20" stroke="#3a3c42"/>
+  <text x="28" y="39" fill="#ffffff" font-size="18">Earlier response leaves less room for heavy work</text>
+  <text x="28" y="63" fill="#9aa0a6" font-size="13">Illustrative schedules, not measured timings. Dashed lines are screen refreshes.</text>
   <g fill="#9aa0a6" font-size="12" text-anchor="middle">
-    <text x="196" y="88">refresh</text>
-    <text x="462" y="88">refresh</text>
-    <text x="728" y="88">refresh</text>
+    <text x="196" y="88">start</text><text x="462" y="88">next refresh</text><text x="728" y="88">following</text>
   </g>
   <g stroke="#6b6f78" stroke-dasharray="4 4">
-    <line x1="196" y1="94" x2="196" y2="396"/>
-    <line x1="462" y1="94" x2="462" y2="396"/>
-    <line x1="728" y1="94" x2="728" y2="396"/>
+    <path d="M196 94V412 M462 94V412 M728 94V412"/>
   </g>
-
   <g fill="#ffffff" font-size="15" font-weight="600">
-    <text x="28" y="140">LessLag</text>
-    <text x="28" y="229">LLUltra,</text>
-    <text x="28" y="247">light frame</text>
-    <text x="28" y="329">LLUltra,</text>
-    <text x="28" y="347">heavy frame</text>
+    <text x="28" y="132">LessLag</text><text x="28" y="236">LLUltra</text><text x="28" y="346">LLUltra</text>
   </g>
-
-  <!-- LessLag: the GPU draws frame A while the CPU updates frame B -->
-  <rect x="204" y="106" width="226" height="26" rx="6" fill="#6f9bd1"/>
-  <text x="317" y="124" fill="#0f1a2b" font-size="13" text-anchor="middle">Update frame B</text>
-  <rect x="204" y="138" width="18" height="26" rx="5" fill="#d9a441"/>
-  <text x="213" y="156" fill="#0f1a2b" font-size="12" text-anchor="middle">P</text>
-  <rect x="226" y="138" width="190" height="26" rx="6" fill="#2f8f6f"/>
-  <text x="321" y="156" fill="#ffffff" font-size="13" text-anchor="middle">Draw frame A</text>
-  <circle cx="462" cy="180" r="5" fill="#2f8f6f"/>
-  <text x="472" y="184" fill="#c9ccd2" font-size="13">A appears</text>
-  <circle cx="728" cy="180" r="5" fill="none" stroke="#2f8f6f" stroke-width="1.5"/>
-  <text x="718" y="184" fill="#c9ccd2" font-size="13" text-anchor="end">B appears</text>
   <g fill="#9aa0a6" font-size="13">
-    <text x="476" y="124">Each gets a whole refresh,</text>
-    <text x="476" y="156">working on different frames.</text>
+    <text x="28" y="153">heavy work</text><text x="28" y="257">lighter draw</text><text x="28" y="367">same heavy work</text>
   </g>
-
-  <!-- LLUltra, light frame: CPU then GPU on frame B inside one refresh -->
-  <rect x="204" y="206" width="146" height="26" rx="6" fill="#6f9bd1"/>
-  <text x="277" y="224" fill="#0f1a2b" font-size="13" text-anchor="middle">Update frame B</text>
-  <rect x="354" y="238" width="18" height="26" rx="5" fill="#d9a441"/>
-  <text x="363" y="256" fill="#0f1a2b" font-size="12" text-anchor="middle">P</text>
-  <rect x="376" y="238" width="78" height="26" rx="6" fill="#2f8f6f"/>
-  <text x="415" y="256" fill="#ffffff" font-size="13" text-anchor="middle">Draw B</text>
-  <circle cx="462" cy="280" r="5" fill="#2f8f6f"/>
-  <text x="472" y="284" fill="#c9ccd2" font-size="13">B appears</text>
-  <g fill="#9aa0a6" font-size="13">
-    <text x="476" y="224">CPU and GPU share one refresh.</text>
-    <text x="476" y="256">B appears a refresh sooner.</text>
+  <!-- Different frames overlap: heavy CPU and GPU work each fit. -->
+  <rect x="204" y="104" width="140" height="26" rx="6" fill="#6f9bd1"/>
+  <rect x="470" y="104" width="140" height="26" rx="6" fill="#6f9bd1" opacity="0.5"/>
+  <g fill="#0f1a2b" font-size="13" text-anchor="middle">
+    <text x="274" y="122">CPU · B</text><text x="540" y="122">CPU · C</text>
   </g>
-
-  <!-- LLUltra, heavy frame: the GPU runs past the refresh -->
-  <rect x="204" y="306" width="190" height="26" rx="6" fill="#6f9bd1"/>
-  <text x="299" y="324" fill="#0f1a2b" font-size="13" text-anchor="middle">Update frame B (heavy)</text>
-  <rect x="398" y="338" width="18" height="26" rx="5" fill="#d9a441"/>
-  <text x="407" y="356" fill="#0f1a2b" font-size="12" text-anchor="middle">P</text>
-  <rect x="420" y="338" width="100" height="26" rx="6" fill="#2f8f6f"/>
-  <text x="470" y="356" fill="#ffffff" font-size="13" text-anchor="middle">Draw B</text>
-  <text x="532" y="356" fill="#9aa0a6" font-size="13">runs past the refresh</text>
-  <rect x="524" y="306" width="196" height="26" rx="6" fill="#3a3c42"/>
-  <text x="622" y="324" fill="#9aa0a6" font-size="13" text-anchor="middle">Next frame waits</text>
-  <circle cx="462" cy="380" r="5" fill="#c0564f"/>
-  <text x="472" y="384" fill="#e0a09a" font-size="13">missed</text>
-  <circle cx="728" cy="380" r="5" fill="#2f8f6f"/>
-  <text x="718" y="384" fill="#c9ccd2" font-size="13" text-anchor="end">B appears</text>
-
-  <text x="28" y="418" fill="#c9ccd2" font-size="14">Frame B took two refreshes. The frame rate drops and B's latency gain is gone.</text>
-  <text x="28" y="442" fill="#9aa0a6" font-size="13">Blue: CPU. Green: GPU. P: presentation request. Dots: the display shows the frame.</text>
+  <rect x="204" y="138" width="190" height="26" rx="6" fill="#2f8f6f" opacity="0.5"/>
+  <rect x="470" y="138" width="190" height="26" rx="6" fill="#2f8f6f"/>
+  <g fill="#ffffff" font-size="13" text-anchor="middle">
+    <text x="299" y="156">GPU · A</text><text x="565" y="156">GPU · B</text>
+  </g>
+  <g fill="#d9a441"><circle cx="204" cy="177" r="5"/><circle cx="470" cy="177" r="5"/></g>
+  <g fill="#f3e2bd" font-size="12"><text x="214" y="181">P A</text><text x="480" y="181">P B</text></g>
+  <g fill="#2f8f6f"><circle cx="462" cy="197" r="5"/><circle cx="728" cy="197" r="5"/></g>
+  <g fill="#c9ccd2" font-size="12"><text x="452" y="201" text-anchor="end">A shown</text><text x="718" y="201" text-anchor="end">B shown</text></g>
+  <!-- Same CPU duration; shorter GPU work fits before the target refresh. -->
+  <rect x="204" y="220" width="140" height="26" rx="6" fill="#6f9bd1"/>
+  <text x="274" y="238" fill="#0f1a2b" font-size="13" text-anchor="middle">CPU · B</text>
+  <rect x="344" y="254" width="100" height="26" rx="6" fill="#2f8f6f"/>
+  <text x="394" y="272" fill="#ffffff" font-size="13" text-anchor="middle">GPU · B</text>
+  <circle cx="344" cy="293" r="5" fill="#d9a441"/>
+  <text x="354" y="297" fill="#f3e2bd" font-size="12">P B</text>
+  <circle cx="462" cy="307" r="5" fill="#2f8f6f"/>
+  <text x="472" y="311" fill="#c9ccd2" font-size="12">B shown sooner</text>
+  <g fill="#9aa0a6" font-size="13"><text x="482" y="241">CPU + GPU finish</text><text x="482" y="263">before the next refresh.</text></g>
+  <!-- Same heavy CPU/GPU durations as LessLag; less overlap costs a refresh. -->
+  <rect x="204" y="330" width="140" height="26" rx="6" fill="#6f9bd1"/>
+  <text x="274" y="348" fill="#0f1a2b" font-size="13" text-anchor="middle">CPU · B</text>
+  <rect x="344" y="364" width="190" height="26" rx="6" fill="#2f8f6f"/>
+  <text x="439" y="382" fill="#ffffff" font-size="13" text-anchor="middle">GPU · B</text>
+  <circle cx="344" cy="403" r="5" fill="#d9a441"/>
+  <text x="354" y="407" fill="#f3e2bd" font-size="12">P B</text>
+  <circle cx="462" cy="417" r="5" fill="#c0564f"/>
+  <text x="472" y="421" fill="#e0a09a" font-size="12">missed</text>
+  <circle cx="728" cy="417" r="5" fill="#2f8f6f"/>
+  <text x="718" y="421" fill="#c9ccd2" font-size="12" text-anchor="end">B shown</text>
+  <text x="548" y="382" fill="#9aa0a6" font-size="13">GPU runs past deadline</text>
+  <text x="28" y="451" fill="#c9ccd2" font-size="13">Missing a refresh can lose the extra latency advantage and lower FPS.</text>
+  <g fill="#9aa0a6" font-size="12">
+    <text x="28" y="475">Blue: CPU. Green bars: GPU. P: CPU queues presentation while drawing may continue.</text>
+    <text x="28" y="495">Green dots: display events, assuming drawing and display acceptance meet that refresh.</text>
+  </g>
 </svg>
