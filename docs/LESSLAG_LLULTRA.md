@@ -36,7 +36,13 @@ Illustrative timings. In console Training captures on 0.5.2, expensive moves cau
 
 ![Detailed CPU, GPU and presentation timelines with six captured-frame guides and separate occupancy insets: three reusable images in Vanilla, two each in LessLag and LLUltra](media/same-input-earlier-response.svg)
 
-Follow N, the picture carrying the same press. The six guides and response dots show the Eden counts: Vanilla 6, LessLag 3, LLUltra 2–3. LLUltra's outlined marker is the alternative later-input result. Left insets show three reusable images versus two; their shown, queued and rendering roles can move between slots. The timeline's bright green bars highlight GPU work on N; dim green bars indicate work on other frames. CPU/GPU activity and request positions are illustrative. Conceptual buffer occupancy, not an exact trace.
+Start at Press and follow N, the picture carrying that input. The blue CPU bar updates the game in response to the press. The CPU then continues preparing later updates while the GPU works through drawing commands.
+
+Follow the green GPU track next: dim bars represent other frames, and the bright bar draws N. Vanilla's deeper pipeline places this work later; LessLag and LLUltra bring it forward. The separate boxes count reusable image buffers, not time intervals; shown, queued and rendering roles can move between slots.
+
+The yellow P marks the CPU's request to display N. Vanilla makes this request later, while LessLag and LLUltra request presentation at the flush, when the drawing commands are submitted. A request can be queued while the GPU is still drawing; it does not mean N is already visible.
+
+Once N is ready, an eligible screen refresh can show it. The green dots mark the first captured response in Eden: frame 6 for Vanilla, 3 for LessLag and 2–3 for LLUltra; the outlined dot is an alternative result. Those counts are measured captured responses, not controller-to-photon timings. Work, request positions and buffer occupancy are illustrative, not an exact trace.
 
 ## Recovering smoothness
 
