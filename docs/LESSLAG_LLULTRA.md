@@ -26,9 +26,15 @@ A framebuffer is reusable memory; a frame is the picture drawn into it. The pres
 
 Measured in Eden on 0.5.2 as captured images from an injected input to the first image showing the response. They are captured-response frames, not controller-to-photon timings. Full tables and clips: [Measured input delay](../README.md#measured-input-delay). Method: [Measuring frames removed by LessLag and LLUltra](LATENCY_METHODOLOGY.md).
 
-![Overlapping work gives LessLag headroom; LLUltra can show the result sooner but heavy work can miss a refresh](media/llultra-deadline-tradeoff.svg)
+![Vanilla and LessLag retain rendering overlap; LLUltra can show the result sooner but heavy work can miss a refresh](media/llultra-deadline-tradeoff.svg)
 
 Illustrative timings. In console Training captures on 0.5.2, expensive moves caused FPS drops in LLUltra while Vanilla and LessLag held their frame rate in those sessions. This is a scoped observation, not a guarantee for every scene or device. See [Implementation and timing tradeoffs](RENDERING.md#implementation-and-timing-tradeoffs).
+
+### Following the same input
+
+![The same button press reaches the CPU at the same point in all three profiles, but its picture reaches the screen sooner with a shorter pipeline](media/same-input-earlier-response.svg)
+
+Follow N, the picture carrying the same button press. This schematic holds the input-related CPU work and GPU draw sizes constant: the benefit comes from a shorter path to display, while other CPU updates can overlap drawing. Stage positions are illustrative, not measured timings or frame counts. The Eden comparison above reports the measured response.
 
 ## Recovering smoothness
 
