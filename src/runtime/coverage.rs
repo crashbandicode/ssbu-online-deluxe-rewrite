@@ -66,7 +66,10 @@ static FAILURE_REPORTED: AtomicBool = AtomicBool::new(false);
 /// written at the next diagnostics poll; a second change before that poll
 /// replaces the edge, so the file name carries the latest edge.
 pub(super) fn note_scene(previous: u8, status: u8) {
-    SCENE_EDGE.store(u32::from(previous) | (u32::from(status) << 8), Ordering::Release);
+    SCENE_EDGE.store(
+        u32::from(previous) | (u32::from(status) << 8),
+        Ordering::Release,
+    );
     REQUESTS.fetch_or(SCENE_BIT, Ordering::AcqRel);
 }
 

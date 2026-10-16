@@ -48,6 +48,8 @@ static PEER_OBSERVER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicB
 static STEALTH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 static STREAMER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static FPS_BOOST: AtomicBool = AtomicBool::new(false);
+/// `ultra_resolution` (0.5.3): true = 720p, false = 576p.
+static ULTRA_720: AtomicBool = AtomicBool::new(false);
 static DRS_MOVES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 static DRS_ADAPTIVE: AtomicBool = AtomicBool::new(false);
 static DRS_THRESHOLD: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(1750);
@@ -76,6 +78,11 @@ pub(super) fn settings() -> Config {
         fps_boost: FPS_BOOST.load(Ordering::Acquire),
         drs_moves: drs_moves(),
         drs_adaptive: adaptive_settings(),
+        ultra_resolution: if ULTRA_720.load(Ordering::Acquire) {
+            crate::config::UltraResolution::P720
+        } else {
+            crate::config::UltraResolution::P576
+        },
     }
 }
 
@@ -112,6 +119,10 @@ pub(super) fn publish(config: &Config) {
     STEALTH.store(config.stealth, Ordering::Release);
     STREAMER.store(config.streamer, Ordering::Release);
     FPS_BOOST.store(config.fps_boost, Ordering::Release);
+    ULTRA_720.store(
+        config.ultra_resolution == crate::config::UltraResolution::P720,
+        Ordering::Release,
+    );
     DRS_MOVES.store(config.drs_moves.0, Ordering::Release);
     DRS_ADAPTIVE.store(config.drs_adaptive.enabled, Ordering::Release);
     DRS_THRESHOLD.store(
