@@ -10,7 +10,6 @@ Vanilla Smash prioritizes smooth performance by preparing and rendering frames a
 
 Finally, **dispatcher backoff** reduces wasted CPU work from repeatedly checking for completed tasks, while **present-at-flush** requests presentation earlier, allowing the GPU to finish rendering while the CPU prepares subsequent frames. Together, these optimizations help maintain a smoother 60 FPS.
 
-When you press a button, Smash processes the input long before you see the result. The CPU must update the game, the GPU must render the image into a buffer, and the display system must show it.
 
 ![Input, CPU update, GPU draw, presentation request and screen refresh for overlapping frames](media/rendering-pipeline-overlap.svg)
 
