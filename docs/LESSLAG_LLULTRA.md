@@ -33,15 +33,16 @@ requesting presentation and showing it are separate events.
 
 ## How does LLUltra go further?
 
-LLUltra also uses two buffers, but selects a less delayed image and submits
-graphics work earlier. That can shorten the response by another frame
-compared with LessLag, as the Eden results below show.
+LLUltra also uses two buffers, but changes the rendering schedule to reduce
+the delay between updating the game and displaying the result. In favorable
+conditions, this saves another frame compared with LessLag.
 
 ## Why can LLUltra hurt performance?
 
-That schedule leaves less room to overlap CPU and GPU work before the next
-screen refresh. If a demanding scene takes too long, the image misses that
-refresh and waits for another, lowering the frame rate.
+Normally, the CPU can prepare the next frame while the GPU finishes drawing
+the previous one. LLUltra reduces that overlap, leaving less time to finish
+everything before the screen refreshes. If a demanding scene takes too long,
+the image misses that refresh and waits for another, lowering the frame rate.
 
 This was observed in recorded console sessions: expensive moves caused drops
 in LLUltra while LessLag maintained its frame rate. LessLag gives up some
