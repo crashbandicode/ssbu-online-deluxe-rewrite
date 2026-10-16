@@ -201,4 +201,43 @@ fn sdk_registration_reaches_the_host_registry_and_edits_round_trip() {
         unsafe { (TABLE.host_status)() },
         abi::HOST_STATUS_MENU_ACTIVE
     );
+
+    // Version 4 rows through the real SDK: a header (no choices, so the SDK
+    // must send a null table, not an empty Vec's dangling pointer) and an
+    // inline row land in the registry with their kinds. FX Control 0.2.0's
+    // 39-row page was refused with -3 on the console for exactly this.
+    static GROUP_CHOICES: [&str; 3] = ["Original", "Variant 1", "Variant 2"];
+    static GROUP_OPTIONS: [OptionSpec; 3] = [
+        OptionSpec::new("kirby", "Kirby", &["On", "Off", "Reduced"]),
+        OptionSpec::header("group_kirby", "Kirby"),
+        OptionSpec {
+            layout: RowLayout::Inline,
+            no_persist: true,
+            ..OptionSpec::new("kirby_hammer", "Hammer", &GROUP_CHOICES)
+        },
+    ];
+    static GROUP_SPEC: PluginSpec = PluginSpec {
+        own_page: true,
+        ..PluginSpec::new("fx", "FX", &GROUP_OPTIONS)
+    };
+    static GROUP_STATE: AtomicOptions<3> = AtomicOptions::new([0, 0, 1]);
+    let fx = unsafe { register_with(&TABLE, &GROUP_SPEC, &GROUP_STATE) }.unwrap();
+    assert_eq!(fx.0, 2);
+    assert_eq!(negotiated_descriptor_version(fx), Some(4));
+    let plugins = HOST.snapshot();
+    let group = &plugins[2];
+    assert!(group.options[1].header && group.options[1].choices.is_empty());
+    assert!(!group.options[1].selectable() && group.options[1].read_only());
+    assert!(group.options[2].inline && !group.options[2].read_only());
+    assert_eq!(group.options[2].choices.len(), 3);
+    let rows = ssbu_online_deluxe_rewrite::plugin_api::rows_for(&plugins, Some(1));
+    assert_eq!(rows.len(), 3);
+    assert_eq!(
+        ssbu_online_deluxe_rewrite::plugin_api::row_selectable(&plugins, &rows),
+        vec![true, false, true]
+    );
+    assert_eq!(HOST.value(2, group, 2).label, "Variant 1");
+    assert_eq!(HOST.step(2, 1, 1), None, "header never steps");
+    assert_eq!(HOST.step(2, 2, 1).unwrap().requested, 2);
+    assert_eq!(GROUP_STATE.get(2), 2);
 }

@@ -425,7 +425,13 @@ pub unsafe fn register_with<H: PluginHandler>(
         .map(|(option, option_spec)| abi::OptionDesc {
             id: option.id.as_ptr(),
             label: option.label.as_ptr(),
-            choices: option.choice_ptrs.as_ptr(),
+            // A header has no choices: the host requires a null table, and
+            // an empty Vec's `as_ptr` is dangling, not null.
+            choices: if option.choice_ptrs.is_empty() {
+                std::ptr::null()
+            } else {
+                option.choice_ptrs.as_ptr()
+            },
             choice_count: option.choice_ptrs.len() as u32,
             flags: option_flags(option_spec, abi::ABI_VERSION),
             config_key: option
@@ -735,7 +741,11 @@ fn v1_option_descs(strings: &DescStrings, spec: &PluginSpec) -> Vec<abi::OptionD
         .map(|(option, option_spec)| abi::OptionDescV1 {
             id: option.id.as_ptr(),
             label: option.label.as_ptr(),
-            choices: option.choice_ptrs.as_ptr(),
+            choices: if option.choice_ptrs.is_empty() {
+                std::ptr::null()
+            } else {
+                option.choice_ptrs.as_ptr()
+            },
             choice_count: option.choice_ptrs.len() as u32,
             flags: option_flags(option_spec, 1),
             config_key: option

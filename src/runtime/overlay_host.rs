@@ -32,10 +32,12 @@
 //! `imgui_get_context_export` is absent from the Elite Legal Stages NRO and is
 //! optional. `IM_ASSERT` in this backend build is `SMASH_ASSERT` and aborts.
 use super::{logging, memory, record, Code};
+use crate::hook_chain::{plan_far_chain, EntryPlan};
 use crate::imgui_host::{
     owns_replacement, parse_nro_header, ro_contains_tag, select_imgui_host, text_contains,
     ImguiHostChoice, NroSegments,
 };
+use skyline::hooks::A64HookFunction;
 use skyline::libc::{c_char, c_void};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, AtomicUsize, Ordering};
 
@@ -89,13 +91,32 @@ static DRAW: AtomicUsize = AtomicUsize::new(0);
 static EXTERNAL_CONTEXT: AtomicUsize = AtomicUsize::new(0);
 static GET_CONTEXT: AtomicUsize = AtomicUsize::new(0);
 
-#[skyline::hook(replace = nvnBootstrapLoader)]
-unsafe fn deluxe_rewrite_nvn_bootstrap_hook(name: *const c_char) -> *const c_void {
+/// The callable `nvnBootstrapLoader` had before this NRO's hook: Skyline's
+/// relocation trampoline for a stock entry, or the previous plugin's handler
+/// when the entry already carried a far-hook stub (`ldr x17; br x17; .quad`).
+/// Published before the entry is patched, so the hook never runs without it.
+static BOOTSTRAP_ORIGINAL: AtomicUsize = AtomicUsize::new(0);
+
+type BootstrapFn = unsafe extern "C" fn(*const c_char) -> *const c_void;
+
+/// Calls the previous `nvnBootstrapLoader` callable. Also handed to the
+/// embedded imgui-smash host as its "original" so it resolves names through
+/// the same chain.
+unsafe extern "C" fn bootstrap_original(name: *const c_char) -> *const c_void {
+    let previous = BOOTSTRAP_ORIGINAL.load(Ordering::Acquire);
+    if previous == 0 {
+        return std::ptr::null();
+    }
+    let call: BootstrapFn = std::mem::transmute(previous);
+    call(name)
+}
+
+unsafe extern "C" fn deluxe_rewrite_nvn_bootstrap_hook(name: *const c_char) -> *const c_void {
     BOOTSTRAP_CALLS.fetch_add(1, Ordering::Relaxed);
     let chained = if CHAIN.load(Ordering::Acquire) == CHAIN_EXTERNAL {
-        original!()(name)
+        bootstrap_original(name)
     } else {
-        imgui_smash_bootstrap_hook(name, original!() as *const c_void)
+        imgui_smash_bootstrap_hook(name, bootstrap_original as *const c_void)
     };
     super::nvn::bootstrap(name, chained)
 }
@@ -284,6 +305,9 @@ fn refuse(phase: &str, detail: u64) -> bool {
 enum BootstrapFailure {
     EntryUnreadable,
     ForeignReplacement,
+    /// The entry carries a malformed far-hook stub, its destination is not
+    /// executable, or Skyline returned no trampoline for a stock entry.
+    EntryMalformed,
 }
 
 fn log_bootstrap_binding(
@@ -320,10 +344,11 @@ fn hook_bootstrap() -> Result<(), BootstrapFailure> {
         return Err(BootstrapFailure::ForeignReplacement);
     }
     let entry = nvnBootstrapLoader as *const () as usize;
-    if entry == 0 || !unsafe { memory::accessible(entry, 4, false) } {
+    if entry == 0 || entry & 3 != 0 || !unsafe { memory::accessible(entry, 16, false) } {
         return Err(BootstrapFailure::EntryUnreadable);
     }
-    let word = unsafe { *(entry as *const u32) };
+    let before = unsafe { *(entry as *const [u32; 4]) };
+    let word = before[0];
     record(Code::HookEntryWord, SITE_BOOTSTRAP, word as u64);
     logging::install_checkpoint(Code::HookEntryWord, entry as u64, word as u64);
     let already_far_hooked = word == 0x5800_0051;
@@ -331,15 +356,85 @@ fn hook_bootstrap() -> Result<(), BootstrapFailure> {
     if already_far_hooked || already_branch {
         record(Code::Compatibility, 4, word as u64);
     }
+    // Another plugin's far hook leaves `ldr x17, #8; br x17; .quad handler`
+    // at the entry. Skyline's relocator would decode that address payload
+    // as instructions (the 2026-10-16 boot crash in And64InlineHook's
+    // literal-load path, memcpy from `target + 8 + <payload displacement>`).
+    // Chain to the handler instead and install with no trampoline, as the
+    // fighter-module probe does.
+    let plan = plan_far_chain(before, entry as u64, replacement as u64);
+    logging::startup_phase(&format!(
+        "nvn_bootstrap_hook_before target={entry:#x} replacement={replacement:#x} words={before:08x?} plan={plan:?}"
+    ));
     record(Code::HookInstalling, SITE_BOOTSTRAP, entry as u64);
-    skyline::install_hook!(deluxe_rewrite_nvn_bootstrap_hook);
-    record(Code::HookInstalled, SITE_BOOTSTRAP, entry as u64);
-    Ok(())
+    match plan {
+        EntryPlan::Reject => {
+            record(Code::HookRejected, SITE_BOOTSTRAP, 2);
+            return Err(BootstrapFailure::EntryMalformed);
+        }
+        EntryPlan::Chain(handler) => {
+            if !unsafe { memory::executable(handler as usize, 4) } {
+                record(Code::HookRejected, SITE_BOOTSTRAP, handler);
+                return Err(BootstrapFailure::EntryMalformed);
+            }
+            BOOTSTRAP_ORIGINAL.store(handler as usize, Ordering::Release);
+            unsafe {
+                A64HookFunction(
+                    entry as *const c_void,
+                    replacement as *const c_void,
+                    std::ptr::null_mut(),
+                );
+            }
+        }
+        EntryPlan::Relocate => {
+            let mut trampoline: *mut c_void = std::ptr::null_mut();
+            unsafe {
+                A64HookFunction(
+                    entry as *const c_void,
+                    replacement as *const c_void,
+                    &mut trampoline,
+                );
+            }
+            if trampoline.is_null() {
+                record(Code::HookRejected, SITE_BOOTSTRAP, 1);
+                return Err(BootstrapFailure::EntryMalformed);
+            }
+            BOOTSTRAP_ORIGINAL.store(trampoline as usize, Ordering::Release);
+        }
+    }
+    let after = unsafe { *(entry as *const [u32; 4]) };
+    let installed = if after[0] == 0x5800_0051 && after[1] == 0xd61f_0220 {
+        u64::from(after[2]) | (u64::from(after[3]) << 32) == replacement as u64
+    } else if after[0] & 0xfc00_0000 == 0x1400_0000 {
+        let displacement = ((after[0] << 6) as i32) >> 4;
+        entry.checked_add_signed(displacement as isize) == Some(replacement)
+    } else {
+        false
+    };
+    logging::startup_phase(&format!(
+        "nvn_bootstrap_hook_after installed={installed} words={after:08x?} previous={:#x}",
+        BOOTSTRAP_ORIGINAL.load(Ordering::Acquire),
+    ));
+    record(
+        if installed {
+            Code::HookInstalled
+        } else {
+            Code::HookRejected
+        },
+        SITE_BOOTSTRAP,
+        entry as u64,
+    );
+    if installed {
+        Ok(())
+    } else {
+        Err(BootstrapFailure::EntryMalformed)
+    }
 }
 
 fn fail_bootstrap(error: BootstrapFailure) -> bool {
     match error {
         BootstrapFailure::EntryUnreadable => refuse("overlay_host_entry_unreadable", 2),
+        BootstrapFailure::EntryMalformed => refuse("overlay_host_entry_malformed", 3),
         BootstrapFailure::ForeignReplacement => {
             STATE.store(STATE_REFUSED, Ordering::Release);
             skyline::println!(
