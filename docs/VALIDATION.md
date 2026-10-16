@@ -2487,6 +2487,30 @@ gaps stated there: no NSO session, no first boot without `config.ini`, no
 plugin option edit, no own-page plugin, no console run. Both Eden profiles
 were restored afterwards (journal `RESTORED`, SHA-256 verified).
 
+### 0.5.3 — 2026-10-16: `early_present` and `dispatcher_backoff` switches, Eden before/after clips (branch `docs/early-present-backoff-toggles`)
+
+Operator: make the early presentation and the dispatcher backoff switchable
+in the INI, record before/after GIFs on the character select and with
+effects under LessLag, and explain how the emulator is made to show the drop.
+Commit d10fce5: `early_present=true|false` (the flush wrapper skips
+`present_at_flush`) and `dispatcher_backoff=true|false` (the installed hook
+returns on every idle pass; Backoff row `Off (ini)`), both default true,
+read at start, carried through the settings atomics; `DISABLE_BACKOFF`
+unchanged. Commits 7635c5c / 6591d6b: README "Before and after, on the
+emulator" and `docs/EMULATOR_METHOD.md` (the CPU-quota bias and its
+limits). Clips: Eden GIF build on the private display, isolated profile,
+build `0.5.3-d10fce5eeb59` (`artifacts/389b94963c3412f3/`), quota 120 % /
+5 ms on both runs, LessLag docked 1080p, driven by an Astra low session from
+`toggle-gifs-1016/BRIEF.md`; 4 GIFs (73/73/69/72 frames, 0/0/3/1 dropped)
+and the Performance stills in `docs/media/toggles-*`. Read from the
+Performance view: character select 35 → 58 fps (frame time 28.6 → 17.2 ms),
+Training with Blazing End 29 → 52 fps (34.8 → 19.2 ms), Backoff `Off (ini)`
+→ 1 840 / 1 738 sleeps/s, `early_presents` 0 → one per present. Evidence
+root: `toggle-gifs-1016/` (NOTES.md, renderer-*.txt, config-used-*.ini,
+driver-evidence.jsonl). Host tests 310, clippy `-D warnings`,
+`--no-default-features`, Skyline release build. **Emulator only; not on the
+card; not merged** — the operator reviews the branch first.
+
 ### 0.5.3 — 2026-10-16: clock probe for the ledger, L+R-only window chord, bundle tool (host tests only)
 
 Operator: the LLUltra work must run at stock clocks, and after Horizon OC

@@ -92,13 +92,29 @@ its limits), LessLag profile, with the Performance view open so the frame
 rate and the Backoff row are visible. Left: both switches off (the upstream
 behaviour). Right: both on.
 
-| Scene | Both off | Both on |
+| Scene | Both off (upstream behaviour) | Both on |
 | --- | --- | --- |
-| Character select, hand sweep | `docs/media/toggles-css-off.gif` (pending) | `docs/media/toggles-css-on.gif` (pending) |
-| Training, LessLag, effects (Pyra Blazing End) | `docs/media/toggles-effects-off.gif` (pending) | `docs/media/toggles-effects-on.gif` (pending) |
+| Character select, hand sweep | ![Character select, switches off](docs/media/toggles-css-off.gif) | ![Character select, switches on](docs/media/toggles-css-on.gif) |
+| Training, LessLag, Pyra Blazing End | ![Training, switches off](docs/media/toggles-effects-off.gif) | ![Training, switches on](docs/media/toggles-effects-on.gif) |
 
-Emulator clips show the mechanism, not console numbers; the console results
-are in [Rendering profiles](docs/RENDERING.md#measured-results).
+The Performance view in each clip, full size, read off the same runs
+(stills: [CSS off](docs/media/toggles-css-perf-off.png) ·
+[CSS on](docs/media/toggles-css-perf-on.png) ·
+[Training off](docs/media/toggles-effects-perf-off.png) ·
+[Training on](docs/media/toggles-effects-perf-on.png)):
+
+| Scene, 120 % CPU quota | Both off | Both on |
+| --- | --- | --- |
+| Character select: FPS row / frame time | 35 / 28.6 ms | 58 / 17.2 ms |
+| Training, Blazing End: FPS row / frame time | 29 / 34.8 ms | 52 / 19.2 ms |
+| Backoff row | `Off (ini)` | 1 840/s · 40 µs (CSS), 1 738/s · 50 µs (Training) |
+| `early_presents` over the run (`renderer-status.txt`) | 0 | 4 119 (CSS), 10 205 (Training): one per frame |
+
+Same build (`0.5.3-d10fce5eeb59`), same quota, same profile; the Training
+CPU opponent differed between the two runs (Simon, Pit; Random CPU), the
+Pyra side special did not. Emulator clips show the mechanism, not console
+numbers; the console results are in
+[Rendering profiles](docs/RENDERING.md#measured-results).
 
 ## What it does
 

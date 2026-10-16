@@ -93,3 +93,23 @@ the same value is used for "after"; the value used is stated with the clip.
 
 The clips live under `docs/media/toggles-*.gif`; the run notes and the exact
 quota are in the evidence root beside the captures.
+
+## Result of the 2026-10-16 clips
+
+Build `0.5.3-d10fce5eeb59`, quota 120 % / 5 ms for both states, LessLag,
+docked 1080p, Eden GIF build on the private display. Read from the
+Performance view in the clips and `renderer-status.txt` after each clip:
+
+| Scene | Switches off | Switches on |
+| --- | --- | --- |
+| Character select, hand sweep | FPS 35, frame time 28.6 ms, Backoff `Off (ini)`, `early_presents=0` | FPS 58, 17.2 ms, Backoff 1 840/s 40 µs, `early_presents=4119` (one per present) |
+| Training, Pyra Blazing End at a stopped CPU | FPS 29, 34.8 ms, `Off (ini)`, 0 | FPS 52, 19.2 ms, 1 738/s 50 µs, 10 205 |
+
+The recorder reported 73 / 73 / 69 / 72 frames with 0, 0, 3 and 1 dropped
+over the 6 s clips. The off state is harsher than the console's 49.9 fps
+because the quota is a blunt instrument, not a calibrated Switch; the
+direction and the mechanism are what the clips establish.
+
+Caveat for every emulator run: the **Clock** row and the `# clock=` header
+read the host CPU (about 4.2 GHz here, reported as `oc`); they mean
+something only on the console.
