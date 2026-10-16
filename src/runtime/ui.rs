@@ -501,6 +501,24 @@ fn setting_cells(
             }),
         });
     }
+    if config.platform == crate::config::Platform::Console {
+        let ultra = config.ultra_resolution.label().to_owned();
+        cells.push(SettingCell {
+            label: marked(selected == crate::menu::ROW_ULTRA_RES, "UltraRes"),
+            local: ultra.clone(),
+            remote: if show_remote {
+                "---".to_owned()
+            } else {
+                String::new()
+            },
+            ping: false,
+            compact: Some(CompactField {
+                label: "UltraRes",
+                value: ultra,
+                selected: selected == crate::menu::ROW_ULTRA_RES,
+            }),
+        });
+    }
     cells
 }
 

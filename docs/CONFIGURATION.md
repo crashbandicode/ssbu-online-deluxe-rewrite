@@ -23,6 +23,7 @@ drs_adaptive=false
 drs_adaptive_threshold_ms=17.5
 drs_adaptive_trigger_frames=6
 drs_adaptive_release_frames=90
+ultra_resolution=576
 ```
 
 | Key | Values | Meaning |
@@ -40,6 +41,7 @@ drs_adaptive_release_frames=90
 | `drs_adaptive_threshold_ms` | `10.00`–`40.00` (up to two decimals) | Present interval that counts as a late frame; 16.67 is one vblank, the default 17.5 allows half a millisecond of jitter |
 | `drs_adaptive_trigger_frames` | `1`–`60` | Consecutive late presents before the resolution drops (default 6, one tenth of a second) |
 | `drs_adaptive_release_frames` | `1`–`600` | Consecutive presents within budget before the resolution is restored (default 90, 1.5 s) |
+| `ultra_resolution` | `576`, `720` | 0.5.3 experiment: the internal resolution console LLUltra renders at (default `576`, the fork's choice); also the Settings row **UltraRes** on a console, which takes effect at once. Dynamic resolution still steps down from it. Emulator profiles and the other console profiles ignore it. Measures how much of LLUltra's budget the resolution drop buys; see [Rendering profiles](RENDERING.md) |
 
 ## Dynamic-resolution experiment (0.5.2)
 

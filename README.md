@@ -79,7 +79,7 @@ including the ZL-gated native edits on the character select, is in
 | --- | --- | --- | --- | --- |
 | Vanilla | 3 | TwoBehind | 1080p, DRS off | 1080p, DRS off |
 | LessLag | 2 | OneBehind, presents at the flush | 1080p, DRS on | 1080p, DRS off |
-| LLUltra | 2 | Immediate, earlier flush, presents at the flush (0.5.2) | 576p, DRS on | 1080p, DRS off |
+| LLUltra | 2 | Immediate, earlier flush, presents at the flush (0.5.2) | 576p, DRS on (UltraRes row or `ultra_resolution=720` to test 720p) | 1080p, DRS off |
 | LLDoubles | 3 | OneBehind, presents at the flush (0.5.2) | 1080p, DRS on | 1080p, DRS on |
 
 Auto uses Vanilla in menus, offline matches and Training; online singles get

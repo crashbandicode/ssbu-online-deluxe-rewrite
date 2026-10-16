@@ -8,7 +8,7 @@ more than two fighters use LLDoubles. Local wireless counts as online here.
 | --- | --- | --- | --- | --- |
 | Vanilla | 3 | TwoBehind | 1080p / off | 1080p / off |
 | LessLag | 2 | OneBehind, presents at the flush (0.4.0) | 1080p / on | 1080p / off |
-| LLUltra | 2 | Immediate, earlier flush, presents at the flush (0.5.2) | 576p / on | 1080p / off |
+| LLUltra | 2 | Immediate, earlier flush, presents at the flush (0.5.2) | 576p / on (`ultra_resolution=720` or the UltraRes row raises it to 720p, 0.5.3) | 1080p / off |
 | LLDoubles | 3 | OneBehind, presents at the flush (0.5.2) | 1080p / on | 1080p / on |
 
 ## How Auto knows it is online

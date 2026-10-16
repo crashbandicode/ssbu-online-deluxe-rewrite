@@ -779,6 +779,7 @@ fn current_announce() -> crate::peer_transport::Announce {
         crate::resolution::hooks_ready(),
         decision.committed,
         settings.platform,
+        settings.ultra_resolution.level(),
     );
     crate::peer_transport::announce_from(
         settings.input_buffer,

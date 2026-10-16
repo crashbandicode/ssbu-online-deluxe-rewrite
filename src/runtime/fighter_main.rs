@@ -119,11 +119,13 @@ pub(super) fn reset_reports() {
 
 pub(super) fn sync_resolution() {
     let decision = crate::render_policy::load_decision();
+    let settings = super::settings();
     let setting = crate::resolution::active_setting(
         decision.live,
         crate::resolution::hooks_ready(),
         decision.committed,
-        super::settings().platform,
+        settings.platform,
+        settings.ultra_resolution.level(),
     );
     if !crate::resolution::needs_retarget(setting.level, setting.dynamic) {
         return;

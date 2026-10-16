@@ -110,9 +110,10 @@ pub struct Setting {
 /// 1080p, dynamic-resolution-off result.
 ///
 /// Vanilla is 1080p with dynamic resolution off. Console LessLag is 1080p on.
-/// Console Ultra is 576p on. Emulator LessLag and Ultra stay 1080p off.
-/// LLDoubles is 1080p on for both platforms.
-pub const fn defaults_for(profile: Profile, platform: Platform) -> Setting {
+/// Console Ultra is `ultra` on (the INI's `ultra_resolution`, 576p by
+/// default). Emulator LessLag and Ultra stay 1080p off. LLDoubles is 1080p on
+/// for both platforms.
+pub const fn defaults_for(profile: Profile, platform: Platform, ultra: Level) -> Setting {
     match (profile, platform) {
         (Profile::Vanilla, _) => Setting {
             level: Level::P1080,
@@ -123,7 +124,7 @@ pub const fn defaults_for(profile: Profile, platform: Platform) -> Setting {
             dynamic: true,
         },
         (Profile::Ultra, Platform::Console) => Setting {
-            level: Level::P576,
+            level: ultra,
             dynamic: true,
         },
         (Profile::LessLag | Profile::Ultra, Platform::Emulator) => Setting {
@@ -145,9 +146,10 @@ pub const fn active_setting(
     hooks_ready: bool,
     committed: Profile,
     platform: Platform,
+    ultra: Level,
 ) -> Setting {
     if live && hooks_ready {
-        defaults_for(committed, platform)
+        defaults_for(committed, platform, ultra)
     } else {
         Setting {
             level: Level::P1080,
@@ -886,29 +888,69 @@ mod tests {
             level: Level::P576,
             dynamic: true,
         };
-        assert_eq!(defaults_for(Profile::Vanilla, Platform::Console), off);
-        assert_eq!(defaults_for(Profile::Vanilla, Platform::Emulator), off);
-        assert_eq!(defaults_for(Profile::LessLag, Platform::Console), on_1080);
-        assert_eq!(defaults_for(Profile::Ultra, Platform::Console), ultra);
-        assert_eq!(defaults_for(Profile::LessLag, Platform::Emulator), off);
-        assert_eq!(defaults_for(Profile::Ultra, Platform::Emulator), off);
-        assert_eq!(defaults_for(Profile::Doubles, Platform::Console), on_1080);
-        assert_eq!(defaults_for(Profile::Doubles, Platform::Emulator), on_1080);
+        let base = Level::P576;
+        assert_eq!(defaults_for(Profile::Vanilla, Platform::Console, base), off);
         assert_eq!(
-            active_setting(false, true, Profile::Ultra, Platform::Console),
+            defaults_for(Profile::Vanilla, Platform::Emulator, base),
             off
         );
         assert_eq!(
-            active_setting(true, false, Profile::Doubles, Platform::Console),
+            defaults_for(Profile::LessLag, Platform::Console, base),
+            on_1080
+        );
+        assert_eq!(defaults_for(Profile::Ultra, Platform::Console, base), ultra);
+        assert_eq!(
+            defaults_for(Profile::LessLag, Platform::Emulator, base),
             off
         );
+        assert_eq!(defaults_for(Profile::Ultra, Platform::Emulator, base), off);
         assert_eq!(
-            active_setting(true, true, Profile::LessLag, Platform::Console),
+            defaults_for(Profile::Doubles, Platform::Console, base),
             on_1080
         );
         assert_eq!(
-            active_setting(true, true, Profile::Ultra, Platform::Emulator),
+            defaults_for(Profile::Doubles, Platform::Emulator, base),
+            on_1080
+        );
+        // `ultra_resolution` moves console Ultra alone; emulator Ultra and the
+        // other profiles ignore it. The INI offers 720; the policy itself
+        // takes any level.
+        for level in [Level::P720, Level::P1080] {
+            assert_eq!(
+                defaults_for(Profile::Ultra, Platform::Console, level),
+                Setting {
+                    level,
+                    dynamic: true
+                }
+            );
+            assert_eq!(defaults_for(Profile::Ultra, Platform::Emulator, level), off);
+            assert_eq!(
+                defaults_for(Profile::LessLag, Platform::Console, level),
+                on_1080
+            );
+        }
+        assert_eq!(
+            active_setting(false, true, Profile::Ultra, Platform::Console, base),
             off
+        );
+        assert_eq!(
+            active_setting(true, false, Profile::Doubles, Platform::Console, base),
+            off
+        );
+        assert_eq!(
+            active_setting(true, true, Profile::LessLag, Platform::Console, base),
+            on_1080
+        );
+        assert_eq!(
+            active_setting(true, true, Profile::Ultra, Platform::Emulator, base),
+            off
+        );
+        assert_eq!(
+            active_setting(true, true, Profile::Ultra, Platform::Console, Level::P720),
+            Setting {
+                level: Level::P720,
+                dynamic: true
+            }
         );
         assert!(installed_hook_word(FUNCTION_OFFSET, 0x5800_0051));
         assert!(installed_hook_word(FUNCTION_OFFSET, 0x1400_0001));

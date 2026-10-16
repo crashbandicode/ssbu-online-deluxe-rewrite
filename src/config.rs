@@ -119,6 +119,58 @@ pub struct Config {
     /// `drs_adaptive_threshold_ms`, restore after `drs_adaptive_release_frames`
     /// presents within budget. Default off, 17.5 ms, 6 and 90.
     pub drs_adaptive: AdaptiveSettings,
+    /// 0.5.3 experiment: the internal resolution console LLUltra renders at
+    /// (`576`, the fork's choice and the default, or `720`). Dynamic
+    /// resolution still steps down from it. Emulator profiles ignore it.
+    pub ultra_resolution: UltraResolution,
+}
+
+/// Console LLUltra base resolution (`ultra_resolution`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum UltraResolution {
+    P720,
+    #[default]
+    P576,
+}
+
+impl UltraResolution {
+    pub const fn key(self) -> &'static str {
+        match self {
+            Self::P720 => "720",
+            Self::P576 => "576",
+        }
+    }
+
+    pub const fn level(self) -> crate::resolution::Level {
+        match self {
+            Self::P720 => crate::resolution::Level::P720,
+            Self::P576 => crate::resolution::Level::P576,
+        }
+    }
+
+    fn parse(value: &str) -> Option<Self> {
+        Some(match value {
+            "720" => Self::P720,
+            "576" => Self::P576,
+            _ => return None,
+        })
+    }
+
+    /// Settings-row label.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::P720 => "720p",
+            Self::P576 => "576p",
+        }
+    }
+
+    /// Left or Right swaps 576p and 720p.
+    pub const fn cycle(self, _direction: i8) -> Self {
+        match self {
+            Self::P576 => Self::P720,
+            Self::P720 => Self::P576,
+        }
+    }
 }
 
 impl Default for Config {
@@ -134,6 +186,7 @@ impl Default for Config {
             fps_boost: false,
             drs_moves: MoveSet::NONE,
             drs_adaptive: AdaptiveSettings::default(),
+            ultra_resolution: UltraResolution::P576,
         }
     }
 }
@@ -152,7 +205,7 @@ fn parse_count<T: TryFrom<u32>>(value: &str, max: u32, message: &str) -> Result<
 
 pub fn parse(text: &str) -> Result<Config, String> {
     let mut config = Config::default();
-    let mut seen = [false; 14];
+    let mut seen = [false; 15];
     for (index, raw) in text.lines().enumerate() {
         let line = raw.split('#').next().unwrap_or_default().trim();
         if line.is_empty() {
@@ -183,6 +236,7 @@ pub fn parse(text: &str) -> Result<Config, String> {
             "drs_adaptive_threshold_ms" => 11,
             "drs_adaptive_trigger_frames" => 12,
             "drs_adaptive_release_frames" => 13,
+            "ultra_resolution" => 14,
             _ => return Err(error(&format!("unknown key '{key}'"))),
         };
         if seen[slot] {
@@ -279,6 +333,10 @@ pub fn parse(text: &str) -> Result<Config, String> {
                 )
                 .map_err(|message| error(&message))?;
             }
+            "ultra_resolution" => {
+                config.ultra_resolution = UltraResolution::parse(value)
+                    .ok_or_else(|| error("ultra_resolution must be 576 or 720"))?;
+            }
             "input_buffer" => {
                 config.input_buffer = if value == "auto" {
                     -1
@@ -333,13 +391,14 @@ pub fn serialize(config: &Config) -> String {
         "false"
     };
     format!(
-        "# Online Deluxe settings\nversion=1\ninput_buffer={input_buffer}\nrender_mode={}\nauto_profile={auto_profile}\nplatform={}\npeer_observer={peer_observer}\nstealth={stealth}\nstreamer={streamer}\nfps_boost={fps_boost}\ndrs_moves={}\ndrs_adaptive={drs_adaptive}\ndrs_adaptive_threshold_ms={}\ndrs_adaptive_trigger_frames={}\ndrs_adaptive_release_frames={}\n",
+        "# Online Deluxe settings\nversion=1\ninput_buffer={input_buffer}\nrender_mode={}\nauto_profile={auto_profile}\nplatform={}\npeer_observer={peer_observer}\nstealth={stealth}\nstreamer={streamer}\nfps_boost={fps_boost}\ndrs_moves={}\ndrs_adaptive={drs_adaptive}\ndrs_adaptive_threshold_ms={}\ndrs_adaptive_trigger_frames={}\ndrs_adaptive_release_frames={}\nultra_resolution={}\n",
         config.render_mode.key(),
         config.platform.key(),
         config.drs_moves.serialize(),
         format_threshold(config.drs_adaptive.threshold_hundredths_ms),
         config.drs_adaptive.trigger_frames,
         config.drs_adaptive.release_frames,
+        config.ultra_resolution.key(),
     )
 }
 
@@ -388,9 +447,43 @@ mod tests {
                 fps_boost: false,
                 drs_moves: MoveSet::NONE,
                 drs_adaptive: AdaptiveSettings::default(),
+                ultra_resolution: UltraResolution::P576,
             };
             assert_eq!(parse(&config.serialize()).unwrap(), config);
         }
+    }
+
+    #[test]
+    fn ultra_resolution_defaults_to_576_round_trips_and_rejects_other_values() {
+        let defaults = parse("version=1").unwrap();
+        assert_eq!(defaults.ultra_resolution, UltraResolution::P576);
+        assert_eq!(
+            defaults.ultra_resolution.level(),
+            crate::resolution::Level::P576
+        );
+        assert!(defaults.serialize().contains("ultra_resolution=576\n"));
+        for (value, expected, level) in [
+            ("720", UltraResolution::P720, crate::resolution::Level::P720),
+            ("576", UltraResolution::P576, crate::resolution::Level::P576),
+        ] {
+            let config = parse(&format!("version=1\nultra_resolution={value}")).unwrap();
+            assert_eq!(config.ultra_resolution, expected);
+            assert_eq!(config.ultra_resolution.level(), level);
+            assert_eq!(parse(&config.serialize()).unwrap(), config);
+        }
+        // The Settings row swaps the two values in either direction.
+        assert_eq!(UltraResolution::P576.cycle(1), UltraResolution::P720);
+        assert_eq!(UltraResolution::P720.cycle(1), UltraResolution::P576);
+        assert_eq!(UltraResolution::P576.cycle(-1), UltraResolution::P720);
+        assert_eq!(UltraResolution::P576.label(), "576p");
+        assert_eq!(UltraResolution::P720.label(), "720p");
+        for bad in ["1080", "900", "480", "720p", "", "true"] {
+            assert!(
+                parse(&format!("version=1\nultra_resolution={bad}")).is_err(),
+                "{bad:?} accepted"
+            );
+        }
+        assert!(parse("version=1\nultra_resolution=720\nultra_resolution=576").is_err());
     }
 
     #[test]

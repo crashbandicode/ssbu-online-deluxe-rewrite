@@ -11,20 +11,24 @@ pub const ROW_NET_PROFILE: usize = 2;
 pub const ROW_STEALTH: usize = 3;
 pub const ROW_STREAMER: usize = 4;
 pub const ROW_FPS: usize = 5;
-pub const ROW_COUNT: usize = 6;
+/// Console LLUltra base resolution (`ultra_resolution`, 0.5.3 experiment).
+pub const ROW_ULTRA_RES: usize = 6;
+pub const ROW_COUNT: usize = 7;
 
 /// Which editable rows exist. Platform is configured, never a row.
-/// FPS++ is the emulator toggle only.
+/// FPS++ is the emulator toggle only; UltraRes is the console one.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RowGate {
     pub peers_connected: bool,
     pub fps_visible: bool,
+    pub ultra_res_visible: bool,
 }
 
 pub fn row_gate(peers_connected: bool, platform: Platform) -> RowGate {
     RowGate {
         peers_connected,
         fps_visible: platform == Platform::Emulator,
+        ultra_res_visible: platform == Platform::Console,
     }
 }
 
@@ -32,6 +36,7 @@ pub fn row_visible(row: usize, gate: RowGate) -> bool {
     match row {
         ROW_PEER => gate.peers_connected,
         ROW_FPS => gate.fps_visible,
+        ROW_ULTRA_RES => gate.ultra_res_visible,
         ROW_NET_LATENCY | ROW_NET_PROFILE | ROW_STEALTH | ROW_STREAMER => true,
         _ => false,
     }
@@ -472,6 +477,10 @@ impl Menu {
                 config.fps_boost = next;
                 true
             }
+            ROW_ULTRA_RES => {
+                config.ultra_resolution = config.ultra_resolution.cycle(direction);
+                true
+            }
             _ => false,
         }
     }
@@ -786,11 +795,30 @@ mod tests {
         let mut config = Config::default();
         assert!(!menu.handle_peers(Action::Toggle, &mut config, false));
         assert_eq!(menu.selected, ROW_NET_LATENCY);
+        // Console: UltraRes is the last row; FPS++ is hidden.
+        menu.handle_peers(Action::Up, &mut config, false);
+        assert_eq!(menu.selected, ROW_ULTRA_RES);
+        assert!(menu.handle_peers(Action::Right, &mut config, false));
+        assert_eq!(
+            config.ultra_resolution,
+            crate::config::UltraResolution::P720
+        );
+        assert!(menu.handle_peers(Action::Left, &mut config, false));
+        assert_eq!(
+            config.ultra_resolution,
+            crate::config::UltraResolution::P576
+        );
         menu.handle_peers(Action::Up, &mut config, false);
         assert_eq!(menu.selected, ROW_STREAMER);
         menu.handle_peers(Action::Down, &mut config, false);
+        menu.handle_peers(Action::Down, &mut config, false);
         assert_eq!(menu.selected, ROW_NET_LATENCY);
+        // Emulator: FPS++ is the last row; UltraRes is hidden.
         config.platform = Platform::Emulator;
+        assert!(!row_visible(
+            ROW_ULTRA_RES,
+            row_gate(false, Platform::Emulator)
+        ));
         menu.handle_peers(Action::Up, &mut config, false);
         assert_eq!(menu.selected, ROW_FPS);
         menu.handle_peers(Action::Down, &mut config, false);
