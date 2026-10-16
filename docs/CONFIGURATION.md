@@ -26,6 +26,8 @@ drs_adaptive_release_frames=90
 ultra_resolution=576
 hide_pages=none
 perf_view=graph
+early_present=true
+dispatcher_backoff=true
 ```
 
 | Key | Values | Meaning |
@@ -45,6 +47,8 @@ perf_view=graph
 | `drs_adaptive_release_frames` | `1`–`600` | Consecutive presents within budget before the resolution is restored (default 90, 1.5 s) |
 | `ultra_resolution` | `576`, `720` | 0.5.3 experiment: the internal resolution console LLUltra renders at (default `576`, the fork's choice); also the Settings row **UltraRes** on a console, which takes effect at once. Dynamic resolution still steps down from it. Emulator profiles and the other console profiles ignore it. Measures how much of LLUltra's budget the resolution drop buys; see [Rendering profiles](RENDERING.md) |
 | `hide_pages` | `none`, or a comma list of `plugins`, `own_pages`, `performance` | 0.5.3: pages the window chord skips. `plugins,performance` makes the cycle Settings → a plugin's own page (FX Control) → hidden, so a measurement session reaches the plugin page in one tap and hides it in one more. Settings is always in the cycle and shows the three as the rows **PluginsPage**, **OwnPages**, **PerfPage** (Shown / Hidden), which toggle them live; Debug keeps its own chord. See [Controls](CONTROLS.md) |
+| `early_present` | `true`, `false` | 0.5.3: present the acquired image at the flush that submitted it, the 0.4.0 fix for the two-image profiles' character-select stall (LessLag; LLUltra and LLDoubles since 0.5.2). `false` keeps the game's own present order everywhere, which is what upstream does. Read at start. The before/after is shown in [Optimizations added by this rewrite](../README.md#optimizations-added-by-this-rewrite) |
+| `dispatcher_backoff` | `true`, `false` | 0.5.3: let the dispatcher idle-backoff hook sleep ([Dispatcher backoff](DISPATCHER_BACKOFF.md)). `false` leaves the hook installed but asleep, so the game spins as upstream does; the Performance row **Backoff** reads `Off (ini)`. Read at start. The `DISABLE_BACKOFF` flag still skips the install entirely |
 | `perf_view` | `graph`, `number` | 0.5.3: the frame-time block at the bottom of the vertical window as the 180-sample plot (default) or the mean as text, which is less draw work while measuring; also the Settings row **PerfView**. The compact match strip is text either way |
 
 ## Dynamic-resolution experiment (0.5.2)

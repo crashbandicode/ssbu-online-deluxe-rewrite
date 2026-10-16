@@ -55,6 +55,10 @@ static ULTRA_720: AtomicBool = AtomicBool::new(false);
 static HIDE_PAGES: AtomicU8 = AtomicU8::new(0);
 /// `perf_view` (0.5.3): true = number, false = graph.
 static PERF_NUMBER: AtomicBool = AtomicBool::new(false);
+/// `early_present` (0.5.3): present at the flush in the render-opts profiles.
+static EARLY_PRESENT: AtomicBool = AtomicBool::new(true);
+/// `dispatcher_backoff` (0.5.3): let the installed backoff hook sleep.
+static BACKOFF_ENABLED: AtomicBool = AtomicBool::new(true);
 static DRS_MOVES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 static DRS_ADAPTIVE: AtomicBool = AtomicBool::new(false);
 static DRS_THRESHOLD: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(1750);
@@ -101,7 +105,19 @@ pub(super) fn settings() -> Config {
         } else {
             crate::config::PerfView::Graph
         },
+        early_present: EARLY_PRESENT.load(Ordering::Acquire),
+        dispatcher_backoff: BACKOFF_ENABLED.load(Ordering::Acquire),
     }
+}
+
+/// `early_present` (0.5.3). Read by the flush wrapper every frame.
+pub(super) fn early_present_enabled() -> bool {
+    EARLY_PRESENT.load(Ordering::Relaxed)
+}
+
+/// `dispatcher_backoff` (0.5.3). Read by the backoff hook on every idle pass.
+pub(super) fn backoff_enabled() -> bool {
+    BACKOFF_ENABLED.load(Ordering::Relaxed)
 }
 
 /// Enabled per-move resolution triggers (0.5.2 experiment). Atomic read; the
@@ -151,6 +167,8 @@ pub(super) fn publish(config: &Config) {
         config.perf_view == crate::config::PerfView::Number,
         Ordering::Release,
     );
+    EARLY_PRESENT.store(config.early_present, Ordering::Release);
+    BACKOFF_ENABLED.store(config.dispatcher_backoff, Ordering::Release);
     DRS_MOVES.store(config.drs_moves.0, Ordering::Release);
     DRS_ADAPTIVE.store(config.drs_adaptive.enabled, Ordering::Release);
     DRS_THRESHOLD.store(

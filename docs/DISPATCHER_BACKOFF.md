@@ -45,8 +45,10 @@ all_threads=0
 # preset=measured reproduces the Eden diagnostic cadence (1 us once per 171 passes)
 ```
 
-`DISABLE_BACKOFF` in the data directory turns the hook off for an A/B. The same
-fix ships alone as the
+`dispatcher_backoff=false` in `config.ini` (0.5.3) keeps the hook installed
+but never sleeps, so an A/B needs only an INI edit and a restart; the Backoff
+row then reads `Off (ini)`. `DISABLE_BACKOFF` in the data directory skips the
+install entirely. The same fix ships alone as the
 [ssbu-dispatcher-backoff](https://git.syntaxbyexample.com/intpa/ssbu-dispatcher-backoff)
 plugin; exactly one of the two installs the hook, whichever loads first, and
 the other reports `External`.

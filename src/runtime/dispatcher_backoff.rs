@@ -247,6 +247,11 @@ unsafe fn snapshot(dispatcher: usize) -> Option<Snapshot> {
 /// Integer-only; no allocation, file or log access; no lock is held here.
 #[skyline::hook(offset = SITE, inline)]
 unsafe fn dispatcher_idle_pass(ctx: &InlineCtx) {
+    // `dispatcher_backoff=false` (0.5.3): installed but never sleeps, so the
+    // game spins as it does upstream. One relaxed load per idle pass.
+    if !super::backoff_enabled() {
+        return;
+    }
     if MAIN_THREAD_ONLY.load(Ordering::Relaxed) && !on_main_thread() {
         return;
     }
@@ -420,6 +425,7 @@ pub(super) fn publish() {
 
 pub(super) fn status_label() -> String {
     match OUTCOME.load(Ordering::Acquire) {
+        1 if !super::backoff_enabled() => "Off (ini)".to_string(),
         1 if !ELIGIBLE.load(Ordering::Acquire) => "Armed".to_string(),
         1 => crate::dispatcher_backoff::status_label(
             true,

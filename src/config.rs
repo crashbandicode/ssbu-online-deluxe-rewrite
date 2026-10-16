@@ -131,6 +131,16 @@ pub struct Config {
     /// 0.5.3: how the window shows frame time (`perf_view`): the plot, or a
     /// number only (less draw work while measuring). Default graph.
     pub perf_view: PerfView,
+    /// 0.5.3: present the acquired image at the flush that submitted it
+    /// (`early_present`, the 0.4.0 character-select fix for the two-image
+    /// profiles). `false` keeps the game's own present order everywhere, as
+    /// upstream does. Default true. Read at start.
+    pub early_present: bool,
+    /// 0.5.3: the dispatcher idle-backoff hook (`dispatcher_backoff`). `false`
+    /// leaves the hook installed but asleep: the game spins as upstream does.
+    /// Default true. Read at start; the `DISABLE_BACKOFF` flag still skips
+    /// the install entirely.
+    pub dispatcher_backoff: bool,
 }
 
 /// Pages left out of the window cycle (`hide_pages=none` or a comma list of
@@ -299,6 +309,8 @@ impl Default for Config {
             ultra_resolution: UltraResolution::P576,
             hide_pages: HiddenPages::NONE,
             perf_view: PerfView::Graph,
+            early_present: true,
+            dispatcher_backoff: true,
         }
     }
 }
@@ -317,7 +329,7 @@ fn parse_count<T: TryFrom<u32>>(value: &str, max: u32, message: &str) -> Result<
 
 pub fn parse(text: &str) -> Result<Config, String> {
     let mut config = Config::default();
-    let mut seen = [false; 17];
+    let mut seen = [false; 19];
     for (index, raw) in text.lines().enumerate() {
         let line = raw.split('#').next().unwrap_or_default().trim();
         if line.is_empty() {
@@ -351,6 +363,8 @@ pub fn parse(text: &str) -> Result<Config, String> {
             "ultra_resolution" => 14,
             "hide_pages" => 15,
             "perf_view" => 16,
+            "early_present" => 17,
+            "dispatcher_backoff" => 18,
             _ => return Err(error(&format!("unknown key '{key}'"))),
         };
         if seen[slot] {
@@ -460,6 +474,20 @@ pub fn parse(text: &str) -> Result<Config, String> {
                 config.perf_view = PerfView::parse(value)
                     .ok_or_else(|| error("perf_view must be graph or number"))?;
             }
+            "early_present" => {
+                config.early_present = match value {
+                    "true" => true,
+                    "false" => false,
+                    _ => return Err(error("early_present must be true or false")),
+                };
+            }
+            "dispatcher_backoff" => {
+                config.dispatcher_backoff = match value {
+                    "true" => true,
+                    "false" => false,
+                    _ => return Err(error("dispatcher_backoff must be true or false")),
+                };
+            }
             "input_buffer" => {
                 config.input_buffer = if value == "auto" {
                     -1
@@ -513,8 +541,14 @@ pub fn serialize(config: &Config) -> String {
     } else {
         "false"
     };
+    let early_present = if config.early_present { "true" } else { "false" };
+    let dispatcher_backoff = if config.dispatcher_backoff {
+        "true"
+    } else {
+        "false"
+    };
     format!(
-        "# Online Deluxe settings\nversion=1\ninput_buffer={input_buffer}\nrender_mode={}\nauto_profile={auto_profile}\nplatform={}\npeer_observer={peer_observer}\nstealth={stealth}\nstreamer={streamer}\nfps_boost={fps_boost}\ndrs_moves={}\ndrs_adaptive={drs_adaptive}\ndrs_adaptive_threshold_ms={}\ndrs_adaptive_trigger_frames={}\ndrs_adaptive_release_frames={}\nultra_resolution={}\nhide_pages={}\nperf_view={}\n",
+        "# Online Deluxe settings\nversion=1\ninput_buffer={input_buffer}\nrender_mode={}\nauto_profile={auto_profile}\nplatform={}\npeer_observer={peer_observer}\nstealth={stealth}\nstreamer={streamer}\nfps_boost={fps_boost}\ndrs_moves={}\ndrs_adaptive={drs_adaptive}\ndrs_adaptive_threshold_ms={}\ndrs_adaptive_trigger_frames={}\ndrs_adaptive_release_frames={}\nultra_resolution={}\nhide_pages={}\nperf_view={}\nearly_present={early_present}\ndispatcher_backoff={dispatcher_backoff}\n",
         config.render_mode.key(),
         config.platform.key(),
         config.drs_moves.serialize(),
@@ -575,8 +609,31 @@ mod tests {
                 ultra_resolution: UltraResolution::P576,
                 hide_pages: HiddenPages::NONE,
                 perf_view: PerfView::Graph,
+                early_present: true,
+                dispatcher_backoff: true,
             };
             assert_eq!(parse(&config.serialize()).unwrap(), config);
+        }
+    }
+
+    #[test]
+    fn early_present_and_dispatcher_backoff_default_on_round_trip_and_reject_bad_values() {
+        let defaults = parse("version=1").unwrap();
+        assert!(defaults.early_present && defaults.dispatcher_backoff);
+        let written = defaults.serialize();
+        assert!(written.contains("early_present=true\n"));
+        assert!(written.contains("dispatcher_backoff=true\n"));
+        let upstream = parse("version=1\nearly_present=false\ndispatcher_backoff=false").unwrap();
+        assert!(!upstream.early_present && !upstream.dispatcher_backoff);
+        assert_eq!(parse(&upstream.serialize()).unwrap(), upstream);
+        let mixed = parse("version=1\nearly_present=false").unwrap();
+        assert!(!mixed.early_present && mixed.dispatcher_backoff);
+        for bad in [
+            "version=1\nearly_present=off",
+            "version=1\ndispatcher_backoff=1",
+            "version=1\nearly_present=true\nearly_present=false",
+        ] {
+            assert!(parse(bad).is_err(), "{bad:?} accepted");
         }
     }
 
