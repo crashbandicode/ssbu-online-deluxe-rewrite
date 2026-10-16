@@ -39,6 +39,8 @@ More in [Screenshots](docs/SCREENSHOTS.md).
 
 ## Additional optimizations not yet present in Deluxe
 
+For the rendering basics, see [How Deluxe LessLag and LLUltra work](docs/LESSLAG_LLULTRA.md).
+
 Two things this rewrite does that the original Online Deluxe does not:
 
 ### Dispatcher backoff (smarter CPU waiting)
