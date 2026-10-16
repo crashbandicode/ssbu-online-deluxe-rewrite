@@ -45,15 +45,36 @@ settings this project has used:
 
 | Quota | Period | Used for | Result |
 | --- | --- | --- | --- |
-| 175 % | 5 ms | Dispatcher backoff A/B/A on the character select, LessLag (0.3.1) | 52 → 59 fps with the hook, 18 % less CPU per frame; Vanilla and LLDoubles stayed at 60 |
-| 120 % | 5 ms | FX Control effect campaign (2026-10-15), present-at-flush before/after clips | reproduces the console's character-select dip; every FX mode sits at the quota's ceiling, so On/Off/Reduced compare by worst interval |
+| 175 % | 5 ms | Dispatcher backoff A/B/A on the character select, LessLag (0.3.1); the calibrated before/after clips (2026-10-16) | 52 → 59 fps with the hook, 18 % less CPU per frame; Vanilla and LLDoubles stayed at 60 |
+| 120 % | 5 ms | FX Control effect campaign (2026-10-15); first before/after clip attempt | far harsher than the console (35 fps on the character select with both switches off); every FX mode sits at the quota's ceiling, so On/Off/Reduced compare by worst interval |
 | none | — | latency trials, control runs | 60 fps everywhere; the stall does not appear |
 
-The quota is applied after the run starts (the unit name is in the launcher's
-`run.json`), kept identical for the "before" and "after" state of an A/B, and
-written into the notes of the run. If a scene shows no drop at 120 %, the
-quota is tightened in steps (100 %, 90 %) until the "before" state drops and
-the same value is used for "after"; the value used is stated with the clip.
+### Calibrating the quota to the console
+
+The quota is a dial, so it was swept against the console's two known
+numbers for the character-select hand sweep: **49.9 fps** before the
+present-at-flush fix and **59.85 fps** after it. One Eden run, build
+`0.5.3-d10fce5eeb59`, LessLag, both switches off, the same 20 s hand sweep
+at each step, three `game_fps` samples and the Performance view's FPS row:
+
+| Quota | `game_fps` samples | FPS row |
+| --- | --- | --- |
+| 175 % | 50.0 · 51.0 · 52.0 | 52 |
+| 160 % | 46.9 · 45.1 · 47.3 | 46 |
+| 150 % | 40.9 · 43.9 · 40.0 | 43 |
+| 140 % | 38.0 · 38.0 · 34.8 | 38 |
+| 130 % | 32.9 · 31.0 · 36.1 | 35 |
+| 120 % (first attempt) | 34.0 | 35 |
+
+**175 %** is the calibrated value: the off state lands on the console's
+49.9, and with both switches on the same quota gives 60.0 on the character
+select (console 59.85) and 60.0 in Training with Pyra's Blazing End. The
+off state in Training read 52–57 fps at 175 %. The quota is applied after
+the run starts (the unit name is in the launcher's `run.json`), kept
+identical for the "before" and "after" state of an A/B, and written into the
+notes of the run. The calibration holds for this host (Yoga, Intel Lunar
+Lake) and this Eden build; another machine needs its own sweep against the
+same two console numbers.
 
 ## What the bias does and does not reproduce
 
@@ -94,21 +115,22 @@ the same value is used for "after"; the value used is stated with the clip.
 The clips live under `docs/media/toggles-*.gif`; the run notes and the exact
 quota are in the evidence root beside the captures.
 
-## Result of the 2026-10-16 clips
+## Result of the 2026-10-16 clips (calibrated, 175 %)
 
-Build `0.5.3-d10fce5eeb59`, quota 120 % / 5 ms for both states, LessLag,
-docked 1080p, Eden GIF build on the private display. Read from the
-Performance view in the clips and `renderer-status.txt` after each clip:
+Build `0.5.3-d10fce5eeb59`, quota 175 % / 5 ms for both states, LessLag,
+docked 1080p, Eden GIF build on the private display, Terry as the Training
+CPU in both runs. `game_fps` is Eden's own counter sampled right after each
+6 s clip; the Performance view in the clip agrees within a frame or two.
 
-| Scene | Switches off | Switches on |
-| --- | --- | --- |
-| Character select, hand sweep | FPS 35, frame time 28.6 ms, Backoff `Off (ini)`, `early_presents=0` | FPS 58, 17.2 ms, Backoff 1 840/s 40 µs, `early_presents=4119` (one per present) |
-| Training, Pyra Blazing End at a stopped CPU | FPS 29, 34.8 ms, `Off (ini)`, 0 | FPS 52, 19.2 ms, 1 738/s 50 µs, 10 205 |
+| Scene | Switches off | Switches on | Console |
+| --- | --- | --- | --- |
+| Character select, hand sweep | 50–53 fps during the sweep (52.8 after the clip), Backoff `Off (ini)`, `early_presents=0` | 60.0 fps, Backoff 2 782/s 50 µs, `early_presents=4228` (one per present) | 49.9 → 59.85 |
+| Training, Pyra Blazing End at a stopped CPU | 52.0 fps, `Off (ini)`, 0 | 59.0 fps, 1 398/s 50 µs, 12 568 | 60 with the switches on |
 
-The recorder reported 73 / 73 / 69 / 72 frames with 0, 0, 3 and 1 dropped
-over the 6 s clips. The off state is harsher than the console's 49.9 fps
-because the quota is a blunt instrument, not a calibrated Switch; the
-direction and the mechanism are what the clips establish.
+The recorder reported 72 / 73 / 73 / 73 frames and no dropped frame over the
+four clips. A first attempt at 120 % gave 35 / 58 fps on the character select
+and 29 / 52 in Training: the same direction, but an off state far harsher than
+the console, which is what the calibration sweep above corrects.
 
 Caveat for every emulator run: the **Clock** row and the `# clock=` header
 read the host CPU (about 4.2 GHz here, reported as `oc`); they mean

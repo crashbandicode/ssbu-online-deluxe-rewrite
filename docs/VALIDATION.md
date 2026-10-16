@@ -2499,15 +2499,20 @@ read at start, carried through the settings atomics; `DISABLE_BACKOFF`
 unchanged. Commits 7635c5c / 6591d6b: README "Before and after, on the
 emulator" and `docs/EMULATOR_METHOD.md` (the CPU-quota bias and its
 limits). Clips: Eden GIF build on the private display, isolated profile,
-build `0.5.3-d10fce5eeb59` (`artifacts/389b94963c3412f3/`), quota 120 % /
-5 ms on both runs, LessLag docked 1080p, driven by an Astra low session from
-`toggle-gifs-1016/BRIEF.md`; 4 GIFs (73/73/69/72 frames, 0/0/3/1 dropped)
-and the Performance stills in `docs/media/toggles-*`. Read from the
-Performance view: character select 35 → 58 fps (frame time 28.6 → 17.2 ms),
-Training with Blazing End 29 → 52 fps (34.8 → 19.2 ms), Backoff `Off (ini)`
-→ 1 840 / 1 738 sleeps/s, `early_presents` 0 → one per present. Evidence
-root: `toggle-gifs-1016/` (NOTES.md, renderer-*.txt, config-used-*.ini,
-driver-evidence.jsonl). Host tests 310, clippy `-D warnings`,
+build `0.5.3-d10fce5eeb59` (`artifacts/389b94963c3412f3/`), LessLag docked
+1080p, driven by Astra low sessions from `toggle-gifs-1016/BRIEF.md` and
+`BRIEF-calibration.md`. A first pass at a 120 % CPU quota gave 35 → 58 fps on
+the character select and 29 → 52 in Training (73/73/69/72 frames, 0/0/3/1
+dropped); the operator asked for a quota tuned to the console, so the quota
+was swept with both switches off (175 % → 52 fps, 160 → 46, 150 → 43,
+140 → 38, 130 → 35 on the hand sweep) and **175 %** chosen as the value
+that reproduces the console's 49.9 fps; with both switches on the same quota
+gives 60.0 (console 59.85). Final clips at 175 % (72/73/73/73 frames, none
+dropped; `docs/media/toggles-*`): character select 50–53 → 60.0 fps,
+Training with Blazing End vs Terry 52 → 59 fps, Backoff `Off (ini)` →
+2 782 / 1 398 sleeps/s, `early_presents` 0 → one per present. Evidence
+root: `toggle-gifs-1016/` (NOTES.md, CALIBRATION.md, q-renderer-*.txt,
+q-config-used-*.ini, driver-evidence.jsonl). Host tests 310, clippy `-D warnings`,
 `--no-default-features`, Skyline release build. **Emulator only; not on the
 card; not merged** — the operator reviews the branch first.
 

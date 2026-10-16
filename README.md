@@ -97,24 +97,25 @@ behaviour). Right: both on.
 | Character select, hand sweep | ![Character select, switches off](docs/media/toggles-css-off.gif) | ![Character select, switches on](docs/media/toggles-css-on.gif) |
 | Training, LessLag, Pyra Blazing End | ![Training, switches off](docs/media/toggles-effects-off.gif) | ![Training, switches on](docs/media/toggles-effects-on.gif) |
 
-The Performance view in each clip, full size, read off the same runs
-(stills: [CSS off](docs/media/toggles-css-perf-off.png) ·
-[CSS on](docs/media/toggles-css-perf-on.png) ·
-[Training off](docs/media/toggles-effects-perf-off.png) ·
-[Training on](docs/media/toggles-effects-perf-on.png)):
+The quota was calibrated against the console first: with both switches off,
+175 % puts the character-select hand sweep at 50–53 fps, where the console
+sat (49.9 fps) before the 0.4.0 fix. The same quota is used for both
+columns. Full-size Performance stills from the character-select runs:
+[off](docs/media/toggles-css-perf-off.png) ·
+[on](docs/media/toggles-css-perf-on.png).
 
-| Scene, 120 % CPU quota | Both off | Both on |
-| --- | --- | --- |
-| Character select: FPS row / frame time | 35 / 28.6 ms | 58 / 17.2 ms |
-| Training, Blazing End: FPS row / frame time | 29 / 34.8 ms | 52 / 19.2 ms |
-| Backoff row | `Off (ini)` | 1 840/s · 40 µs (CSS), 1 738/s · 50 µs (Training) |
-| `early_presents` over the run (`renderer-status.txt`) | 0 | 4 119 (CSS), 10 205 (Training): one per frame |
+| Scene, 175 % CPU quota (calibrated) | Both off | Both on | Console, for comparison |
+| --- | --- | --- | --- |
+| Character select, hand sweep | 50–53 fps | 60.0 fps | 49.9 → 59.85 fps |
+| Training, Pyra Blazing End vs Terry | 52 fps | 59 fps | LessLag Training holds 60 on the console |
+| Backoff row | `Off (ini)` | 2 782/s · 50 µs (CSS), 1 398/s · 50 µs (Training) | — |
+| `early_presents` over the run (`renderer-status.txt`) | 0 | 4 228 (CSS), 12 568 (Training): one per frame | — |
 
-Same build (`0.5.3-d10fce5eeb59`), same quota, same profile; the Training
-CPU opponent differed between the two runs (Simon, Pit; Random CPU), the
-Pyra side special did not. Emulator clips show the mechanism, not console
-numbers; the console results are in
-[Rendering profiles](docs/RENDERING.md#measured-results).
+Same build (`0.5.3-d10fce5eeb59`), same quota, same profile, same CPU
+opponent; the clips are 6 s at 12 fps, 72–73 frames each, none dropped.
+Emulator clips show the mechanism, not console numbers; the console results
+are in [Rendering profiles](docs/RENDERING.md#measured-results) and the
+calibration in [Mimicking the Switch in Eden](docs/EMULATOR_METHOD.md).
 
 ## What it does
 
