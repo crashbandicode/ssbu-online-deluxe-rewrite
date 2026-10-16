@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="760" height="710" viewBox="0 0 760 710" font-family="Segoe UI, Helvetica, Arial, sans-serif" role="img" aria-labelledby="title desc">
   <title id="title">The same button press across six captured frames</title>
-  <desc id="desc">Six dashed vertical guides mark captured frames after input. Visible-response endpoints use the Eden 0.5.2 measurements: Vanilla six, LessLag three, LLUltra two normally and two to three for later-phase input. CPU and GPU stage positions and durations are schematic, not measured. The outlined LLUltra marker at frame three is an alternative trial result, not a second display event. A presentation request is separate from visible response. Outside the time axis, separate occupancy insets show Vanilla with three reusable images, shown, queued and rendering, and LessLag and LLUltra with two, shown and rendering. These are conceptual roles, not exact contents or frame identities. Vanilla keeps its later presentation request and older pictures remain visible longer.</desc>
+  <desc id="desc">Six dashed vertical guides mark captured frames after input. Visible-response endpoints use the Eden 0.5.2 measurements: Vanilla six, LessLag three, LLUltra two normally and two to three for later-phase input. CPU and GPU stage positions and durations are schematic, not measured. A separate GPU activity track highlights rendering of N and uses dimmer bars for other frames, without treating the buffer snapshots as time intervals. The outlined LLUltra marker at frame three is an alternative trial result, not a second display event. A presentation request is separate from visible response. Outside the time axis, separate occupancy insets show Vanilla with three reusable images, shown, queued and rendering, and LessLag and LLUltra with two, shown and rendering. These are conceptual roles, not exact contents or frame identities. Vanilla keeps its later presentation request and older pictures remain visible longer.</desc>
   <rect x="0.5" y="0.5" width="759" height="709" rx="16" fill="#1b1c20" stroke="#3a3c42"/>
   <text x="28" y="39" fill="#ffffff" font-size="18">The same input, reflected on screen sooner</text>
   <text x="28" y="63" fill="#9aa0a6" font-size="13">Response endpoints: measured in Eden. CPU/GPU stage placement: schematic, not traced.</text>
@@ -73,9 +73,25 @@
     <text x="100" y="271">occupancy snapshot</text><text x="100" y="405">occupancy snapshot</text>
     <text x="100" y="565">occupancy snapshot</text>
   </g>
-  <g fill="#9aa0a6" font-size="12" text-anchor="middle">
-    <text x="444" y="175">deeper rendering / scheduling path</text>
-    <text x="309" y="335">less delay</text>
+  <!-- GPU activity uses the time axis; occupancy insets remain independent snapshots. -->
+  <g id="gpu-activity-tracks">
+    <g fill="#214a40" opacity="0.35">
+      <rect x="196" y="152" width="528" height="36" rx="7"/>
+      <rect x="196" y="312" width="528" height="36" rx="7"/>
+      <rect x="196" y="472" width="528" height="36" rx="7"/>
+    </g>
+    <g fill="#2f8f6f" opacity="0.4">
+      <rect x="204" y="156" width="406" height="28" rx="6"/>
+      <rect x="204" y="316" width="136" height="28" rx="6"/>
+      <rect x="470" y="316" width="244" height="28" rx="6"/>
+      <rect x="382" y="476" width="332" height="28" rx="6"/>
+    </g>
+    <g fill="#c9ccd2" font-size="12" text-anchor="middle">
+      <text x="407" y="175">GPU · other frames</text>
+      <text x="272" y="335">GPU · older frames</text>
+      <text x="592" y="335">GPU · other frames</text>
+      <text x="548" y="495">GPU · other frames</text>
+    </g>
   </g>
   <g fill="#2f8f6f" stroke="#ffffff" stroke-width="1.5">
     <rect x="620" y="156" width="70" height="28" rx="6"/>
@@ -116,9 +132,9 @@
   <g fill="#9aa0a6" font-size="12">
     <text x="28" y="610">Conceptual buffer occupancy, not an exact trace.</text>
     <text x="28" y="630">Left insets count reusable images, not time steps; roles can move between slots.</text>
-    <text x="28" y="648">Blue: CPU. Green bars: GPU. Yellow P: request. Screen bands: older pictures still visible.</text>
-    <text x="28" y="666">Green dots: first captured response in Eden 0.5.2, not controller-to-photon timing.</text>
+    <text x="28" y="648">Blue: CPU. Bright green: GPU drawing N. Dim green: GPU work on other frames.</text>
+    <text x="28" y="666">Yellow P: request. Green dots: first captured response, not controller-to-photon timing.</text>
     <text x="28" y="684">Outlined dot: alternative LLUltra result with later input, not a second display of N.</text>
-    <text x="28" y="702">Response counts are measured; work, occupancy and request placement are illustrative.</text>
+    <text x="28" y="702">Eden response counts are measured; GPU activity and request placement are illustrative.</text>
   </g>
 </svg>

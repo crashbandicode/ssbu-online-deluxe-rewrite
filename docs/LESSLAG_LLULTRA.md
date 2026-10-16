@@ -36,7 +36,7 @@ Illustrative timings. In console Training captures on 0.5.2, expensive moves cau
 
 ![Detailed CPU, GPU and presentation timelines with six captured-frame guides and separate occupancy insets: three reusable images in Vanilla, two each in LessLag and LLUltra](media/same-input-earlier-response.svg)
 
-Follow N, the picture carrying the same press. The six guides and response dots show the Eden counts: Vanilla 6, LessLag 3, LLUltra 2–3. LLUltra's outlined marker is the alternative later-input result. Left insets show three reusable images versus two; their shown, queued and rendering roles can move between slots. CPU/GPU work and request positions are illustrative. Conceptual buffer occupancy, not an exact trace.
+Follow N, the picture carrying the same press. The six guides and response dots show the Eden counts: Vanilla 6, LessLag 3, LLUltra 2–3. LLUltra's outlined marker is the alternative later-input result. Left insets show three reusable images versus two; their shown, queued and rendering roles can move between slots. The timeline's bright green bars highlight GPU work on N; dim green bars indicate work on other frames. CPU/GPU activity and request positions are illustrative. Conceptual buffer occupancy, not an exact trace.
 
 ## Recovering smoothness
 
