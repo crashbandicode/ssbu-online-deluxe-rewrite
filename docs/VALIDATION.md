@@ -2526,6 +2526,50 @@ evidence started the same evening on the LAN-NSO Eden but stopped at the
 Online tile (error 2306-0502: the fixture's companion service was not
 listening on 8443/8444); its partial profiles are in the evidence root's
 `coverage-nso-1016/`.
+### 0.5.3 — 2026-10-17: two-host NSO session — arena, Quickplay, Background and Co-op matches reached; category A is live code
+
+Operator: "you need two eden instances to run quickplay or arenas" … "can you
+not do it?" — so this thread started the companion itself on the Surface (its
+owner's bounded launcher, own unit names, one-hour cap 01:48–02:48Z), ran the
+Yoga coverage peer on NSO profile `b` (account 49154, coverage build
+292a402a…, LessLag, `platform=console`, player 2 enabled) and drove the Ally's
+fixture slot `a` (account 49153, the owner's tested Windows profile) over ssh
+through the owner's own harness (scheduled-task launch into the desktop,
+named-pipe control client, renderer capture). Two Astra low drivers, one per
+peer. Display fix first (same evening): the Qt software-keyboard dialog that
+had segfaulted weston's Xwayland three times survives on a **rootful Xwayland
+without weston's window manager** (`coverage-nso-1016/display-rootful.ps1`;
+offline proof on the Stage Builder name prompt, then live on Create Arena).
+Reached on the coverage peer: Quickplay Solo match 1 (dropped for inactivity
+while the driver worked the overlay; hooks ran), **public arena COV created
+from the Yoga through the Qt dialog, Ally joined, round 1 played to results**,
+round 2 cut by the Ally launcher's 30-minute cap, arena closed; **Quickplay
+match 2 complete with results**; **Background Matchmaking matched from the
+main menu and completed**; **Co-op 2v2 complete** (Dark Samus + Ness vs Shulk
++ Corrin); Debug-view manual snapshot; collect. Result
+(`tools/coverage/report.py`, `compare.py` against the 2026-10-15 table): 927
+of 1,466 functions executed; **29 functions / 464 lines executed that no
+campaign had reached** — exactly category A (arena room init/update, arena
+status/parts/text, room-id decode, `banner_peers`, the PIA station board).
+They are live; nothing new to remove. 300 functions (2,640 lines) never ran in
+either campaign and are all accounted for (removed tiers, FPS++, DRS, plugin
+option edits/own pages, the opt-in peer observer, arena-name bookkeeping).
+**Finding for review:** the scene-entry hooks `deluxe_rewrite_arena`
+(0x22d9fa0) and `deluxe_rewrite_background_matchmaking` (0x22da090) never fired
+through a real arena lobby and a real background match, and
+`deluxe_rewrite_quickplay` (0x22da160) fired in one process (nso-a3) but zero
+times in the two-host process despite four searches; matches were still
+classified through `stage_setup` and the character-select classifier
+(`mark_match` 58 times), so the product behaved, but the Arena/Quickplay
+connection distinction did not come from those hooks here. Harness notes:
+same-host two-peer pairing fails (2618-0502); the Ally's run cap is 30 minutes
+(relaunch under a new phase takes a minute); "No" on rematch prompts was never
+explicitly captured. Evidence: evidence root `coverage-nso-1016/` (REPORT.md
+§0, NOTES.md, DRIVE-LOG*.md, `profraw/nso-b2/`, `report-two-host/`,
+`compare-two-host/`, screenshots of both peers); both Yoga profiles restored
+byte for byte, the Ally's tasks removed, all Edens and displays of this thread
+stopped; the companion units expire on their own.
+
 ### 0.5.3 — 2026-10-17: NSO coverage campaign on the LAN-NSO Eden (no new removal evidence)
 
 Operator request: finish the code-reduction measurement against the other
