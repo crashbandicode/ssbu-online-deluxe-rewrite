@@ -1,6 +1,6 @@
 [package]
 name = "deluxe-plugin-abi"
-version = "4.0.0"
+version = "5.0.0"
 edition = "2021"
 publish = false
 description = "C-compatible registration ABI shared by Online Deluxe and separately built plugin NROs"

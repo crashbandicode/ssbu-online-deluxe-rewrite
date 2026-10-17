@@ -90,8 +90,8 @@ mod tests {
 mod switch {
     use super::{parse_config, status_choice};
     use deluxe_plugin_sdk::{
-        abi, host, negotiated_descriptor_version, register, AtomicOptions, OptionSpec,
-        PluginHandler, PluginSpec, RequestStatus, RowLayout, Tone,
+        abi, host, register, AtomicOptions, OptionSpec, PluginHandler, PluginSpec, RequestStatus,
+        RowLayout, Tone,
     };
     use std::ffi::CStr;
     use std::sync::OnceLock;
@@ -222,9 +222,9 @@ mod switch {
         // the persisted choice.
         load_config();
         let result = register(&SPEC, DemoHandler);
-        let version = result.ok().and_then(negotiated_descriptor_version);
         skyline::println!(
-            "[deluxe-plugin-demo] register: {result:?} descriptor_version: {version:?}"
+            "[deluxe-plugin-demo] register: {result:?} (descriptor version {})",
+            abi::ABI_VERSION
         );
     }
 }
