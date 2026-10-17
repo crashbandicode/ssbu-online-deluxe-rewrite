@@ -2594,19 +2594,24 @@ Online tile (error 2306-0502: the fixture's companion service was not
 listening on 8443/8444); its partial profiles are in the evidence root's
 `coverage-nso-1016/`.
 
-### 0.6.0 — 2026-10-17: reduction-candidate merged into main; whole-product coverage trace closed with what it has
+### 0.5.4 — 2026-10-17: reduction-candidate merged into main; whole-product coverage trace closed with what it has
 
 Operator order: "let's just stop this for now with what we have … Merge the
-code into main as a minor version and push to switch." `reduction-candidate`
-(code tip 962eb3d, ledger 4a2006a) merged into `main` with a merge commit as
-0.6.0 (Cargo version bump only; no code change since the candidate package
-`5357da2626a98fb9` that carried the latency rerun below). Gates on the merge:
+code into main … and push to switch." `reduction-candidate` (code tip
+962eb3d, ledger 4a2006a) merged into `main` with a merge commit (Cargo
+version bump only; no code change since the candidate package
+`5357da2626a98fb9` that carried the latency rerun below). The merge was first
+labelled 0.6.0 (tag `v0.6.0`, Forgejo release 384, card install
+`switch-mtp-060/`) by misreading the order; the operator corrected it to a
+patch version ("I meant patch sorry not minor") within the hour, so the
+version is 0.5.4 (commit on top of the merge), the `v0.6.0` tag and release
+were removed and the card reinstalled (`switch-mtp-054/`). Gates on the merge:
 `cargo clippy --all-targets -- -D warnings` clean, `cargo build
 --no-default-features` ok, host tests 233 + 1 pass, `cargo skyline build
 --release` ok (package in the evidence root `artifacts/`, hash in its
-manifest and in the release). The 0.6.0 NRO goes to the operator's card over
-DBI MTP in the same transaction style as the earlier installs (evidence
-`switch-mtp-060/`); the card run is the acceptance test, not claimed here.
+manifest and in the release). The 0.5.4 NRO goes to the operator's card over
+DBI MTP in the same transaction style as the earlier installs; the card run
+is the acceptance test, not claimed here.
 
 Coverage trace of the coverage variant of the same source (package
 `72d91b51b540bf26`, Eden only): offline host and guest scenarios (Training,
@@ -2628,7 +2633,7 @@ abort from the plugin; Linux Eden and the console are fine), and the
 Linux Surface peer paired with the Yoga (companion probe `result=true`
 once the Yoga advertised its wired address) but every Quickplay ended in
 2618-0513/2618-0502 with ufw active on both Linux hosts and no sudo to
-change it. Both are open findings, not fixed in 0.6.0.
+change it. Both are open findings, not fixed in 0.5.4.
 
 ### 0.5.3 — 2026-10-17: latency response trials repeated on candidate package `5357da2626a98fb9` (Eden) — frame reduction unchanged
 
