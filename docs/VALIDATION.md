@@ -2526,6 +2526,43 @@ evidence started the same evening on the LAN-NSO Eden but stopped at the
 Online tile (error 2306-0502: the fixture's companion service was not
 listening on 8443/8444); its partial profiles are in the evidence root's
 `coverage-nso-1016/`.
+### 0.5.3 — 2026-10-17: NSO coverage campaign on the LAN-NSO Eden (no new removal evidence)
+
+Operator request: finish the code-reduction measurement against the other
+agent's "LAN NSO" Eden (commit 289c4684e7, private companion for auth,
+matchmaking and NAT check) so the Quickplay, Arena and Doubles paths that no
+emulator session had reached get coverage. Coverage build
+`artifacts/292a402ab785fec9/` (0.5.3 be82f50, `"variant": "coverage"`),
+NSO profile `a` staged with it (LessLag, `platform=console`, player 2 enabled),
+Astra low drivers, three runs of peer a and one of peer b (profile `b`, second
+address on the same host), companion window 00:29–01:29Z. Reached: Online →
+Smash with the window shown and cycled, Quickplay Solo and Co-op waiting rooms
+(window shown there too), Background Matchmaking started, kept alive through
+Training and cancelled, Spectate ("Failed to play replay"), the Create Arena
+settings screen, the public arena list, a Debug-view manual snapshot. Not
+reached: an arena lobby (Create Arena → Next opens the game's text-entry
+applet and Eden's applet window segfaults the headless Xwayland on the Yoga,
+three times, taking Eden down with `std::bad_alloc`) and a connected Quickplay
+match (the companion paired the two peers but the connection failed with
+2618-0502 "One or more other consoles are not responding"; two addresses on
+one host behave like the fixture's unsupported same-IP case). Result
+(`tools/coverage/report.py` over four scenario sets, joined by function name
+with the 2026-10-15 table): 774 of 1,466 instrumented functions executed; **no
+function executed here that the 2026-10-15 campaign had not executed**; 329
+functions (3,104 lines) never ran in either campaign, and every one is already
+accounted for (Tier 1 and Tier 2 removed on main, FPS++ gate, DRS experiment,
+plugin option edits/own pages, and the ~750 lines of category A arena/match
+code that needs a lobby or a connected match). Category A stays. Next NSO
+attempt needs a display that survives the applet window and a second host as
+the peer. Evidence: evidence root `coverage-nso-1016/` (REPORT.md, NOTES.md,
+DRIVE-LOG*.md, profiles, reports, receipts; both NSO profiles restored byte for
+byte). Tier 2 gates on the merge 55d2c74: `cargo clippy --all-targets -- -D
+warnings`, 300 host tests, `cargo build --no-default-features`, Skyline
+release package `artifacts/c408b41dc14f6c61/` (build
+`0.5.3-55d2c7402673-1792198537`, NRO 1,462,272 B, SHA-256
+`c408b41dc14f6c61e8704a70529687b8f77a23997ebe8ceeab9d777794b70a07`); not
+deployed to the card.
+
 ### 0.5.3 — 2026-10-16: retired five opt-in diagnostics
 
 The coverage campaign's Tier 2 probes are removed. They last shipped in
