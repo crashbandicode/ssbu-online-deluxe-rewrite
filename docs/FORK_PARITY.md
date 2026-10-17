@@ -262,9 +262,10 @@ the sync and peer-manager behavior in its own source and does not link
   There is no `ultelier::sync_guest` call.
 - Peer manager: `src/peer_transport.rs` owns the connection-id handshake and
   fork-compatible announcements; `src/runtime/pia_rtt.rs` reads Pia's
-  already-computed RTT; `src/runtime/peer_observer.rs` installs the station
-  and payload hooks. `src/runtime/mod.rs` registers `pia_rtt::install` and
-  `peer_observer::install` directly.
+  already-computed RTT; `src/runtime/connection_transport.rs` installs the
+  parsed-message, station-index and send-site hooks (until 2026-10-17 that file
+  was `peer_observer.rs` and also carried the opt-in observer). `src/runtime/mod.rs`
+  registers `pia_rtt::install` and `connection_transport::install` directly.
 - If `ssbusync_status` or `ssbusync_restrict_mark_arena_mode` is already
   exported, `legacy_host_present` skips the rewrite's hooks. Leave the old
   Online Deluxe, SsbuSync, and PIA-manager plugins out of this stack.
@@ -416,8 +417,9 @@ retained. Auto's target and the renderer's committed state are distinct.
 | Peer cycling | Bounded station selection using one identity snapshot for name/interface/settings/ping | 9e9 cycled two remote identities correctly in a three-station lobby; no three-station match completed |
 | Streamer | Menu and fork chord; hides all remote rows and ping, persists to INI | d9 exact menu-saved INI reload and menu/chord privacy passed |
 | Connection / match classification | Quickplay, Arena and Local stay distinct; fighter count classifies doubles; Training/result-stage rules retained | Stage/context guards required. Since 0.4.1 the latency mark changes Auto's effective connection without rewriting the stored one (`Scene::marked_online`); since 0.4.2 main-menu entry keeps a stored Quickplay and the diagnostics poll demotes an unmarked Singles/Doubles stage to Offline after five seconds (`offline_match_due`) |
-| Resolution and DRS | Committed profile plus explicit platform table; guarded resolution function/register/crop path | Console-policy Eden full-Gigaflare scaling and restoration passed for Less/Ultra/Doubles; Vanilla stays off; b19 title fullscreen-crop reset fixed |
-| Cut-in and Sephiroth Gigaflare scaler | Bounded visual resolution reports driven by guarded fighter Main and cut-in sites | Two approximate callback-count gates and Gigaflare trigger passed; Luigi Up-B cut-in scaling/restoration passed |
+| Resolution and DRS | Committed profile plus explicit platform table; guarded resolution function/register/crop path | Console-policy Eden full-Gigaflare scaling and restoration passed for Less/Ultra/Doubles while that trigger existed; Vanilla stays off; b19 title fullscreen-crop reset fixed |
+| Cut-in scaler | Bounded visual resolution reports driven by the guarded fighter Main and cut-in sites | Two approximate callback-count gates passed; Luigi Up-B cut-in scaling/restoration passed |
+| Sephiroth Gigaflare scaler | **Parity deliberately dropped 2026-10-17.** The fork scales on the full-charge shot (`fighter/sephiroth.rs:40-60`); the rewrite carried it until then and removed it | Console measurement did not justify it: Vanilla and LessLag hold 60 through the move on the Switch (2026-10-15 redo), so the trigger only cost a `WorkModule` read per Sephiroth tick. Eden Gigaflare evidence above is history |
 | Player Info / performance view | Global ImGui table; connected-only remote column; right in Training/online lobbies, left in ordinary matches | 9e9 remote visibility passed offline/connected/disconnected; a9c right-side Training window confirmed; lobby check pending |
 | Standalone ImGui | Reuse compatible host, embedded fallback otherwise | Embedded and both standalone load orders tested previously; Elite coexistence observed |
 | Native CSS / Arena / LDN text | Fork CSS and arena display paths reinstated alongside the global window | CSS retains selected values after window closure; Streamer restores original styles. Arena lists up to eight known mapped remote stations (`arena_parts`); NSO test pending. LDN lobby network count and native D-pad buffer editing (ZL held, 0.4.1) are implemented; 9e9 Auto-to-0 edit observed. [Details](NATIVE_DISPLAY.md) |
@@ -427,7 +429,8 @@ retained. Auto's target and the renderer's committed state are distinct.
 | Reduced FX | Moved to ssbu-fx-control 0.1.0 / Deluxe 0.5.0. Was a live visual-layer policy with guarded lighter asset siblings | Through 0.4.2: several visual checks passed; full-family and Off-like performance acceptance pending. Never silently converted to Off |
 | Hardware overclocking | Deliberately excluded by user request | No clock management or nx_over dependency |
 | Plugin registration API / Plugins page | Added by this rewrite, not inherited from the fork; `src/plugin_api.rs`, `src/runtime/plugin_export.rs`, `sdk/` | Host tests, SDK round-trip, Eden `plugins-page-1012a` (registration, vertical edits, INI persistence) and Eden `plugins-match-1012b` (compact Settings/Plugins strips in a live match, in-match edit persisted); hardware still unverified |
-| Software FPS boost `+` | Diagnostic implementation only; normal play reports Unsupported | Native-window composition-speed control accelerated game time in a measured match. [Evidence](FPS_BOOST_INVESTIGATION.md); withheld from normal play |
+| Software FPS boost `+` | **Parity deliberately dropped 2026-10-17.** Was a diagnostic implementation only; normal play reported Unsupported. The key, row, chord, marker and code 88 are gone; a peer's bit 14 still decodes as `++` | Emulator-only and never applied in normal play; the native-window composition-speed control accelerated game time in a measured match. [Evidence](FPS_BOOST_INVESTIGATION.md) stays as history |
+| Peer observer (`peer_observer`) | **Removed 2026-10-17.** Added by this rewrite, not inherited from the fork: an opt-in ring, station map and send probe on the transport hooks (codes 37–45, 64, 65) | Never enabled on any card or Eden profile; the live handshake, station binding and announcements never depended on it |
 | Dispatcher backoff | Added by this rewrite, not inherited from the fork; `src/dispatcher_backoff.rs`, `src/runtime/dispatcher_backoff.rs`, one inline hook at `main+0x354ab48`, all profiles and scenes, MainThread only | Eden A/B/A under a 175% CPU quota: CSS LessLag 52 → 59 fps, 18% less CPU/frame; Vanilla/LLDoubles CPU saving at 60; live match unchanged. Hardware benefit pending the Switch test. Same fix ships standalone as `ssbu-dispatcher-backoff`; one owner per site |
 
 The renderer drains outstanding work before native buffer-count changes. It
@@ -452,8 +455,8 @@ reinstall hooks and never patch SGPO's `0x374812c` neighborhood.
 - The independent window edits settings; the fork-style native title displays
   them while the window is closed. Original styles are captured once per pane
   identity and restored by Streamer. Ordinary game input remains unsuppressed.
-- No hardware overclocking, unproven software FPS boost, or duplicate external
-  backend is introduced.
+- No hardware overclocking, software FPS boost (removed 2026-10-17), or
+  duplicate external backend is introduced.
 
 ## Dependency and compatibility boundaries
 
@@ -485,9 +488,9 @@ sessions passed approximate tick/present frequency gates; this is not exact
 per-frame or module-unload proof. Normal mode rejects nonfighter weapon agents
 before reading fighter state. Missing triggers are shown as unavailable.
 
-`peer_observer=true` enables diagnostic observations. The actual handshake and
-station map no longer depend on that diagnostic toggle; disabling logging does
-not disable normal peer functionality. Transport hooks only annotate the
+The opt-in `peer_observer` diagnostics were removed on 2026-10-17 (an existing
+`peer_observer=` line is read and ignored). The handshake, station binding and
+announcements never depended on that toggle. Transport hooks only annotate the
 fork-compatible fields of validated traffic; they do not originate game inputs.
 
 ## Validation coverage

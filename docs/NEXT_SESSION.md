@@ -147,10 +147,10 @@ Do not restore a staging journal until its frontend has exited. Stop owned
 supervisors, preserve raw evidence, and restore staged configuration/plugins
 after each test.
 
-FPS++ has been measured: enabling the native-window composition-speed path
-accelerated the match timer. Normal play therefore reports Unsupported; the
-diagnostic marker is not a recommended setting. See
-[FPS_BOOST_INVESTIGATION.md](FPS_BOOST_INVESTIGATION.md). No hardware overclocking.
+FPS++ was measured (enabling the native-window composition-speed path
+accelerated the match timer) and removed on 2026-10-17; there is no marker or
+key to set. See [FPS_BOOST_INVESTIGATION.md](FPS_BOOST_INVESTIGATION.md) for
+the history. No hardware overclocking.
 
 ## Switch boundary
 

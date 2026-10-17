@@ -7,7 +7,7 @@
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use crate::peer_observer::mix_id;
+use crate::connection_transport::mix_id;
 use crate::peer_passive::{read_response_beacon, walk_messages, Beacon, ForkPayload};
 
 const SLOTS: usize = 8;
@@ -144,8 +144,6 @@ pub struct Announce {
     pub resolution: u8,
     /// Actual dynamic-resolution state. False when the resolution guard rejected.
     pub dynamic: bool,
-    /// Fork bit 14. Set only when this client has read back the native-window write.
-    pub boost_applied: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -310,8 +308,8 @@ pub fn announced_profile(
 ///
 /// Buffer, index, vsync, and render opts follow the committed profile. The
 /// resolution discriminant and dynamic-resolution bit are the configured
-/// state passed in. [`encode_v3`] sets bit 14 only when the boost write
-/// read back as applied.
+/// state passed in. Bit 14 (the fork's FPS boost) is never sent: FPS++ was
+/// removed on 2026-10-17. It is still decoded from peers.
 pub fn profile_bits(mode: AnnounceMode, resolution: u8, dynamic: bool) -> u16 {
     let (buffer, index, vsync, opts) = match mode {
         AnnounceMode::Vanilla => (3u16, 2u16, 1u16, 0u16),
@@ -329,7 +327,6 @@ pub fn announce_from(
     live: bool,
     committed: crate::render_policy::Profile,
     setting: crate::resolution::Setting,
-    boost_applied: bool,
 ) -> Announce {
     let profile = announced_profile(live, committed);
     Announce {
@@ -337,7 +334,6 @@ pub fn announce_from(
         profile,
         resolution: if live { setting.level as u8 } else { 0 },
         dynamic: live && setting.dynamic,
-        boost_applied: profile.is_some() && boost_applied,
     }
 }
 
@@ -396,13 +392,10 @@ fn label_from_code(code: u8) -> &'static str {
 }
 
 pub fn encode_v3(announce: Announce) -> [u8; 4] {
-    let mut bits = match announce.profile {
+    let bits = match announce.profile {
         Some(mode) => profile_bits(mode, announce.resolution, announce.dynamic),
         None => 0,
     };
-    if announce.boost_applied && announce.profile.is_some() {
-        bits |= 1 << 14;
-    }
     [3, announce.latency as u8, bits as u8, (bits >> 8) as u8]
 }
 
@@ -554,11 +547,11 @@ fn apply_leaves(table: &mut Table) {
     resolve_selection(table);
 }
 
-/// A station left that no constant id was ever bound to (the station map
-/// hook is part of the opt-in peer observer, so the binding is usually
-/// absent). With exactly one confirmed peer that peer is the opponent who
-/// left: an opponent who declines a rematch otherwise stays on the banner
-/// through the single-peer fallback until the whole session ends.
+/// A station left that no constant id was ever bound to (the station-index
+/// hook binds only when the game resolves that station by id, so a leave can
+/// arrive with no binding). With exactly one confirmed peer that peer is the
+/// opponent who left: an opponent who declines a rematch otherwise stays on
+/// the banner through the single-peer fallback until the whole session ends.
 fn retire_only_confirmed(table: &mut Table) {
     let mut confirmed = table.peers.iter().flatten();
     let (Some(only), None) = (confirmed.next(), confirmed.next()) else {
@@ -1606,7 +1599,6 @@ mod tests {
             profile: Some(mode),
             resolution: 0,
             dynamic: matches!(mode, AnnounceMode::LessLagDoubles),
-            boost_applied: false,
         }
     }
 
@@ -2081,7 +2073,6 @@ mod tests {
                 level: crate::resolution::Level::P1080,
                 dynamic: false,
             },
-            false,
         );
         assert_eq!(quiet_doubles.profile, Some(AnnounceMode::LessLagDoubles));
         assert!(!quiet_doubles.dynamic);
@@ -2149,15 +2140,15 @@ mod tests {
     }
 
     #[test]
-    fn applied_boost_uses_fork_bit_14_and_v2_still_clears_it() {
+    fn peer_bit_14_still_decodes_as_boost_and_is_never_sent() {
         let less = preset_bits(AnnounceMode::LessLag);
         let boosted = less | (1 << 14);
         assert_eq!(settings_label(boosted), "LessLag");
         assert_eq!(label_from_code(settings_code(boosted)), "LessLag++");
-        let mut announced = announce(4, AnnounceMode::LessLag);
-        announced.boost_applied = true;
-        let encoded = encode_v3(announced);
-        assert_eq!(u16::from_le_bytes([encoded[2], encoded[3]]), boosted);
+        // FPS++ was removed on 2026-10-17: our own announce never carries bit 14.
+        let encoded = encode_v3(announce(4, AnnounceMode::LessLag));
+        assert_eq!(u16::from_le_bytes([encoded[2], encoded[3]]), less);
+        assert_eq!(u16::from_le_bytes([encoded[2], encoded[3]]) & (1 << 14), 0);
         let quiet = announce_from(
             4,
             false,
@@ -2166,9 +2157,7 @@ mod tests {
                 level: crate::resolution::Level::P1080,
                 dynamic: false,
             },
-            true,
         );
-        assert!(!quiet.boost_applied);
         assert_eq!(encode_v3(quiet), [3, 4, 0, 0]);
         let mut table = Table::empty();
         feed(
@@ -2539,8 +2528,8 @@ mod tests {
             false,
         );
         table.local_index = 1;
-        // No station map (peer observer off): Ann shows through the
-        // single-peer fallback without a station selection.
+        // No station binding yet: Ann shows through the single-peer
+        // fallback without a station selection.
         let shown = frame_from(view_of(&mut table));
         assert!(shown.peer.known);
         assert_eq!(shown.selection, Selection::None);

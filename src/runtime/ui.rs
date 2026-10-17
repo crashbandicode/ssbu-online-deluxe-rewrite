@@ -361,7 +361,7 @@ fn setting_cells(
     });
     cells.push(SettingCell {
         label: "Interface".to_owned(),
-        local: super::peer_observer::local_interface_label().to_owned(),
+        local: super::connection_transport::local_interface_label().to_owned(),
         remote: peer_interface,
         ping: false,
         compact: None,
@@ -421,14 +421,11 @@ fn setting_cells(
     let textures = super::nvn::active_count();
     let applied = super::renderer::status() != "Awaiting window";
     let auto = super::auto_driver::snapshot();
-    let profile = crate::fps_boost::append_applied_suffix(
-        &crate::auto_policy::profile_row_label(
-            config.auto_profile,
-            auto.ready,
-            config.render_mode,
-            auto.request,
-        ),
-        super::fps_boost::applied(),
+    let profile = crate::auto_policy::profile_row_label(
+        config.auto_profile,
+        auto.ready,
+        config.render_mode,
+        auto.request,
     );
     let profile_state = crate::menu::net_profile_status(
         auto.request,
@@ -496,26 +493,6 @@ fn setting_cells(
             selected: selected == crate::menu::ROW_STREAMER,
         }),
     });
-    if config.platform == crate::config::Platform::Emulator {
-        let fps =
-            crate::fps_boost::settings_value(config.fps_boost, super::fps_boost::status_label())
-                .to_owned();
-        cells.push(SettingCell {
-            label: marked(selected == crate::menu::ROW_FPS, "FPS++"),
-            local: fps.clone(),
-            remote: if show_remote {
-                "---".to_owned()
-            } else {
-                String::new()
-            },
-            ping: false,
-            compact: Some(CompactField {
-                label: "FPS++",
-                value: fps,
-                selected: selected == crate::menu::ROW_FPS,
-            }),
-        });
-    }
     if config.platform == crate::config::Platform::Console {
         let ultra = config.ultra_resolution.label().to_owned();
         cells.push(SettingCell {
@@ -1066,7 +1043,6 @@ unsafe extern "C" fn draw() {
         let (width, height) = overlay_host::display_size();
         let sx = width / 1920.0;
         let sy = height / 1080.0;
-        let fps_visible = config.platform == crate::config::Platform::Emulator;
         // SetNextWindowPos runs before this frame's window is measured. For a
         // compact strip, use the maximum design width to preserve its left edge.
         let scene = super::auto_driver::snapshot();
@@ -1211,9 +1187,6 @@ unsafe extern "C" fn draw() {
                     },
                 );
                 row("Engine", super::renderer::status());
-                if fps_visible {
-                    row("FPS++", super::fps_boost::status_label());
-                }
                 row("Timing", super::timing::status());
                 if show_remote {
                     row("Ping detail", ping.detail);

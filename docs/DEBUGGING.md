@@ -73,8 +73,9 @@ hidden, the match capture never arms and the exported online context reports
 nothing (it was part of the FX family until 0.4.2). DISABLE_BUFFER disables
 input-buffer writes. DISABLE_RENDERER skips
 experimental rendering text patches regardless of the INI request; actual mode
-stays Vanilla. DISABLE_PIA skips RTT and prevents the optional peer observer
-from installing. DISABLE_NATIVE skips the native banner hook. DISABLE_BACKOFF
+stays Vanilla. DISABLE_PIA skips RTT, and the connection transport (which
+needs the Pia cleanup hook) then does not install either. DISABLE_NATIVE skips
+the native banner hook. DISABLE_BACKOFF
 skips the dispatcher idle backoff (code 102 `a` = 4). All seven flags together
 skip those hook families while retaining logging.
 Remove the disable flags to re-enable their hook families.
@@ -104,11 +105,9 @@ data directory and flags.
 | 33 / 34 / 35 | Renderer owner / caller / flush target diagnostics |
 | 36 | Pia RTT sample/cleanup and foreign/drop counters |
 | 48 | Render-opts teardown guard fired: a module unloaded between the frame's fighter recording and its post-scene hook, so the relocated model update and fighter worker were skipped and the game's own ordering runs for the next 180 frames. a = unload epoch, b = scene frame |
-| 37 / 38 | Opt-in parsed peer observation / bounded escaped name sample |
-| 39 / 40 | Peer observer drops / station identity mapping changes |
-| 41–45 | Opt-in read-only outgoing packet/header diagnostics; never packet writes |
 | 46 / 47 | Render-policy transition / refused transition or invalid post-setter count |
-| 64 / 65 | Sampled station-map reachability flags / mixed source ID |
+| 66–72 | Connection transport counters: handshake learned / confirmed, session cleanup, beacon writes/skips, payload writes/skips, stealth suppression, ambiguous mapping or busy gate |
+| 82 | Fighter transition edge: a = entry, action (1 start, 2 end) in bits 8–15, source in bits 16–23 (1 cut-in, 3 move table; 2 was the Sephiroth Gigaflare trigger, removed 2026-10-17) |
 | 98 | Overlay command edge: a = HID button mask; b = previous view, resulting view, Npad id, style flags and command-edge flags (bit 0 Down, bit 1 Plus/Minus). Style 0 means no device |
 | 99 | Plugin registered: a = handle (negative `REGISTER_ERR_*` code on error), b = accepted option count |
 | 100 | Plugins-page Left/Right edge: a = plugin index (bits 0–15) and option index (16–31); b = requested choice (0–15) and the plugin's `REQUEST_*` answer (16–23) |
@@ -126,8 +125,13 @@ data directory and flags.
 
 Codes 18–20 describe historical CSS builds; they are no longer emitted.
 Codes 11, 27–29, 84–87 and 91–97 were the character-FX records. They moved
-to the ssbu-fx-control plugin in 0.5.0 and are not reused here. In codes 6,
-8, 15 and 24 the field that carried the FX mode is always 0 since 0.5.0.
+to the ssbu-fx-control plugin in 0.5.0 and are not reused here. Codes 75–77
+and 83 were opt-in diagnostics retired on 2026-10-16. Codes 37–45, 64 and 65
+were the opt-in peer observer (parsed observation, name sample, drops, station
+map, the 41–45 send probe, the 64/65 station-map reachability sample) and 88
+was FPS++; both were removed on 2026-10-17. None of these numbers is reused.
+In codes 6, 8, 15 and 24 the field that carried the FX mode is always 0 since
+0.5.0.
 Codes 12/13 mark character-select entry and exit (exit = one second without a CSS update).
 No game-owned pane or font is modified by the global window.
 
@@ -148,26 +152,16 @@ unique names to prevent dynamic symbol collisions. NVN bootstrap interposition
 chains other wrappers and records the entry word. See
 [dependency details](IMGUI_DEPENDENCY.md); future LessLag/acquire changes need new tests.
 
-## Optional peer observer
+## Connection transport
 
-`peer_observer=false` is the default. Set it to true before process startup
-only for a controlled diagnostic run. Both parsed-message and station-index
-instruction guards must match, and the Pia lifecycle hooks must be installed.
-The optional pre-encryption send probe has its own instruction checks. This
-does not enable peer metadata in the UI and never writes network packets.
-
-The observer validates body bounds against the accepted packet length before
-copying. A nonblocking gate protects its bounded queue and station generations;
-file output occurs on the diagnostic thread after releasing the gate. Missed
-observations are counted, and missed lifecycle notifications conservatively
-clear mappings. Names are escaped, truncated diagnostic samples. Mixed IDs are
-correlation values, not an anonymization guarantee. Observer events remain
-subject to the ordinary log size and crash-flush limits above.
-
-The map event queue can drop a one-shot update while retaining the in-memory
-mapping. Absence of code 40 alone does not prove the station hook failed. The
-64/65 reachability sample is diagnostic only and is not a coherent authorization
-record for packet writes.
+The parsed-message, station-index and pre-encryption send hooks install when
+their instruction guards match and the Pia lifecycle hooks are in (codes 4/5
+with the site offsets `0x153844`, `0x15f0b8`, `0x155878`). They feed the
+handshake table, bind station indices and commit the fork-compatible
+announcements; their counters are codes 66–72. The opt-in `peer_observer`
+ring, station map and send probe that used to share these hooks were removed
+on 2026-10-17. Mixed IDs in the transport rows are correlation values, not an
+anonymization guarantee.
 
 ## Live render profiles
 

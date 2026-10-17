@@ -10,8 +10,9 @@ it, to `docs/FX_RUNTIME_MATRIX.md` and `docs/FX_PERFORMANCE_METHOD.md` in that
 repository. The FX results below are dated records of 0.4.2 and earlier builds.
 
 `lesslag_core` and `doubles_core` stay INI-only startup experiments. They are
-separate from the four live profiles. Hardware clocks stay excluded. Software
-FPS boost stays a gated diagnostic; the normal menu reports Unsupported.
+separate from the four live profiles. Hardware clocks stay excluded. The
+software FPS boost diagnostic was removed on 2026-10-17 and the Sephiroth
+Gigaflare DRS trigger with it; the Gigaflare pilots below are history.
 
 A constant 60 FPS does not establish low input latency, and a callback interval
 is not a displayed-frame interval. Every percentile, captured-image count, and

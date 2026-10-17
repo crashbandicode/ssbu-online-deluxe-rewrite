@@ -2526,6 +2526,76 @@ evidence started the same evening on the LAN-NSO Eden but stopped at the
 Online tile (error 2306-0502: the fixture's companion service was not
 listening on 8443/8444); its partial profiles are in the evidence root's
 `coverage-nso-1016/`.
+
+### 0.5.3 — 2026-10-17: removed the opt-in peer observer, FPS++ and the Gigaflare DRS trigger (host tests only)
+
+Operator order after the coverage campaign: three features go, with no other
+behaviour change. Branch `work/reduction-1017` from main 690dc57.
+
+- **Opt-in peer observer** (`peer_observer`, default false, never enabled on
+  any card or Eden profile). `src/peer_observer.rs` and
+  `src/runtime/peer_observer.rs` are gone. The runtime file was not
+  observer-only: it also carried the live connection transport (the
+  parsed-message hook feeding `observe_incoming`, the station-index hook
+  binding stations, the pre-encryption send hook committing announcements,
+  the nifm interface byte and the code 66–72 counters). Those parts moved
+  unchanged to `src/runtime/connection_transport.rs`, and the hook sites,
+  guards, `mix_id`, `kind_of`, `header_span` and `message_body_range` they
+  read to `src/connection_transport.rs`. Removed: the observation ring, the
+  station map and its generation table, the `invalidate_index` /
+  `invalidate_session` calls from `runtime/pia_rtt.rs`, the station-probe
+  flags, the send-site probe (`diagnose_send`, `SendBuild`, the 17-event
+  report, `stamp_send_seq`), name decoding, `inherit_header`, and the
+  `drain_station_probe` / `drain_send` publishers. Event codes 37–45, 64 and
+  65 were only ever recorded by the observer (verified: codes 41–45 reached
+  the log only through `publish_send`, which ran under the flag) and are
+  retired by comment in `diagnostics.rs`; 66–72 stay. The stale
+  `peer_transport.rs` comment claiming the station-map hook was part of the
+  observer is corrected (it always installed on its guard alone).
+- **FPS++** (`fps_boost`, `ALLOW_FPS_BOOST`, emulator-only, reported
+  Unsupported in every normal build). `src/fps_boost.rs` and
+  `src/runtime/fps_boost.rs` are gone, with the NVN window
+  initialize/finalize/present callbacks, the Settings row (`ROW_FPS`; the
+  `ROW_*` constants are renumbered, `ROW_COUNT` 11 → 10), the Debug-view
+  row, the L+R+ZL/ZR+X chord, the `++` suffix on the local profile label in
+  the window and both native banners, the `fps_boost_status` and
+  `fps_boost_applied` lines of `renderer-status.txt`, and event code 88
+  (retired by comment). `Announce.boost_applied` and the `announce_from`
+  parameter are gone, so our v3 payload never sets fork bit 14; a peer's bit
+  14 is still decoded as `++` (test `peer_bit_14_still_decodes_as_boost_and_is_never_sent`).
+- **Sephiroth Gigaflare DRS trigger.** `perf_scaler::sephiroth_tick`, the
+  `edge` slots, `EDGE_KIND` / `EDGE_SPECIAL_N_SHOOT` / `EDGE_CHARGE_KIND` /
+  `CHARGE_FULL`, `MainTick.charge` and the `WorkModule` charge read in
+  `runtime/fighter_main.rs::read_tick` are gone; `on_main` now returns the
+  cut-in action and the move-table pair. The cut-in trigger, the 0.5.2 move
+  table (entry, kind and status are still sampled every tick) and the
+  adaptive trigger are untouched. Code 82 keeps source 1 (cut-in) and 3
+  (move table); source 2 is retired by comment. Reason: the 2026-10-15
+  console redo had Vanilla and LessLag hold 60 through the move.
+- **Legacy keys.** `config::parse` rejects unknown keys and the runtime would
+  then reset the user's INI, and existing cards carry `peer_observer=` and
+  `fps_boost=` lines. Both are now ignored legacy keys like `effects` /
+  `effects_scope` (any value, any order, duplicates allowed) and the writer
+  no longer emits them; test
+  `removed_peer_observer_and_fps_boost_keys_are_ignored_and_not_written_back`.
+- **Lines** (`git diff --stat main`: 31 files, +885 / −4,507; src alone
+  −4,434). Dedicated modules, split at their `#[cfg(test)]` boundary:
+  peer observer 1,981 production + 735 test lines deleted, of which 536
+  production lines (147 host + 389 runtime) are the re-homed transport, plus
+  91 new transport tests; FPS++ 805 production + 473 test lines deleted.
+  Shared-file edits (approximate, by hunk): peer observer about 57 production
+  and 20 test lines, FPS++ about 128 production and 93 test lines (menu,
+  overlay, config, UI, banners, NVN status, transport, diagnostics),
+  Gigaflare 88 production (76 `perf_scaler.rs`, 11 `fighter_main.rs`, one
+  comment in `diagnostics.rs`) and 37 test lines. Host tests 300 → 274.
+- Gates on this commit: `cargo clippy --all-targets -- -D warnings`, `cargo
+  test` (274 passed), `cargo build --no-default-features`, `cargo fmt --
+  --check` (clean on every touched file; `clock_probe.rs`,
+  `coverage_profile.rs`, `runtime/clock_probe.rs` and `runtime/timing.rs`
+  were already unformatted on main and are left alone). The Skyline build and
+  any console or Eden run are the parent's; nothing here is claimed as
+  runtime-verified.
+
 ### 0.5.3 — 2026-10-17: two-host NSO session — arena, Quickplay, Background and Co-op matches reached; category A is live code
 
 Operator: "you need two eden instances to run quickplay or arenas" … "can you

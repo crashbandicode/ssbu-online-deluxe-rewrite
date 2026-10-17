@@ -19,7 +19,7 @@ fork's room-ID path, but still needs an NSO test. See [native display](NATIVE_DI
 | Control | Action |
 | --- | --- |
 | L+R + Down | Cycle settings → (plugins) → (own plugin pages) → performance → hidden. The Settings rows PluginsPage, OwnPages and PerfPage (or `hide_pages` in the INI, 0.5.3) take pages out of the cycle, e.g. settings → FX Control → hidden; Settings is always in it. See [Configuration](CONFIGURATION.md) |
-| Up / Down | Select Peer, NetLatency, NetProfile, Stealth, Streamer, FPS++ (emulator) or UltraRes (console, 0.5.3: LLUltra's internal resolution, 576p or 720p), then PluginsPage / OwnPages / PerfPage (Shown or Hidden) and PerfView (Graph or Number, 0.5.3) (or a plugin row on a plugin page) |
+| Up / Down | Select Peer, NetLatency, NetProfile, Stealth, Streamer, UltraRes (console only, 0.5.3: LLUltra's internal resolution, 576p or 720p), then PluginsPage / OwnPages / PerfPage (Shown or Hidden) and PerfView (Graph or Number, 0.5.3) (or a plugin row on a plugin page) |
 | Left / Right | Change the selected value (in menus and on the character select) |
 | ZR + Left / Right | Change the selected value while a fight is live (Training, Singles, Doubles; since 0.5.3). A plain Left/Right is ignored there, so a taunt or a stray press cannot change a setting mid-game; Up/Down still move the selection. ZR rather than ZL because ZL + D-pad Left/Right in Training swaps the controlled fighter |
 | Shoulder chord + Left / Right outside settings | Cycle the selected remote peer |
@@ -64,5 +64,5 @@ Interface shows local Wi-Fi/Ethernet/Unknown and the selected peer's announced
 type, if available. An emulator's reported interface can be virtual; it does
 not identify the host computer's physical network connection.
 
-**FPS++** is a diagnostic experiment and reports **Unsupported** in the normal
-build; see [Rendering profiles](RENDERING.md#fps).
+The fork's **FPS++** row and its L+R+ZL/ZR+X chord were removed on 2026-10-17;
+the chord now does nothing. See [Rendering profiles](RENDERING.md#fps).

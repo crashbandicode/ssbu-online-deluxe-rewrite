@@ -237,12 +237,11 @@ fn station_pick() -> crate::pia_rtt::StationPick {
 }
 
 /// The RTT lock was busy, so this call cannot say which protocol left.
-/// The publication epoch still drops the old ping. An enabled peer observer
-/// clears every mapped id instead of keeping a station that might already be gone.
+/// The publication epoch still drops the old ping, and the transport clears
+/// its session rather than keep a station that might already be gone.
 fn lifecycle_missed() {
     EPOCH.fetch_add(1, Ordering::Release);
     DROPPED.fetch_add(1, Ordering::Relaxed);
-    super::peer_observer::invalidate_session();
     crate::peer_transport::clear_session();
 }
 
@@ -374,7 +373,6 @@ unsafe fn deluxe_rewrite_observe_rtt_sample(ctx: &InlineCtx) {
         // mapped id. This does not name the old or new protocol.
         Access::Done(true) => {
             begin_publication_retirement();
-            super::peer_observer::invalidate_session();
             crate::peer_transport::clear_session();
             crate::peer_transport::note_local(u32::from(local));
             end_publication_retirement();
@@ -401,7 +399,6 @@ unsafe fn deluxe_rewrite_observe_station_left(ctx: &InlineCtx) {
     {
         Access::Done(true) => {
             begin_publication_retirement();
-            super::peer_observer::invalidate_index(remote);
             crate::peer_transport::clear_station(remote);
             end_publication_retirement();
         }
@@ -418,7 +415,6 @@ unsafe fn deluxe_rewrite_observe_session_end(ctx: &InlineCtx) {
     match with_session(|session, epoch| session.accept_cleanup_for(protocol, epoch, station)) {
         Access::Done(true) => {
             begin_publication_retirement();
-            super::peer_observer::invalidate_session();
             crate::peer_transport::clear_session();
             end_publication_retirement();
         }

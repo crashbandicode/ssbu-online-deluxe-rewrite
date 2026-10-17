@@ -4,38 +4,36 @@ use crate::auto_policy::{cycle_profile_choice, Connection, ProfileChoice, SceneS
 use crate::config::{Config, Platform, RenderMode};
 
 /// Editable Player Info rows, top to bottom. The FX row left in 0.5.0 with
-/// character FX (now the `ssbu-fx-control` plugin).
+/// character FX (now the `ssbu-fx-control` plugin); the emulator-only FPS++
+/// row left on 2026-10-17 with FPS++.
 pub const ROW_PEER: usize = 0;
 pub const ROW_NET_LATENCY: usize = 1;
 pub const ROW_NET_PROFILE: usize = 2;
 pub const ROW_STEALTH: usize = 3;
 pub const ROW_STREAMER: usize = 4;
-pub const ROW_FPS: usize = 5;
 /// Console LLUltra base resolution (`ultra_resolution`, 0.5.3 experiment).
-pub const ROW_ULTRA_RES: usize = 6;
+pub const ROW_ULTRA_RES: usize = 5;
 /// Window pages in the chord cycle (`hide_pages`, 0.5.3): the shared Plugins
 /// page, every plugin's own page, Performance. Settings has no row: it is
 /// always in the cycle and shows these three.
-pub const ROW_PAGE_PLUGINS: usize = 7;
-pub const ROW_PAGE_OWN: usize = 8;
-pub const ROW_PAGE_PERF: usize = 9;
+pub const ROW_PAGE_PLUGINS: usize = 6;
+pub const ROW_PAGE_OWN: usize = 7;
+pub const ROW_PAGE_PERF: usize = 8;
 /// Frame time as the plot or a number (`perf_view`, 0.5.3).
-pub const ROW_PERF_VIEW: usize = 10;
-pub const ROW_COUNT: usize = 11;
+pub const ROW_PERF_VIEW: usize = 9;
+pub const ROW_COUNT: usize = 10;
 
 /// Which editable rows exist. Platform is configured, never a row.
-/// FPS++ is the emulator toggle only; UltraRes is the console one.
+/// UltraRes is the console-only row.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RowGate {
     pub peers_connected: bool,
-    pub fps_visible: bool,
     pub ultra_res_visible: bool,
 }
 
 pub fn row_gate(peers_connected: bool, platform: Platform) -> RowGate {
     RowGate {
         peers_connected,
-        fps_visible: platform == Platform::Emulator,
         ultra_res_visible: platform == Platform::Console,
     }
 }
@@ -43,16 +41,9 @@ pub fn row_gate(peers_connected: bool, platform: Platform) -> RowGate {
 pub fn row_visible(row: usize, gate: RowGate) -> bool {
     match row {
         ROW_PEER => gate.peers_connected,
-        ROW_FPS => gate.fps_visible,
         ROW_ULTRA_RES => gate.ultra_res_visible,
-        ROW_NET_LATENCY
-        | ROW_NET_PROFILE
-        | ROW_STEALTH
-        | ROW_STREAMER
-        | ROW_PAGE_PLUGINS
-        | ROW_PAGE_OWN
-        | ROW_PAGE_PERF
-        | ROW_PERF_VIEW => true,
+        ROW_NET_LATENCY | ROW_NET_PROFILE | ROW_STEALTH | ROW_STREAMER | ROW_PAGE_PLUGINS
+        | ROW_PAGE_OWN | ROW_PAGE_PERF | ROW_PERF_VIEW => true,
         _ => false,
     }
 }
@@ -385,7 +376,7 @@ pub struct Menu {
     pub selected: usize,
 }
 
-/// Steps to the next visible row. Hidden Peer and FPS++ rows are not stops.
+/// Steps to the next visible row. Hidden Peer and UltraRes rows are not stops.
 pub fn move_row(selected: usize, direction: i8, gate: RowGate) -> usize {
     let mut next = selected;
     for _ in 0..ROW_COUNT {
@@ -459,17 +450,6 @@ impl Menu {
             }
             ROW_STREAMER => {
                 config.streamer = !config.streamer;
-                true
-            }
-            ROW_FPS => {
-                let next = crate::fps_boost::saved_after_toggle(
-                    config.platform == Platform::Emulator,
-                    config.fps_boost,
-                );
-                if next == config.fps_boost {
-                    return false;
-                }
-                config.fps_boost = next;
                 true
             }
             ROW_ULTRA_RES => {
@@ -548,8 +528,7 @@ mod tests {
         assert_eq!(menu.selected, ROW_STEALTH);
         menu.handle(Action::Down, &mut config);
         assert_eq!(menu.selected, ROW_STREAMER);
-        menu.handle(Action::Down, &mut config);
-        assert_eq!(menu.selected, ROW_FPS);
+        // Emulator: UltraRes is hidden, so the page rows follow Streamer.
         menu.handle(Action::Down, &mut config);
         assert_eq!(menu.selected, ROW_PAGE_PLUGINS);
         menu.handle(Action::Down, &mut config);
@@ -673,33 +652,6 @@ mod tests {
         assert!(config.stealth);
         assert_eq!(stealth_value(config.stealth, Some(false)), "On (reconnect)");
         assert_eq!(stealth_value(config.stealth, None), "On");
-    }
-
-    #[test]
-    fn fps_row_is_skipped_on_console_and_toggles_on_emulator() {
-        let mut menu = Menu {
-            open: true,
-            selected: ROW_FPS,
-        };
-        let mut config = Config::default();
-        assert!(!row_visible(ROW_FPS, row_gate(true, Platform::Console)));
-        assert!(row_visible(ROW_FPS, row_gate(true, Platform::Emulator)));
-        assert!(!menu.handle(Action::Right, &mut config));
-        assert!(!config.fps_boost);
-        assert_ne!(menu.selected, ROW_FPS);
-        config.platform = Platform::Emulator;
-        menu.selected = ROW_FPS;
-        assert!(menu.handle(Action::Right, &mut config));
-        assert!(config.fps_boost);
-        assert!(menu.handle(Action::Left, &mut config));
-        assert!(!config.fps_boost);
-        config.fps_boost = true;
-        config.platform = Platform::Console;
-        menu.selected = ROW_FPS;
-        assert!(!menu.handle(Action::Right, &mut config));
-        assert!(config.fps_boost);
-        assert_ne!(menu.selected, ROW_FPS);
-        assert!(!crate::fps_boost::saved_after_toggle(false, true));
     }
 
     #[test]
@@ -830,7 +782,7 @@ mod tests {
         assert_eq!(menu.selected, ROW_PAGE_OWN);
         menu.handle_peers(Action::Up, &mut config, false);
         assert_eq!(menu.selected, ROW_PAGE_PLUGINS);
-        // Console: UltraRes is above them; FPS++ is hidden.
+        // Console: UltraRes is above them.
         menu.handle_peers(Action::Up, &mut config, false);
         assert_eq!(menu.selected, ROW_ULTRA_RES);
         assert!(menu.handle_peers(Action::Right, &mut config, false));
@@ -849,7 +801,7 @@ mod tests {
             menu.handle_peers(Action::Down, &mut config, false);
         }
         assert_eq!(menu.selected, ROW_NET_LATENCY);
-        // Emulator: FPS++ sits above the page rows; UltraRes is hidden.
+        // Emulator: UltraRes is hidden, so Streamer sits above the page rows.
         config.platform = Platform::Emulator;
         assert!(!row_visible(
             ROW_ULTRA_RES,
@@ -857,7 +809,7 @@ mod tests {
         ));
         menu.selected = ROW_PAGE_PLUGINS;
         menu.handle_peers(Action::Up, &mut config, false);
-        assert_eq!(menu.selected, ROW_FPS);
+        assert_eq!(menu.selected, ROW_STREAMER);
         menu.selected = ROW_PERF_VIEW;
         menu.handle_peers(Action::Down, &mut config, false);
         assert_eq!(menu.selected, ROW_NET_LATENCY);
@@ -948,7 +900,7 @@ mod tests {
             },
             CompactField {
                 label: "Profile",
-                value: "Auto:LLDbl++".to_owned(),
+                value: "Auto:LLDbl".to_owned(),
                 selected: false,
             },
             CompactField {
@@ -962,8 +914,8 @@ mod tests {
                 selected: false,
             },
             CompactField {
-                label: "FPS++",
-                value: "On (Applied)".to_owned(),
+                label: "UltraRes",
+                value: "576p".to_owned(),
                 selected: false,
             },
             CompactField {
@@ -976,7 +928,7 @@ mod tests {
         let opponent = compact_fields_line(fields.iter(), true);
         assert_eq!(
             settings,
-            ">Net:Auto   Profile:Auto:LLDbl++   Stealth:On (reconnect)   Stream:Off   FPS++:On (Applied)"
+            ">Net:Auto   Profile:Auto:LLDbl   Stealth:On (reconnect)   Stream:Off   UltraRes:576p"
         );
         assert_eq!(opponent, format!(">Peer:{peer}"));
         assert!(!settings.contains('\n'));
@@ -1009,7 +961,7 @@ mod tests {
             },
             CompactField {
                 label: "Profile",
-                value: "Auto:LLDbl++".to_owned(),
+                value: "Auto:LLDbl".to_owned(),
                 selected: false,
             },
             CompactField {
@@ -1023,8 +975,8 @@ mod tests {
                 selected: false,
             },
             CompactField {
-                label: "FPS++",
-                value: "On (Applied)".to_owned(),
+                label: "UltraRes",
+                value: "576p".to_owned(),
                 selected: false,
             },
             CompactField {

@@ -16,8 +16,6 @@ auto_profile=true
 platform=console
 stealth=true
 streamer=false
-fps_boost=false
-peer_observer=false
 drs_moves=none
 drs_adaptive=false
 drs_adaptive_threshold_ms=17.5
@@ -38,8 +36,6 @@ dispatcher_backoff=true
 | `platform` | `console`, `emulator` | Selects the Auto table and resolution policy |
 | `stealth` | `true`, `false` | Suppress the recognition beacon and settings payload |
 | `streamer` | `true`, `false` | Hide remote identities and restore the original native styles |
-| `fps_boost` | `true`, `false` | Diagnostic experiment; the normal build reports Unsupported |
-| `peer_observer` | `true`, `false` | Opt-in peer-observer diagnostics (station map, name rows) |
 | `drs_moves` | `none`, `all`, or comma-separated move names (below) | 0.5.2 experiment: lower the internal resolution one level while a named move's status is active; see [Rendering profiles](RENDERING.md) |
 | `drs_adaptive` | `true`, `false` | 0.5.2 experiment: lower the resolution one level after a run of presents slower than the threshold, restore after a run within budget |
 | `drs_adaptive_threshold_ms` | `10.00`–`40.00` (up to two decimals) | Present interval that counts as a late frame; 16.67 is one vblank, the default 17.5 allows half a millisecond of jitter |
@@ -50,6 +46,11 @@ dispatcher_backoff=true
 | `early_present` | `true`, `false` | 0.5.3: present the acquired image at the flush that submitted it, the 0.4.0 fix for the two-image profiles' character-select stall (LessLag; LLUltra and LLDoubles since 0.5.2). `false` keeps the game's own present order everywhere, which is what upstream does. Read at start. The before/after is shown in [Optimizations added by this rewrite](../README.md#optimizations-added-by-this-rewrite) |
 | `dispatcher_backoff` | `true`, `false` | 0.5.3: let the dispatcher idle-backoff hook sleep ([Dispatcher backoff](DISPATCHER_BACKOFF.md)). `false` leaves the hook installed but asleep, so the game spins as upstream does; the Performance row **Backoff** reads `Off (ini)`. Read at start. The `DISABLE_BACKOFF` flag still skips the install entirely |
 | `perf_view` | `graph`, `number` | 0.5.3: the frame-time block at the bottom of the vertical window as the 180-sample plot (default) or the mean as text, which is less draw work while measuring; also the Settings row **PerfView**. The compact match strip is text either way |
+
+Legacy keys that earlier builds wrote are read and ignored, so an existing file
+is not reset: `effects` and `effects_scope` (FX moved to ssbu-fx-control in
+0.5.0), `fps_boost` and `peer_observer` (both features removed on 2026-10-17).
+The next save drops them.
 
 ## Dynamic-resolution experiment (0.5.2)
 

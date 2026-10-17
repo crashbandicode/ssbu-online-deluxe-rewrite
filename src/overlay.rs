@@ -8,6 +8,8 @@ pub(crate) const L: u64 = 1 << 6;
 pub(crate) const R: u64 = 1 << 7;
 const ZL: u64 = 1 << 8;
 const ZR: u64 = 1 << 9;
+/// Only the retired-chord test presses X now.
+#[cfg(test)]
 const X: u64 = 1 << 2;
 const Y: u64 = 1 << 3;
 const PLUS_MINUS: u64 = (1 << 10) | (1 << 11);
@@ -193,18 +195,7 @@ impl Overlay {
             config.streamer = !config.streamer;
             return true;
         }
-        // Fork FPS++ chord: L+R+ZL+X or L+R+ZR+X. Stored only on emulator.
-        if shoulders && buttons & (ZL | ZR) != 0 && pressed & X != 0 {
-            let next = crate::fps_boost::saved_after_toggle(
-                config.platform == crate::config::Platform::Emulator,
-                config.fps_boost,
-            );
-            if next == config.fps_boost {
-                return false;
-            }
-            config.fps_boost = next;
-            return true;
-        }
+        // The fork's FPS++ chord (L+R+ZL/ZR+X) left with FPS++ on 2026-10-17.
         if self.view != View::Settings && shoulders {
             if pressed & LEFT != 0 {
                 crate::peer_transport::cycle_peer(-1);
@@ -944,24 +935,25 @@ mod tests {
     }
 
     #[test]
-    fn fps_chord_toggles_only_on_emulator() {
+    fn the_retired_fps_chord_changes_nothing() {
         let _gate = crate::peer_transport::global_gate();
         let mut ui = Overlay::default();
-        let mut config = Config::default();
-        assert!(!ui.poll(L | R | ZL | X, &mut config));
-        assert!(!config.fps_boost);
-        config.platform = crate::config::Platform::Emulator;
-        ui.poll(0, &mut config);
-        assert!(ui.poll(L | R | ZL | X, &mut config));
-        assert!(config.fps_boost);
-        ui.poll(0, &mut config);
-        assert!(ui.poll(L | R | ZR | X, &mut config));
-        assert!(!config.fps_boost);
-        config.fps_boost = true;
-        config.platform = crate::config::Platform::Console;
-        ui.poll(0, &mut config);
-        assert!(ui.poll(L | R | ZL | X, &mut config));
-        assert!(!config.fps_boost);
+        for platform in [
+            crate::config::Platform::Console,
+            crate::config::Platform::Emulator,
+        ] {
+            let mut config = Config {
+                platform,
+                ..Config::default()
+            };
+            let before = config.clone();
+            assert!(!ui.poll(L | R | ZL | X, &mut config));
+            ui.poll(0, &mut config);
+            assert!(!ui.poll(L | R | ZR | X, &mut config));
+            ui.poll(0, &mut config);
+            assert_eq!(config, before);
+            assert_eq!(ui.view, View::Hidden);
+        }
     }
 
     fn native(surface: crate::menu::NativeSurface, allow: bool) -> crate::menu::NativePads {

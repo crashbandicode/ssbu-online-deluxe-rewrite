@@ -1,7 +1,7 @@
 #![cfg_attr(not(test), allow(dead_code))]
 
 //! Passive Pia message and fork-payload checks. Helpers are used by
-//! `peer_transport` and `runtime::peer_observer`. This module does not install hooks.
+//! `peer_transport` and `runtime::connection_transport`. This module does not install hooks.
 //!
 //! The message walk matches `libssbu_pia_manager` `0x41a8`. The packet length
 //! window matches the checks at `0x5cf0` and `0x5b28`. The connection-response

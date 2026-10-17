@@ -9,7 +9,11 @@ pub const CAPACITY: usize = 128;
 
 /// Numbers are stable. Codes 11, 27 to 29, 84 to 87 and 91 to 97 were the
 /// character-FX records; they moved to the `ssbu-fx-control` plugin in 0.5.0
-/// and are not reused.
+/// and are not reused. Codes 75 to 77 and 83 were opt-in diagnostics retired
+/// on 2026-10-16. Codes 37 to 45, 64 and 65 were the opt-in peer observer
+/// (parsed observation, name sample, drops, station map, the 41 to 45 send
+/// probe, the 64/65 station-map reachability sample) and code 88 was FPS++;
+/// both were removed on 2026-10-17. None of these numbers is reused.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u16)]
 pub enum Code {
@@ -51,20 +55,6 @@ pub enum Code {
     RenderCaller = 34,
     RenderFlushTarget = 35,
     PiaRtt = 36,
-    PeerObserve = 37,
-    PeerObserveName = 38,
-    PeerObserveDrop = 39,
-    PeerObserveMap = 40,
-    /// Outgoing plaintext packet header at the encrypt site.
-    SendPacket = 41,
-    /// Mixed source id plus the flag, kind, length, and inheritance mask.
-    SendIdentity = 42,
-    /// Mixed destination id and the receive-map index, when the id is known.
-    SendDestination = 43,
-    /// Kind 0x14 subtype-2 spare slot, or kind 0x58 type and Data baseline.
-    SendDetail = 44,
-    /// Send-site ring or unreadable packet drops.
-    SendDrop = 45,
     ProfileTransition = 46,
     ProfileRefused = 47,
     /// Render-opts teardown guard: a module unloaded between this frame's
@@ -72,10 +62,6 @@ pub enum Code {
     /// update and fighter worker were skipped and the game's own ordering
     /// runs for the quiet window. `a` is the unload epoch, `b` the frame.
     RenderTeardownGuard = 48,
-    /// Station-index hook reachability. `a` is hits since install; `b` is flags.
-    StationProbe = 64,
-    /// Mixed source id from that sample. `a` is `mix_id` after a successful read.
-    StationProbeId = 65,
     /// Mixed constant id learned from an inverse connection request.
     TransportHandshake = 66,
     /// Mixed constant id confirmed by a matching connection response.
@@ -104,13 +90,11 @@ pub enum Code {
     ResolutionCrop = 80,
     /// `common` Main arm or rejection. `a` is the result, `b` is the detail.
     FighterMain = 81,
-    /// Cut-in or Sephiroth start/end. Not a per-tick counter.
+    /// Cut-in start/end. `a` is the entry, the action (1 start, 2 end) in bits
+    /// 8..15 and the source in bits 16..23: 1 cut-in, 3 a 0.5.2 move-table
+    /// edge. Source 2 was the Sephiroth Gigaflare trigger, removed 2026-10-17
+    /// and not reused. Not a per-tick counter.
     FighterTransition = 82,
-    /// Native-window FPS++ phase in the low byte of `a` and the note in the
-    /// next byte. `b` is 1 when the interval read back as applied. The
-    /// tracked NVN window thread produces the pair. The diagnostics poll only
-    /// publishes it, and only when it changes.
-    FpsBoost = 88,
     /// One capture arm. `a` is the API-trace id. `b` is 1 when the embedded
     /// backend is the one that will be sampled. Not a per-frame record.
     MenuOrder = 89,
@@ -301,7 +285,11 @@ mod tests {
 
     #[test]
     fn event_codes_keep_their_numbers() {
-        assert_eq!(Code::FpsBoost as u16, 88);
+        assert_eq!(Code::PiaRtt as u16, 36);
+        assert_eq!(Code::ProfileTransition as u16, 46);
+        assert_eq!(Code::RenderTeardownGuard as u16, 48);
+        assert_eq!(Code::TransportHandshake as u16, 66);
+        assert_eq!(Code::FighterTransition as u16, 82);
         assert_eq!(Code::MenuOrder as u16, 89);
         assert_eq!(Code::RenderPollProbe as u16, 90);
         assert_eq!(Code::NullLatencyPointer as u16, 10);

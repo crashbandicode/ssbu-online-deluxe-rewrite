@@ -180,7 +180,6 @@ unsafe extern "C" fn window_initialize(window: Ptr, builder: *const c_void) -> u
         } else if TOTAL.load(Ordering::Relaxed) == 3 && ACTIVE.load(Ordering::Relaxed) == 3 {
             super::renderer::arm_mode(3);
         }
-        super::fps_boost::on_initialize(skyline::nn::os::GetSystemTick() as u64);
     }
     result
 }
@@ -192,7 +191,6 @@ unsafe extern "C" fn window_finalize(window: Ptr) {
         super::renderer::arm_mode(-1);
         ACTIVE.store(-1, Ordering::Relaxed);
         TOTAL.store(-1, Ordering::Relaxed);
-        super::fps_boost::on_finalize(skyline::nn::os::GetSystemTick() as u64);
     }
     let f: unsafe extern "C" fn(Ptr) = std::mem::transmute(FINALIZE.load(Ordering::Acquire));
     f(window);
@@ -359,7 +357,6 @@ unsafe extern "C" fn queue_present(queue: Ptr, window: Ptr, index: i32) {
         if !presented_early {
             super::resolution::on_present(window);
         }
-        super::fps_boost::on_present(tick);
         super::adaptive_drs::on_present(tick);
         super::dispatcher_backoff::note_present(tick);
         super::hang_trace::count(super::hang_trace::Hook::Present);
@@ -474,12 +471,6 @@ pub(super) fn write_status() {
             OUTSTANDING.load(Ordering::Relaxed),
             PRESENT_MASK.load(Ordering::Relaxed), ACQUIRE_MASK.load(Ordering::Relaxed),
             PRESENT_TICK.load(Ordering::Relaxed), ACQUIRE_TICK.load(Ordering::Relaxed));
-        let _ = writeln!(
-            file,
-            "fps_boost_status={}\nfps_boost_applied={}",
-            super::fps_boost::status_label(),
-            u8::from(super::fps_boost::applied())
-        );
         let _ = writeln!(
             file,
             "lesslag_fields_skip={}",

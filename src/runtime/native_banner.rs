@@ -585,14 +585,11 @@ fn snapshot() -> (bool, String, Option<[u8; 4]>, u8) {
         return (true, String::new(), None, 0);
     }
     let auto = auto_driver::snapshot();
-    let profile = crate::fps_boost::append_applied_suffix(
-        &crate::auto_policy::profile_row_label(
-            config.auto_profile,
-            auto.ready,
-            config.render_mode,
-            auto.request,
-        ),
-        super::fps_boost::applied(),
+    let profile = crate::auto_policy::profile_row_label(
+        config.auto_profile,
+        auto.ready,
+        config.render_mode,
+        auto.request,
     );
     let latency = native_banner::local_latency_label(config.input_buffer);
     let frame = crate::peer_transport::peer_frame();
@@ -660,14 +657,11 @@ fn arena_parts() -> ArenaParts {
         };
     }
     let auto = auto_driver::snapshot();
-    let profile = crate::fps_boost::append_applied_suffix(
-        &crate::auto_policy::profile_row_label(
-            config.auto_profile,
-            auto.ready,
-            config.render_mode,
-            auto.request,
-        ),
-        super::fps_boost::applied(),
+    let profile = crate::auto_policy::profile_row_label(
+        config.auto_profile,
+        auto.ready,
+        config.render_mode,
+        auto.request,
     );
     let latency = native_banner::local_latency_label(config.input_buffer);
     let (_frame, roster) = crate::peer_transport::banner_peers();

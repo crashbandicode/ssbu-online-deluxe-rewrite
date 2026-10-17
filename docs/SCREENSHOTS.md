@@ -13,7 +13,7 @@ are from `docs-media-1014/`).
 | | |
 | --- | --- |
 | ![Settings window on the main menu](media/settings-view.png) <br> The Player Info window (Settings view) on the main menu. | ![Performance view](media/performance-view.png) <br> The Performance view. |
-| ![Settings window close-up](media/settings-window.png) <br> Settings rows: Name, Interface, NetLatency, NetProfile, Status, Stealth, Streamer, FPS++, then the live Resolution, DRS, Backoff, Memory and FPS rows. Character FX is no longer a Deluxe row. | ![Debug window close-up](media/debug-window.png) <br> Debug rows, including `Timing`, `Capture L+R+Up (30 s)`, `CSS capture` and `Match capture`. |
+| ![Settings window close-up](media/settings-window.png) <br> Settings rows: Name, Interface, NetLatency, NetProfile, Status, Stealth, Streamer, FPS++ (an emulator capture; that row was removed 2026-10-17), then the live Resolution, DRS, Backoff, Memory and FPS rows. Character FX is no longer a Deluxe row. | ![Debug window close-up](media/debug-window.png) <br> Debug rows, including `Timing`, `Capture L+R+Up (30 s)`, `CSS capture` and `Match capture`. |
 | ![Debug view](media/debug-view.png) <br> The Debug view on the main menu: build, renderer and capture rows. | ![Streamer on](media/streamer-on.png) <br> Streamer on in the Settings window at the main menu (NetProfile LessLag, Status Active). |
 | ![FX Control page](media/fx-control-view.png) <br> A plugin's own page in the window cycle: the FX Control plugin's page (Scope, All, one row per covered fighter, EFF variants), one D-pad Down after Settings. | ![FX Control page close-up](media/fx-control-window.png) <br> The same page up close. |
 
@@ -53,7 +53,7 @@ frame time and the frame-time bar.
 
 | | |
 | --- | --- |
-| ![Match with the Settings strip](media/match-settings-strip.png) <br> A Singles match vs a level 9 CPU on Final Destination with the Settings strip open: `>Net:Auto Profile:lesslag Stealth:Off Stream:Off FPS++:Off` and the frame-time line. | ![Match with the Performance strip](media/match-performance.png) <br> The Performance view in the same match. |
+| ![Match with the Settings strip](media/match-settings-strip.png) <br> A Singles match vs a level 9 CPU on Final Destination with the Settings strip open: `>Net:Auto Profile:lesslag Stealth:Off Stream:Off FPS++:Off` (the FPS++ field was removed 2026-10-17) and the frame-time line. | ![Match with the Performance strip](media/match-performance.png) <br> The Performance view in the same match. |
 | ![Debug table over the pause menu](media/match-debug.png) <br> The Debug view in a match; the Plus in the chord also opens the game's pause menu. | ![Results after quitting](media/results-quit.png) <br> The results screen after quitting through the pause menu. |
 
 ![Match with the compact strip](media/match-strip.gif)

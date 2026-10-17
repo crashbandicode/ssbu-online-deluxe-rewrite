@@ -2,13 +2,13 @@ mod adaptive_drs;
 mod api_trace;
 mod auto_driver;
 mod clock_probe;
+mod connection_transport;
 #[cfg(feature = "coverage")]
 mod coverage;
 mod css_capture;
 mod dispatcher_backoff;
 mod fighter_main;
 mod fighter_probe;
-mod fps_boost;
 mod hang_trace;
 mod hooks;
 mod imgui;
@@ -21,7 +21,6 @@ mod native_banner;
 mod nvn;
 mod online;
 mod overlay_host;
-mod peer_observer;
 mod pia_rtt;
 mod plugin_export;
 mod render_sequence;
@@ -43,10 +42,8 @@ static RENDER_MODE: AtomicU8 = AtomicU8::new(0);
 static AUTO_PROFILE: AtomicBool = AtomicBool::new(true);
 static PLATFORM: AtomicU8 = AtomicU8::new(0);
 static INPUT_BUFFER: AtomicI8 = AtomicI8::new(-1);
-static PEER_OBSERVER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static STEALTH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 static STREAMER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-static FPS_BOOST: AtomicBool = AtomicBool::new(false);
 /// `ultra_resolution` (0.5.3): true = 720p, false = 576p.
 static ULTRA_720: AtomicBool = AtomicBool::new(false);
 /// `hide_pages` (0.5.3) as bits: 1 plugins, 2 own pages, 4 performance.
@@ -79,10 +76,8 @@ pub(super) fn settings() -> Config {
         } else {
             crate::config::Platform::Console
         },
-        peer_observer: PEER_OBSERVER.load(Ordering::Acquire),
         stealth: STEALTH.load(Ordering::Acquire),
         streamer: STREAMER.load(Ordering::Acquire),
-        fps_boost: FPS_BOOST.load(Ordering::Acquire),
         drs_moves: drs_moves(),
         drs_adaptive: adaptive_settings(),
         ultra_resolution: if ULTRA_720.load(Ordering::Acquire) {
@@ -147,10 +142,8 @@ pub(super) fn publish(config: &Config) {
     RENDER_MODE.store(config.render_mode as u8, Ordering::Release);
     AUTO_PROFILE.store(config.auto_profile, Ordering::Release);
     PLATFORM.store(config.platform as u8, Ordering::Release);
-    PEER_OBSERVER.store(config.peer_observer, Ordering::Release);
     STEALTH.store(config.stealth, Ordering::Release);
     STREAMER.store(config.streamer, Ordering::Release);
-    FPS_BOOST.store(config.fps_boost, Ordering::Release);
     ULTRA_720.store(
         config.ultra_resolution == crate::config::UltraResolution::P720,
         Ordering::Release,
@@ -271,8 +264,7 @@ pub fn main() {
     css_capture::install();
     resolution::install();
     fighter_probe::install();
-    peer_observer::install();
-    fps_boost::arm();
+    connection_transport::install();
 }
 
 fn legacy_host_present() -> bool {

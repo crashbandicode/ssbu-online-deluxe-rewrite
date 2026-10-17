@@ -100,17 +100,12 @@ pub struct Config {
     pub auto_profile: bool,
     /// Honest console/emulator override. Default console. No text-base heuristic.
     pub platform: Platform,
-    /// Diagnostic-only inbound observer. Omitted keys stay false.
-    pub peer_observer: bool,
     /// Saved next-connection preference. The default and a missing key are on.
     /// An explicit true or false is kept. A live session latches the value at
     /// its first inverse request until session cleanup.
     pub stealth: bool,
     /// Display privacy. Default and a missing key are off. It does not change packets.
     pub streamer: bool,
-    /// Emulator-only native-window swap interval. Default and a missing key are
-    /// off. Console never applies it. This is not a hardware clock.
-    pub fps_boost: bool,
     /// 0.5.2 experiment: moves that lower the internal resolution while their
     /// status is active (`none`, `all`, or catalog names). Default none.
     pub drs_moves: MoveSet,
@@ -300,10 +295,8 @@ impl Default for Config {
             render_mode: RenderMode::Vanilla,
             auto_profile: true,
             platform: Platform::Console,
-            peer_observer: false,
             stealth: true,
             streamer: false,
-            fps_boost: false,
             drs_moves: MoveSet::NONE,
             drs_adaptive: AdaptiveSettings::default(),
             ultra_resolution: UltraResolution::P576,
@@ -329,7 +322,7 @@ fn parse_count<T: TryFrom<u32>>(value: &str, max: u32, message: &str) -> Result<
 
 pub fn parse(text: &str) -> Result<Config, String> {
     let mut config = Config::default();
-    let mut seen = [false; 19];
+    let mut seen = [false; 17];
     for (index, raw) in text.lines().enumerate() {
         let line = raw.split('#').next().unwrap_or_default().trim();
         if line.is_empty() {
@@ -341,8 +334,13 @@ pub fn parse(text: &str) -> Result<Config, String> {
             .ok_or_else(|| error("expected key=value"))?;
         let key = key.trim();
         let value = value.trim();
-        // FX moved to ssbu_fx_control/config.ini in 0.5.0; an unknown key would reset this file.
-        if matches!(key, "effects" | "effects_scope") {
+        // Legacy keys: an unknown key would reset this file. FX moved to
+        // ssbu_fx_control/config.ini in 0.5.0; `peer_observer` and `fps_boost`
+        // were removed on 2026-10-17 and existing cards still carry the lines.
+        if matches!(
+            key,
+            "effects" | "effects_scope" | "peer_observer" | "fps_boost"
+        ) {
             continue;
         }
         let slot = match key {
@@ -351,20 +349,18 @@ pub fn parse(text: &str) -> Result<Config, String> {
             "render_mode" => 2,
             "auto_profile" => 3,
             "platform" => 4,
-            "peer_observer" => 5,
-            "stealth" => 6,
-            "streamer" => 7,
-            "fps_boost" => 8,
-            "drs_moves" => 9,
-            "drs_adaptive" => 10,
-            "drs_adaptive_threshold_ms" => 11,
-            "drs_adaptive_trigger_frames" => 12,
-            "drs_adaptive_release_frames" => 13,
-            "ultra_resolution" => 14,
-            "hide_pages" => 15,
-            "perf_view" => 16,
-            "early_present" => 17,
-            "dispatcher_backoff" => 18,
+            "stealth" => 5,
+            "streamer" => 6,
+            "drs_moves" => 7,
+            "drs_adaptive" => 8,
+            "drs_adaptive_threshold_ms" => 9,
+            "drs_adaptive_trigger_frames" => 10,
+            "drs_adaptive_release_frames" => 11,
+            "ultra_resolution" => 12,
+            "hide_pages" => 13,
+            "perf_view" => 14,
+            "early_present" => 15,
+            "dispatcher_backoff" => 16,
             _ => return Err(error(&format!("unknown key '{key}'"))),
         };
         if seen[slot] {
@@ -403,13 +399,6 @@ pub fn parse(text: &str) -> Result<Config, String> {
                     _ => return Err(error("platform must be console or emulator")),
                 };
             }
-            "peer_observer" => {
-                config.peer_observer = match value {
-                    "true" => true,
-                    "false" => false,
-                    _ => return Err(error("peer_observer must be true or false")),
-                };
-            }
             "stealth" => {
                 config.stealth = match value {
                     "true" => true,
@@ -422,13 +411,6 @@ pub fn parse(text: &str) -> Result<Config, String> {
                     "true" => true,
                     "false" => false,
                     _ => return Err(error("streamer must be true or false")),
-                };
-            }
-            "fps_boost" => {
-                config.fps_boost = match value {
-                    "true" => true,
-                    "false" => false,
-                    _ => return Err(error("fps_boost must be true or false")),
                 };
             }
             "drs_moves" => {
@@ -527,28 +509,26 @@ pub fn serialize(config: &Config) -> String {
     } else {
         config.input_buffer.to_string()
     };
-    let peer_observer = if config.peer_observer {
-        "true"
-    } else {
-        "false"
-    };
     let stealth = if config.stealth { "true" } else { "false" };
     let streamer = if config.streamer { "true" } else { "false" };
-    let fps_boost = if config.fps_boost { "true" } else { "false" };
     let auto_profile = if config.auto_profile { "true" } else { "false" };
     let drs_adaptive = if config.drs_adaptive.enabled {
         "true"
     } else {
         "false"
     };
-    let early_present = if config.early_present { "true" } else { "false" };
+    let early_present = if config.early_present {
+        "true"
+    } else {
+        "false"
+    };
     let dispatcher_backoff = if config.dispatcher_backoff {
         "true"
     } else {
         "false"
     };
     format!(
-        "# Online Deluxe settings\nversion=1\ninput_buffer={input_buffer}\nrender_mode={}\nauto_profile={auto_profile}\nplatform={}\npeer_observer={peer_observer}\nstealth={stealth}\nstreamer={streamer}\nfps_boost={fps_boost}\ndrs_moves={}\ndrs_adaptive={drs_adaptive}\ndrs_adaptive_threshold_ms={}\ndrs_adaptive_trigger_frames={}\ndrs_adaptive_release_frames={}\nultra_resolution={}\nhide_pages={}\nperf_view={}\nearly_present={early_present}\ndispatcher_backoff={dispatcher_backoff}\n",
+        "# Online Deluxe settings\nversion=1\ninput_buffer={input_buffer}\nrender_mode={}\nauto_profile={auto_profile}\nplatform={}\nstealth={stealth}\nstreamer={streamer}\ndrs_moves={}\ndrs_adaptive={drs_adaptive}\ndrs_adaptive_threshold_ms={}\ndrs_adaptive_trigger_frames={}\ndrs_adaptive_release_frames={}\nultra_resolution={}\nhide_pages={}\nperf_view={}\nearly_present={early_present}\ndispatcher_backoff={dispatcher_backoff}\n",
         config.render_mode.key(),
         config.platform.key(),
         config.drs_moves.serialize(),
@@ -600,10 +580,8 @@ mod tests {
                 render_mode: RenderMode::Vanilla,
                 auto_profile: true,
                 platform: Platform::Console,
-                peer_observer: false,
                 stealth: false,
                 streamer: false,
-                fps_boost: false,
                 drs_moves: MoveSet::NONE,
                 drs_adaptive: AdaptiveSettings::default(),
                 ultra_resolution: UltraResolution::P576,
@@ -872,30 +850,37 @@ mod tests {
     }
 
     #[test]
-    fn peer_observer_defaults_off_and_round_trips() {
-        assert!(!parse("version=1").unwrap().peer_observer);
-        assert!(
-            parse("version=1\npeer_observer=true")
-                .unwrap()
-                .peer_observer
-        );
-        assert!(
-            !parse("version=1\npeer_observer=false")
-                .unwrap()
-                .peer_observer
-        );
-        let enabled = Config {
-            peer_observer: true,
+    fn removed_peer_observer_and_fps_boost_keys_are_ignored_and_not_written_back() {
+        // Existing cards carry both lines (0.5.3 and earlier wrote them). An
+        // unknown key would reset the file, so they parse as no-ops with any
+        // value, in any order, even duplicated, and the writer drops them.
+        let legacy = parse(
+            "version=1\ninput_buffer=4\nplatform=emulator\npeer_observer=true\nstealth=false\nfps_boost=true\nrender_mode=llultra\n",
+        )
+        .unwrap();
+        let expected = Config {
+            input_buffer: 4,
+            platform: Platform::Emulator,
+            stealth: false,
+            render_mode: RenderMode::LessLagUltra,
+            auto_profile: false,
             ..Config::default()
         };
-        assert!(parse(&enabled.serialize()).unwrap().peer_observer);
+        assert_eq!(legacy, expected);
         for text in [
-            "version=1\npeer_observer=yes",
-            "version=1\npeer_observer=TRUE",
+            "version=1\npeer_observer=false",
+            "version=1\nfps_boost=false",
+            "version=1\npeer_observer=yes\nfps_boost=1",
+            "version=1\nfps_boost=",
             "version=1\npeer_observer=true\npeer_observer=false",
+            "version=1\nfps_boost=true\nfps_boost=false",
         ] {
-            assert!(parse(text).is_err(), "accepted {text:?}");
+            assert_eq!(parse(text).unwrap(), Config::default(), "{text:?}");
         }
+        let written = legacy.serialize();
+        assert!(!written.contains("peer_observer"));
+        assert!(!written.contains("fps_boost"));
+        assert_eq!(parse(&written).unwrap(), expected);
     }
 
     #[test]
@@ -979,32 +964,5 @@ mod tests {
         assert!(doubles.serialize().contains("render_mode=lldoubles"));
         assert!(doubles.serialize().contains("auto_profile=true"));
         assert!(doubles.serialize().contains("platform=emulator"));
-    }
-
-    #[test]
-    fn fps_boost_defaults_off_and_round_trips_only_as_a_bool() {
-        assert!(!Config::default().fps_boost);
-        assert!(!parse("version=1").unwrap().fps_boost);
-        let enabled = Config {
-            fps_boost: true,
-            platform: Platform::Emulator,
-            ..Config::default()
-        };
-        assert_eq!(parse(&enabled.serialize()).unwrap(), enabled);
-        assert!(enabled.serialize().contains("fps_boost=true"));
-        let disabled = Config {
-            fps_boost: false,
-            ..enabled
-        };
-        assert!(!parse(&disabled.serialize()).unwrap().fps_boost);
-        for text in [
-            "version=1\nfps_boost=yes",
-            "version=1\nfps_boost=TRUE",
-            "version=1\nfps_boost=1",
-            "version=1\nfps_boost=",
-            "version=1\nfps_boost=true\nfps_boost=false",
-        ] {
-            assert!(parse(text).is_err(), "accepted {text:?}");
-        }
     }
 }

@@ -81,21 +81,25 @@ own order; see [Configuration](CONFIGURATION.md) and the clips under
 
 DRS is dynamic resolution scaling during supported expensive visual events.
 The resolution row reports the applied internal level, not just a requested
-preset. In the console-policy Eden test, full Gigaflare lowered LessLag and
-LLDoubles from 1080p to 720p, and LLUltra from 576p to 480p, then restored them.
-Vanilla kept DRS off. This verifies the trigger and policy, not Switch performance.
-Luigi's close-range Up-B cut-in also lowered LLDoubles from 1080p to 720p and
-restored it in Eden.
+preset. Luigi's close-range Up-B cut-in lowered LLDoubles from 1080p to 720p
+and restored it in Eden. Earlier, when Sephiroth's full-charge Gigaflare was
+still a trigger, the console-policy Eden test had it lower LessLag and
+LLDoubles from 1080p to 720p and LLUltra from 576p to 480p, then restore them,
+with Vanilla keeping DRS off; those runs verified the policy and the restore
+path, not Switch performance.
 
 ### Per-move and adaptive triggers (0.5.2 experiment)
 
-The shipped triggers are the fighter cut-in (the critical-hit and finish
-zoom, held for a seven-frame cooldown) and Sephiroth's full-charge Gigaflare,
-the same two the original Online Deluxe scales on. Both are reached without
-smashline: a function hook on the cut-in start and an inline hook on the
-fighter Main line that samples entry, kind, status and the Gigaflare charge
-every tick. 0.5.2 adds two opt-in triggers on the same report multiset,
-configured in `config.ini` ([Configuration](CONFIGURATION.md)):
+The shipped trigger is the fighter cut-in (the critical-hit and finish zoom,
+held for a seven-frame cooldown). The original Online Deluxe also scales on
+Sephiroth's full-charge Gigaflare; the rewrite carried that trigger until
+2026-10-17 and dropped it because the console measurement did not justify it
+(Vanilla and LessLag hold 60 through the move; see the move ledger in the
+evidence root). Both paths are reached without smashline: a function hook on
+the cut-in start and an inline hook on the fighter Main line that samples
+entry, kind and status every tick for the move table. 0.5.2 adds two opt-in
+triggers on the same report multiset, configured in `config.ini`
+([Configuration](CONFIGURATION.md)):
 
 - **Move table** (`drs_moves`): while a fighter's status is one of a named
   move's statuses, that entry holds one report at the next lower level
@@ -130,11 +134,16 @@ require restart and are not substitutes for the full presets.
 ## FPS++
 
 Upstream's separate **FPS++** option was implemented for investigation, but its
-native path sped up the match clock in Eden. The normal build reports it as
-**Unsupported** and does not apply it, even if its saved setting is On. It remains
-an explicit diagnostic experiment, separate from the working LessLag profiles
-and from hardware overclocking. See the
-[FPS++ measurements](FPS_BOOST_INVESTIGATION.md).
+native path sped up the match clock in Eden, so the normal build only ever
+reported it as **Unsupported**. It was removed on 2026-10-17: it was
+emulator-only, never applied in normal play, and no console run reached it.
+The INI key `fps_boost`, the Settings row, the Debug row, the chord, the
+`ALLOW_FPS_BOOST` marker, event code 88 and the `fps_boost_status` /
+`fps_boost_applied` lines of `renderer-status.txt` are gone; an existing
+`fps_boost=` line is read and ignored. A peer's fork bit 14 is still decoded as
+the `++` suffix on its announced profile. The measurements stay in the
+[FPS++ investigation](FPS_BOOST_INVESTIGATION.md) as history. Hardware
+overclocking remains excluded.
 
 ## Measured results
 
