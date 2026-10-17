@@ -2489,6 +2489,71 @@ gaps stated there: no NSO session, no first boot without `config.ini`, no
 plugin option edit, no own-page plugin, no console run. Both Eden profiles
 were restored afterwards (journal `RESTORED`, SHA-256 verified).
 
+### 0.5.3 — 2026-10-17: native banner and Player Info window cut to one text builder, one style decision and one row model (host tests, Skyline build)
+
+Same file-by-file reduction order as the two cuts below. Plan: evidence root
+`reduction-1017/PLAN-native-ui.md`. Commits a21394c (native banner, host and
+runtime) and 160efc0 (window, plus `pia_rtt::Shown<T>`) on `work/native-ui-1017`
+from `reduction-candidate` 93116e7.
+
+Production code lines (code-audit classifier, comments/blanks/test modules
+excluded): `src/native_banner.rs` 507 → 256 (tests 532 → 248, 18 → 9 tests);
+`src/runtime/native_banner.rs` 1,358 → 689; `src/runtime/ui.rs` 1,051 → 820;
+`src/pia_rtt.rs` 641 → 637; `src/runtime/pia_rtt.rs` 230 → 226; `src/menu.rs`
+430 and `src/overlay.rs` 297 unchanged. Net −1,159. The plan's host (≤ 260)
+and runtime (≤ 700) targets are met; the window's ≤ 600 is not: every view,
+row, strip, chord and record is kept, and about 220 of the remaining lines are
+ImGui calls, record encodings and struct literals that rustfmt lays out one
+argument per line (`fn_call_width` 60, `struct_lit_width` 18).
+
+Removed, host: `LineParts`, `PaintInput`, `PaintOutcome`, `BannerPaint`,
+`Observe`, `observe_style`, `telemetry_text`, `with_room_id`, `arena_status`,
+`banner_paint`, `font_for`, `material_for`, `colors_for`, `font_choice`,
+`arena_y`, `style_matches`, `show_native_remote`, `local_wireless_text`,
+`visible_network_count`, `store_scan_count`, `ldn_symbols_usable`,
+`LDN_INITIALIZED`, `LDN_INITIALIZE` / `LDN_GET_STATE` / `LDN_SCAN`,
+`bound_bytes`, `main_data_end`, `is_arena_room_name` (the `ARENA_ROOM_NAME`
+const remains), `remote_line_max()` (now the `REMOTE_LINE_MAX` const);
+`local_count_active` lost its `symbols_ready` and `identity_ok` parameters.
+Added: `status_text`, `paint`, `PaneKind`, `Style`, `Styled`, an owned
+`RemoteLine`, `local_lobby_text`. Runtime banner: `install_ldn`,
+`symbol_mapped`, `hook_symbol`, `on_ldn_initialize`, `on_ldn_scan`,
+`network_state`, `lookup_symbol`, the `LDN_*` / `ORIGINAL_*` / `GET_STATE` /
+`SCAN_COUNT` / `LDN_READY` statics, `snapshot`, `arena_parts`, `arena_text`,
+`ArenaLine` / `ArenaParts`, `empty_slot`, `store_text`, `store_bytes`,
+`slot_text`, `names_equal`, `find_slot`, `address_slot`, `free_slot`,
+`clear_arena`, `clear_arena_state`, `pane_name_at`, `parent_of`,
+`pane_from_link`, `mapped_span`, `raw_name`, `pack_half`; `apply_pos_y` is
+folded into `apply_style`, `read_material` / `write_material` into one
+`material`, `copy_name` is `pane_name`. Window: `SettingCell`,
+`CompactLines`, `setting_cells`, `settings_strip`, `marked`,
+`compact_settings_lines`, `compact_performance_lines`, `compact_plugin_lines`,
+`draw_settings_vertical`, `draw_plugins_vertical`, `draw_rows` (now
+`draw_table`), `draw_compact_lines` (now `draw_strip`), `draw_debug` (now
+`debug_rows`), `plugin_page` (now `plugin_rows`), `latest_frame_time` (folded
+into `timing_line`). `pia_rtt`: `current_publication()` and `current_board()`
+return `Shown<T>`; `present_published`, `present_station` and
+`aggregate_stability` take it instead of three generation numbers.
+
+Behaviour changes, recorded in `docs/FORK_PARITY.md` and
+`docs/NATIVE_DISPLAY.md`: Streamer's restore of a pane is one-shot and no
+longer re-fires when only the live font drifted from the saved one; the
+local-wireless lobby pane goes through the same per-pane capture as the title
+panes, shows the input buffer behind the marker outside Streamer and the game's
+own captured count text in Streamer (the fork's `nn::ldn` hooks and bare scan
+count are gone). Diagnostics only: the install records `HookRejected` for a
+refused CSS or arena site (was a log line); a rejected pane open records one
+`PaneRejected` and one `PaneField(address, vtable)` instead of four fields;
+the chained text setter records one `Compatibility` row.
+
+Gates: 233 host tests plus the SDK round-trip, host clippy with warnings
+denied, no-default build, rustfmt, Skyline release build
+`0.5.3-160efc058ba2-1792252181` (NRO 1,437,696 bytes, SHA-256
+`e2b0a365a1876921…`, the same size as the ecb9923 candidate). Not run in Eden
+or on the console. Owed before the branch merges: CSS title and Streamer
+restore, the local-wireless lobby pane in both Streamer states, the arena pane
+(NSO), and the window's vertical tables and ready-match strip.
+
 ### 0.5.3 — 2026-10-17: Tier 1 code reduction — 21 helpers with no production caller removed (host tests, Skyline build)
 
 Operator rule from the coverage campaign: code is not kept because a unit

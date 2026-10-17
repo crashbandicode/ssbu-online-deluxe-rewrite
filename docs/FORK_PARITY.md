@@ -466,7 +466,7 @@ retained. Auto's target and the renderer's committed state are distinct.
 | Sephiroth Gigaflare scaler | **Parity deliberately dropped 2026-10-17.** The fork scales on the full-charge shot (`fighter/sephiroth.rs:40-60`); the rewrite carried it until then and removed it | Console measurement did not justify it: Vanilla and LessLag hold 60 through the move on the Switch (2026-10-15 redo), so the trigger only cost a `WorkModule` read per Sephiroth tick. Eden Gigaflare evidence above is history |
 | Player Info / performance view | Global ImGui table; connected-only remote column; right in Training/online lobbies, left in ordinary matches | 9e9 remote visibility passed offline/connected/disconnected; a9c right-side Training window confirmed; lobby check pending |
 | Standalone ImGui | Reuse compatible host, embedded fallback otherwise | Embedded and both standalone load orders tested previously; Elite coexistence observed |
-| Native CSS / Arena / LDN text | Fork CSS and arena display paths reinstated alongside the global window | CSS retains selected values after window closure; Streamer restores original styles. Arena lists up to eight known mapped remote stations (`arena_parts`); NSO test pending. LDN lobby network count and native D-pad buffer editing (ZL held, 0.4.1) are implemented; 9e9 Auto-to-0 edit observed. [Details](NATIVE_DISPLAY.md) |
+| Native CSS / Arena / LDN text | Fork CSS and arena display paths reinstated alongside the global window | CSS retains selected values after window closure; Streamer restores original styles once (since 2026-10-17 the restore no longer re-fires on font drift alone). Arena lists up to eight known mapped remote stations (`arena_remotes`); NSO test pending. The lobby pane shows the input buffer and, in Streamer, the game's own captured count text (2026-10-17; the fork's `nn::ldn` Initialize/Scan hooks and bare scan count are not reproduced); native D-pad buffer editing (ZL held, 0.4.1) is implemented; 9e9 Auto-to-0 edit observed. [Details](NATIVE_DISPLAY.md) |
 | 300-frame native-banner grace / LDN two-pane force | Not copied | Scene generations and validated pane identities replace retained unguarded pointers; no forced controller slots |
 | SsbuSync arena marker | Not needed by the in-tree backend | Legacy host exports trigger a best-effort overlap refusal; do not install both stacks |
 | FX On/Off and scope | Moved to ssbu-fx-control 0.1.0 / Deluxe 0.5.0. Added by this rewrite, not inherited from the fork; Deluxe now has no effect hooks and exports only the online context | Through 0.4.2: named visual requests only; user-confirmed Palutena/Sephiroth and TM/SGPO coexistence on prior candidates; full expanded catalog not runtime-certified. Further evidence belongs to the plugin |
@@ -494,8 +494,9 @@ reinstall hooks and never patch SGPO's `0x374812c` neighborhood.
   emulator address layout cannot silently choose console defaults.
 - RTT warmup uses initialized samples, avoiding the original manager's unwritten
   zero. A full ring retains the fork's mean behavior and stability thresholds.
-- Streamer is persistent display privacy and does not alter packets. Native LDN
-  privacy/count presentation and the small window are separate paths.
+- Streamer is persistent display privacy and does not alter packets. Native
+  lobby privacy restores the game's own count text instead of reproducing the
+  fork's LDN scan count (2026-10-17); the small window is a separate path.
 - The independent window edits settings; the fork-style native title displays
   them while the window is closed. Original styles are captured once per pane
   identity and restored by Streamer. Ordinary game input remains unsuppressed.
