@@ -2594,6 +2594,30 @@ Online tile (error 2306-0502: the fixture's companion service was not
 listening on 8443/8444); its partial profiles are in the evidence root's
 `coverage-nso-1016/`.
 
+### 0.5.3 — 2026-10-17: latency response trials repeated on candidate package `5357da2626a98fb9` (Eden) — frame reduction unchanged
+
+Operator: "redo the test to make sure that we still have the same frame
+reduction for input latency on the reduction candidate." Same method,
+Eden, isolated profile and scripts as the benchmark entry below (evidence
+root `bench-latency-5357-1017/`: `RESULTS.md`, `summary-table.md`,
+`reviewed-trials.json`, `trials/`, `ui/`, `DRIVE-LOG-BENCH.md`,
+`staging-receipt.json` restored and verified). Every API CSV header carries
+`build=0.5.3-962eb3d1d19f-1792252459`.
+
+Included trials, R = images from injection to the first crouch image, normal
+phase / delayed phase 8: Vanilla 6, 6, 6, 6 / 7, 6, 6, 7; LessLag 3, 3, 3, 3 /
+3, 3, 3, 3; LLUltra 2, 2, 2 / 3, 2, 2; LLDoubles 4, 4, 4 / 4, 4, 4. Savings
+against the same-session Vanilla are three, four and two images, unchanged
+from 0.5.2 and from the first candidate run; every included trial satisfies
+R = M + D. Eight trials were excluded for a nonconsecutive present identity in
+the critical window (host capture hiccups) and replaced by extra groups; no
+manual pose overrides. The Vanilla delayed phase read 7 on two of four
+trials (present delta 3 instead of 2 on the three-image ring), variance of
+the Vanilla baseline that the earlier runs also showed once. The quota
+frame-rate, capture and plugin-page checks were not repeated on this
+package; their code paths changed only in the window drawing and the pane
+text, which the console run covers.
+
 ### 0.5.3 — 2026-10-17: per-file reduction pass complete — candidate package `5357da2626a98fb9` (host tests, Skyline build)
 
 The three per-file plans (`peer_transport.rs`, `pia_rtt.rs`, native banner +
