@@ -2594,6 +2594,44 @@ Online tile (error 2306-0502: the fixture's companion service was not
 listening on 8443/8444); its partial profiles are in the evidence root's
 `coverage-nso-1016/`.
 
+### 0.5.3 — 2026-10-17: per-file reduction pass complete — candidate package `5357da2626a98fb9` (host tests, Skyline build)
+
+The three per-file plans (`peer_transport.rs`, `pia_rtt.rs`, native banner +
+window; entries below) are merged on `reduction-candidate` 962eb3d. Totals
+against `main` be82f50 (code-audit classifier, comments/blanks/test modules
+excluded): Deluxe `src/` 22,253 → 15,332 production lines (−6,921, −31.1 %);
+`sdk/` 861 → 754; test lines inside `src/` 11,008 → 7,886; 68 → 60 files.
+Per file: `peer_transport.rs` 1,388 → 739, `pia_rtt.rs` 1,010 → 637,
+`runtime/pia_rtt.rs` 364 → 226, `native_banner.rs` 544 → 256,
+`runtime/native_banner.rs` 1,364 → 689, `runtime/ui.rs` 1,182 → 820
+(operator targets of ≈ 700 / ≈ 400 / ≈ 800 for the three groups: the first met,
+the second and third not; what remains is guard windows, consumer-facing
+types, ImGui call plumbing and event-record packings, and each entry below
+lists the features that would have to go to reach the figure). Full table:
+evidence root `reduction-1017/LOC-BY-FILE.md`.
+
+Gates on 962eb3d: 233 host tests + SDK round-trip, host clippy with warnings
+denied, no-default build, rustfmt, Skyline release build
+`0.5.3-962eb3d1d19f-1792252459`: NRO 1,437,696 bytes, SHA-256
+`5357da2626a98fb9776237774cecf473280272d2c2e3fc48deffe2511bda78b5`, module
+`e79d250c843c3725…`, ELF `32768a2ad5a9f002…`. Package: evidence root
+`artifacts/5357da2626a98fb9/`; staged with the unchanged FX Control candidate
+`0c7e626d…` in `candidate-1017/` for the operator's Switch run. The SDK and
+ABI did not change in this pass, so the FX Control build from the benchmark
+entry still pairs with it.
+
+Behaviour changes carried by this pass, all recorded in `docs/FORK_PARITY.md`
+and `docs/NATIVE_DISPLAY.md`: one-shot announcement write (no revert on a
+racing cleanup); a contention tick on busy UI snapshots; the first RTT sample
+is kept; more than sixteen fresh RTT stations evict the stalest; one-shot
+Streamer restore on the native panes; the local-wireless lobby pane shows the
+input buffer behind the marker and restores the game's own count text in
+Streamer (the fork's `nn::ldn` hooks are not reproduced). Not run in Eden or
+on the console. The console run owed from the benchmark entry now also has to
+show: CSS and arena pane text and Streamer restore, the lobby pane in both
+Streamer states, the window's tables and in-match strip, and the transport
+handshake / RTT / names / announce.
+
 ### 0.5.3 — 2026-10-17: `pia_rtt.rs` cut to sixteen keyed stations and one publication lock (host tests, Skyline build)
 
 Plan: evidence root `reduction-1017/PLAN-pia-rtt.md` (items A–J). Commit
