@@ -2633,6 +2633,110 @@ branch from main 74991cf.
   capture, one `CAPTURE_CSS` capture and one Training `CAPTURE_MATCH` on the
   card, each analysed with the unchanged tools, plus continuing
   `hang-trace.log` heartbeats.
+### 0.5.3 — 2026-10-17: plugin API host and window pages consolidated; SDK 5.0.0 (host tests only)
+
+Operator order after the reduction plan
+(`reduction-1017/PLAN-plugin-api.md` in the evidence root, §4a, §4b, §5, §7,
+§8). Branch off 74991cf. Nothing here is runtime-verified.
+
+- **Version policy.** The host accepts descriptor versions 2, 3 and 4 under
+  one rule set (the version 4 rules: every option flag, the own-page plugin
+  flag, 64 options) and refuses 1 with `REGISTER_ERR_ABI`
+  (`abi::MIN_ABI_VERSION = 2`, `descriptor_version_supported = 2..=4`). The
+  three versions share one 56-byte row layout, so this is strictly more
+  permissive for every known sender: smash-replay-to-mp4 (version 2, five
+  rows, SDK pin `fa479944`) and FX Control 0.1.x copies (version 3) keep their
+  rows unchanged. Version 1 was only ever sent by unreleased 2026-10-12 SDK
+  builds. The per-version flag and limit tables, `OptionDescV1`/`widen`,
+  `MAX_OPTIONS_V3`/`V2` are gone.
+- **Host rewrite** (`src/plugin_api.rs`): one `RowKind { Value, Status,
+  Header }` replaces the `locked`/`header`/`inline` bools; one `copy_str`
+  replaces `bounded_cstr`/`owned_id`/`owned_label`/`owned_checked`;
+  `parse_descriptor` returns a `Plugin` (no `ParsedPlugin`); `Registry::value`
+  is a pure getter (pending is cleared and persisted only by
+  `reconcile_pending`, run before every draw); `PageRow { Group, Option }`,
+  `rows_for`, `selectable`, `move_selection` and one `wrap` replace
+  `PluginRow`, `plugin_rows`, `plugin_page_rows`, `cycle_choice`,
+  `move_plugin_row`, `row_selectable`, `move_selectable_row`,
+  `clamp_selectable_row`; `compact_page`/`vertical_window` merged into
+  `menu::window`, `compact_segments` moved to `menu::strip_segments`,
+  `compact_label`/`compact_line`/`inline_pieces`/`count`/`persisted_value`
+  dropped. Pending-request handling stays (the replay plugin's "Stop rec" row
+  answers `Pending`, verified in its source).
+- **Window pages** (`src/runtime/ui.rs`, Switch-only, compiled by reasoning):
+  one `menu::Row` model feeds the vertical table and the strip for Settings
+  cells and plugin rows alike; `draw_rows` is the one 2- or 3-column drawer
+  (`draw_settings_vertical` and `draw_plugins_vertical` build its input);
+  `plugin_page` asks `current` only for the windowed rows; `rgb` + `GREEN` /
+  `YELLOW` / `RED` / `GREY` consts; `setting_cells` is closure-driven with one
+  `dash()` and a toggles table, returning the strip's remote facts instead of
+  the strip finding cells by label; `perf_facts(strip)` is the one source for
+  the Performance table and strip; `draw` keeps input, polling and records and
+  `draw_window` the frame and body dispatch; `auto_driver::snapshot()` runs
+  once per draw; the quiet-ping copy is gone (`performance` takes
+  `Option<&PresentedPing>`). Rendered text is unchanged except as listed
+  below.
+- **Visible changes** (also in `docs/FORK_PARITY.md`): version 1 refused;
+  versions 2/3 read under the version 4 rules; `OPTION_FLAG_INLINE` draws as
+  a value row; the shared Plugins page has a group row per plugin, so the
+  strip shows the plugin label as a header segment and then the plain option
+  labels (was `Plugin.Option`, or the plugin label alone for a one-option
+  plugin) and the selection index counts group rows (first option is row 1);
+  a pending change applied between `reconcile_pending` and the draw shows
+  `(pending)` one frame longer; code 99 logs one line per registration.
+- **SDK and ABI 5.0.0** (removed public items): the SDK sends version 4 only
+  and calls the host once; the version 3/2/1 retry chain, `v1_option_descs`,
+  `NEGOTIATED_VERSIONS`/`negotiated_descriptor_version`, `needs_version_4` and
+  `RowLayout::Inline` are gone; `option_flags` lost its version parameter.
+  The exported symbol, `TABLE_VERSION`, the 72-byte `PluginDesc`, the 56-byte
+  `OptionDesc`, every flag bit, tone byte, error code and `ONLINE_*` are byte
+  for byte as before; `ssbu_online_deluxe_online_context_v1` and the
+  `PluginApiV1` table are untouched. Demo: drops the
+  `negotiated_descriptor_version` log.
+- **FX Control must change** (per the plan's §5; done by the parent in
+  `/home/intpa/ssbu-fx-control`): `Cargo.toml:22` bump the SDK `rev` to this
+  commit; `src/runtime/plugin.rs:7-10` drop `negotiated_descriptor_version`
+  from the import and `:38` record `b` as
+  `u64::from(deluxe_plugin_sdk::abi::ABI_VERSION)` (or drop it; code
+  `PluginRegistered`'s `b` meaning changes, update its diagnostics doc if
+  present) and `:52` the println; `src/menu.rs:346` delete the
+  `needs_version_4` assertion and `:347-350` replace the `RowLayout::Inline`
+  loop with "every non-header row is `RowLayout::Value`". Runtime behaviour
+  does not change (FX Control already needs a version 4 host); ship FX
+  Control and Deluxe together. The replay plugin needs nothing.
+- **Production lines** (physical lines before the first `#[cfg(test)]`, as
+  the plan counts): `src/plugin_api.rs` 903 → 664 (plan ≈300; the plan's
+  figure left out the ≈200-line `Registry` it keeps and rustfmt's layout of
+  `parse_descriptor`); `src/runtime/plugin_export.rs` 138 → 135 (plan ≈100;
+  `flush_persistence` and the online export are untouched by order);
+  `src/runtime/ui.rs` 1,235 → 1,170 in all, plugin drawing ≈220 → ≈165
+  (plan ≈60) and Deluxe's own drawing ≈1,015 → ≈1,005 (plan ≈790: every §4b
+  idea is applied, but rustfmt expands the table-driven cells and fact lists
+  back to one field per line); `src/overlay.rs` 369 → 371 (plugin navigation
+  27 → 22; plan ≈30 for the whole bucket); `src/menu.rs` 479 → 531
+  (`CompactField`/`compact_fields_line` 30 out, `Row`/`strip_segments`/
+  `strip_line`/`window` 82 in; plan ≈45); `sdk/abi/src/lib.rs` 345 → 306;
+  `sdk/sdk/src/lib.rs` 828 → 703; `tests/plugin_sdk_roundtrip.rs` 243 → 236.
+  `git diff --stat 74991cf`: 15 files, +1,578 / −2,143.
+- **Tests.** Host 274 → 275 (`plugin_api` 17 incl. the new
+  `replay_plugin_version_two_descriptor_registers_with_rows_tones_and_pending`:
+  a raw version 2 descriptor shaped like the replay plugin's five rows, two
+  persisted toggles, a six-choice toned status row, a tone-only row, an
+  editable `no_persist` row answering `Pending`; `menu` gains
+  `windows_page_the_strip_and_centre_the_table` and the `strip_rows_…` rewrite
+  of the `CompactField` tests; overlay row indices shift by the group row),
+  plus the SDK round-trip (1), SDK 23 + 1 doc-test, ABI 2. Gates: `cargo
+  clippy --all-targets -- -D warnings`, `cargo test --workspace`, `cargo
+  build --no-default-features`, `cargo fmt -- --check` (clean on every touched
+  file; the four pre-existing unformatted files are left alone), `cargo test`
+  in `sdk/sdk` and `sdk/abi`, `cargo build` of the demo. The Skyline build of
+  the NRO and the demo NRO are the parent's.
+- **Still owed:** an Eden run with the demo plugin as the replay plugin's
+  stand-in (built at `e4ef935`, SDK 2.0.0, sends version 2: shared page with
+  its group row, tones, read-only rows, `config_path` writes) and with the FX
+  Control page (own page, headers, 33 rows, persistence of `scope` and the
+  fighter rows), and the console. Claim nothing beyond the host tests until
+  then.
 
 ### 0.5.3 — 2026-10-17: removed the opt-in peer observer, FPS++ and the Gigaflare DRS trigger (host tests only)
 

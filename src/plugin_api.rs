@@ -7,45 +7,47 @@
 //! lock, on the overlay draw thread, and only while the Plugins page is shown
 //! or an edge was accepted. The host never assumes a request succeeded: the
 //! displayed value is always the plugin's answer to `current`.
+//!
+//! Descriptor versions 2, 3 and 4 share one layout and are read under one
+//! rule set (the version 4 rules); version 1 is refused.
 
 use core::ffi::{c_char, c_void};
 use deluxe_plugin_abi as abi;
 use std::sync::{Arc, Mutex};
 
+/// How a row behaves.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RowKind {
+    /// Left/Right request the adjacent choice.
+    Value,
+    /// `OPTION_FLAG_READ_ONLY` or a single choice: the value follows
+    /// `current`, Left/Right do nothing and `request` is never called.
+    Status,
+    /// `OPTION_FLAG_HEADER`: label only, no choices, skipped by Up/Down,
+    /// never persisted, callbacks never called.
+    Header,
+}
+
 /// One registered option, strings owned by the host.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PluginOption {
-    pub id: String,
     pub label: String,
     pub choices: Vec<String>,
+    pub kind: RowKind,
     /// INI key for host persistence (the option id unless overridden).
     pub config_key: String,
     /// Persisted value per choice; `None` writes the decimal index.
     pub values: Option<Vec<String>>,
-    /// Cleared by `OPTION_FLAG_NO_PERSIST`.
+    /// Cleared by `OPTION_FLAG_NO_PERSIST` and `OPTION_FLAG_READ_ONLY`.
     pub persist: bool,
-    /// `TONE_*` byte per choice from a version 2 descriptor; `None` is neutral.
+    /// `TONE_*` byte per choice; `None` is neutral.
     pub tones: Option<Vec<u8>>,
-    /// `OPTION_FLAG_READ_ONLY`: a status row whose value follows `current`.
-    pub locked: bool,
-    /// `OPTION_FLAG_HEADER` (version 4): label only, no choices, skipped by
-    /// Up/Down, never persisted, callbacks never called.
-    pub header: bool,
-    /// `OPTION_FLAG_INLINE` (version 4): every choice drawn on the row with
-    /// the current one marked.
-    pub inline: bool,
 }
 
 impl PluginOption {
-    /// A single choice, a row flagged read-only, or a header is a status row:
-    /// Left/Right do nothing and `request` is never called.
-    pub fn read_only(&self) -> bool {
-        self.header || self.locked || self.choices.len() <= 1
-    }
-
-    /// Whether Up/Down may land on this row.
-    pub fn selectable(&self) -> bool {
-        !self.header
+    /// Whether Left/Right may request a change.
+    pub fn editable(&self) -> bool {
+        self.kind == RowKind::Value
     }
 
     /// Tone for `choice`; neutral when the plugin declared none.
@@ -54,17 +56,6 @@ impl PluginOption {
             .as_ref()
             .and_then(|tones| tones.get(choice).copied())
             .unwrap_or(abi::TONE_NEUTRAL)
-    }
-
-    /// Token written for `choice` when the plugin persists.
-    pub fn persisted_value(&self, choice: usize) -> String {
-        match &self.values {
-            Some(values) => values
-                .get(choice)
-                .cloned()
-                .unwrap_or_else(|| choice.to_string()),
-            None => choice.to_string(),
-        }
     }
 }
 
@@ -76,8 +67,8 @@ pub struct Plugin {
     pub options: Vec<PluginOption>,
     /// The plugin's own INI the host updates after menu edits, when set.
     pub config_path: Option<String>,
-    /// Drawn on its own page of the window cycle (descriptor version 3,
-    /// `PLUGIN_FLAG_OWN_PAGE`) instead of on the shared Plugins page.
+    /// Drawn on its own page of the window cycle (`PLUGIN_FLAG_OWN_PAGE`)
+    /// instead of on the shared Plugins page.
     pub own_page: bool,
     user: usize,
     current: abi::CurrentFn,
@@ -154,13 +145,6 @@ pub struct StepResult {
     pub status: RequestStatus,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct PendingChoice {
-    plugin: usize,
-    option: usize,
-    choice: usize,
-}
-
 /// Displayed value of one option.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ValueText {
@@ -175,7 +159,9 @@ pub struct ValueText {
 /// one global instance; tests use their own so parallel tests do not race.
 pub struct Registry {
     plugins: Mutex<Vec<Arc<Plugin>>>,
-    pending: Mutex<Vec<PendingChoice>>,
+    /// `(plugin, option, choice)` of requests answered `Pending` and not yet
+    /// seen in the plugin's live value.
+    pending: Mutex<Vec<(usize, usize, usize)>>,
     last_step: Mutex<Option<StepResult>>,
     writes: Mutex<Vec<PersistWrite>>,
 }
@@ -186,77 +172,33 @@ impl Default for Registry {
     }
 }
 
-/// Reads a NUL-terminated string of at most `max` bytes. `None` when the
-/// pointer is null or no terminator appears within `max + 1` bytes, so a bad
-/// descriptor cannot make the host scan unbounded memory.
+/// Bounded copy of a NUL-terminated string. Null is `REGISTER_ERR_NULL`; no
+/// terminator within `max + 1` bytes (so a bad descriptor cannot make the
+/// host scan unbounded memory) or a string `valid` refuses is
+/// `REGISTER_ERR_INVALID`.
 ///
 /// # Safety
-/// `ptr` must be readable for `max + 1` bytes or NUL-terminated before that.
-unsafe fn bounded_cstr<'a>(ptr: *const c_char, max: usize) -> Option<&'a [u8]> {
-    if ptr.is_null() {
-        return None;
-    }
-    let bytes = ptr.cast::<u8>();
-    for len in 0..=max {
-        if *bytes.add(len) == 0 {
-            return Some(std::slice::from_raw_parts(bytes, len));
-        }
-    }
-    None
-}
-
-unsafe fn owned_id(ptr: *const c_char) -> Result<String, i32> {
-    let bytes = bounded_cstr(ptr, abi::MAX_ID_LEN).ok_or(if ptr.is_null() {
-        abi::REGISTER_ERR_NULL
-    } else {
-        abi::REGISTER_ERR_INVALID
-    })?;
-    if !abi::valid_id(bytes) {
-        return Err(abi::REGISTER_ERR_INVALID);
-    }
-    Ok(String::from_utf8_lossy(bytes).into_owned())
-}
-
-unsafe fn owned_label(ptr: *const c_char) -> Result<String, i32> {
-    let bytes = bounded_cstr(ptr, abi::MAX_LABEL_LEN).ok_or(if ptr.is_null() {
-        abi::REGISTER_ERR_NULL
-    } else {
-        abi::REGISTER_ERR_INVALID
-    })?;
-    if !abi::valid_label(bytes) {
-        return Err(abi::REGISTER_ERR_INVALID);
-    }
-    Ok(String::from_utf8_lossy(bytes).into_owned())
-}
-
-/// Non-null pointer required; `valid` decides acceptance.
-unsafe fn owned_checked(
+/// `ptr` must be null, readable for `max + 1` bytes, or NUL-terminated before that.
+unsafe fn copy_str(
     ptr: *const c_char,
     max: usize,
     valid: fn(&[u8]) -> bool,
 ) -> Result<String, i32> {
-    let bytes = bounded_cstr(ptr, max).ok_or(if ptr.is_null() {
-        abi::REGISTER_ERR_NULL
-    } else {
-        abi::REGISTER_ERR_INVALID
-    })?;
-    if !valid(bytes) {
-        return Err(abi::REGISTER_ERR_INVALID);
+    if ptr.is_null() {
+        return Err(abi::REGISTER_ERR_NULL);
     }
-    Ok(String::from_utf8_lossy(bytes).into_owned())
-}
-
-/// Validated, host-owned copy of a descriptor, ready to insert.
-#[derive(Debug)]
-pub struct ParsedPlugin {
-    pub id: String,
-    pub label: String,
-    pub options: Vec<PluginOption>,
-    pub config_path: Option<String>,
-    pub own_page: bool,
-    pub user: usize,
-    pub current: abi::CurrentFn,
-    pub request: abi::RequestFn,
+    let bytes = ptr.cast::<u8>();
+    for len in 0..=max {
+        if *bytes.add(len) == 0 {
+            let text = std::slice::from_raw_parts(bytes, len);
+            return if valid(text) {
+                Ok(String::from_utf8_lossy(text).into_owned())
+            } else {
+                Err(abi::REGISTER_ERR_INVALID)
+            };
+        }
+    }
+    Err(abi::REGISTER_ERR_INVALID)
 }
 
 /// Copies and validates a raw descriptor without touching any registry.
@@ -264,7 +206,11 @@ pub struct ParsedPlugin {
 /// # Safety
 /// `desc` must be null or point to a `PluginDesc` whose pointer fields are
 /// null or valid for the duration of the call.
-pub unsafe fn parse_descriptor(desc: *const abi::PluginDesc) -> Result<ParsedPlugin, i32> {
+pub unsafe fn parse_descriptor(desc: *const abi::PluginDesc) -> Result<Plugin, i32> {
+    const ALLOWED_OPTION_FLAGS: u32 = abi::OPTION_FLAG_NO_PERSIST
+        | abi::OPTION_FLAG_READ_ONLY
+        | abi::OPTION_FLAG_HEADER
+        | abi::OPTION_FLAG_INLINE;
     if desc.is_null() {
         return Err(abi::REGISTER_ERR_NULL);
     }
@@ -274,77 +220,44 @@ pub unsafe fn parse_descriptor(desc: *const abi::PluginDesc) -> Result<ParsedPlu
     {
         return Err(abi::REGISTER_ERR_ABI);
     }
-    // Version 3 introduced the first plugin flag; older descriptors must keep
-    // the reserved word at zero, as every host before 0.5.0 required.
-    let allowed_plugin_flags = if desc.abi_version >= 3 {
-        abi::PLUGIN_FLAG_OWN_PAGE
-    } else {
-        0
-    };
-    if desc.flags & !allowed_plugin_flags != 0 {
+    if desc.flags & !abi::PLUGIN_FLAG_OWN_PAGE != 0 {
         return Err(abi::REGISTER_ERR_INVALID);
     }
-    let own_page = desc.flags & abi::PLUGIN_FLAG_OWN_PAGE != 0;
     let (Some(current), Some(request)) = (desc.current, desc.request) else {
         return Err(abi::REGISTER_ERR_CALLBACKS);
     };
-    let id = owned_id(desc.id)?;
-    let label = owned_label(desc.label)?;
+    let id = copy_str(desc.id, abi::MAX_ID_LEN, abi::valid_id)?;
+    let label = copy_str(desc.label, abi::MAX_LABEL_LEN, abi::valid_label)?;
     let config_path = if desc.config_path.is_null() {
         None
     } else {
-        Some(owned_checked(
+        Some(copy_str(
             desc.config_path,
             abi::MAX_PATH_LEN,
             abi::valid_config_path,
         )?)
     };
     let option_count = desc.option_count as usize;
-    let max_options = match desc.abi_version {
-        4.. => abi::MAX_OPTIONS,
-        3 => abi::MAX_OPTIONS_V3,
-        _ => abi::MAX_OPTIONS_V2,
-    };
-    if option_count == 0 || option_count > max_options {
+    if option_count == 0 || option_count > abi::MAX_OPTIONS {
         return Err(abi::REGISTER_ERR_INVALID);
     }
     if desc.options.is_null() {
         return Err(abi::REGISTER_ERR_NULL);
     }
-    // Version 1 rows are 48 bytes without tones; widen them to the current layout.
-    let raw_options: Vec<abi::OptionDesc> = if desc.abi_version == 1 {
-        std::slice::from_raw_parts(desc.options.cast::<abi::OptionDescV1>(), option_count)
-            .iter()
-            .map(|raw| raw.widen())
-            .collect()
-    } else {
-        std::slice::from_raw_parts(desc.options, option_count).to_vec()
-    };
-    let allowed_flags = match desc.abi_version {
-        4.. => {
-            abi::OPTION_FLAG_NO_PERSIST
-                | abi::OPTION_FLAG_READ_ONLY
-                | abi::OPTION_FLAG_HEADER
-                | abi::OPTION_FLAG_INLINE
-        }
-        2 | 3 => abi::OPTION_FLAG_NO_PERSIST | abi::OPTION_FLAG_READ_ONLY,
-        _ => abi::OPTION_FLAG_NO_PERSIST,
-    };
+    let mut ids: Vec<String> = Vec::with_capacity(option_count);
     let mut options = Vec::with_capacity(option_count);
-    for raw in &raw_options {
-        if raw.flags & !allowed_flags != 0 {
-            return Err(abi::REGISTER_ERR_INVALID);
-        }
+    for raw in std::slice::from_raw_parts(desc.options, option_count) {
         let header = raw.flags & abi::OPTION_FLAG_HEADER != 0;
-        let inline = raw.flags & abi::OPTION_FLAG_INLINE != 0;
-        if header && inline {
+        if raw.flags & !ALLOWED_OPTION_FLAGS != 0
+            || (header && raw.flags & abi::OPTION_FLAG_INLINE != 0)
+        {
             return Err(abi::REGISTER_ERR_INVALID);
         }
-        let option_id = owned_id(raw.id)?;
-        if options.iter().any(|o: &PluginOption| o.id == option_id) {
+        let option_id = copy_str(raw.id, abi::MAX_ID_LEN, abi::valid_id)?;
+        if ids.contains(&option_id) {
             return Err(abi::REGISTER_ERR_INVALID);
         }
-        let option_label = owned_label(raw.label)?;
+        let label = copy_str(raw.label, abi::MAX_LABEL_LEN, abi::valid_label)?;
         let choice_count = raw.choice_count as usize;
         if header {
             // A header carries its label and nothing else.
@@ -356,17 +269,15 @@ pub unsafe fn parse_descriptor(desc: *const abi::PluginDesc) -> Result<ParsedPlu
                 return Err(abi::REGISTER_ERR_INVALID);
             }
             options.push(PluginOption {
-                id: option_id,
-                label: option_label,
+                label,
                 choices: Vec::new(),
+                kind: RowKind::Header,
                 config_key: String::new(),
                 values: None,
                 persist: false,
                 tones: None,
-                locked: true,
-                header: true,
-                inline: false,
             });
+            ids.push(option_id);
             continue;
         }
         if choice_count == 0 || choice_count > abi::MAX_CHOICES {
@@ -375,23 +286,21 @@ pub unsafe fn parse_descriptor(desc: *const abi::PluginDesc) -> Result<ParsedPlu
         if raw.choices.is_null() {
             return Err(abi::REGISTER_ERR_NULL);
         }
-        let raw_choices = std::slice::from_raw_parts(raw.choices, choice_count);
         let mut choices = Vec::with_capacity(choice_count);
-        for choice in raw_choices {
-            choices.push(owned_label(*choice)?);
+        for choice in std::slice::from_raw_parts(raw.choices, choice_count) {
+            choices.push(copy_str(*choice, abi::MAX_LABEL_LEN, abi::valid_label)?);
         }
         let config_key = if raw.config_key.is_null() {
             option_id.clone()
         } else {
-            owned_id(raw.config_key)?
+            copy_str(raw.config_key, abi::MAX_ID_LEN, abi::valid_id)?
         };
         let values = if raw.choice_values.is_null() {
             None
         } else {
-            let raw_values = std::slice::from_raw_parts(raw.choice_values, choice_count);
             let mut values = Vec::with_capacity(choice_count);
-            for value in raw_values {
-                values.push(owned_checked(*value, abi::MAX_VALUE_LEN, abi::valid_value)?);
+            for value in std::slice::from_raw_parts(raw.choice_values, choice_count) {
+                values.push(copy_str(*value, abi::MAX_VALUE_LEN, abi::valid_value)?);
             }
             Some(values)
         };
@@ -406,39 +315,35 @@ pub unsafe fn parse_descriptor(desc: *const abi::PluginDesc) -> Result<ParsedPlu
         };
         let locked = raw.flags & abi::OPTION_FLAG_READ_ONLY != 0;
         options.push(PluginOption {
-            id: option_id,
-            label: option_label,
+            label,
+            kind: if locked || choice_count == 1 {
+                RowKind::Status
+            } else {
+                RowKind::Value
+            },
             choices,
             config_key,
             values,
             // Read-only rows are never edited, so there is nothing to persist.
             persist: raw.flags & abi::OPTION_FLAG_NO_PERSIST == 0 && !locked,
             tones,
-            locked,
-            header: false,
-            inline,
         });
+        ids.push(option_id);
     }
-    if options
-        .iter()
-        .filter(|o| o.persist)
-        .enumerate()
-        .any(|(i, o)| {
-            options
-                .iter()
-                .filter(|p| p.persist)
-                .take(i)
-                .any(|p| p.config_key == o.config_key)
-        })
-    {
-        return Err(abi::REGISTER_ERR_INVALID);
+    // Two persisted options sharing one key would overwrite each other.
+    let mut keys: Vec<&str> = Vec::new();
+    for option in options.iter().filter(|option| option.persist) {
+        if keys.contains(&option.config_key.as_str()) {
+            return Err(abi::REGISTER_ERR_INVALID);
+        }
+        keys.push(&option.config_key);
     }
-    Ok(ParsedPlugin {
+    Ok(Plugin {
         id,
         label,
         options,
         config_path,
-        own_page,
+        own_page: desc.flags & abi::PLUGIN_FLAG_OWN_PAGE != 0,
         user: desc.user as usize,
         current,
         request,
@@ -489,44 +394,23 @@ impl Registry {
             .unwrap_or_default()
     }
 
-    fn queue_write(&self, write: PersistWrite) {
-        let Ok(mut writes) = self.writes.lock() else {
-            return;
-        };
-        writes.retain(|w| !(w.path == write.path && w.key == write.key));
-        writes.push(write);
-    }
-
-    pub fn count(&self) -> usize {
-        self.plugins.lock().map(|p| p.len()).unwrap_or(0)
-    }
-
     /// Registration order is the display order.
     pub fn snapshot(&self) -> Vec<Arc<Plugin>> {
         self.plugins.lock().map(|p| p.clone()).unwrap_or_default()
     }
 
     /// Inserts a validated plugin. Returns its handle or a `REGISTER_ERR_*` code.
-    pub fn register(&self, parsed: ParsedPlugin) -> i32 {
+    pub fn register(&self, plugin: Plugin) -> i32 {
         let Ok(mut plugins) = self.plugins.lock() else {
             return abi::REGISTER_ERR_FULL;
         };
         if plugins.len() >= abi::MAX_PLUGINS {
             return abi::REGISTER_ERR_FULL;
         }
-        if plugins.iter().any(|p| p.id == parsed.id) {
+        if plugins.iter().any(|p| p.id == plugin.id) {
             return abi::REGISTER_ERR_DUPLICATE;
         }
-        plugins.push(Arc::new(Plugin {
-            id: parsed.id,
-            label: parsed.label,
-            options: parsed.options,
-            config_path: parsed.config_path,
-            own_page: parsed.own_page,
-            user: parsed.user,
-            current: parsed.current,
-            request: parsed.request,
-        }));
+        plugins.push(Arc::new(plugin));
         (plugins.len() - 1) as i32
     }
 
@@ -536,7 +420,7 @@ impl Registry {
     /// See [`parse_descriptor`].
     pub unsafe fn register_raw(&self, desc: *const abi::PluginDesc) -> i32 {
         match parse_descriptor(desc) {
-            Ok(parsed) => self.register(parsed),
+            Ok(plugin) => self.register(plugin),
             Err(code) => code,
         }
     }
@@ -546,24 +430,22 @@ impl Registry {
             .lock()
             .ok()?
             .iter()
-            .find_map(|p| (p.plugin == plugin && p.option == option).then_some(p.choice))
+            .find_map(|(p, o, choice)| (*p == plugin && *o == option).then_some(*choice))
     }
 
     fn set_pending(&self, plugin: usize, option: usize, choice: Option<usize>) {
         let Ok(mut pending) = self.pending.lock() else {
             return;
         };
-        pending.retain(|p| !(p.plugin == plugin && p.option == option));
+        pending.retain(|(p, o, _)| !(*p == plugin && *o == option));
         if let Some(choice) = choice {
-            pending.push(PendingChoice {
-                plugin,
-                option,
-                choice,
-            });
+            pending.push((plugin, option, choice));
         }
     }
 
-    /// Current display text. A satisfied pending request is cleared here.
+    /// Current display text. Pure: a pending request stays shown until
+    /// [`Self::reconcile_pending`], which the overlay runs before every draw,
+    /// sees the plugin's live value reach it and persists it.
     pub fn value(&self, plugin_index: usize, plugin: &Plugin, option: usize) -> ValueText {
         let Some(spec) = plugin.options.get(option) else {
             return ValueText {
@@ -573,37 +455,27 @@ impl Registry {
             };
         };
         let current = plugin.current(option);
-        let pending = self.pending_for(plugin_index, option);
-        let pending = match (pending, current) {
-            (Some(wanted), Some(now)) if wanted == now => {
-                // The plugin has applied the pending change on its own; this
-                // is the moment it becomes worth persisting.
-                self.set_pending(plugin_index, option, None);
-                self.queue_persist(plugin_index, plugin, option, now);
-                false
-            }
-            (Some(_), _) => true,
-            (None, _) => false,
-        };
         ValueText {
             label: current
                 .and_then(|index| spec.choices.get(index).cloned())
                 .unwrap_or_else(|| "Unavailable".to_owned()),
-            pending,
+            pending: self
+                .pending_for(plugin_index, option)
+                .is_some_and(|wanted| Some(wanted) != current),
             tone: current.map_or(abi::TONE_NEUTRAL, |index| spec.tone_of(index)),
         }
     }
 
-    /// One Left (-1) or Right (+1) edge on a row. Read-only and unavailable
-    /// options make no request. The plugin's answer is recorded for the
-    /// runtime to log and returned to the caller.
+    /// One Left (-1) or Right (+1) edge on a row. Status, header and
+    /// unavailable options make no request. The plugin's answer is recorded
+    /// for the runtime to log and returned to the caller.
     pub fn step(&self, plugin_index: usize, option: usize, direction: i8) -> Option<StepResult> {
         if direction == 0 {
             return None;
         }
         let plugin = self.snapshot().get(plugin_index)?.clone();
         let spec = plugin.options.get(option)?;
-        if spec.read_only() {
+        if !spec.editable() {
             return None;
         }
         let current = plugin.current(option)?;
@@ -611,13 +483,13 @@ impl Registry {
         // so a second Left/Right can take a pending change back instead of
         // re-requesting the same choice.
         let base = self.pending_for(plugin_index, option).unwrap_or(current);
-        let requested = cycle_choice(base, spec.choices.len(), direction);
+        let requested = wrap(base, direction, spec.choices.len());
         let status = plugin.request(option, requested);
         // A pending request that merely returns to the live value is a
         // cancellation: nothing stays pending and nothing is written. A
         // pending change is persisted only once the plugin applies it (see
-        // `value` and `reconcile_pending`), so a plugin that defers in-match
-        // edits sees no disk activity until then. Applied writes at once.
+        // `reconcile_pending`), so a plugin that defers in-match edits sees no
+        // disk activity until then. Applied writes at once.
         let still_pending = status == RequestStatus::Pending && requested != current;
         self.set_pending(plugin_index, option, still_pending.then_some(requested));
         if status == RequestStatus::Applied {
@@ -641,6 +513,7 @@ impl Registry {
     }
 
     /// Queues the INI write for `choice` when the plugin persists this option.
+    /// Same path and key coalesce to the newest value.
     fn queue_persist(&self, plugin_index: usize, plugin: &Plugin, option: usize, choice: usize) {
         let Some(spec) = plugin.options.get(option) else {
             return;
@@ -648,12 +521,20 @@ impl Registry {
         let Some(path) = plugin.config_path.as_ref().filter(|_| spec.persist) else {
             return;
         };
-        self.queue_write(PersistWrite {
+        let Ok(mut writes) = self.writes.lock() else {
+            return;
+        };
+        writes.retain(|w| !(w.path == *path && w.key == spec.config_key));
+        writes.push(PersistWrite {
             plugin: plugin_index,
             option,
             path: path.clone(),
             key: spec.config_key.clone(),
-            value: spec.persisted_value(choice),
+            value: spec
+                .values
+                .as_ref()
+                .and_then(|values| values.get(choice).cloned())
+                .unwrap_or_else(|| choice.to_string()),
         });
     }
 
@@ -662,51 +543,42 @@ impl Registry {
     /// per draw, so a change a plugin applies at match end is written even
     /// while the Plugins page is hidden. Callbacks run on the draw thread.
     pub fn reconcile_pending(&self) {
-        let pending: Vec<PendingChoice> = match self.pending.lock() {
+        let pending: Vec<(usize, usize, usize)> = match self.pending.lock() {
             Ok(list) if list.is_empty() => return,
             Ok(list) => list.clone(),
             Err(_) => return,
         };
         let plugins = self.snapshot();
-        for entry in pending {
-            let Some(plugin) = plugins.get(entry.plugin) else {
+        for (plugin_index, option, choice) in pending {
+            let Some(plugin) = plugins.get(plugin_index) else {
                 continue;
             };
-            if plugin.current(entry.option) == Some(entry.choice) {
-                self.set_pending(entry.plugin, entry.option, None);
-                self.queue_persist(entry.plugin, plugin, entry.option, entry.choice);
+            if plugin.current(option) == Some(choice) {
+                self.set_pending(plugin_index, option, None);
+                self.queue_persist(plugin_index, plugin, option, choice);
             }
         }
     }
 }
 
-/// Right walks forward and wraps; Left walks backward and wraps.
-pub fn cycle_choice(current: usize, count: usize, direction: i8) -> usize {
+/// Steps `index` by `direction` (-1, 0, +1) with wrap-around over `count`
+/// entries. An empty list keeps zero.
+pub fn wrap(index: usize, direction: i8, count: usize) -> usize {
     if count == 0 {
         return 0;
     }
-    let count = count as i64;
-    ((current as i64 + i64::from(direction)).rem_euclid(count)) as usize
+    (index.min(count - 1) as i64 + i64::from(direction)).rem_euclid(count as i64) as usize
 }
 
-/// Flattened navigable row: one option of one plugin.
+/// One row of the Plugins page or an own page.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct PluginRow {
-    pub plugin: usize,
-    pub option: usize,
-}
-
-/// Rows of the shared Plugins page: every plugin that did not ask for its own
-/// page, in registration order.
-pub fn plugin_rows(plugins: &[Arc<Plugin>]) -> Vec<PluginRow> {
-    plugins
-        .iter()
-        .enumerate()
-        .filter(|(_, entry)| !entry.own_page)
-        .flat_map(|(plugin, entry)| {
-            (0..entry.options.len()).map(move |option| PluginRow { plugin, option })
-        })
-        .collect()
+pub enum PageRow {
+    /// A plugin's label heading its options on the shared page. Never selected.
+    Group(usize),
+    Option {
+        plugin: usize,
+        option: usize,
+    },
 }
 
 /// Indices of the plugins that asked for their own page, in registration
@@ -720,188 +592,76 @@ pub fn page_plugins(plugins: &[Arc<Plugin>]) -> Vec<usize> {
         .collect()
 }
 
-/// Rows of one plugin's own page.
-pub fn plugin_page_rows(plugins: &[Arc<Plugin>], plugin: usize) -> Vec<PluginRow> {
-    plugins
-        .get(plugin)
-        .map(|entry| {
-            (0..entry.options.len())
-                .map(|option| PluginRow { plugin, option })
-                .collect()
-        })
-        .unwrap_or_default()
+/// Whether any plugin shows on the shared Plugins page.
+pub fn has_shared_rows(plugins: &[Arc<Plugin>]) -> bool {
+    plugins.iter().any(|entry| !entry.own_page)
 }
 
-/// Rows the selection moves over for a view: the shared page, or one plugin's
-/// page (`page` indexes [`page_plugins`]).
-pub fn rows_for(plugins: &[Arc<Plugin>], page: Option<usize>) -> Vec<PluginRow> {
+/// Rows of a view. The shared page (`None`) has a `Group` row per plugin
+/// that did not ask for its own page, followed by its options; own page
+/// `Some(i)` (indexing [`page_plugins`]) has that plugin's options alone.
+pub fn rows_for(plugins: &[Arc<Plugin>], page: Option<usize>) -> Vec<PageRow> {
+    let options = |plugin: usize| {
+        (0..plugins[plugin].options.len()).map(move |option| PageRow::Option { plugin, option })
+    };
     match page {
-        None => plugin_rows(plugins),
+        None => plugins
+            .iter()
+            .enumerate()
+            .filter(|(_, entry)| !entry.own_page)
+            .flat_map(|(plugin, _)| std::iter::once(PageRow::Group(plugin)).chain(options(plugin)))
+            .collect(),
         Some(page) => page_plugins(plugins)
             .get(page)
-            .map(|plugin| plugin_page_rows(plugins, *plugin))
+            .map(|plugin| options(*plugin).collect())
             .unwrap_or_default(),
     }
 }
 
-/// Steps to the adjacent row, wrapping. An empty list keeps zero.
-pub fn move_plugin_row(selected: usize, direction: i8, total: usize) -> usize {
-    if total == 0 {
+/// Whether Up/Down may land on `row`: an option that is not a header.
+pub fn selectable(plugins: &[Arc<Plugin>], row: PageRow) -> bool {
+    match row {
+        PageRow::Group(_) => false,
+        PageRow::Option { plugin, option } => plugins
+            .get(plugin)
+            .and_then(|entry| entry.options.get(option))
+            .is_none_or(|spec| spec.kind != RowKind::Header),
+    }
+}
+
+/// `selected` clamped into `rows` and moved forward onto a selectable row,
+/// then stepped by `direction` (-1, 0, +1) with wrap, skipping group and
+/// header rows. A list without a selectable row behaves like [`wrap`].
+pub fn move_selection(
+    plugins: &[Arc<Plugin>],
+    rows: &[PageRow],
+    selected: usize,
+    direction: i8,
+) -> usize {
+    if rows.is_empty() {
         return 0;
     }
-    let total = total as i64;
-    ((selected.min(total as usize - 1) as i64 + i64::from(direction)).rem_euclid(total)) as usize
-}
-
-/// Whether each row of `rows` may hold the selection (headers may not).
-pub fn row_selectable(plugins: &[Arc<Plugin>], rows: &[PluginRow]) -> Vec<bool> {
-    rows.iter()
-        .map(|row| {
-            plugins
-                .get(row.plugin)
-                .and_then(|plugin| plugin.options.get(row.option))
-                .is_none_or(PluginOption::selectable)
-        })
-        .collect()
-}
-
-/// Steps to the adjacent selectable row, wrapping and skipping headers. A
-/// list without a selectable row behaves like [`move_plugin_row`].
-pub fn move_selectable_row(selected: usize, direction: i8, selectable: &[bool]) -> usize {
-    let total = selectable.len();
-    let mut row = move_plugin_row(selected, direction, total);
-    for _ in 0..total {
-        if selectable.get(row).copied().unwrap_or(true) {
-            break;
+    let settle = |mut row: usize, direction: i8| {
+        for _ in 0..rows.len() {
+            if selectable(plugins, rows[row]) {
+                break;
+            }
+            row = wrap(row, direction, rows.len());
         }
-        row = move_plugin_row(row, direction, total);
-    }
-    row
-}
-
-/// `selected` clamped into the list and moved forward (wrapping) onto the
-/// first selectable row, so a header never holds the selection.
-pub fn clamp_selectable_row(selected: usize, selectable: &[bool]) -> usize {
-    let total = selectable.len();
-    if total == 0 {
-        return 0;
-    }
-    let start = selected.min(total - 1);
-    if selectable[start] {
-        return start;
-    }
-    move_selectable_row(start, 1, selectable)
-}
-
-/// Fields shown per compact-strip page. The strip never scales text below
-/// readability for a long plugin list; it pages instead.
-pub const COMPACT_PAGE: usize = 4;
-
-/// Rows per vertical window before the list is clipped around the selection.
-pub const VERTICAL_WINDOW: usize = 10;
-
-/// Page containing `selected`: `(start, end, page_index, page_count)`,
-/// one-based page numbers for display.
-pub fn compact_page(selected: usize, total: usize, page: usize) -> (usize, usize, usize, usize) {
-    if total == 0 || page == 0 {
-        return (0, 0, 1, 1);
-    }
-    let pages = total.div_ceil(page);
-    let index = selected.min(total - 1) / page;
-    let start = index * page;
-    (start, (start + page).min(total), index + 1, pages)
-}
-
-/// Contiguous window of at most `window` rows containing `selected`.
-pub fn vertical_window(selected: usize, total: usize, window: usize) -> (usize, usize) {
-    if total == 0 || window == 0 {
-        return (0, 0);
-    }
-    if total <= window {
-        return (0, total);
-    }
-    let selected = selected.min(total - 1);
-    let half = window / 2;
-    let start = selected.saturating_sub(half).min(total - window);
-    (start, start + window)
-}
-
-/// Single-option plugins show their plugin label; others `Plugin.Option`.
-pub fn compact_label(plugin_label: &str, option_label: &str, option_count: usize) -> String {
-    if option_count <= 1 {
-        plugin_label.to_owned()
+        row
+    };
+    let row = settle(selected.min(rows.len() - 1), 1);
+    if direction == 0 {
+        row
     } else {
-        format!("{plugin_label}.{option_label}")
+        settle(wrap(row, direction, rows.len()), direction)
     }
-}
-
-/// One unwrapped compact row for a page of plugin fields.
-pub fn compact_line(fields: &[(String, ValueText, bool)]) -> String {
-    compact_segments(fields)
-        .into_iter()
-        .map(|(text, _)| text)
-        .collect()
-}
-
-/// The same row split into `(text, tone)` segments so the renderer can colour
-/// each value: `>Label:` and the separators stay neutral, the value and its
-/// pending marker take the choice's tone. A header field (empty value label;
-/// choice labels are never empty) is its label alone, without the colon.
-/// Concatenating the texts gives [`compact_line`] exactly, so font fitting
-/// can use the joined string.
-pub fn compact_segments(fields: &[(String, ValueText, bool)]) -> Vec<(String, u8)> {
-    let mut segments = Vec::with_capacity(fields.len() * 3);
-    for (index, (label, value, selected)) in fields.iter().enumerate() {
-        if index > 0 {
-            segments.push(("   ".to_owned(), abi::TONE_NEUTRAL));
-        }
-        if value.label.is_empty() {
-            segments.push((label.clone(), abi::TONE_NEUTRAL));
-            continue;
-        }
-        segments.push((
-            format!("{}{label}:", if *selected { ">" } else { "" }),
-            abi::TONE_NEUTRAL,
-        ));
-        segments.push((
-            format!("{}{}", value.label, if value.pending { "~" } else { "" }),
-            value.tone,
-        ));
-    }
-    segments
-}
-
-/// The value column of an inline row as `(text, tone, marked)` pieces: every
-/// choice in order, two spaces apart, the current one as `[Choice]` in its
-/// tone (plus `~` while a request is pending), the others neutral. With no
-/// current choice nothing is marked.
-pub fn inline_pieces(
-    option: &PluginOption,
-    current: Option<usize>,
-    pending: bool,
-) -> Vec<(String, u8, bool)> {
-    let mut pieces = Vec::with_capacity(option.choices.len() * 2);
-    for (index, choice) in option.choices.iter().enumerate() {
-        if index > 0 {
-            pieces.push(("  ".to_owned(), abi::TONE_NEUTRAL, false));
-        }
-        if current == Some(index) {
-            pieces.push((
-                format!("[{choice}]{}", if pending { "~" } else { "" }),
-                option.tone_of(index),
-                true,
-            ));
-        } else {
-            pieces.push((choice.clone(), abi::TONE_NEUTRAL, false));
-        }
-    }
-    pieces
 }
 
 /// Process-wide registry used by the runtime export and the overlay.
 pub static REGISTRY: Registry = Registry::new();
 
-/// Test and host-side helper: a descriptor with owned C strings.
+/// Test helpers: a descriptor with owned C strings and a scripted fake plugin.
 #[cfg(test)]
 pub(crate) mod testing {
     use super::*;
@@ -912,30 +672,7 @@ pub(crate) mod testing {
         _choice_tables: Vec<Vec<*const c_char>>,
         _tone_tables: Vec<Vec<u8>>,
         pub _options: Vec<abi::OptionDesc>,
-        pub _options_v1: Vec<abi::OptionDescV1>,
         pub desc: abi::PluginDesc,
-    }
-
-    impl DescHolder {
-        /// Re-points the descriptor at a version 1 (48-byte, tone-less) option
-        /// array, as an older consumer would send it.
-        pub fn as_version_1(&mut self) {
-            self._options_v1 = self
-                ._options
-                .iter()
-                .map(|o| abi::OptionDescV1 {
-                    id: o.id,
-                    label: o.label,
-                    choices: o.choices,
-                    choice_count: o.choice_count,
-                    flags: o.flags,
-                    config_key: o.config_key,
-                    choice_values: o.choice_values.cast::<c_char>(),
-                })
-                .collect();
-            self.desc.abi_version = 1;
-            self.desc.options = self._options_v1.as_ptr().cast::<abi::OptionDesc>();
-        }
     }
 
     /// Persistence and presentation settings for one option in [`descriptor_with`].
@@ -946,10 +683,10 @@ pub(crate) mod testing {
         pub no_persist: bool,
         pub tones: Option<&'static [u8]>,
         pub read_only: bool,
-        /// Version 4 header row: the choice list is ignored and sent as 0
-        /// choices with null tables.
+        /// Header row: the choice list is ignored and sent as 0 choices with
+        /// null tables.
         pub header: bool,
-        /// Version 4 inline row.
+        /// `OPTION_FLAG_INLINE`: still a valid wire bit, drawn as a value row.
         pub inline: bool,
     }
 
@@ -985,7 +722,7 @@ pub(crate) mod testing {
         let id_ptr = keep(id);
         let label_ptr = keep(label);
         let path_ptr = config_path.map_or(std::ptr::null(), &mut keep);
-        let mut choice_tables = Vec::new();
+        let mut choice_tables: Vec<Vec<*const c_char>> = Vec::new();
         let mut tone_tables: Vec<Vec<u8>> = Vec::new();
         let mut raw_options = Vec::new();
         for (index, (oid, olabel, choices)) in options.iter().enumerate() {
@@ -993,40 +730,16 @@ pub(crate) mod testing {
             let olabel_ptr = keep(olabel);
             let settings = persist.get(index).copied().unwrap_or_default();
             let key_ptr = settings.key.map_or(std::ptr::null(), &mut keep);
-            let table: Vec<*const c_char> = choices.iter().map(|c| keep(c)).collect();
-            choice_tables.push(table);
-            let values_ptr = match settings.values {
-                Some(values) => {
-                    let table: Vec<*const c_char> = values.iter().map(|v| keep(v)).collect();
-                    choice_tables.push(table);
-                    choice_tables.last().unwrap().as_ptr()
-                }
-                None => std::ptr::null(),
-            };
-            let table = if settings.values.is_some() {
-                &choice_tables[choice_tables.len() - 2]
-            } else {
-                choice_tables.last().unwrap()
-            };
-            let tones_ptr = match settings.tones {
-                Some(tones) => {
-                    tone_tables.push(tones.to_vec());
-                    tone_tables.last().unwrap().as_ptr()
-                }
-                None => std::ptr::null(),
-            };
             let mut flags = 0;
-            if settings.no_persist {
-                flags |= abi::OPTION_FLAG_NO_PERSIST;
-            }
-            if settings.read_only {
-                flags |= abi::OPTION_FLAG_READ_ONLY;
-            }
-            if settings.header {
-                flags |= abi::OPTION_FLAG_HEADER;
-            }
-            if settings.inline {
-                flags |= abi::OPTION_FLAG_INLINE;
+            for (set, bit) in [
+                (settings.no_persist, abi::OPTION_FLAG_NO_PERSIST),
+                (settings.read_only, abi::OPTION_FLAG_READ_ONLY),
+                (settings.header, abi::OPTION_FLAG_HEADER),
+                (settings.inline, abi::OPTION_FLAG_INLINE),
+            ] {
+                if set {
+                    flags |= bit;
+                }
             }
             if settings.header {
                 raw_options.push(abi::OptionDesc {
@@ -1041,11 +754,32 @@ pub(crate) mod testing {
                 });
                 continue;
             }
+            // Tables are boxed into `choice_tables` so their addresses stay
+            // put while the vector grows.
+            let choices_ptr = {
+                choice_tables.push(choices.iter().map(|c| keep(c)).collect());
+                choice_tables.last().unwrap().as_ptr()
+            };
+            let choice_count = choices.len() as u32;
+            let values_ptr = match settings.values {
+                Some(values) => {
+                    choice_tables.push(values.iter().map(|v| keep(v)).collect());
+                    choice_tables.last().unwrap().as_ptr()
+                }
+                None => std::ptr::null(),
+            };
+            let tones_ptr = match settings.tones {
+                Some(tones) => {
+                    tone_tables.push(tones.to_vec());
+                    tone_tables.last().unwrap().as_ptr()
+                }
+                None => std::ptr::null(),
+            };
             raw_options.push(abi::OptionDesc {
                 id: oid_ptr,
                 label: olabel_ptr,
-                choices: table.as_ptr(),
-                choice_count: table.len() as u32,
+                choices: choices_ptr,
+                choice_count,
                 flags,
                 config_key: key_ptr,
                 choice_values: values_ptr,
@@ -1070,14 +804,14 @@ pub(crate) mod testing {
             _choice_tables: choice_tables,
             _tone_tables: tone_tables,
             _options: raw_options,
-            _options_v1: Vec::new(),
             desc,
         }
     }
 
-    /// Fake plugin state: one atomic per option plus a scripted request answer.
+    /// Fake plugin state: one atomic per option (a fifth slot starts at 0 for
+    /// five-row plugins) plus a scripted request answer.
     pub struct FakePlugin {
-        pub values: [std::sync::atomic::AtomicU32; 4],
+        pub values: [std::sync::atomic::AtomicU32; 5],
         pub answer: std::sync::atomic::AtomicU32,
         pub requests: Mutex<Vec<(u32, u32)>>,
     }
@@ -1091,6 +825,7 @@ pub(crate) mod testing {
                     AtomicU32::new(initial[1]),
                     AtomicU32::new(initial[2]),
                     AtomicU32::new(initial[3]),
+                    AtomicU32::new(0),
                 ],
                 answer: AtomicU32::new(answer),
                 requests: Mutex::new(Vec::new()),
@@ -1155,10 +890,14 @@ mod tests {
         ("status", "Status", &["Ready"]),
     ];
 
+    fn option(plugin: usize, option: usize) -> PageRow {
+        PageRow::Option { plugin, option }
+    }
+
     #[test]
     fn registration_copies_strings_and_assigns_ordered_handles() {
         let registry = Registry::new();
-        assert_eq!(registry.count(), 0);
+        assert!(registry.snapshot().is_empty());
         assert_eq!(register_fake(&registry, "demo", "Demo", DEMO, &TOGGLE), 0);
         assert_eq!(
             register_fake(
@@ -1180,30 +919,25 @@ mod tests {
         assert_eq!(plugins[0].label, "Demo");
         assert_eq!(plugins[0].options.len(), 3);
         assert_eq!(plugins[0].options[1].choices, vec!["A", "B", "C"]);
-        assert!(plugins[0].options[2].read_only());
-        assert!(!plugins[0].options[0].read_only());
+        assert_eq!(plugins[0].options[2].kind, RowKind::Status);
+        assert!(!plugins[0].options[2].editable());
+        assert!(plugins[0].options[0].editable());
         assert_eq!(plugins[1].label, "Replay");
+        assert!(has_shared_rows(&plugins));
+        assert!(page_plugins(&plugins).is_empty());
+        // The shared page heads each plugin's options with a group row.
         assert_eq!(
-            plugin_rows(&plugins),
+            rows_for(&plugins, None),
             vec![
-                PluginRow {
-                    plugin: 0,
-                    option: 0
-                },
-                PluginRow {
-                    plugin: 0,
-                    option: 1
-                },
-                PluginRow {
-                    plugin: 0,
-                    option: 2
-                },
-                PluginRow {
-                    plugin: 1,
-                    option: 0
-                },
+                PageRow::Group(0),
+                option(0, 0),
+                option(0, 1),
+                option(0, 2),
+                PageRow::Group(1),
+                option(1, 0),
             ]
         );
+        assert!(rows_for(&plugins, Some(0)).is_empty());
     }
 
     #[test]
@@ -1222,16 +956,15 @@ mod tests {
             Some(fake_current),
             Some(fake_request),
         );
-        holder.desc.abi_version = abi::ABI_VERSION + 1;
-        assert_eq!(
-            unsafe { registry.register_raw(&holder.desc) },
-            abi::REGISTER_ERR_ABI
-        );
-        holder.desc.abi_version = 0;
-        assert_eq!(
-            unsafe { registry.register_raw(&holder.desc) },
-            abi::REGISTER_ERR_ABI
-        );
+        // Versions 2, 3 and 4 are read under one rule set; 0, 1 and 5 are not ours.
+        for version in [0, 1, abi::ABI_VERSION + 1] {
+            holder.desc.abi_version = version;
+            assert_eq!(
+                unsafe { registry.register_raw(&holder.desc) },
+                abi::REGISTER_ERR_ABI,
+                "version {version}"
+            );
+        }
         holder.desc.abi_version = abi::ABI_VERSION;
         holder.desc.struct_size += 8;
         assert_eq!(
@@ -1239,20 +972,13 @@ mod tests {
             abi::REGISTER_ERR_ABI
         );
         holder.desc.struct_size = core::mem::size_of::<abi::PluginDesc>() as u32;
-        // Unknown plugin flag bits are invalid in every version; the own-page
-        // bit exists only from version 3.
+        // Unknown plugin flag bits are invalid; the own-page bit is accepted
+        // from every version now.
         holder.desc.flags = 2;
         assert_eq!(
             unsafe { registry.register_raw(&holder.desc) },
             abi::REGISTER_ERR_INVALID
         );
-        holder.desc.flags = abi::PLUGIN_FLAG_OWN_PAGE;
-        holder.desc.abi_version = 2;
-        assert_eq!(
-            unsafe { registry.register_raw(&holder.desc) },
-            abi::REGISTER_ERR_INVALID
-        );
-        holder.desc.abi_version = abi::ABI_VERSION;
         holder.desc.flags = 0;
         holder.desc.request = None;
         assert_eq!(
@@ -1273,6 +999,26 @@ mod tests {
             abi::REGISTER_ERR_INVALID
         );
         holder.desc.option_count = 3;
+        let saved_options = holder.desc.options;
+        holder.desc.options = std::ptr::null();
+        assert_eq!(
+            unsafe { registry.register_raw(&holder.desc) },
+            abi::REGISTER_ERR_NULL
+        );
+        holder.desc.options = saved_options;
+        // The own-page bit is accepted from every version now.
+        for version in [2, 3, abi::ABI_VERSION] {
+            let fresh = Registry::new();
+            holder.desc.abi_version = version;
+            holder.desc.flags = abi::PLUGIN_FLAG_OWN_PAGE;
+            assert_eq!(
+                unsafe { fresh.register_raw(&holder.desc) },
+                0,
+                "version {version}"
+            );
+            assert!(fresh.snapshot()[0].own_page);
+        }
+        holder.desc.flags = 0;
         assert_eq!(unsafe { registry.register_raw(&holder.desc) }, 0);
 
         for (id, label, options) in [
@@ -1317,7 +1063,22 @@ mod tests {
             unsafe { registry.register_raw(&holder.desc) },
             abi::REGISTER_ERR_INVALID
         );
-        assert_eq!(registry.count(), 1);
+        // A label that never terminates within its limit is refused, not scanned on.
+        let unterminated = [b'x'; abi::MAX_LABEL_LEN + 8];
+        let mut holder = descriptor(
+            "ok",
+            "Demo",
+            DEMO,
+            user,
+            Some(fake_current),
+            Some(fake_request),
+        );
+        holder.desc.label = unterminated.as_ptr().cast();
+        assert_eq!(
+            unsafe { registry.register_raw(&holder.desc) },
+            abi::REGISTER_ERR_INVALID
+        );
+        assert_eq!(registry.snapshot().len(), 1);
     }
 
     #[test]
@@ -1344,6 +1105,35 @@ mod tests {
                 &TOGGLE
             ),
             abi::REGISTER_ERR_FULL
+        );
+        // Option limits: 64 rows fit, 65 do not, in every accepted version.
+        let user = &TOGGLE as *const FakePlugin as *mut c_void;
+        let ids: Vec<String> = (0..65).map(|index| format!("o{index}")).collect();
+        let choices: &[&str] = &["A", "B"];
+        let rows: Vec<(&str, &str, &[&str])> =
+            ids.iter().map(|id| (id.as_str(), "x", choices)).collect();
+        let wide = Registry::new();
+        let mut holder = descriptor(
+            "wide",
+            "Wide",
+            &rows[..64],
+            user,
+            Some(fake_current),
+            Some(fake_request),
+        );
+        holder.desc.abi_version = 2;
+        assert_eq!(unsafe { wide.register_raw(&holder.desc) }, 0);
+        let holder = descriptor(
+            "wider",
+            "Wider",
+            &rows,
+            user,
+            Some(fake_current),
+            Some(fake_request),
+        );
+        assert_eq!(
+            unsafe { wide.register_raw(&holder.desc) },
+            abi::REGISTER_ERR_INVALID
         );
     }
 
@@ -1372,6 +1162,7 @@ mod tests {
         assert_eq!(registry.step(0, 0, 0), None);
         assert_eq!(registry.step(0, 9, 1), None);
         assert_eq!(registry.step(5, 0, 1), None);
+        assert_eq!(registry.value(0, &plugin, 9).label, "Unavailable");
         assert_eq!(registry.take_last_step().unwrap().option, 1);
         assert_eq!(registry.take_last_step(), None);
         TOGGLE.values[0].store(0, Ordering::Relaxed);
@@ -1422,6 +1213,8 @@ mod tests {
         assert!(!registry.value(0, &plugins[0], 0).pending);
         assert_eq!(registry.step(0, 0, 1).unwrap().requested, 2);
         assert!(registry.value(0, &plugins[0], 0).pending);
+        // The plugin applies on its own: `value` is pure, so the row reads
+        // not-pending at once and the draw-time reconcile clears the entry.
         PENDING.values[0].store(2, Ordering::Relaxed);
         assert_eq!(
             registry.value(0, &plugins[0], 0),
@@ -1431,6 +1224,7 @@ mod tests {
                 tone: abi::TONE_NEUTRAL,
             }
         );
+        registry.reconcile_pending();
         PENDING.values[0].store(1, Ordering::Relaxed);
         assert!(!registry.value(0, &plugins[0], 0).pending);
 
@@ -1533,9 +1327,12 @@ mod tests {
         assert_eq!(plugins[1].config_path, None);
         let record = &plugins[0].options[0];
         assert_eq!(record.config_key, "record_enabled");
-        assert_eq!(record.persisted_value(1), "on");
+        assert_eq!(
+            record.values.as_deref(),
+            Some(&["off".to_owned(), "on".to_owned()][..])
+        );
         assert_eq!(plugins[0].options[1].config_key, "quality");
-        assert_eq!(plugins[0].options[1].persisted_value(2), "2");
+        assert_eq!(plugins[0].options[1].values, None);
         assert!(!plugins[0].options[3].persist);
         assert!(registry.take_writes().is_empty());
 
@@ -1719,6 +1516,13 @@ mod tests {
                     ..Persist::default()
                 },
             ),
+            (
+                None,
+                Persist {
+                    tones: Some(&[abi::TONE_OK, 9]),
+                    ..Persist::default()
+                },
+            ),
         ] {
             let holder = descriptor_with(
                 "p",
@@ -1760,27 +1564,49 @@ mod tests {
             unsafe { registry.register_raw(&holder.desc) },
             abi::REGISTER_ERR_INVALID
         );
-        let mut holder = descriptor(
+        // A read-only row may reuse a persisted key: it is never written.
+        let holder = descriptor_with(
             "p",
             "P",
+            &[("a", "A", &["x", "y"]), ("b", "B", &["x", "y"])],
+            Some("sd:/ok.ini"),
+            &[
+                Persist {
+                    key: Some("same"),
+                    ..Persist::default()
+                },
+                Persist {
+                    key: Some("same"),
+                    read_only: true,
+                    ..Persist::default()
+                },
+            ],
+            user,
+            Some(fake_current),
+            Some(fake_request),
+        );
+        assert_eq!(unsafe { registry.register_raw(&holder.desc) }, 0);
+        // Bit 4 is not an option flag in any version.
+        let mut holder = descriptor(
+            "q",
+            "Q",
             &[("o", "O", &["Off", "On"])],
             user,
             Some(fake_current),
             Some(fake_request),
         );
-        // Bit 2 is READ_ONLY in version 2; bit 3 is still unknown.
-        holder._options[0].flags = 1 << 2;
+        holder._options[0].flags = 1 << 4;
         assert_eq!(
             unsafe { registry.register_raw(&holder.desc) },
             abi::REGISTER_ERR_INVALID
         );
-        assert_eq!(registry.count(), 0);
+        assert_eq!(registry.snapshot().len(), 1);
     }
 
     static TONED: FakePlugin = FakePlugin::new([1, 2, 0, 0], abi::REQUEST_APPLIED);
 
     #[test]
-    fn version_two_tones_and_read_only_rows_render_and_lock_as_declared() {
+    fn tones_and_read_only_rows_render_and_lock_as_declared() {
         let registry = Registry::new();
         let user = &TONED as *const FakePlugin as *mut c_void;
         let holder = descriptor_with(
@@ -1815,10 +1641,9 @@ mod tests {
         assert_eq!(plugin.options[0].tone_of(1), abi::TONE_OK);
         assert_eq!(plugin.options[0].tone_of(0), abi::TONE_NEUTRAL);
         assert_eq!(plugin.options[2].tone_of(1), abi::TONE_NEUTRAL);
-        assert!(plugin.options[1].read_only());
-        assert!(plugin.options[1].locked);
+        assert_eq!(plugin.options[1].kind, RowKind::Status);
         assert!(!plugin.options[1].persist);
-        assert!(!plugin.options[0].read_only());
+        assert!(plugin.options[0].editable());
         let enabled = registry.value(0, &plugin, 0);
         assert_eq!((enabled.label.as_str(), enabled.tone), ("On", abi::TONE_OK));
         let health = registry.value(0, &plugin, 1);
@@ -1832,37 +1657,40 @@ mod tests {
         // Plain rows still edit.
         assert_eq!(registry.step(0, 2, 1).unwrap().requested, 1);
         TONED.values[2].store(0, Ordering::Relaxed);
-
-        let fields = vec![
-            ("Link.Enabled".to_owned(), enabled, true),
-            ("Link.Health".to_owned(), health, false),
-        ];
-        let segments = compact_segments(&fields);
-        assert_eq!(
-            segments,
-            vec![
-                (">Link.Enabled:".to_owned(), abi::TONE_NEUTRAL),
-                ("On".to_owned(), abi::TONE_OK),
-                ("   ".to_owned(), abi::TONE_NEUTRAL),
-                ("Link.Health:".to_owned(), abi::TONE_NEUTRAL),
-                ("Fail".to_owned(), abi::TONE_ERROR),
-            ]
-        );
-        assert_eq!(compact_line(&fields), ">Link.Enabled:On   Link.Health:Fail");
     }
 
-    #[test]
-    fn version_one_descriptors_still_register_without_tones() {
-        let registry = Registry::new();
-        let user = &TONED as *const FakePlugin as *mut c_void;
+    /// The replay plugin's five rows exactly as its version 2 SDK sends them:
+    /// two persisted toggles, a six-choice toned status row, a three-choice
+    /// tone-only row and an editable `no_persist` row whose `request` answers
+    /// `Pending`.
+    static REPLAY: FakePlugin = FakePlugin::new([0, 1, 2, 1], abi::REQUEST_PENDING);
+
+    fn replay_descriptor() -> DescHolder {
+        static STATUS_TONES: [u8; 6] = [
+            abi::TONE_NEUTRAL,
+            abi::TONE_OK,
+            abi::TONE_WARN,
+            abi::TONE_OK,
+            abi::TONE_ERROR,
+            abi::TONE_ERROR,
+        ];
+        static OBS_TONES: [u8; 3] = [abi::TONE_OK, abi::TONE_WARN, abi::TONE_ERROR];
+        static STOP_TONES: [u8; 2] = [abi::TONE_NEUTRAL, abi::TONE_WARN];
         let mut holder = descriptor_with(
-            "old",
-            "Old",
+            "smash_replay_to_mp4",
+            "OBS Recording",
             &[
                 ("enabled", "Enabled", &["Off", "On"]),
-                ("mode", "Mode", &["A", "B"]),
+                ("record_playback", "Playback", &["Off", "On"]),
+                (
+                    "status",
+                    "Status",
+                    &["Idle", "Rec", "Pending", "Kept", "Dropped", "No OBS"],
+                ),
+                ("obs", "OBS", &["OBS", "OBS", "OBS"]),
+                ("stop_now", "Stop rec", &["Ready", "Stop"]),
             ],
-            Some("sd:/ultimate/old/config.ini"),
+            Some("sd:/ultimate/smash_replay_to_mp4/config.ini"),
             &[
                 Persist {
                     key: Some("enabled"),
@@ -1870,73 +1698,117 @@ mod tests {
                     ..Persist::default()
                 },
                 Persist {
+                    key: Some("record_playback"),
+                    values: Some(&["off", "on"]),
+                    ..Persist::default()
+                },
+                Persist {
                     no_persist: true,
+                    tones: Some(&STATUS_TONES),
+                    read_only: true,
+                    ..Persist::default()
+                },
+                Persist {
+                    no_persist: true,
+                    tones: Some(&OBS_TONES),
+                    read_only: true,
+                    ..Persist::default()
+                },
+                Persist {
+                    no_persist: true,
+                    tones: Some(&STOP_TONES),
                     ..Persist::default()
                 },
             ],
-            user,
+            &REPLAY as *const FakePlugin as *mut c_void,
             Some(fake_current),
             Some(fake_request),
         );
-        holder.as_version_1();
-        assert_eq!(holder.desc.abi_version, 1);
-        assert_eq!(unsafe { registry.register_raw(&holder.desc) }, 0);
-        let plugin = registry.snapshot()[0].clone();
-        assert_eq!(plugin.options.len(), 2);
-        assert_eq!(plugin.options[0].config_key, "enabled");
-        assert_eq!(plugin.options[0].persisted_value(1), "on");
-        assert_eq!(plugin.options[0].tones, None);
-        assert!(!plugin.options[1].persist);
-        assert_eq!(registry.value(0, &plugin, 0).tone, abi::TONE_NEUTRAL);
-        assert_eq!(
-            plugin.config_path.as_deref(),
-            Some("sd:/ultimate/old/config.ini")
-        );
+        holder.desc.abi_version = 2;
+        holder
+    }
 
-        // A version 1 descriptor may not use version 2 flag bits.
-        let mut flagged = descriptor_with(
-            "old2",
-            "Old2",
-            &[("health", "Health", &["Ok", "Fail"])],
-            None,
-            &[Persist {
-                read_only: true,
-                ..Persist::default()
-            }],
-            user,
-            Some(fake_current),
-            Some(fake_request),
-        );
-        flagged.as_version_1();
+    #[test]
+    fn replay_plugin_version_two_descriptor_registers_with_rows_tones_and_pending() {
+        let registry = Registry::new();
+        let holder = replay_descriptor();
+        assert_eq!(holder.desc.abi_version, 2);
+        assert_eq!(unsafe { registry.register_raw(&holder.desc) }, 0);
+        let plugins = registry.snapshot();
+        let plugin = plugins[0].clone();
+        assert_eq!(plugin.label, "OBS Recording");
+        assert!(!plugin.own_page);
         assert_eq!(
-            unsafe { registry.register_raw(&flagged.desc) },
-            abi::REGISTER_ERR_INVALID
-        );
-        // Unknown descriptor versions are refused as ABI errors.
-        flagged.desc.abi_version = abi::ABI_VERSION + 1;
-        assert_eq!(
-            unsafe { registry.register_raw(&flagged.desc) },
-            abi::REGISTER_ERR_ABI
-        );
-        // Bad tone bytes are invalid.
-        let bad = descriptor_with(
-            "bad",
-            "Bad",
-            &[("health", "Health", &["Ok", "Fail"])],
-            None,
-            &[Persist {
-                tones: Some(&[abi::TONE_OK, 9]),
-                ..Persist::default()
-            }],
-            user,
-            Some(fake_current),
-            Some(fake_request),
+            plugin.options.iter().map(|o| o.kind).collect::<Vec<_>>(),
+            [
+                RowKind::Value,
+                RowKind::Value,
+                RowKind::Status,
+                RowKind::Status,
+                RowKind::Value
+            ]
         );
         assert_eq!(
-            unsafe { registry.register_raw(&bad.desc) },
-            abi::REGISTER_ERR_INVALID
+            plugin.options.iter().map(|o| o.persist).collect::<Vec<_>>(),
+            [true, true, false, false, false]
         );
-        assert_eq!(registry.count(), 1);
+        assert_eq!(plugin.options[1].config_key, "record_playback");
+        // The shared page: one group row, five options, all five selectable.
+        let rows = rows_for(&plugins, None);
+        assert_eq!(rows.len(), 6);
+        assert_eq!(move_selection(&plugins, &rows, 0, 0), 1);
+        assert_eq!(move_selection(&plugins, &rows, 5, 1), 1);
+        assert_eq!(move_selection(&plugins, &rows, 1, -1), 5);
+        // Tones follow the live choice; read-only rows never request.
+        let status = registry.value(0, &plugin, 2);
+        assert_eq!(
+            (status.label.as_str(), status.tone),
+            ("Pending", abi::TONE_WARN)
+        );
+        assert_eq!(registry.value(0, &plugin, 3).tone, abi::TONE_WARN);
+        assert_eq!(registry.step(0, 2, 1), None);
+        assert_eq!(registry.step(0, 3, 1), None);
+        assert!(REPLAY.requests.lock().unwrap().is_empty());
+        // "Stop rec" answers Pending: shown as pending, nothing persisted.
+        let stop = registry.step(0, 4, 1).unwrap();
+        assert_eq!((stop.requested, stop.status), (1, RequestStatus::Pending));
+        let shown = registry.value(0, &plugin, 4);
+        assert_eq!((shown.label.as_str(), shown.pending), ("Ready", true));
+        registry.reconcile_pending();
+        assert!(registry.take_writes().is_empty());
+        REPLAY.values[4].store(1, Ordering::Relaxed);
+        registry.reconcile_pending();
+        assert!(registry.take_writes().is_empty(), "no_persist row");
+        let shown = registry.value(0, &plugin, 4);
+        assert_eq!(
+            (shown.label.as_str(), shown.pending, shown.tone),
+            ("Stop", false, abi::TONE_WARN)
+        );
+        // A persisted toggle answered Pending is written once the plugin applies it.
+        assert_eq!(
+            registry.step(0, 0, 1).unwrap().status,
+            RequestStatus::Pending
+        );
+        registry.reconcile_pending();
+        assert!(registry.take_writes().is_empty());
+        REPLAY.values[0].store(1, Ordering::Relaxed);
+        registry.reconcile_pending();
+        assert_eq!(
+            registry.take_writes(),
+            vec![PersistWrite {
+                plugin: 0,
+                option: 0,
+                path: "sd:/ultimate/smash_replay_to_mp4/config.ini".to_owned(),
+                key: "enabled".to_owned(),
+                value: "on".to_owned(),
+            }]
+        );
+        assert_eq!(
+            REPLAY.requests.lock().unwrap().as_slice(),
+            &[(4, 1), (0, 1)]
+        );
+        REPLAY.values[0].store(0, Ordering::Relaxed);
+        REPLAY.values[4].store(0, Ordering::Relaxed);
     }
 
     #[test]
@@ -1969,50 +1841,38 @@ mod tests {
     }
 
     #[test]
-    fn row_navigation_pages_and_windows_are_bounded() {
-        assert_eq!(cycle_choice(0, 2, 1), 1);
-        assert_eq!(cycle_choice(1, 2, 1), 0);
-        assert_eq!(cycle_choice(0, 3, -1), 2);
-        assert_eq!(cycle_choice(0, 0, 1), 0);
-        assert_eq!(move_plugin_row(0, 1, 0), 0);
-        assert_eq!(move_plugin_row(0, -1, 4), 3);
-        assert_eq!(move_plugin_row(3, 1, 4), 0);
-        assert_eq!(move_plugin_row(9, 1, 4), 0);
-        assert_eq!(compact_page(0, 0, COMPACT_PAGE), (0, 0, 1, 1));
-        assert_eq!(compact_page(0, 3, COMPACT_PAGE), (0, 3, 1, 1));
-        assert_eq!(compact_page(3, 9, COMPACT_PAGE), (0, 4, 1, 3));
-        assert_eq!(compact_page(4, 9, COMPACT_PAGE), (4, 8, 2, 3));
-        assert_eq!(compact_page(8, 9, COMPACT_PAGE), (8, 9, 3, 3));
-        assert_eq!(compact_page(50, 9, COMPACT_PAGE), (8, 9, 3, 3));
-        assert_eq!(vertical_window(0, 0, VERTICAL_WINDOW), (0, 0));
-        assert_eq!(vertical_window(2, 6, VERTICAL_WINDOW), (0, 6));
-        assert_eq!(vertical_window(0, 25, VERTICAL_WINDOW), (0, 10));
-        assert_eq!(vertical_window(12, 25, VERTICAL_WINDOW), (7, 17));
-        assert_eq!(vertical_window(24, 25, VERTICAL_WINDOW), (15, 25));
-        assert_eq!(compact_label("Replay", "Record", 1), "Replay");
-        assert_eq!(compact_label("Demo", "Mode", 3), "Demo.Mode");
-        let line = compact_line(&[
-            (
-                "Replay".to_owned(),
-                ValueText {
-                    label: "On".to_owned(),
-                    pending: true,
-                    tone: abi::TONE_NEUTRAL,
-                },
-                true,
-            ),
-            (
-                "Demo.Mode".to_owned(),
-                ValueText {
-                    label: "B".to_owned(),
-                    pending: false,
-                    tone: abi::TONE_NEUTRAL,
-                },
-                false,
-            ),
-        ]);
-        assert_eq!(line, ">Replay:On~   Demo.Mode:B");
-        assert!(!line.contains('\n'));
+    fn wrap_and_selection_moves_are_bounded() {
+        assert_eq!(wrap(0, 1, 2), 1);
+        assert_eq!(wrap(1, 2, 2), 1);
+        assert_eq!(wrap(1, 1, 2), 0);
+        assert_eq!(wrap(0, -1, 3), 2);
+        assert_eq!(wrap(0, 1, 0), 0);
+        assert_eq!(wrap(0, -1, 4), 3);
+        assert_eq!(wrap(3, 1, 4), 0);
+        assert_eq!(wrap(9, 1, 4), 0);
+        assert_eq!(wrap(2, 0, 4), 2);
+        assert_eq!(move_selection(&[], &[], 3, 1), 0);
+        // Headers and group rows are skipped in both directions and never
+        // hold a clamped selection. The FX descriptor on the shared page.
+        let registry = Registry::new();
+        let mut holder = grouped_descriptor(abi::ABI_VERSION);
+        holder.desc.flags = 0;
+        assert_eq!(unsafe { registry.register_raw(&holder.desc) }, 0);
+        let plugins = registry.snapshot();
+        let rows = rows_for(&plugins, None);
+        assert_eq!(
+            rows.iter()
+                .map(|row| selectable(&plugins, *row))
+                .collect::<Vec<_>>(),
+            [false, true, false, true, true]
+        );
+        assert_eq!(move_selection(&plugins, &rows, 0, 0), 1);
+        assert_eq!(move_selection(&plugins, &rows, 2, 0), 3);
+        assert_eq!(move_selection(&plugins, &rows, 9, 0), 4);
+        assert_eq!(move_selection(&plugins, &rows, 1, 1), 3);
+        assert_eq!(move_selection(&plugins, &rows, 3, -1), 1);
+        assert_eq!(move_selection(&plugins, &rows, 4, 1), 1);
+        assert_eq!(move_selection(&plugins, &rows, 1, -1), 4);
     }
 
     static GROUPED: FakePlugin = FakePlugin::new([1, 0, 2, 0], abi::REQUEST_APPLIED);
@@ -2062,96 +1922,53 @@ mod tests {
             Some(fake_request),
         );
         holder.desc.abi_version = version;
+        holder.desc.flags = abi::PLUGIN_FLAG_OWN_PAGE;
         holder
     }
 
     #[test]
-    fn version_four_header_and_inline_rows_parse_navigate_and_render() {
-        let registry = Registry::new();
-        let holder = grouped_descriptor(abi::ABI_VERSION);
-        assert_eq!(unsafe { registry.register_raw(&holder.desc) }, 0);
-        let plugins = registry.snapshot();
-        let plugin = plugins[0].clone();
-        let header = &plugin.options[1];
-        assert!(header.header && !header.inline);
-        assert!(header.choices.is_empty() && !header.persist && header.read_only());
-        assert!(!header.selectable());
-        let hammer = &plugin.options[2];
-        assert!(hammer.inline && !hammer.header && hammer.selectable());
-        assert!(!hammer.read_only());
-        assert_eq!(hammer.choices.len(), 4);
-        // The header answers nothing; nothing is asked of it.
-        assert_eq!(plugin.current(1), None);
-        assert_eq!(registry.step(0, 1, 1), None);
-        assert!(GROUPED.requests.lock().unwrap().is_empty());
-        // The inline row steps like any row and keeps its tone.
-        assert_eq!(registry.step(0, 2, 1).unwrap().requested, 3);
-        assert_eq!(GROUPED.requests.lock().unwrap().as_slice(), &[(2, 3)]);
-        GROUPED.values[2].store(3, Ordering::Relaxed);
-        let pieces = inline_pieces(hammer, plugin.current(2), false);
-        assert_eq!(
-            pieces,
-            vec![
-                ("Original".to_owned(), abi::TONE_NEUTRAL, false),
-                ("  ".to_owned(), abi::TONE_NEUTRAL, false),
-                ("Variant 1".to_owned(), abi::TONE_NEUTRAL, false),
-                ("  ".to_owned(), abi::TONE_NEUTRAL, false),
-                ("Variant 2".to_owned(), abi::TONE_NEUTRAL, false),
-                ("  ".to_owned(), abi::TONE_NEUTRAL, false),
-                ("[Variant 3]".to_owned(), abi::TONE_WARN, true),
-            ]
-        );
-        assert_eq!(
-            inline_pieces(hammer, Some(0), true)[0],
-            ("[Original]~".to_owned(), abi::TONE_NEUTRAL, true)
-        );
-        assert!(inline_pieces(hammer, None, false)
-            .iter()
-            .all(|(_, _, marked)| !marked));
-
-        // Navigation skips the header in both directions and never clamps
-        // onto it.
-        let rows = rows_for(&plugins, None);
-        assert_eq!(rows.len(), 4);
-        let selectable = row_selectable(&plugins, &rows);
-        assert_eq!(selectable, vec![true, false, true, true]);
-        assert_eq!(move_selectable_row(0, 1, &selectable), 2);
-        assert_eq!(move_selectable_row(2, -1, &selectable), 0);
-        assert_eq!(move_selectable_row(3, 1, &selectable), 0);
-        assert_eq!(clamp_selectable_row(1, &selectable), 2);
-        assert_eq!(clamp_selectable_row(9, &selectable), 3);
-        assert_eq!(clamp_selectable_row(0, &[]), 0);
-        assert_eq!(move_selectable_row(0, 1, &[false, false]), 1);
-
-        // The compact strip prints a header as its label alone.
-        let fields = vec![
-            (
-                "Kirby".to_owned(),
-                ValueText {
-                    label: String::new(),
-                    pending: false,
-                    tone: abi::TONE_NEUTRAL,
-                },
-                false,
-            ),
-            ("Hammer".to_owned(), registry.value(0, &plugin, 2), true),
-        ];
-        assert_eq!(compact_line(&fields), "Kirby   >Hammer:Variant 3");
-        assert_eq!(
-            compact_segments(&fields)[0],
-            ("Kirby".to_owned(), abi::TONE_NEUTRAL)
-        );
+    fn header_rows_parse_and_inline_rows_are_plain_value_rows_in_every_version() {
+        for version in [2, 3, abi::ABI_VERSION] {
+            let registry = Registry::new();
+            let holder = grouped_descriptor(version);
+            assert_eq!(
+                unsafe { registry.register_raw(&holder.desc) },
+                0,
+                "version {version}"
+            );
+            let plugins = registry.snapshot();
+            let plugin = plugins[0].clone();
+            assert!(plugin.own_page);
+            let header = &plugin.options[1];
+            assert_eq!(header.kind, RowKind::Header);
+            assert!(header.choices.is_empty() && !header.persist && !header.editable());
+            let hammer = &plugin.options[2];
+            assert_eq!(hammer.kind, RowKind::Value);
+            assert_eq!(hammer.choices.len(), 4);
+            assert_eq!(plugin.options[3].kind, RowKind::Status);
+            // The header answers nothing; nothing is asked of it.
+            assert_eq!(registry.step(0, 1, 1), None);
+            assert!(GROUPED.requests.lock().unwrap().is_empty());
+            // The former inline row steps like any row and keeps its tone.
+            assert_eq!(registry.step(0, 2, 1).unwrap().requested, 3);
+            assert_eq!(GROUPED.requests.lock().unwrap().as_slice(), &[(2, 3)]);
+            assert_eq!(registry.value(0, &plugin, 2).tone, abi::TONE_WARN);
+            GROUPED.values[2].store(2, Ordering::Relaxed);
+            GROUPED.requests.lock().unwrap().clear();
+            // The own page has no group row; the shared page has none of its rows.
+            assert_eq!(page_plugins(&plugins), vec![0]);
+            assert!(!has_shared_rows(&plugins));
+            assert!(rows_for(&plugins, None).is_empty());
+            let rows = rows_for(&plugins, Some(0));
+            assert_eq!(rows.len(), 4);
+            assert_eq!(move_selection(&plugins, &rows, 1, 0), 2);
+            assert!(rows_for(&plugins, Some(1)).is_empty());
+        }
     }
 
     #[test]
-    fn version_four_rows_are_refused_by_older_descriptors_and_validated() {
-        // Version 3 knows neither flag.
+    fn header_rows_are_validated() {
         let registry = Registry::new();
-        let holder = grouped_descriptor(3);
-        assert_eq!(
-            unsafe { registry.register_raw(&holder.desc) },
-            abi::REGISTER_ERR_INVALID
-        );
         // A header must come without choices.
         let mut holder = grouped_descriptor(abi::ABI_VERSION);
         let borrowed_choices = holder._options[0].choices;
@@ -2168,42 +1985,13 @@ mod tests {
             unsafe { registry.register_raw(&holder.desc) },
             abi::REGISTER_ERR_INVALID
         );
-        // Option limits: 33 rows need version 4; 65 are too many for anyone.
-        let user = &GROUPED as *const FakePlugin as *mut c_void;
-        let ids: Vec<String> = (0..65).map(|index| format!("o{index}")).collect();
-        let choices: &[&str] = &["A", "B"];
-        let rows: Vec<(&str, &str, &[&str])> =
-            ids.iter().map(|id| (id.as_str(), "x", choices)).collect();
-        let mut wide = descriptor_with(
-            "wide",
-            "Wide",
-            &rows[..33],
-            None,
-            &[],
-            user,
-            Some(fake_current),
-            Some(fake_request),
-        );
-        wide.desc.abi_version = 3;
+        // A null choice table on a value row is a null error.
+        let mut holder = grouped_descriptor(abi::ABI_VERSION);
+        holder._options[0].choices = std::ptr::null();
         assert_eq!(
-            unsafe { registry.register_raw(&wide.desc) },
-            abi::REGISTER_ERR_INVALID
+            unsafe { registry.register_raw(&holder.desc) },
+            abi::REGISTER_ERR_NULL
         );
-        wide.desc.abi_version = abi::ABI_VERSION;
-        assert_eq!(unsafe { registry.register_raw(&wide.desc) }, 0);
-        let too_wide = descriptor_with(
-            "wider",
-            "Wider",
-            &rows,
-            None,
-            &[],
-            user,
-            Some(fake_current),
-            Some(fake_request),
-        );
-        assert_eq!(
-            unsafe { registry.register_raw(&too_wide.desc) },
-            abi::REGISTER_ERR_INVALID
-        );
+        assert!(registry.snapshot().is_empty());
     }
 }

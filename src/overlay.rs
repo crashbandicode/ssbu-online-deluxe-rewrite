@@ -119,8 +119,9 @@ impl CommandLatch {
 pub struct Overlay {
     pub view: View,
     pub menu: Menu,
-    /// Selected flattened row on the Plugins page or the current own page
-    /// (`plugin_api::rows_for`); reset when the view changes.
+    /// Selected row on the Plugins page or the current own page (an index
+    /// into `plugin_api::rows_for`, which on the shared page counts the group
+    /// rows); reset when the view changes.
     pub plugin_row: usize,
     /// Which own page is shown while `view == View::PluginPage`
     /// (index into `plugin_api::page_plugins`).
@@ -217,7 +218,7 @@ impl Overlay {
                         self.view,
                         self.page,
                         debug_modifier,
-                        !crate::plugin_api::plugin_rows(&snapshot).is_empty(),
+                        crate::plugin_api::has_shared_rows(&snapshot),
                         crate::plugin_api::page_plugins(&snapshot).len(),
                         config.hide_pages,
                     )
@@ -242,28 +243,29 @@ impl Overlay {
         }
         if matches!(self.view, View::Plugins | View::PluginPage) {
             // Plugin rows never touch `Config`; the plugin owns the change.
+            // Group and header rows never hold the selection.
             let page = (self.view == View::PluginPage).then_some(self.page);
             let snapshot = plugins.snapshot();
             let rows = crate::plugin_api::rows_for(&snapshot, page);
-            if rows.is_empty() {
-                return false;
-            }
-            // Header rows (descriptor version 4) never hold the selection.
-            let selectable = crate::plugin_api::row_selectable(&snapshot, &rows);
-            self.plugin_row = crate::plugin_api::clamp_selectable_row(self.plugin_row, &selectable);
-            if pressed & UP != 0 {
-                self.plugin_row =
-                    crate::plugin_api::move_selectable_row(self.plugin_row, -1, &selectable);
+            let direction: i8 = if pressed & UP != 0 {
+                -1
             } else if pressed & DOWN != 0 {
-                self.plugin_row =
-                    crate::plugin_api::move_selectable_row(self.plugin_row, 1, &selectable);
-            } else if !chord && pressed & (LEFT | RIGHT) != 0 {
-                if self.edit_hold && !edit_modifier(buttons) {
-                    return false;
+                1
+            } else {
+                0
+            };
+            self.plugin_row =
+                crate::plugin_api::move_selection(&snapshot, &rows, self.plugin_row, direction);
+            if direction == 0
+                && !chord
+                && pressed & (LEFT | RIGHT) != 0
+                && !(self.edit_hold && !edit_modifier(buttons))
+            {
+                if let Some(crate::plugin_api::PageRow::Option { plugin, option }) =
+                    rows.get(self.plugin_row)
+                {
+                    plugins.step(*plugin, *option, if pressed & LEFT != 0 { -1 } else { 1 });
                 }
-                let direction: i8 = if pressed & LEFT != 0 { -1 } else { 1 };
-                let row = rows[self.plugin_row];
-                plugins.step(row.plugin, row.option, direction);
             }
             return false;
         }
@@ -848,7 +850,10 @@ mod tests {
         assert_eq!(ui.view, View::Plugins);
         assert!(!ui.menu.open);
         ui.poll_with(0, &mut config, css, &registry);
-        // Unmodified D-pad edits the plugin row, not NetLatency or a native pane.
+        // Row 0 of the shared page is the "Demo" group row: the selection
+        // settles on the first option. Unmodified D-pad edits the plugin row,
+        // not NetLatency or a native pane.
+        assert_eq!(ui.plugin_row, 1);
         assert!(!ui.poll_with(RIGHT, &mut config, css, &registry));
         assert_eq!(config, Config::default());
         let step = registry.take_last_step().unwrap();
@@ -862,24 +867,25 @@ mod tests {
         assert_eq!(registry.take_last_step(), None);
         ui.poll_with(0, &mut config, css, &registry);
         ui.poll_with(DOWN, &mut config, css, &registry);
-        assert_eq!(ui.plugin_row, 1);
+        assert_eq!(ui.plugin_row, 2);
         ui.poll_with(0, &mut config, css, &registry);
         ui.poll_with(LEFT, &mut config, css, &registry);
         let step = registry.take_last_step().unwrap();
         assert_eq!((step.option, step.requested), (1, 0));
         ui.poll_with(0, &mut config, css, &registry);
         ui.poll_with(DOWN, &mut config, css, &registry);
-        assert_eq!(ui.plugin_row, 2);
+        assert_eq!(ui.plugin_row, 3);
         ui.poll_with(0, &mut config, css, &registry);
         // The single-choice status row is read-only.
         ui.poll_with(RIGHT, &mut config, css, &registry);
         assert_eq!(registry.take_last_step(), None);
         ui.poll_with(0, &mut config, css, &registry);
+        // Wrapping skips the group row in both directions.
         ui.poll_with(DOWN, &mut config, css, &registry);
-        assert_eq!(ui.plugin_row, 0);
+        assert_eq!(ui.plugin_row, 1);
         ui.poll_with(0, &mut config, css, &registry);
         ui.poll_with(UP, &mut config, css, &registry);
-        assert_eq!(ui.plugin_row, 2);
+        assert_eq!(ui.plugin_row, 3);
         ui.poll_with(0, &mut config, css, &registry);
         // Chord + Left/Right still cycles the peer rather than a plugin.
         ui.poll_with(L | R | RIGHT, &mut config, css, &registry);

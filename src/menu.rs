@@ -117,35 +117,87 @@ pub fn compact_strip(shape: MenuShape, view: InfoView) -> bool {
         )
 }
 
-/// One navigable field in the inline match strip.
+/// One drawn window row. The vertical table and the compact strip draw the
+/// same list, for Settings cells and plugin rows alike.
 #[cfg(any(target_os = "switch", test))]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct CompactField {
-    pub label: &'static str,
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub(crate) struct Row {
+    pub label: String,
+    /// Empty for a label-only row (a plugin group or header); choice labels
+    /// are never empty.
     pub value: String,
+    /// `deluxe_plugin_abi::TONE_*` of the value text.
+    pub tone: u8,
+    pub pending: bool,
     pub selected: bool,
 }
 
-/// Builds one unwrapped row of inline fields. Peer is kept on the optional
-/// opponent row so a long name cannot crowd the local controls.
+/// `(text, tone)` segments of one strip line so the renderer can colour each
+/// value: `>Label:` and the three-space separators stay neutral, the value
+/// and its pending marker `~` take the row's tone, and a label-only row is
+/// its label alone, without the colon. Concatenating the texts gives
+/// [`strip_line`] exactly, so font fitting can use the joined string.
 #[cfg(any(target_os = "switch", test))]
-pub(crate) fn compact_fields_line<'a>(
-    fields: impl IntoIterator<Item = &'a CompactField>,
-    peer_only: bool,
-) -> String {
-    fields
+pub(crate) fn strip_segments(rows: &[Row]) -> Vec<(String, u8)> {
+    let mut segments = Vec::with_capacity(rows.len() * 3);
+    for (index, row) in rows.iter().enumerate() {
+        if index > 0 {
+            segments.push(("   ".to_owned(), deluxe_plugin_abi::TONE_NEUTRAL));
+        }
+        if row.value.is_empty() {
+            segments.push((row.label.clone(), deluxe_plugin_abi::TONE_NEUTRAL));
+            continue;
+        }
+        segments.push((
+            format!("{}{}:", if row.selected { ">" } else { "" }, row.label),
+            deluxe_plugin_abi::TONE_NEUTRAL,
+        ));
+        segments.push((
+            format!("{}{}", row.value, if row.pending { "~" } else { "" }),
+            row.tone,
+        ));
+    }
+    segments
+}
+
+/// One unwrapped strip line of `rows`.
+#[cfg(any(target_os = "switch", test))]
+pub(crate) fn strip_line(rows: &[Row]) -> String {
+    strip_segments(rows)
         .into_iter()
-        .filter(|field| (field.label == "Peer") == peer_only)
-        .map(|field| {
-            format!(
-                "{}{}:{}",
-                if field.selected { ">" } else { "" },
-                field.label,
-                field.value
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("   ")
+        .map(|(text, _)| text)
+        .collect()
+}
+
+/// Rows shown around `selected`: with `paged`, the page of `size` rows that
+/// contains it (the strip pages rather than shrinking its text); otherwise a
+/// centred window of at most `size` rows (the vertical table). Returns
+/// `(start, end, page, pages)` with one-based page numbers for display.
+#[cfg(any(target_os = "switch", test))]
+pub(crate) fn window(
+    selected: usize,
+    total: usize,
+    size: usize,
+    paged: bool,
+) -> (usize, usize, usize, usize) {
+    if total == 0 || size == 0 {
+        return (0, 0, 1, 1);
+    }
+    let selected = selected.min(total - 1);
+    if paged {
+        let page = selected / size;
+        let start = page * size;
+        return (
+            start,
+            (start + size).min(total),
+            page + 1,
+            total.div_ceil(size),
+        );
+    }
+    let start = selected
+        .saturating_sub(size / 2)
+        .min(total.saturating_sub(size));
+    (start, (start + size).min(total), 1, 1)
 }
 
 #[cfg(any(target_os = "switch", test))]
@@ -889,43 +941,34 @@ mod tests {
         }
     }
 
+    fn strip_row(label: &str, value: &str, selected: bool) -> Row {
+        Row {
+            label: label.to_owned(),
+            value: value.to_owned(),
+            selected,
+            ..Row::default()
+        }
+    }
+
+    fn settings_strip(peer: &str) -> (Vec<Row>, Vec<Row>) {
+        (
+            vec![
+                strip_row("Net", "Auto", true),
+                strip_row("Profile", "Auto:LLDbl", false),
+                strip_row("Stealth", "On (reconnect)", false),
+                strip_row("Stream", "Off", false),
+                strip_row("UltraRes", "576p", false),
+            ],
+            vec![strip_row("Peer", peer, true)],
+        )
+    }
+
     #[test]
-    fn compact_field_rows_keep_values_inline_and_mark_the_selected_field() {
+    fn strip_rows_keep_values_inline_and_mark_the_selected_field() {
         let peer = "P".repeat(64);
-        let fields = [
-            CompactField {
-                label: "Net",
-                value: "Auto".to_owned(),
-                selected: true,
-            },
-            CompactField {
-                label: "Profile",
-                value: "Auto:LLDbl".to_owned(),
-                selected: false,
-            },
-            CompactField {
-                label: "Stealth",
-                value: "On (reconnect)".to_owned(),
-                selected: false,
-            },
-            CompactField {
-                label: "Stream",
-                value: "Off".to_owned(),
-                selected: false,
-            },
-            CompactField {
-                label: "UltraRes",
-                value: "576p".to_owned(),
-                selected: false,
-            },
-            CompactField {
-                label: "Peer",
-                value: peer.clone(),
-                selected: true,
-            },
-        ];
-        let settings = compact_fields_line(fields.iter(), false);
-        let opponent = compact_fields_line(fields.iter(), true);
+        let (fields, opponent) = settings_strip(&peer);
+        let settings = strip_line(&fields);
+        let opponent = strip_line(&opponent);
         assert_eq!(
             settings,
             ">Net:Auto   Profile:Auto:LLDbl   Stealth:On (reconnect)   Stream:Off   UltraRes:576p"
@@ -933,6 +976,55 @@ mod tests {
         assert_eq!(opponent, format!(">Peer:{peer}"));
         assert!(!settings.contains('\n'));
         assert!(!opponent.contains('\n'));
+        // Plugin rows: a group or header is its label alone, a value takes its
+        // tone and the pending marker, and the texts join to the line.
+        let rows = [
+            strip_row("Kirby", "", false),
+            Row {
+                tone: deluxe_plugin_abi::TONE_WARN,
+                pending: true,
+                ..strip_row("Hammer", "Variant 3", true)
+            },
+            Row {
+                tone: deluxe_plugin_abi::TONE_ERROR,
+                ..strip_row("Health", "Fail", false)
+            },
+        ];
+        assert_eq!(
+            strip_segments(&rows),
+            vec![
+                ("Kirby".to_owned(), deluxe_plugin_abi::TONE_NEUTRAL),
+                ("   ".to_owned(), deluxe_plugin_abi::TONE_NEUTRAL),
+                (">Hammer:".to_owned(), deluxe_plugin_abi::TONE_NEUTRAL),
+                ("Variant 3~".to_owned(), deluxe_plugin_abi::TONE_WARN),
+                ("   ".to_owned(), deluxe_plugin_abi::TONE_NEUTRAL),
+                ("Health:".to_owned(), deluxe_plugin_abi::TONE_NEUTRAL),
+                ("Fail".to_owned(), deluxe_plugin_abi::TONE_ERROR),
+            ]
+        );
+        assert_eq!(
+            strip_line(&rows),
+            "Kirby   >Hammer:Variant 3~   Health:Fail"
+        );
+        assert_eq!(strip_line(&[]), "");
+    }
+
+    #[test]
+    fn windows_page_the_strip_and_centre_the_table() {
+        // Paged (strip): the page of four containing the selection.
+        assert_eq!(window(0, 0, 4, true), (0, 0, 1, 1));
+        assert_eq!(window(0, 3, 4, true), (0, 3, 1, 1));
+        assert_eq!(window(3, 9, 4, true), (0, 4, 1, 3));
+        assert_eq!(window(4, 9, 4, true), (4, 8, 2, 3));
+        assert_eq!(window(8, 9, 4, true), (8, 9, 3, 3));
+        assert_eq!(window(50, 9, 4, true), (8, 9, 3, 3));
+        // Centred (table): ten rows around the selection, clamped to the list.
+        assert_eq!(window(0, 0, 10, false), (0, 0, 1, 1));
+        assert_eq!(window(2, 6, 10, false), (0, 6, 1, 1));
+        assert_eq!(window(0, 25, 10, false), (0, 10, 1, 1));
+        assert_eq!(window(12, 25, 10, false), (7, 17, 1, 1));
+        assert_eq!(window(24, 25, 10, false), (15, 25, 1, 1));
+        assert_eq!(window(3, 5, 0, false), (0, 0, 1, 1));
     }
 
     #[test]
@@ -953,42 +1045,11 @@ mod tests {
     #[test]
     fn maximum_peer_name_and_timing_lines_fit_without_wrapping_at_common_sizes() {
         let peer = "P".repeat(64);
-        let fields = [
-            CompactField {
-                label: "Net",
-                value: "Auto".to_owned(),
-                selected: false,
-            },
-            CompactField {
-                label: "Profile",
-                value: "Auto:LLDbl".to_owned(),
-                selected: false,
-            },
-            CompactField {
-                label: "Stealth",
-                value: "On (reconnect)".to_owned(),
-                selected: false,
-            },
-            CompactField {
-                label: "Stream",
-                value: "Off".to_owned(),
-                selected: false,
-            },
-            CompactField {
-                label: "UltraRes",
-                value: "576p".to_owned(),
-                selected: false,
-            },
-            CompactField {
-                label: "Peer",
-                value: peer,
-                selected: true,
-            },
-        ];
-        let first = compact_fields_line(fields.iter(), false);
+        let (fields, opponent) = settings_strip(&peer);
+        let first = strip_line(&fields);
         let second = format!(
             "{}   IF:Wi-Fi   Ping:31ms   PeerNet:25   PeerProfile:LessLagDoubles   {}",
-            compact_fields_line(fields.iter(), true),
+            strip_line(&opponent),
             compact_timing_line(Some(16.67), Some(16.67))
         );
         assert!(!first.contains('\n'));

@@ -28,6 +28,41 @@ The rewrite is one NRO. Keep Training Modpack and SGPO coexistence: no
 then), and `llultra` reads SGPO's word at
 `0x374812c` without patching it (`src/runtime/render_ultra.rs`).
 
+## Rewrite changes 0.5.3 (2026-10-17): plugin API host and window pages consolidated
+
+Host-tested only; the behaviour changes a plugin or a player can see:
+
+1. Descriptor version 1 is refused with `REGISTER_ERR_ABI` (no known sender;
+   only unreleased 2026-10-12 SDK builds sent it).
+2. Descriptor versions 2 and 3 are validated under the version 4 rules (every
+   flag bit, 64 options), which is strictly more permissive. The replay
+   plugin (version 2, five rows) and FX Control 0.1.x copies (version 3) keep
+   their rows unchanged.
+3. `OPTION_FLAG_INLINE` rows draw as ordinary value rows; the SDK's
+   `RowLayout::Inline` is gone (no plugin sends it; FX Control uses value
+   rows since its strip scrolled off the console pane).
+4. The shared Plugins page has a real group row per plugin: the vertical
+   table is unchanged, but the in-match strip now shows the plugin label as a
+   header segment followed by the plain option labels, where it showed
+   `Plugin.Option` labels (or the plugin label alone for a one-option plugin).
+5. On the shared page the selection index counts the group rows (row 0 is
+   the first plugin's label, the first option is row 1); Up/Down skip them.
+6. `Registry::value` is a pure getter; a pending request is cleared and
+   persisted by `reconcile_pending`, which the overlay runs before every
+   draw. A plugin applying a pending change between that call and the draw
+   shows `(pending)` one frame longer.
+7. The SDK (5.0.0) sends descriptor version 4 only and calls the host once;
+   `negotiated_descriptor_version` and the version 3/2/1 retries are gone, and
+   an old host answers `RegisterError::Abi` as before.
+8. Code 99 (`PluginRegistered`) logs one line per registration (`a` handle or
+   negative code, `b` option count, as before); the two separate accepted /
+   refused prints became one.
+
+Deluxe's own Settings, Performance and Debug drawing kept its text: the
+Settings and plugin tables share one drawer, the strip fields share
+`menu::strip_segments`, the Performance table and strip read their facts from
+one `perf_facts` list, and the window frame is drawn by `draw_window`.
+
 ## Rewrite changes 0.5.0 (2026-10-14)
 
 - Character FX (On / Off / Reduced and its scope) moved to the separate
