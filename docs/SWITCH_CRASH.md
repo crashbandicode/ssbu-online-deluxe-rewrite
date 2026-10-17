@@ -277,8 +277,9 @@ registration, and searching binary data for literal offsets cannot exclude
 computed hook addresses. It does not exonerate the FX plugins. Its Hammer-item
 interpretation was also rejected on visual review. Useful next evidence is
 the relocated vtable and its initialization/reset methods. The opt-in
-DUMP_RENDER_PROBE diagnostic now includes nearby owner code, candidate vtables
-and the caller prologue; it adds no hook or gameplay mutation.
+DUMP_RENDER_PROBE diagnostic included nearby owner code, candidate vtables
+and the caller prologue; it added no hook or gameplay mutation. The flag was
+removed on 2026-10-16.
 The new probe succeeded in Eden. Relocated vtable main+0x4f69ec0 contains the
 faulting fill function at slot +0x78. Slot +0x10 is main+0x3ce300 (always returns
 zero); slot +0x70 is main+0x3ceaf0 (resets existing entries/counts without

@@ -97,4 +97,3 @@ Empty files in the same directory, read once at boot:
 | `CAPTURE_MATCH` | Record every match ([Captures](CAPTURES.md)) |
 | `CAPTURE_TIMING` | Not a flag: write a label into it to start one capture |
 | `DISABLE_BACKOFF`, `DISABLE_NATIVE`, `DISABLE_MENU`, `DISABLE_SCENE`, `DISABLE_BUFFER`, `DISABLE_RENDERER`, `DISABLE_PIA` | Bisection switches; see [Debugging](DEBUGGING.md). `DISABLE_FX` is ignored since 0.5.0 |
-| `DUMP_PRESENTATION_HISTORY`, `DUMP_RENDER_PROBE` | Extra diagnostics; see [Debugging](DEBUGGING.md) |

@@ -12,8 +12,10 @@
 //! sleep briefly before the game's own rescan. It never decides to skip
 //! work: any sign that work may be ready is a veto.
 //!
-//! The same file ships in the standalone `ssbu-dispatcher-backoff` NRO; keep
-//! the two copies identical.
+//! The decision logic started as a copy of the standalone
+//! `ssbu-dispatcher-backoff` plugin. This copy no longer parses
+//! `dispatcher_backoff.ini` (retired 2026-10-16). The standalone tree was
+//! not changed here.
 
 /// What the glue observed on one fall-through pass at the hook site.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -64,79 +66,6 @@ impl Policy {
         cooldown_us: 0,
         main_thread_only: true,
     };
-
-    /// The cadence the Eden diagnostic measured: a 1 µs request about once
-    /// per 171 idle passes, from the first pass, main thread only.
-    pub const MEASURED: Policy = Policy {
-        spin_passes: 0,
-        every_passes: 171,
-        base_ns: 1_000,
-        max_ns: 1_000,
-        cooldown_us: 0,
-        main_thread_only: true,
-    };
-
-    /// Reject nonsense from an override file. Zero `max_ns` disables sleeping;
-    /// any other `max_ns` is held to 1 µs..=2 ms and `base_ns` to 1 µs..=max.
-    pub fn sanitized(self) -> Policy {
-        let max_ns = if self.max_ns == 0 {
-            0
-        } else {
-            self.max_ns.clamp(1_000, 2_000_000)
-        };
-        let base_ns = if max_ns == 0 {
-            0
-        } else {
-            self.base_ns.clamp(1_000, max_ns)
-        };
-        Policy {
-            spin_passes: self.spin_passes.min(1 << 20),
-            every_passes: self.every_passes.clamp(1, 1 << 16),
-            base_ns,
-            max_ns,
-            cooldown_us: self.cooldown_us.min(1_000_000),
-            main_thread_only: self.main_thread_only,
-        }
-    }
-
-    /// Parse `key=value` lines. Unknown keys are ignored; bad values keep the
-    /// previous field. Keys: `spin_passes`, `every_passes`, `base_ns`,
-    /// `max_ns`, `cooldown_us`, `all_threads` (1 lets worker dispatchers
-    /// sleep too), and `preset=measured` to start from [`Policy::MEASURED`].
-    pub fn parse(text: &str, defaults: Policy) -> Policy {
-        let mut policy = defaults;
-        for line in text.lines() {
-            let line = line.trim();
-            if line.is_empty() || line.starts_with('#') || line.starts_with(';') {
-                continue;
-            }
-            let Some((key, value)) = line.split_once('=') else {
-                continue;
-            };
-            let (key, value) = (key.trim(), value.trim());
-            if key == "preset" {
-                match value {
-                    "measured" => policy = Policy::MEASURED,
-                    "default" => policy = Policy::DEFAULT,
-                    _ => {}
-                }
-                continue;
-            }
-            let Ok(value) = value.parse::<u32>() else {
-                continue;
-            };
-            match key {
-                "spin_passes" => policy.spin_passes = value,
-                "every_passes" => policy.every_passes = value,
-                "base_ns" => policy.base_ns = value,
-                "max_ns" => policy.max_ns = value,
-                "cooldown_us" => policy.cooldown_us = value,
-                "all_threads" => policy.main_thread_only = value == 0,
-                _ => {}
-            }
-        }
-        policy.sanitized()
-    }
 
     /// Packed form for one diagnostics record: `spin_passes` in bits 0..15,
     /// `base_ns / 1000` in 16..31, `max_ns / 1000` in 32..47, bit 48 set
@@ -256,22 +185,6 @@ mod tests {
     }
 
     #[test]
-    fn measured_preset_sleeps_once_per_171_passes_from_the_first() {
-        let policy = Policy::MEASURED.sanitized();
-        let mut streak = Streak::default();
-        let mut sleeps = Vec::new();
-        for pass in 1..=600u32 {
-            if let Ok(ns) = decide(policy, &idle(), &mut streak) {
-                sleeps.push((pass, ns));
-            }
-        }
-        assert_eq!(
-            sleeps,
-            vec![(1, 1_000), (172, 1_000), (343, 1_000), (514, 1_000)]
-        );
-    }
-
-    #[test]
     fn any_sign_of_work_vetoes_and_resets_the_streak() {
         let policy = Policy {
             spin_passes: 0,
@@ -326,55 +239,10 @@ mod tests {
             base_ns: 20_000,
             max_ns: 0,
             ..Policy::DEFAULT
-        }
-        .sanitized();
+        };
         let mut streak = Streak::default();
         assert_eq!(decide(policy, &idle(), &mut streak), Err(Veto::Spinning));
         assert_eq!(streak.idle_passes, 1);
-    }
-
-    #[test]
-    fn parse_overrides_and_sanitizes() {
-        let text = "# tuning\nspin_passes = 4\nbase_ns=5\nmax_ns = 40000\nall_threads=1\n\
-                    every_passes=0\ncooldown_us=250\nnonsense\nbogus=x\n";
-        let policy = Policy::parse(text, Policy::DEFAULT);
-        assert_eq!(
-            policy,
-            Policy {
-                spin_passes: 4,
-                every_passes: 1,
-                base_ns: 1_000,
-                max_ns: 40_000,
-                cooldown_us: 250,
-                main_thread_only: false,
-            }
-        );
-        let huge = Policy::parse("max_ns=999999999\nbase_ns=999999999", Policy::DEFAULT);
-        assert_eq!(huge.max_ns, 2_000_000);
-        assert_eq!(huge.base_ns, 2_000_000);
-        assert!(huge.main_thread_only);
-        assert_eq!(Policy::parse("", Policy::DEFAULT), Policy::DEFAULT);
-        assert!(Policy::parse("all_threads=0", Policy::DEFAULT).main_thread_only);
-        let preset = Policy::parse("preset=measured\ncooldown_us=16667", Policy::DEFAULT);
-        assert_eq!(
-            preset,
-            Policy {
-                cooldown_us: 16_667,
-                ..Policy::MEASURED
-            }
-        );
-        assert_eq!(preset.cooldown_ticks(), 320_006);
-    }
-
-    #[test]
-    fn sub_microsecond_max_is_raised_not_panicked() {
-        for max in [1u32, 500, 999] {
-            let policy = Policy::parse(&format!("max_ns={max}\nbase_ns=1"), Policy::DEFAULT);
-            assert_eq!(policy.max_ns, 1_000);
-            assert_eq!(policy.base_ns, 1_000);
-        }
-        let policy = Policy::parse("max_ns=3000\nbase_ns=90000", Policy::DEFAULT);
-        assert_eq!((policy.base_ns, policy.max_ns), (3_000, 3_000));
     }
 
     #[test]
@@ -388,7 +256,6 @@ mod tests {
             ..Policy::DEFAULT
         };
         assert_eq!((workers.packed() >> 48) & 1, 1);
-        assert_eq!(Policy::MEASURED.packed() >> 49, 171);
         assert_eq!(status_label(false, Some(5), 20_000), "Off");
         assert_eq!(status_label(true, None, 0), "Idle");
         assert_eq!(status_label(true, Some(0), 0), "Idle");

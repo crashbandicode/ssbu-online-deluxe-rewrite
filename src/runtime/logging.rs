@@ -222,7 +222,6 @@ pub(super) fn start(version: &str) {
                 std::thread::sleep(Duration::from_millis(250));
                 timing.poll();
                 super::auto_driver::poll();
-                super::presentation::poll();
                 super::fps_boost::publish();
                 super::dispatcher_backoff::publish();
                 super::pia_rtt::poll();

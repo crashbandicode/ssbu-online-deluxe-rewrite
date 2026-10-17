@@ -2526,6 +2526,20 @@ evidence started the same evening on the LAN-NSO Eden but stopped at the
 Online tile (error 2306-0502: the fixture's companion service was not
 listening on 8443/8444); its partial profiles are in the evidence root's
 `coverage-nso-1016/`.
+### 0.5.3 — 2026-10-16: retired five opt-in diagnostics
+
+The coverage campaign's Tier 2 probes are removed. They last shipped in
+`be82f506cd33ef8c8dc017e754597d45893c1ecd`. Retired: `DUMP_PRESENTATION_HISTORY`
+(the `nn::vi` frame-history dump; Eden returned no usable presented timestamps,
+and the CSV captures plus present-at-flush superseded it), `PROBE_FIGHTER_MODULE`
+(the sixteen-word event and `fighter-module.txt` dump; the `common` load/unload
+observation and logical Main arm stay), `DUMP_RENDER_PROBE` (the 5 October
+read-only range dump), `PROBE_CROP` (the code-83 SetCrop log; the crop wrapper
+and fullscreen rearm stay), and `dispatcher_backoff.ini` (the override parser;
+the shipped default policy stays, with `dispatcher_backoff=false` and
+`DISABLE_BACKOFF` as the off switches). Event codes 75, 76, 77 and 83 are no
+longer emitted. Flag-absent hooks, defaults and the other event codes are
+unchanged. No console run of this commit.
 
 ### 0.5.3 — 2026-10-16: `early_present` and `dispatcher_backoff` switches, Eden before/after clips (branch `docs/early-present-backoff-toggles`)
 

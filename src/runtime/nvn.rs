@@ -10,9 +10,7 @@ use std::{
     fs::File,
     io::Write,
     path::Path,
-    sync::atomic::{
-        AtomicBool, AtomicI32, AtomicI64, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering,
-    },
+    sync::atomic::{AtomicI32, AtomicI64, AtomicU64, AtomicUsize, Ordering},
 };
 type Ptr = *mut c_void;
 type Getter = unsafe extern "C" fn(Ptr, *const c_char) -> *const c_void;
@@ -29,10 +27,6 @@ static GET_TOTAL: AtomicUsize = AtomicUsize::new(0);
 static GET_INTERVAL: AtomicUsize = AtomicUsize::new(0);
 static SET_ACTIVE: AtomicUsize = AtomicUsize::new(0);
 static SET_CROP: AtomicUsize = AtomicUsize::new(0);
-/// 0 unread, 1 off, 2 on. The marker is consulted once.
-static CROP_PROBE: AtomicU8 = AtomicU8::new(0);
-static CROP_ARMED: AtomicBool = AtomicBool::new(false);
-static CROP_OBSERVED: AtomicU32 = AtomicU32::new(0);
 static WINDOW: AtomicUsize = AtomicUsize::new(0);
 static ACTIVE: AtomicI32 = AtomicI32::new(-1);
 /// The game's queue, from its first tracked present. Used by `present_at_flush`.
@@ -96,14 +90,6 @@ unsafe extern "C" fn get_proc(device: Ptr, name: *const c_char) -> *const c_void
             let raw = SET_CROP.load(Ordering::Acquire);
             if raw == 0 || raw == crop_wrapper_address() {
                 return next;
-            }
-            if crop_probe_enabled()
-                && CROP_ARMED
-                    .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-                    .is_ok()
-            {
-                let (a, b) = crate::diagnostics::crop_armed_event();
-                super::record(super::Code::CropObserve, a, b);
             }
             return window_set_crop as *const c_void;
         }
@@ -301,21 +287,8 @@ fn remember_raw_crop(address: usize) {
     SET_CROP.store(address, Ordering::Release);
 }
 
-fn crop_probe_enabled() -> bool {
-    match CROP_PROBE.load(Ordering::Acquire) {
-        1 => return false,
-        2 => return true,
-        _ => {}
-    }
-    let on = Path::new(DATA_DIR).join("PROBE_CROP").exists();
-    let stored = if on { 2 } else { 1 };
-    let _ = CROP_PROBE.compare_exchange(0, stored, Ordering::AcqRel, Ordering::Acquire);
-    CROP_PROBE.load(Ordering::Acquire) == 2
-}
-
-/// Game SetCrop entry. Forwards the original arguments once. Code 83 is
-/// recorded only while `PROBE_CROP` is present. A fullscreen reset is reported
-/// to the resolution policy, which does not call [`set_crop`].
+/// Game SetCrop entry. Forwards the original arguments once. A fullscreen
+/// reset is reported to the resolution policy, which does not call [`set_crop`].
 #[inline(never)]
 unsafe extern "C" fn window_set_crop(window: Ptr, x: i32, y: i32, w: i32, h: i32) {
     let address = SET_CROP.load(Ordering::Acquire);
@@ -324,9 +297,6 @@ unsafe extern "C" fn window_set_crop(window: Ptr, x: i32, y: i32, w: i32, h: i32
     }
     let crop: unsafe extern "C" fn(Ptr, i32, i32, i32, i32) = std::mem::transmute(address);
     crop(window, x, y, w, h);
-    if crop_probe_enabled() {
-        note_crop_observe(x, y, w, h);
-    }
     let delay =
         crate::resolution::delay_for_profile(crate::render_policy::load_decision().committed);
     let _ = crate::resolution::rearm_fullscreen_reset(
@@ -340,27 +310,6 @@ unsafe extern "C" fn window_set_crop(window: Ptr, x: i32, y: i32, w: i32, h: i32
             height: h,
         },
     );
-}
-
-fn note_crop_observe(x: i32, y: i32, w: i32, h: i32) {
-    let seen = CROP_OBSERVED.load(Ordering::Relaxed);
-    if seen > crate::diagnostics::CROP_OBSERVE_CAP {
-        return;
-    }
-    if CROP_OBSERVED
-        .compare_exchange(seen, seen + 1, Ordering::AcqRel, Ordering::Acquire)
-        .is_err()
-    {
-        return;
-    }
-    let present = tracked_presents();
-    if seen == crate::diagnostics::CROP_OBSERVE_CAP {
-        let (a, b) = crate::diagnostics::crop_cap_event(present);
-        super::record(super::Code::CropObserve, a, b);
-        return;
-    }
-    let (rect_a, rect_b) = crate::diagnostics::crop_rect_event(present, x, y, w, h);
-    super::record(super::Code::CropObserve, rect_a, rect_b);
 }
 
 /// Present the image acquired this frame now, at the end of the flush that

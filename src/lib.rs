@@ -19,7 +19,6 @@ mod peer_transport;
 mod pia_rtt;
 pub mod plugin_api;
 pub mod policy;
-pub mod presentation;
 pub mod ui_safety;
 
 pub mod build_info {

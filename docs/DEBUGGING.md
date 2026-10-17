@@ -36,9 +36,6 @@ Under sd:/ultimate/ssbu_online_deluxe_rewrite/:
   `early_present_mismatches` for the present-at-flush path (0.4.0 LessLag;
   0.5.2 LLUltra and LLDoubles).
   Values are independent observations, not an atomic frame snapshot.
-- presentation-history.txt: bounded VI probe results, only when the boot flag
-  DUMP_PRESENTATION_HISTORY is present. No usable presented timestamps were obtained
-  in the tested stock Eden startup window. Remove the flag for ordinary tests.
 
 128 fixed-size events use a nonblocking try-lock. Game hooks do no file I/O; contention
 increments a dropped counter. Startup install checkpoints are synchronous. The sink reports
@@ -78,9 +75,8 @@ input-buffer writes. DISABLE_RENDERER skips
 experimental rendering text patches regardless of the INI request; actual mode
 stays Vanilla. DISABLE_PIA skips RTT and prevents the optional peer observer
 from installing. DISABLE_NATIVE skips the native banner hook. DISABLE_BACKOFF
-skips the dispatcher idle backoff (code 102 `a` = 4). All seven flags together,
-with DUMP_PRESENTATION_HISTORY absent, skip those hook families while retaining
-logging.
+skips the dispatcher idle backoff (code 102 `a` = 4). All seven flags together
+skip those hook families while retaining logging.
 Remove the disable flags to re-enable their hook families.
 DISABLE_FX and the PROBE_CRITICAL_SCREEN marker are ignored since 0.5.0: the
 FX hook family moved to the separate ssbu-fx-control plugin, which has its own

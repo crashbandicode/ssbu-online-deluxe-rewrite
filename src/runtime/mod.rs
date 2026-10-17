@@ -24,8 +24,6 @@ mod overlay_host;
 mod peer_observer;
 mod pia_rtt;
 mod plugin_export;
-mod presentation;
-mod render_probe;
 mod render_sequence;
 mod render_ultra;
 mod renderer;
@@ -244,8 +242,6 @@ pub fn main() {
         skyline::println!("[Deluxe] Existing SsbuSync host detected; rewrite hooks skipped");
         return;
     }
-    render_probe::dump_if_requested();
-    presentation::install();
     for (name, install) in [
         ("RENDERER", renderer::install as fn()),
         ("MENU", ui::install as fn()),
