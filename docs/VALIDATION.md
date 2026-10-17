@@ -2588,6 +2588,13 @@ behaviour change. Branch `work/reduction-1017` from main 690dc57.
   overlay, config, UI, banners, NVN status, transport, diagnostics),
   Gigaflare 88 production (76 `perf_scaler.rs`, 11 `fighter_main.rs`, one
   comment in `diagnostics.rs`) and 37 test lines. Host tests 300 → 274.
+- Skyline release package `artifacts/7ea17849ef97f044/` (build
+  `0.5.3-49fbfe169695-1792208004`, NRO 1,441,792 B, SHA-256
+  `7ea17849ef97f0442ce731df9f4bc25a1a59ea9b75b54251583ec90fd19fdff1`),
+  built by the primary after reviewing the commit; 20,480 B smaller than the
+  previous package. Not deployed to the card; the first console run is the
+  parity check for the re-homed transport (handshake, announce, station
+  binding, RTT display) and for the cut-in trigger without Gigaflare.
 - Gates on this commit: `cargo clippy --all-targets -- -D warnings`, `cargo
   test` (274 passed), `cargo build --no-default-features`, `cargo fmt --
   --check` (clean on every touched file; `clock_probe.rs`,
