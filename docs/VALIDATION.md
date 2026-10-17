@@ -2527,6 +2527,45 @@ Online tile (error 2306-0502: the fixture's companion service was not
 listening on 8443/8444); its partial profiles are in the evidence root's
 `coverage-nso-1016/`.
 
+### 0.5.3 — 2026-10-17: `peer_transport.rs` cut to its production surface (host tests, Skyline build)
+
+Operator: "take each file as its own plan and get the code down without reducing
+functionality … don't just shift the code to other files". Plan:
+evidence root `reduction-1017/PLAN-peer-transport.md`. Commit 7e6097e on
+`reduction-candidate` (plus ec250b4 docs, 26620e4 rustfmt-only fixes in
+`clock_probe.rs`, `coverage_profile.rs`, `runtime/clock_probe.rs`).
+
+Production code lines (code-audit classifier, comments/blanks/test modules
+excluded): `src/peer_transport.rs` 1,378 → 739 (tests 1,132 → 499, 25 → 8
+tests covering the same behaviours); `src/peer_passive.rs` 261 → 258;
+`src/runtime/connection_transport.rs` 342 → 305; `src/runtime/pia_rtt.rs`
+360 → 370 (the station list that `publication_targets` used to build). Net
+−669. Removed: the `View` intermediate and its u8 code tables
+(`settings_code`, `label_from_code`, `display_latency`), the four separate
+gate-entry copies (one `with_table` remains), `PublicationTargets`,
+`RequestParse`/`ConnectionRequest`/`Direction`/`PendingStore`, `AnnounceMode`
+(a 1:1 copy of `render_policy::Profile`), `encode_v3` (inlined),
+`TransportCounters`/eleven counter statics (one `[AtomicU64; 10]` indexed by
+`Counter`), `spare_tag_offset` (shares `peer_passive::beacon_tag_offset`),
+`Table.epoch`, the test-only production functions, and in the runtime the
+`SavedBody` save/revert path. Every consumer-facing name and the `ShownPeer`
+fields are unchanged; `settings_label` now returns the final `++` label.
+
+Behaviour changes, both recorded in `docs/FORK_PARITY.md` (Names / peer
+settings row): the send hook applies the planned beacon and v3 bytes once and
+no longer saves and reverts them when a cleanup races the store (they are the
+rewrite's own announcement in its own packet, already addressed to the
+departing peer); and UI snapshots that meet a busy gate now count a
+`Contentions` tick (surfaces in `TransportSkip`), which they did not before.
+No packet or display behaviour changed.
+
+Gates: 249 host tests + SDK round-trip, host clippy with warnings denied,
+no-default build, rustfmt, Skyline release build `0.5.3-26620e452923-1792247628`
+(NRO 1,441,792 bytes, SHA-256 `f5b60530b6005163…`; the 4 KB growth over
+`3f8855a2…` is page rounding, the `.text` shrank). Not run in Eden or on the
+console; the owed console checks for the transport (handshake, RTT, names,
+announce) now also cover this cut.
+
 ### 0.5.3 — 2026-10-17: reduction candidate ecb9923 benchmarked in Eden (latency, quota frame rate, captures, plugin pages)
 
 Operator: "Rerun the benchmarks after for frame reduction and test correction."
