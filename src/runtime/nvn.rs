@@ -360,9 +360,6 @@ unsafe extern "C" fn queue_present(queue: Ptr, window: Ptr, index: i32) {
         super::adaptive_drs::on_present(tick);
         super::dispatcher_backoff::note_present(tick);
         super::hang_trace::count(super::hang_trace::Hook::Present);
-        if super::api_trace::active() {
-            super::dispatcher_backoff::frame_rows(tick);
-        }
     }
     PRESENT_TICK.store(tick, Ordering::Relaxed);
     let n = PRESENTS.fetch_add(1, Ordering::Relaxed) + 1;
@@ -380,7 +377,7 @@ unsafe extern "C" fn queue_present(queue: Ptr, window: Ptr, index: i32) {
     if tracked {
         TRACKED_PRESENTS.fetch_add(1, Ordering::Relaxed);
         let before = OUTSTANDING.fetch_sub(1, Ordering::AcqRel);
-        let after = crate::render_trace::outstanding_after_present(before);
+        let after = crate::render_policy::outstanding_after_present(before);
         let shown = if after > i64::from(i32::MAX) {
             i32::MAX
         } else if after < i64::from(i32::MIN) {
@@ -388,7 +385,7 @@ unsafe extern "C" fn queue_present(queue: Ptr, window: Ptr, index: i32) {
         } else {
             after as i32
         };
-        super::api_trace::mark_thread(crate::render_trace::KIND_OUTSTANDING, shown);
+        super::api_trace::mark_thread(crate::capture::KIND_OUTSTANDING, shown);
         let saved = super::auto_driver::current_request();
         let snap = crate::render_policy::snapshot();
         let (active, allocated, fresh) = if snap.needs_fresh(saved, index, after) {
@@ -532,7 +529,7 @@ unsafe extern "C" fn sync_wait(sync: Ptr, timeout: u64) -> i32 {
     let kind = if timeout == u64::MAX && TEXTURE_SYNC.load(Ordering::Acquire) == sync as usize {
         3
     } else if timeout == u64::MAX {
-        crate::render_trace::KIND_SYNC_INFINITE_OTHER
+        crate::capture::KIND_SYNC_INFINITE_OTHER
     } else if timeout == 0 {
         4
     } else {

@@ -921,7 +921,7 @@ unsafe fn draw_settings_vertical(
 unsafe extern "C" fn draw() {
     let sample = input::read();
     let buttons = sample.buttons;
-    super::timing::observe(buttons);
+    super::capture::observe(buttons);
     let Ok(mut guard) = UI.try_lock() else {
         return;
     };
@@ -1019,13 +1019,13 @@ unsafe extern "C" fn draw() {
     };
     let ping =
         crate::pia_rtt::present_published(identity, publication, epoch, published_gen, draw_gen);
-    super::timing::set_view(view as u8);
+    super::capture::set_view(view as u8);
     let pressed = buttons & !ui.previous_timing_buttons;
     ui.previous_timing_buttons = buttons;
     let shoulders = crate::overlay::L | crate::overlay::R;
     if view == View::Debug && buttons & shoulders == shoulders && pressed & crate::overlay::UP != 0
     {
-        super::timing::request();
+        super::capture::request();
     }
     #[cfg(feature = "coverage")]
     if view == View::Debug
@@ -1187,13 +1187,13 @@ unsafe extern "C" fn draw() {
                     },
                 );
                 row("Engine", super::renderer::status());
-                row("Timing", super::timing::status());
+                row("Timing", super::capture::status());
                 if show_remote {
                     row("Ping detail", ping.detail);
                 }
                 row("Capture", "L+R+Up (30 s)");
-                row("CSS capture", &super::css_capture::status_label());
-                row("Match capture", &super::match_capture::status_label());
+                row("CSS capture", &super::capture::css_label());
+                row("Match capture", &super::capture::match_label());
                 igEndTable();
             }
             if let Some(lines) = compact_lines.as_ref() {

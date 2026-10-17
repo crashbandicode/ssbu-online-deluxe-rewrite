@@ -7,15 +7,13 @@
 //! system tick. Nothing here changes game behaviour.
 
 use crate::auto_policy::{Connection, SceneStatus};
-
-pub const TICK_HZ: u64 = 19_200_000;
+use crate::capture::TICK_HZ;
 
 /// Tracked hooks, in the order they appear on a heartbeat line.
 pub const HOOK_NAMES: [&str; HOOK_COUNT] = [
     "present",
     "backoff_pass",
     "backoff_sleep",
-    "css_init",
     "css_wait",
     "css_ui_job",
     "fighter_load",
@@ -23,7 +21,7 @@ pub const HOOK_NAMES: [&str; HOOK_COUNT] = [
     "fighter_main",
     "cut_in",
 ];
-pub const HOOK_COUNT: usize = 10;
+pub const HOOK_COUNT: usize = 9;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct HookSample {
@@ -32,8 +30,6 @@ pub struct HookSample {
     pub in_flight: u32,
     /// Tick of the most recent entry; meaningful while `in_flight > 0`.
     pub entry_tick: u64,
-    /// First call since the current scene began, zero until it happens.
-    pub first_tick: u64,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -134,16 +130,6 @@ pub fn heartbeat_line(
     line
 }
 
-pub fn first_line(hook: usize, first_tick: u64, boot: u64, scene: u8) -> String {
-    format!(
-        "[HangTrace] first {} t={} tick={:#x} scene={}",
-        HOOK_NAMES.get(hook).copied().unwrap_or("?"),
-        seconds(first_tick, boot),
-        first_tick,
-        scene_label(scene)
-    )
-}
-
 pub fn scene_line(previous: u8, next: u8, now: u64, boot: u64) -> String {
     format!(
         "[HangTrace] scene {} -> {} t={} tick={:#x}",
@@ -156,7 +142,7 @@ pub fn scene_line(previous: u8, next: u8, now: u64, boot: u64) -> String {
 
 pub fn header(build: &str, boot: u64) -> String {
     format!(
-        "build={build}\nboot_tick={boot:#x} tick_hz={TICK_HZ}\n# [Heartbeat] every 5 s: t = seconds since boot_tick; mem_used/mem_total/mem_free/heap_region are the kernel's bytes for this process (svcGetInfo); each hook shows calls since boot and, while a call has entered and not returned, [ACTIVE xN age_ms]\n# [HangTrace] first <hook>: first call of that hook since the current scene began\n# present/backoff_pass/fighter_main are count-only liveness signals\n"
+        "build={build}\nboot_tick={boot:#x} tick_hz={TICK_HZ}\n# [Heartbeat] every 5 s: t = seconds since boot_tick; mem_used/mem_total/mem_free/heap_region are the kernel's bytes for this process (svcGetInfo); each hook shows calls since boot and, while a call has entered and not returned, [ACTIVE xN age_ms]\n# [HangTrace] scene a -> b: the packed scene changed\n# present/backoff_pass/fighter_main are count-only liveness signals\n"
     )
 }
 
@@ -183,11 +169,10 @@ mod tests {
     fn heartbeat_marks_only_in_flight_hooks_active() {
         let mut samples = [HookSample::default(); HOOK_COUNT];
         samples[0].calls = 1200;
-        samples[4] = HookSample {
+        samples[3] = HookSample {
             calls: 9,
             in_flight: 2,
             entry_tick: TICK_HZ,
-            first_tick: TICK_HZ,
         };
         let memory = Memory {
             used: 3_000 * 1024 * 1024,
@@ -210,9 +195,11 @@ mod tests {
         assert!(line.contains(
             " scene=local/inactive ready=1 css=0 trace=0 mem_used=3145728000 mem_total=3445620736 mem_free=299892736 heap_region=2147483648 present=1200 "
         ));
-        assert!(line.contains(" css_wait=9[ACTIVE x2 age_ms=2000] "));
+        assert!(line.contains(" backoff_sleep=0 css_wait=9[ACTIVE x2 age_ms=2000] css_ui_job=0 "));
+        assert!(!line.contains("css_init"));
         assert!(!line.contains("present=1200["));
         assert_eq!(line.matches("ACTIVE").count(), 1);
+        assert!(line.ends_with(" cut_in=0"));
         let without = heartbeat_line(TICK_HZ * 3, TICK_HZ, Liveness::default(), None, &samples);
         assert!(without.contains(" trace=0 mem=unavailable present=1200 "));
     }
@@ -235,17 +222,12 @@ mod tests {
     }
 
     #[test]
-    fn first_and_scene_lines_name_hooks_and_scenes() {
-        assert_eq!(
-            first_line(6, TICK_HZ * 4, TICK_HZ, 4),
-            format!(
-                "[HangTrace] first fighter_load t=3.000 tick={:#x} scene=offline/training",
-                TICK_HZ * 4
-            )
-        );
-        assert!(first_line(99, 0, 0, 0).contains("first ? "));
+    fn scene_lines_and_header_name_scenes_without_first_lines() {
         assert!(scene_line(0, 5, TICK_HZ, 0)
             .starts_with("[HangTrace] scene offline/inactive -> local/training t=1.000"));
-        assert!(header("b", 7).starts_with("build=b\nboot_tick=0x7 tick_hz=19200000\n"));
+        let header = header("b", 7);
+        assert!(header.starts_with("build=b\nboot_tick=0x7 tick_hz=19200000\n"));
+        assert!(!header.contains("first <hook>"));
+        assert_eq!(HOOK_NAMES.len(), 9);
     }
 }

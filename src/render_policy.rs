@@ -345,6 +345,12 @@ impl Snapshot {
     }
 }
 
+/// Tracked-window acquisitions still outstanding after one present returns.
+/// A real zero stays zero; an unmatched present becomes negative.
+pub const fn outstanding_after_present(before: i64) -> i64 {
+    before.wrapping_sub(1)
+}
+
 pub fn index_value(input: u32, decision: Decision, armed: RenderMode) -> u32 {
     if decision.live {
         return match decision.modulus {
@@ -1227,6 +1233,13 @@ pub fn publish_drain(generation: u8) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn present_return_keeps_a_real_zero_and_an_unmatched_present() {
+        assert_eq!(outstanding_after_present(1), 0);
+        assert_eq!(outstanding_after_present(0), -1);
+        assert_eq!(outstanding_after_present(2), 1);
+    }
 
     fn present(saved: RenderMode, index: i32, outstanding: i64, active: i32) -> PresentInput {
         PresentInput {

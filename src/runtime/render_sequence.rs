@@ -82,7 +82,7 @@ unsafe fn deluxe_rewrite_record_fighters(ctx: &InlineCtx) {
         } else {
             super::renderer::mode().render_opts()
         };
-    super::api_trace::mark_thread(crate::render_trace::KIND_RECORD_FIGHTERS, i32::from(active));
+    super::api_trace::mark_thread(crate::capture::KIND_RECORD_FIGHTERS, i32::from(active));
     FRAME_ACTIVE.store(active, Ordering::Release);
     if !active {
         // Replaces precisely the original BL; the four ABI arguments survive.
@@ -147,7 +147,7 @@ unsafe fn submit_queue() {
 #[skyline::hook(offset = POST_SCENE, inline)]
 unsafe fn deluxe_rewrite_post_scene(_: &InlineCtx) {
     let active = FRAME_ACTIVE.load(Ordering::Acquire);
-    super::api_trace::mark_thread(crate::render_trace::KIND_POST_SCENE, i32::from(active));
+    super::api_trace::mark_thread(crate::capture::KIND_POST_SCENE, i32::from(active));
     let scene_frame = SCENE_FRAMES.fetch_add(1, Ordering::Relaxed);
     if !active {
         return;

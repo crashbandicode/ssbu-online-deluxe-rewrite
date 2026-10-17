@@ -49,7 +49,8 @@ pub(super) fn startup_phase(phase: &str) {
     }
 }
 
-fn rotate(path: &Path) -> io::Result<File> {
+/// `<name>.log` becomes `<name>.previous.log`; also used by the hang trace.
+pub(super) fn rotate(path: &Path) -> io::Result<File> {
     if path.exists() {
         let previous = path.with_extension("previous.log");
         if previous.exists() {
@@ -211,16 +212,16 @@ pub(super) fn start(version: &str) {
             let mut dropped = 0;
             let mut iteration = 0u64;
             let mut error_reported = false;
-            let mut timing = super::timing::Service::default();
+            let mut capture = super::capture::Service::default();
             loop {
-                // A running capture drains its chunks twice per period so a
+                // A running capture drains its rings twice per period so a
                 // match's row rate has twice the headroom of the 30 s capture.
                 std::thread::sleep(Duration::from_millis(250));
-                if timing.capturing() {
-                    timing.poll();
+                if capture.capturing() {
+                    capture.poll();
                 }
                 std::thread::sleep(Duration::from_millis(250));
-                timing.poll();
+                capture.poll();
                 super::auto_driver::poll();
                 super::dispatcher_backoff::publish();
                 super::pia_rtt::poll();

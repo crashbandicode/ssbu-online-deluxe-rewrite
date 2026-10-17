@@ -69,7 +69,7 @@ fn sample() -> u32 {
         std::hint::black_box(acc);
         best = best.min(end.saturating_sub(start));
     }
-    let mhz = crate::clock_probe::mhz_from_sample(cycles, best, crate::timing::TICK_HZ);
+    let mhz = crate::clock_probe::mhz_from_sample(cycles, best, crate::capture::TICK_HZ);
     MHZ.store(mhz, Ordering::Relaxed);
     mhz
 }

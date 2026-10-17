@@ -49,8 +49,8 @@ evidence is in [VALIDATION.md](VALIDATION.md).
   code 105 records mismatches).
 - `Vanilla*` banner label under the cleanup hold (0.4.0).
 - Opt-in `CAPTURE_MATCH` match capture (0.4.0): streamed timing and API CSVs
-  for a whole match, ended by `scene_end` (`src/runtime/match_capture.rs`,
-  code 106).
+  for a whole match, ended by `scene_end` (`src/runtime/capture.rs` since
+  2026-10-17, formerly `match_capture.rs`; code 106).
 - ZL-gated native D-pad edits (0.4.1, `src/overlay.rs`).
 - An unbound station leave retires the only confirmed peer (0.4.1,
   `peer_transport::retire_only_confirmed`).

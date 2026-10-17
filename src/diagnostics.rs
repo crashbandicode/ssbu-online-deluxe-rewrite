@@ -13,7 +13,10 @@ pub const CAPACITY: usize = 128;
 /// on 2026-10-16. Codes 37 to 45, 64 and 65 were the opt-in peer observer
 /// (parsed observation, name sample, drops, station map, the 41 to 45 send
 /// probe, the 64/65 station-map reachability sample) and code 88 was FPS++;
-/// both were removed on 2026-10-17. None of these numbers is reused.
+/// both were removed on 2026-10-17. Code 89 (`MenuOrder`, one row per capture
+/// arm) stopped being emitted the same day when the captures were
+/// consolidated; the variant stays so the number remains reserved. None of
+/// these numbers is reused.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u16)]
 pub enum Code {
@@ -95,8 +98,8 @@ pub enum Code {
     /// edge. Source 2 was the Sephiroth Gigaflare trigger, removed 2026-10-17
     /// and not reused. Not a per-tick counter.
     FighterTransition = 82,
-    /// One capture arm. `a` is the API-trace id. `b` is 1 when the embedded
-    /// backend is the one that will be sampled. Not a per-frame record.
+    /// Reserved; no longer emitted (2026-10-17). Was one row per capture arm:
+    /// `a` the capture id, `b` 1 when the embedded backend was the sampled one.
     MenuOrder = 89,
     /// Startup-only PROBE_RENDER_POLL discriminator; not a shipping fix.
     /// a=1: execute the original zero-timeout render poll without changing profile.
@@ -130,10 +133,11 @@ pub enum Code {
     /// total sleeps in bits 0..47 and the last sleep length in microseconds
     /// in bits 48..63. Not a per-frame record.
     DispatcherBackoffStats = 103,
-    /// CSS capture startup. `a` is the installed hook mask: bit 0 dispatcher
-    /// registration, bit 1 dependency wait, bit 2 UI job (7 = arming). `b`
-    /// bit 0 is the `CAPTURE_CSS` flag, bit 1 `GetThreadPriority` resolved,
-    /// bit 2 `GetThreadCoreMask` resolved. Both zero: flag absent, no hooks.
+    /// CSS capture startup. Since 2026-10-17 `a` is the installed hook mask:
+    /// bit 0 dependency wait, bit 1 UI job (3 = both, arming possible); `b`
+    /// bit 0 is the `CAPTURE_CSS` flag. Both zero: no flag, no hooks. Before
+    /// that, `a` bit 0 was the dispatcher-registration hook (7 = all three)
+    /// and `b` bits 1–2 said whether the SDK thread-info symbols resolved.
     CssCapture = 104,
     /// Two-image LessLag presents at the flush. Only mismatches are recorded:
     /// `a` = 2 when the game then presented a different index than the one

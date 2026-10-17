@@ -2527,6 +2527,113 @@ Online tile (error 2306-0502: the fixture's companion service was not
 listening on 8443/8444); its partial profiles are in the evidence root's
 `coverage-nso-1016/`.
 
+### 0.5.3 — 2026-10-17: captures and traces consolidated (host tests and Python analyzers only)
+
+Operator order after the capture plan (evidence root
+`reduction-1017/PLAN-captures.md`, a read-only investigation of 690dc57):
+consolidate the "captures and traces" bucket towards the plan's floor while
+keeping every capability the console used in the 15 Oct campaign. Worktree
+branch from main 74991cf.
+
+- **Module layout.** `src/capture.rs` (pure, host-tested) replaces
+  `src/timing.rs`, `src/render_trace.rs` and `src/capture_export.rs`: the
+  constants and the kept kind constants (12–17, 27, 66, 77), `thread_label`,
+  `image_offset`, `request_label`, `Finish`, one `Ring<T: Entry>` with
+  `Sample` (callback row) and `Event` (API row) as its two 32-byte row
+  types, `Stream`-keyed `header`/`rows`/`footer`, and the status phases.
+  `src/runtime/capture.rs` replaces `runtime/timing.rs`,
+  `runtime/match_capture.rs` and the arming, visit and status parts of
+  `runtime/css_capture.rs`: one `PENDING` request byte (match > controller
+  > CSS > `CAPTURE_TIMING` file), one `FLAGS` byte for `CAPTURE_CSS` and
+  `CAPTURE_MATCH`, `note_css_frame` (code 12, CSS arming and the match
+  end-by-CSS; `online.rs` no longer calls a separate `note_css`, because the
+  same character-select hook reaches `note_css_frame` on every update,
+  before the pane walk that gated the old call), `note_stage`/`note_scene`,
+  the three Debug rows and the `Service` that streams both CSVs.
+  `runtime/css_capture.rs` keeps only the two hooks (dependency wait, UI
+  job) and their install; `runtime/api_trace.rs` gains `point`.
+  `outstanding_after_present` moved to `render_policy.rs` with its test;
+  `logging::rotate` is shared with the hang trace.
+- **Dropped by name.** Trace kinds 60/61 (the per-frame backoff rows,
+  `backoff_frame_events`, `frame_rows`, the `FRAME_*` aggregates and the
+  timed branch in `dispatcher_backoff.rs`, the `nvn.rs` call), 62/63
+  (`describe_thread`, `GET_PRIORITY`/`GET_CORE_MASK`, `THREADS`, `core_info`),
+  64 and the `INIT_WORKER` hook (`child_of_ui_aggregate`, `dispatch_info`,
+  `SUBMIT_WORKER`/`UI_AGGREGATE`), 28 (`contains_resizing`, `resize_event`,
+  `RESIZE_COUNT`; the scan of every backend log line is gone), 29–34
+  (`FlushFields`, `FlushPlanDiagnostic`, `flush_field_events`,
+  `read_flush_fields`; the field store in the flush hook stays, gated on
+  `+0x1d18` directly), `ticks_to_us`, `pointer_halves`, `bits_u32`; event
+  code 89 (`MenuOrder`, reserved by comment); `Finish::Capacity` (a full
+  ring counts rows as `skipped` and never ends a capture); the two-chunk
+  20-byte `.bss` packing (`Packed`, `Chunk`, `take_chunk`,
+  `CHUNK_HALF_RANGE`); the `[HangTrace] first <hook>` lines (`first_line`,
+  `note_first`, `first_tick`, `reported_first`) and the `css_init`
+  heartbeat field; the duplicate `rotate` and `TICK_HZ`; the test-only
+  production code (`Snapshot` ×2, `write_csv` ×2, `u32_bits`, `Default` ×2,
+  `export_ready_csvs`, `controller_request_busy`, `write_buffered`,
+  `Stream::closed`).
+- **Race fix (plan §4.3; inferred, never observed in a capture).** The old
+  `take_ready` discarded rows still in the buffer but reported `total`, so a
+  hook that finished the capture between the poll's `drain` and its
+  `take_ready` lost its last rows while the footer counted them, and the
+  analyzers would have rejected the file. `Ring::take_ready(out)` now hands
+  the final rows over under the same lock that counted them (test
+  `take_ready_hands_over_the_final_rows_so_the_count_matches`). Drains swap
+  buffers, O(1) under the lock, instead of copying.
+- **Byte-identical.** `timing-<id>.csv` (schema 2) and `api-<id>.csv`
+  (schema 1) including the clock lines after the column line, pinned by the
+  golden test `golden_csv_bytes_for_both_streams`; the `timing-status.txt`
+  strings; the heartbeat line minus `css_init=`; the four triggers (Debug
+  chord, `CAPTURE_TIMING` label, `CAPTURE_CSS` entry, `CAPTURE_MATCH`
+  stage); the `Timing`, `CSS capture` and `Match capture` rows (the CSS
+  row's mask wording is now 0x3); the export (`create_new`, 64 KiB buffer,
+  flush, `sync_all`, Exporting before any CSV work, Saved only after both
+  footers and the saved status). `tools/analyze_timing.py`,
+  `tools/analyze_render_trace.py`, `tools/frame_windows.py` and their tests
+  are unchanged (30 passed, one pre-existing skip). Code 104's `a` is now
+  the two-bit mask (bit 0 wait, bit 1 job; 3 = both) and `b` keeps only bit
+  0; `diagnostics.rs` and DEBUGGING.md say so.
+- **Behaviour changes called out.** Capacity no longer ends a callback
+  capture; API rows are skipped only when the 4096-row ring is full (the
+  old two-chunk headroom or better); the API storage moved from 80 KiB of
+  resident `.bss` to the heap at arm (0 idle; 272 KiB peak, as before; a
+  low heap now refuses the arm visibly with `timing capture could not be
+  armed`); a match request arriving under a 30 s capture replaces, rather
+  than queues behind, a pending controller request; an arm that fails to
+  open the API file no longer also creates the timing file. The ring is
+  generic over the row type (the plan's second option in §3.3 item 4), so
+  `buttons` keeps all 64 bits instead of being truncated to 32.
+- **Lines** (production = before `#[cfg(test)] mod tests`, base 74991cf):
+  bucket 2,436 → 1,579 (−35 %). `capture.rs` 483 (plan about 240; was
+  `timing.rs` 364 + `render_trace.rs` 630 + `capture_export.rs` 91),
+  `runtime/capture.rs` 562 (plan about 300; was `runtime/timing.rs` 446 +
+  `match_capture.rs` 105 + about 70 of `css_capture.rs`),
+  `runtime/api_trace.rs` 45 → 52 (plan about 35), `runtime/css_capture.rs`
+  333 → 115 (plan about 60), `hang_trace.rs` 162 → 148 (plan about 75),
+  `runtime/hang_trace.rs` 260 → 219 (plan about 110). Elsewhere −84:
+  `renderer.rs` −38, `dispatcher_backoff.rs` −31, `overlay_host.rs` −17,
+  `response_probe.rs` −6, `nvn.rs` −3, `logging.rs` +1, `diagnostics.rs` +4,
+  `render_policy.rs` +6. Net −941 production lines; `git diff --stat`
+  against 74991cf: 31 files, +1,612 / −3,172. The plan's floor of about 820
+  was not reached: its §3.3 estimates undercounted rustfmt'd, documented
+  Rust by about 2× (every §3.3 item is implemented, nothing beyond the §3.1
+  kept capabilities remains, and the §3.6 cuts were declined), and the
+  number was not chased by stripping comments or compressing formatting.
+- Host tests 274 → 265 (20 deleted with the old modules, 10 new in
+  `capture.rs`, one moved to `render_policy.rs`, the five `hang_trace.rs`
+  tests adapted to nine hooks and no first lines). Gates: `cargo clippy
+  --all-targets -- -D warnings`, `cargo test` (265 unit + 1 integration),
+  `cargo build --no-default-features`, `cargo fmt -- --check` (clean except
+  `clock_probe.rs`, `coverage_profile.rs` and `runtime/clock_probe.rs`,
+  which were already unformatted on main and are left alone), `python3 -m
+  unittest discover -s tools -p "test_*.py"`. The Skyline build is the
+  parent's: `runtime/` compiles only there, and nothing here is claimed as
+  runtime-verified. Console parity is still owed: one `CAPTURE_TIMING` 30 s
+  capture, one `CAPTURE_CSS` capture and one Training `CAPTURE_MATCH` on the
+  card, each analysed with the unchanged tools, plus continuing
+  `hang-trace.log` heartbeats.
+
 ### 0.5.3 — 2026-10-17: removed the opt-in peer observer, FPS++ and the Gigaflare DRS trigger (host tests only)
 
 Operator order after the coverage campaign: three features go, with no other

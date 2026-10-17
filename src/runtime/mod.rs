@@ -1,6 +1,7 @@
 mod adaptive_drs;
 mod api_trace;
 mod auto_driver;
+mod capture;
 mod clock_probe;
 mod connection_transport;
 #[cfg(feature = "coverage")]
@@ -15,7 +16,6 @@ mod imgui;
 mod imgui_stats;
 mod input;
 mod logging;
-mod match_capture;
 mod memory;
 mod native_banner;
 mod nvn;
@@ -28,7 +28,6 @@ mod render_ultra;
 mod renderer;
 mod resolution;
 mod response_probe;
-mod timing;
 mod ui;
 
 use crate::{
@@ -259,8 +258,8 @@ pub fn main() {
         }
     }
     // After the renderer family verified the dispatcher sites it shares. The
-    // match flag is read first: it also wants the CSS capture hooks.
-    match_capture::install();
+    // capture flags are read first: `CAPTURE_MATCH` also wants the CSS hooks.
+    capture::install();
     css_capture::install();
     resolution::install();
     fighter_probe::install();

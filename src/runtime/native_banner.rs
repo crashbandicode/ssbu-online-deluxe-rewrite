@@ -441,7 +441,7 @@ pub(super) fn drop_scene() {
 #[skyline::hook(offset = CSS_UPDATE)]
 unsafe fn deluxe_rewrite_css_banner(arg: u64) {
     original!()(arg);
-    super::css_capture::note_css_frame();
+    super::capture::note_css_frame();
     paint_css(arg);
 }
 

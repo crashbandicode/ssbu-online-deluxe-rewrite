@@ -27,13 +27,7 @@ pub(super) unsafe fn draw(sample: Sample) {
         // Both are observations of the same sampled state, with no clock-domain
         // conversion or invented inference about when that state first arrived.
         for (kind, result) in [(6, sample.left_y), (7, sample.update_count as i32)] {
-            api_trace::TRACE.observe(crate::render_trace::Event {
-                begin: start,
-                end: start,
-                kind,
-                index: serial as i32,
-                result,
-            });
+            api_trace::point(start, kind, serial as i32, result);
         }
     }
     let (width, height) = overlay_host::display_size();
