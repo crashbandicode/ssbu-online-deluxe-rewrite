@@ -2594,6 +2594,42 @@ Online tile (error 2306-0502: the fixture's companion service was not
 listening on 8443/8444); its partial profiles are in the evidence root's
 `coverage-nso-1016/`.
 
+### 0.6.0 — 2026-10-17: reduction-candidate merged into main; whole-product coverage trace closed with what it has
+
+Operator order: "let's just stop this for now with what we have … Merge the
+code into main as a minor version and push to switch." `reduction-candidate`
+(code tip 962eb3d, ledger 4a2006a) merged into `main` with a merge commit as
+0.6.0 (Cargo version bump only; no code change since the candidate package
+`5357da2626a98fb9` that carried the latency rerun below). Gates on the merge:
+`cargo clippy --all-targets -- -D warnings` clean, `cargo build
+--no-default-features` ok, host tests 233 + 1 pass, `cargo skyline build
+--release` ok (package in the evidence root `artifacts/`, hash in its
+manifest and in the release). The 0.6.0 NRO goes to the operator's card over
+DBI MTP in the same transaction style as the earlier installs (evidence
+`switch-mtp-060/`); the card run is the acceptance test, not claimed here.
+
+Coverage trace of the coverage variant of the same source (package
+`72d91b51b540bf26`, Eden only): offline host and guest scenarios (Training,
+window pages, plugin pages, menus, CSS, Streamer), then LAN-NSO runs
+`nso-b3` to `nso-b6` on the Yoga (Quickplay versus the Ally on Online Deluxe
+0.3.0, two public arenas including the Streamer room-pane check, Background
+matchmaking from Training, Co-op Quickplay) and a Surface peer `surf-a1`
+(Smash menu only). Merged result (`coverage-1017/report-final/`): 1,192
+instrumented functions, 1,047 executed in at least one scenario, 145 never
+executed (68 closures, 13 constructors/trait impls; 813 physical lines; 73
+with no live reference). Interim before the arenas: 1,024 executed. Never
+executed and worth a follow-up: the hook sites behind `deluxe_rewrite_arena`
+and `deluxe_rewrite_background_matchmaking` never fired in any arena or
+Background scenario; `peer_transport::settings_label` / `profile_bits`
+(the modded-opponent exchange) never ran because no two coverage-build
+peers ever reached a match: the candidate and coverage builds abort at
+startup on the Ally's Windows Eden (`nn::fs::RenameDirectory` → `nn::diag`
+abort from the plugin; Linux Eden and the console are fine), and the
+Linux Surface peer paired with the Yoga (companion probe `result=true`
+once the Yoga advertised its wired address) but every Quickplay ended in
+2618-0513/2618-0502 with ufw active on both Linux hosts and no sudo to
+change it. Both are open findings, not fixed in 0.6.0.
+
 ### 0.5.3 — 2026-10-17: latency response trials repeated on candidate package `5357da2626a98fb9` (Eden) — frame reduction unchanged
 
 Operator: "redo the test to make sure that we still have the same frame
