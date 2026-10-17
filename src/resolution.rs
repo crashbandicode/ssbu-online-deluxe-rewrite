@@ -429,10 +429,6 @@ impl Policy {
         }
     }
 
-    pub fn dropped_transitions(&self) -> u8 {
-        self.transition_dropped
-    }
-
     pub fn transitions(&self) -> &[Transition] {
         &self.transitions[..self.transition_len as usize]
     }
@@ -730,20 +726,12 @@ fn with_policy<T>(body: impl FnOnce(&mut Policy) -> T) -> T {
     body(&mut policy)
 }
 
-pub fn update_settings(level: Level, dynamic: bool) {
-    with_policy(|policy| policy.update_settings(level, dynamic));
-}
-
 pub fn push_report(level: Level) -> PushResult {
     with_policy(|policy| policy.push_report(level))
 }
 
 pub fn pop_report(token: ReportToken) -> bool {
     with_policy(|policy| policy.pop_report(token))
-}
-
-pub fn clear_reports() {
-    with_policy(|policy| policy.clear_reports());
 }
 
 pub fn reset_scene() {
@@ -1042,7 +1030,7 @@ mod tests {
         );
         assert_eq!(policy.transitions()[3].a, 1920);
         assert_eq!(policy.transitions()[3].b, 1080);
-        assert_eq!(policy.dropped_transitions(), 0);
+        assert_eq!(policy.transition_dropped, 0);
     }
 
     #[test]

@@ -15,6 +15,7 @@
 //! station object. Those bytes are not the RTT station index `0..=252`.
 
 /// Pia packet magic at `H+0`. `H` is the packet object plus 8.
+#[cfg_attr(not(target_os = "switch"), allow(dead_code))]
 pub const PIA_MAGIC: u32 = 0x32ab_9864;
 /// Pia header version byte at `H+4`.
 pub const PIA_VERSION: u8 = 4;
@@ -60,13 +61,6 @@ pub enum ParseError {
     Truncated,
     /// `out` cannot hold another message.
     Capacity,
-}
-
-/// Magic, version, and the `0x20..=0x5c0` length window.
-pub fn packet_prefix_accepted(magic: u32, version: u8, wire_len: u32) -> bool {
-    magic == PIA_MAGIC
-        && version == PIA_VERSION
-        && (PACKET_LEN_MIN..=PACKET_LEN_MAX).contains(&wire_len)
 }
 
 /// Pia header byte at `H+4`. The low 7 bits are the version. Bit 7 is set
@@ -360,16 +354,6 @@ mod tests {
             Ok(n) => Ok(out[..n].to_vec()),
             Err(err) => Err(err),
         }
-    }
-
-    #[test]
-    fn packet_length_window_is_inclusive_at_both_ends() {
-        assert!(packet_prefix_accepted(PIA_MAGIC, 4, 0x20));
-        assert!(packet_prefix_accepted(PIA_MAGIC, 4, 0x5c0));
-        assert!(!packet_prefix_accepted(PIA_MAGIC, 4, 0x1f));
-        assert!(!packet_prefix_accepted(PIA_MAGIC, 4, 0x5c1));
-        assert!(!packet_prefix_accepted(PIA_MAGIC, 3, 0x20));
-        assert!(!packet_prefix_accepted(0, 4, 0x20));
     }
 
     #[test]

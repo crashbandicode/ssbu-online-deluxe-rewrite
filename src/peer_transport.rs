@@ -884,11 +884,6 @@ pub fn display_identity(selection: Selection) -> crate::pia_rtt::RttIdentity {
     }
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
-pub fn shown_peer() -> ShownPeer {
-    peer_frame().peer
-}
-
 fn unknown_peer() -> ShownPeer {
     blank_peer()
 }
@@ -1830,7 +1825,7 @@ mod tests {
             &response(b"Samus", true, 1, 2),
             false,
         );
-        assert!(shown_peer().known);
+        assert!(peer_frame().peer.known);
         assert!(BUSY
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
             .is_ok());
@@ -1846,8 +1841,8 @@ mod tests {
         rtt.resize(aligned, 0);
         let writes = plan_outgoing(0x55, &rtt, Some(announce(4, AnnounceMode::Ultra)), 0, false);
         assert!(writes.iter().flatten().next().is_none());
-        assert!(!shown_peer().known);
-        assert_eq!(shown_peer().interface, "Unknown");
+        assert!(!peer_frame().peer.known);
+        assert_eq!(peer_frame().peer.interface, "Unknown");
         assert_eq!(latched_stealth(), None);
     }
 
@@ -2475,7 +2470,7 @@ mod tests {
         clear_station(4);
         assert_eq!(selection_snapshot(), Selection::Busy);
         BUSY.store(false, Ordering::Release);
-        let shown = shown_peer();
+        let shown = peer_frame().peer;
         assert_eq!(shown.station, Some(9));
         assert_eq!(name_label(&shown.name, shown.name_len), Some("Bob"));
         assert_eq!(shown.settings, "LessLag");
@@ -2483,7 +2478,7 @@ mod tests {
         bind_station(4, 33);
         assert_eq!(selected_station(), Some(9));
         cycle_peer(1);
-        let shown = shown_peer();
+        let shown = peer_frame().peer;
         assert_eq!(shown.station, Some(4));
         assert_eq!(name_label(&shown.name, shown.name_len), Some("Cora"));
         assert!(BUSY
@@ -2492,7 +2487,7 @@ mod tests {
         clear_session();
         BUSY.store(false, Ordering::Release);
         assert_eq!(selection_snapshot(), Selection::None);
-        assert!(!shown_peer().known);
+        assert!(!peer_frame().peer.known);
         assert!(!remote_rows_visible(true));
         assert!(remote_rows_visible(false));
         clear_session();

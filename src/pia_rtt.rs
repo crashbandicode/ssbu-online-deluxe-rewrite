@@ -183,13 +183,6 @@ pub fn rtt_matches(identity: RttIdentity, publication: Publication, epoch: u64) 
     }
 }
 
-/// Next draw generation. Accepted leave, cleanup, and protocol adoption each
-/// step twice: once before the station map changes, and once after.
-#[cfg_attr(not(test), allow(dead_code))]
-pub fn next_draw_generation(generation: u64) -> u64 {
-    generation.wrapping_add(1)
-}
-
 /// The diagnostic poll is the only writer of publication bytes. A draw shows
 /// them only while the generation it published is still the current one.
 pub fn rtt_published(
@@ -1004,11 +997,6 @@ impl Session {
         self.table.cleanups
     }
 
-    #[cfg_attr(not(test), allow(dead_code))]
-    pub fn accept_sample(&mut self, sample: Observation, epoch: u64) -> bool {
-        self.accept_sample_for(sample, epoch, StationPick::Absent)
-    }
-
     pub fn accept_sample_for(
         &mut self,
         sample: Observation,
@@ -1019,11 +1007,6 @@ impl Session {
         let adopted = self.table.observe_rtt(sample);
         self.publish(sample.now_tick, epoch, station);
         adopted
-    }
-
-    #[cfg_attr(not(test), allow(dead_code))]
-    pub fn accept_leave(&mut self, protocol: u64, remote: u32, epoch: u64) -> bool {
-        self.accept_leave_for(protocol, remote, epoch, StationPick::Absent)
     }
 
     pub fn accept_leave_for(
@@ -1039,21 +1022,11 @@ impl Session {
         cleared
     }
 
-    #[cfg_attr(not(test), allow(dead_code))]
-    pub fn accept_cleanup(&mut self, protocol: u64, epoch: u64) -> bool {
-        self.accept_cleanup_for(protocol, epoch, StationPick::Absent)
-    }
-
     pub fn accept_cleanup_for(&mut self, protocol: u64, epoch: u64, station: StationPick) -> bool {
         self.reconcile(epoch);
         let cleared = self.table.session_end(protocol);
         self.publish(self.table.last_tick, epoch, station);
         cleared
-    }
-
-    #[cfg_attr(not(test), allow(dead_code))]
-    pub fn accept_poll(&mut self, now_tick: u64, epoch: u64) {
-        self.accept_poll_for(now_tick, epoch, StationPick::Absent)
     }
 
     pub fn accept_poll_for(&mut self, now_tick: u64, epoch: u64, station: StationPick) {
@@ -1234,7 +1207,7 @@ mod tests {
         assert_eq!(boxed.table.local, 0xfd);
         assert_eq!(boxed.applied, 1);
         let mut live = Session::new_boxed();
-        live.accept_sample(obs(3, 1, 20, 1_000), 1);
+        live.accept_sample_for(obs(3, 1, 20, 1_000), 1, StationPick::Absent);
         assert_eq!(live.publication().reading(), PingReading::Measured(20));
         assert_eq!(live.samples(), 1);
     }
@@ -1428,7 +1401,7 @@ mod tests {
             published_gen,
             draw
         ));
-        draw = next_draw_generation(draw);
+        draw = draw.wrapping_add(1);
         assert!(!rtt_published(
             RttIdentity::Baseline,
             old,
@@ -1443,7 +1416,7 @@ mod tests {
             published_gen,
             draw
         ));
-        draw = next_draw_generation(draw);
+        draw = draw.wrapping_add(1);
         assert!(!rtt_published(
             RttIdentity::Baseline,
             old,
@@ -1543,14 +1516,14 @@ mod tests {
     fn foreign_and_unknown_protocol_leaves_do_not_retire_a_current_station() {
         let foreign = PROTOCOL + 8;
         let mut session = Session::new();
-        session.accept_sample(at(PROTOCOL, 2, 1, 10, 0), 1);
-        session.accept_sample(at(foreign, 9, 1, 80, PER_MS), 1);
+        session.accept_sample_for(at(PROTOCOL, 2, 1, 10, 0), 1, StationPick::Absent);
+        session.accept_sample_for(at(foreign, 9, 1, 80, PER_MS), 1, StationPick::Absent);
         // Numeric station indices alone cannot associate another protocol's
         // leave with our connected opponent. This result gates runtime cleanup.
-        assert!(!session.accept_leave(foreign, 2, 1));
-        assert!(!session.accept_leave(PROTOCOL + 3, 2, 1));
+        assert!(!session.accept_leave_for(foreign, 2, 1, StationPick::Absent));
+        assert!(!session.accept_leave_for(PROTOCOL + 3, 2, 1, StationPick::Absent));
         assert_eq!(session.stored_rtt(2), Some(10));
-        assert!(session.accept_leave(PROTOCOL, 2, 1));
+        assert!(session.accept_leave_for(PROTOCOL, 2, 1, StationPick::Absent));
         assert_eq!(session.stored_rtt(2), None);
     }
 
@@ -1590,16 +1563,24 @@ mod tests {
         let epoch = 1;
         let background = PROTOCOL;
         let match_protocol = PROTOCOL + 4;
-        session.accept_sample(at(background, 2, 1, 50, 0), epoch);
-        session.accept_sample(at(background, 3, 1, 60, 0), epoch);
-        session.accept_sample(at(match_protocol, 7, 5, 12, PER_MS), epoch);
+        session.accept_sample_for(at(background, 2, 1, 50, 0), epoch, StationPick::Absent);
+        session.accept_sample_for(at(background, 3, 1, 60, 0), epoch, StationPick::Absent);
+        session.accept_sample_for(
+            at(match_protocol, 7, 5, 12, PER_MS),
+            epoch,
+            StationPick::Absent,
+        );
         assert_eq!(
             session.publication().reading(),
             PingReading::Unavailable(PingGap::OtherProtocol)
         );
         assert_eq!(session.stored_rtt(2), Some(50));
         let later = STALE_MS * PER_MS;
-        session.accept_sample(at(match_protocol, 7, 5, 12, later), epoch);
+        session.accept_sample_for(
+            at(match_protocol, 7, 5, 12, later),
+            epoch,
+            StationPick::Absent,
+        );
         assert_eq!(session.publication().reading(), PingReading::Measured(12));
         assert_eq!(session.stored_rtt(2), None);
         assert_eq!(session.stored_rtt(3), None);
@@ -1609,11 +1590,19 @@ mod tests {
     #[test]
     fn adopting_a_stale_protocol_reports_the_slot_clear() {
         let mut session = Session::new();
-        assert!(!session.accept_sample(at(PROTOCOL, 2, 1, 10, 0), 1));
-        assert!(!session.accept_sample(at(PROTOCOL, 2, 1, 11, PER_MS), 1));
-        assert!(!session.accept_sample(at(PROTOCOL + 1, 4, 1, 12, PER_MS), 1));
+        assert!(!session.accept_sample_for(at(PROTOCOL, 2, 1, 10, 0), 1, StationPick::Absent));
+        assert!(!session.accept_sample_for(at(PROTOCOL, 2, 1, 11, PER_MS), 1, StationPick::Absent));
+        assert!(!session.accept_sample_for(
+            at(PROTOCOL + 1, 4, 1, 12, PER_MS),
+            1,
+            StationPick::Absent
+        ));
         assert_eq!(session.stored_rtt(2), Some(11));
-        assert!(session.accept_sample(at(PROTOCOL + 1, 4, 1, 12, (STALE_MS + 1) * PER_MS), 1));
+        assert!(session.accept_sample_for(
+            at(PROTOCOL + 1, 4, 1, 12, (STALE_MS + 1) * PER_MS),
+            1,
+            StationPick::Absent
+        ));
         assert_eq!(session.stored_rtt(2), None);
         assert_eq!(session.stored_rtt(4), Some(12));
     }
@@ -1624,7 +1613,7 @@ mod tests {
         let epoch = 1;
         let primary = PROTOCOL;
         let other = PROTOCOL + 9;
-        session.accept_sample(at(primary, 2, 1, 10, 0), epoch);
+        session.accept_sample_for(at(primary, 2, 1, 10, 0), epoch, StationPick::Absent);
         assert_eq!(session.publication().reading(), PingReading::Measured(10));
         for step in 1..6u64 {
             let now = step * 200 * PER_MS;
@@ -1633,7 +1622,7 @@ mod tests {
             } else {
                 at(other, 8, 4, 90, now)
             };
-            session.accept_sample(sample, epoch);
+            session.accept_sample_for(sample, epoch, StationPick::Absent);
             assert_eq!(
                 session.publication().reading(),
                 PingReading::Unavailable(PingGap::OtherProtocol)
@@ -1646,23 +1635,27 @@ mod tests {
     fn missed_lifecycle_drops_the_old_peer_until_a_new_sample() {
         let mut session = Session::new();
         let mut epoch = 1u64;
-        session.accept_sample(at(PROTOCOL, 2, 1, 40, 0), epoch);
+        session.accept_sample_for(at(PROTOCOL, 2, 1, 40, 0), epoch, StationPick::Absent);
         assert_eq!(session.publication().reading(), PingReading::Measured(40));
         epoch += 1;
-        session.accept_poll(500 * PER_MS, epoch);
+        session.accept_poll_for(500 * PER_MS, epoch, StationPick::Absent);
         assert_eq!(session.stored_rtt(2), None);
         assert_eq!(
             session.publication().reading(),
             PingReading::Unavailable(PingGap::NoneFresh)
         );
-        session.accept_sample(at(PROTOCOL, 2, 1, 4, 600 * PER_MS), epoch);
+        session.accept_sample_for(
+            at(PROTOCOL, 2, 1, 4, 600 * PER_MS),
+            epoch,
+            StationPick::Absent,
+        );
         assert_eq!(session.publication().reading(), PingReading::Measured(4));
     }
 
     #[test]
     fn poll_without_the_table_expires_a_measured_value() {
         let mut session = Session::new();
-        session.accept_sample(at(PROTOCOL, 2, 1, 40, 0), 1);
+        session.accept_sample_for(at(PROTOCOL, 2, 1, 40, 0), 1, StationPick::Absent);
         let published = session.publication();
         assert_eq!(
             expire_publication(published, STALE_MS * PER_MS - 1, 1).reading(),
@@ -1684,10 +1677,10 @@ mod tests {
     fn repeated_poll_keeps_the_sample_tick_until_the_reader_expires_it() {
         let mut session = Session::new();
         let sample_tick = 50 * PER_MS;
-        session.accept_sample(at(PROTOCOL, 2, 1, 33, sample_tick), 1);
+        session.accept_sample_for(at(PROTOCOL, 2, 1, 33, sample_tick), 1, StationPick::Absent);
         assert_eq!(session.publication().tick, sample_tick);
         let still_fresh = sample_tick + (STALE_MS - 1) * PER_MS;
-        session.accept_poll(still_fresh, 1);
+        session.accept_poll_for(still_fresh, 1, StationPick::Absent);
         assert_eq!(session.publication().tick, sample_tick);
         assert_eq!(session.publication().reading(), PingReading::Measured(33));
         let stale_at = sample_tick + STALE_MS * PER_MS;
@@ -1695,13 +1688,13 @@ mod tests {
             expire_publication(session.publication(), stale_at, 1).reading(),
             PingReading::Unavailable(PingGap::Stale)
         );
-        session.accept_poll(stale_at, 1);
+        session.accept_poll_for(stale_at, 1, StationPick::Absent);
         assert_ne!(session.publication().tick, stale_at);
         assert_eq!(
             session.publication().reading(),
             PingReading::Unavailable(PingGap::Stale)
         );
-        session.accept_poll(stale_at + 10 * PER_MS, 1);
+        session.accept_poll_for(stale_at + 10 * PER_MS, 1, StationPick::Absent);
         assert_eq!(
             session.publication().reading(),
             PingReading::Unavailable(PingGap::Stale)
@@ -1777,8 +1770,8 @@ mod tests {
     #[test]
     fn overflow_is_rejected_and_a_stale_snapshot_has_no_colour() {
         let mut session = Session::new();
-        session.accept_sample(at(PROTOCOL, 2, 1, 20, 0), 1);
-        session.accept_sample(at(PROTOCOL, 2, 1, i64::MAX, PER_MS), 1);
+        session.accept_sample_for(at(PROTOCOL, 2, 1, 20, 0), 1, StationPick::Absent);
+        session.accept_sample_for(at(PROTOCOL, 2, 1, i64::MAX, PER_MS), 1, StationPick::Absent);
         assert_eq!(session.publication().reading(), PingReading::Measured(20));
         assert_eq!(session.table.rejected_overflow, 1);
         let presented = PresentedPing::from_publication(session.publication());

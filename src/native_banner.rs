@@ -45,10 +45,6 @@ pub const LDN_INITIALIZE: &[u8] = b"_ZN2nn3ldn10InitializeEv\0";
 pub const LDN_GET_STATE: &[u8] = b"_ZN2nn3ldn8GetStateEv\0";
 pub const LDN_SCAN: &[u8] = b"_ZN2nn3ldn4ScanEPNS0_11NetworkInfoEPiiRKNS0_10ScanFilterEi\0";
 
-pub fn local_update_accepted(words: [u32; 4]) -> bool {
-    words == LOCAL_UPDATE_WORDS
-}
-
 /// Name and vtable from the probed pane. The vtable is an offset from main text.
 pub fn local_pane_identity(name: &str, vtable: u64, text_base: u64) -> bool {
     text_base != 0 && name == LOCAL_PANE_NAME && vtable == text_base.wrapping_add(LOCAL_PANE_VTABLE)
@@ -125,12 +121,6 @@ pub struct FontMetrics {
     pub line_space: f32,
     pub char_space: f32,
     pub text_position: u8,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct GraphNode {
-    pub parent: Option<usize>,
-    pub prev: Option<usize>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -220,10 +210,6 @@ pub fn store_scan_count(found: i32) -> u8 {
 }
 
 /// Fork `num_available_networks`: only Initialized (`GetState == 1`) keeps the scan.
-pub fn displayed_network_count(state: u32, stored: u8) -> u8 {
-    visible_network_count(state == LDN_INITIALIZED, stored)
-}
-
 fn visible_network_count(initialized: bool, stored: u8) -> u8 {
     if initialized {
         stored
@@ -538,22 +524,6 @@ pub fn decode_room_id(units: &[u16]) -> Option<String> {
     Some(text)
 }
 
-pub fn walk_pane(nodes: &[GraphNode], start: usize, steps: &[PaneLink]) -> Option<usize> {
-    let mut current = start;
-    for step in steps {
-        let node = nodes.get(current)?;
-        let next = match step {
-            PaneLink::Parent => node.parent?,
-            PaneLink::Prev => node.prev?,
-        };
-        if next == start || next == current || nodes.get(next).is_none() {
-            return None;
-        }
-        current = next;
-    }
-    Some(current)
-}
-
 /// The arena room-id pane named by the 13.0.5 init site. No prefix match.
 pub fn is_arena_room_name(name: &str) -> bool {
     name == "set_txt_roomid"
@@ -598,18 +568,6 @@ pub fn setter_utf8(text: &str) -> Option<String> {
         None
     } else {
         Some(cleaned)
-    }
-}
-
-pub fn text_fits(is_utf8: bool, cap_units: usize, text: &str) -> bool {
-    if text.is_empty() || cap_units == 0 || cap_units > PANE_SCAN_MAX || text.len() > TEXT_CAP {
-        return false;
-    }
-    if is_utf8 {
-        text.len() < cap_units
-    } else {
-        let units = text.encode_utf16().count();
-        units > 0 && units <= TEXT_CAP && units < cap_units
     }
 }
 
@@ -659,6 +617,29 @@ fn cap_str(text: &str, max_bytes: usize) -> &str {
 mod tests {
     use super::*;
     use crate::pia_rtt::{PingRgba, PING_STABLE};
+
+    /// Host model of the runtime pane graph for checking the CSS walk constants.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    struct GraphNode {
+        parent: Option<usize>,
+        prev: Option<usize>,
+    }
+
+    fn walk_pane(nodes: &[GraphNode], start: usize, steps: &[PaneLink]) -> Option<usize> {
+        let mut current = start;
+        for step in steps {
+            let node = nodes.get(current)?;
+            let next = match step {
+                PaneLink::Parent => node.parent?,
+                PaneLink::Prev => node.prev?,
+            };
+            if next == start || next == current || nodes.get(next).is_none() {
+                return None;
+            }
+            current = next;
+        }
+        Some(current)
+    }
 
     fn parts<'a>(profile: &'a str, latency: &'a str, remote: bool, name: &'a str) -> LineParts<'a> {
         LineParts {
@@ -1061,13 +1042,6 @@ mod tests {
     }
 
     #[test]
-    fn text_fit_never_claims_past_the_buffer() {
-        assert!(text_fits(true, 3, "hi"));
-        assert!(!text_fits(true, 2, "hi"));
-        assert!(!text_fits(true, 800, "A"));
-    }
-
-    #[test]
     fn stable_ping_color_follows_the_snapshot_channels() {
         assert_eq!(
             ping_bytes(PingRgba {
@@ -1160,20 +1134,10 @@ mod tests {
         assert_eq!(local_wireless_text(true, "Auto", false, 7), "0");
         assert!(!local_wireless_text(false, "Auto", true, 7).contains('7'));
         assert!(!local_wireless_text(true, "Auto", true, 7).contains("Auto"));
-        assert_eq!(displayed_network_count(LDN_INITIALIZED, 7), 7);
-        assert_eq!(displayed_network_count(0, 7), 0);
-        assert_eq!(displayed_network_count(3, 7), 0);
     }
 
     #[test]
     fn local_count_requires_the_probed_pane_and_live_symbols() {
-        assert!(local_update_accepted(LOCAL_UPDATE_WORDS));
-        assert!(!local_update_accepted([
-            0x3600_00a0,
-            0xf940_c268,
-            0xb942_5517,
-            0
-        ]));
         assert_eq!(LOCAL_SCENE_WORD, 0x946e_9728);
         assert!(local_pane_identity(
             "set_text_dev_count",

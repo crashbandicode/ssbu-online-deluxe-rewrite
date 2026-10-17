@@ -481,13 +481,15 @@ mod tests {
 
     fn with_reports(base: Level, test: impl FnOnce(&Scaler)) {
         let _guard = LOCK.lock().unwrap_or_else(|err| err.into_inner());
-        resolution::clear_reports();
-        resolution::update_settings(Level::P1080, true);
+        // Production paths only: a scene reset drops live reports, a retarget
+        // sets the base level and the dynamic flag.
+        resolution::reset_scene();
+        resolution::retarget(Level::P1080, true);
         let scaler = Scaler::new(base);
         test(&scaler);
         scaler.clear();
-        resolution::clear_reports();
-        resolution::update_settings(Level::P1080, false);
+        resolution::reset_scene();
+        resolution::retarget(Level::P1080, false);
     }
 
     #[test]
@@ -561,7 +563,7 @@ mod tests {
     fn stale_token_does_not_pop_a_newer_report() {
         with_reports(Level::P1080, |scaler| {
             assert_eq!(scaler.cut_in_start(1, true), Action::Started);
-            resolution::clear_reports();
+            resolution::reset_scene();
             let kept = resolution::push_report(Level::P480);
             assert!(matches!(kept, PushResult::Stored(_)));
             for _ in 0..6 {
@@ -583,11 +585,11 @@ mod tests {
     #[test]
     fn dynamic_off_and_full_multiset_do_not_stick_active() {
         with_reports(Level::P1080, |scaler| {
-            resolution::update_settings(Level::P1080, false);
+            resolution::retarget(Level::P1080, false);
             assert_eq!(scaler.cut_in_start(0, true), Action::NotStored);
             assert_eq!(scaler.cut_in_tick(0, true, false), Action::Idle);
             assert_eq!(resolution::status().reports, 0);
-            resolution::update_settings(Level::P1080, true);
+            resolution::retarget(Level::P1080, true);
             let mut held = Vec::new();
             for _ in 0..8 {
                 held.push(match resolution::push_report(Level::P900) {
@@ -707,7 +709,7 @@ mod tests {
             scaler.clear();
             assert!(!scaler.counters().adaptive_active);
             assert_eq!(resolution::status().reports, 0);
-            resolution::update_settings(Level::P1080, false);
+            resolution::retarget(Level::P1080, false);
             assert_eq!(scaler.adaptive_push(), Action::NotStored);
             assert!(!scaler.counters().adaptive_active);
         });

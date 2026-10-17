@@ -91,11 +91,6 @@ pub const fn core_info(ideal_core: i32, affinity_mask: u64) -> i32 {
     bits_u32(core | ((affinity_mask as u32 & 0x00ff_ffff) << 8))
 }
 
-pub const fn core_info_parts(info: i32) -> (u8, u32) {
-    let word = u32_bits(info);
-    (word as u8, word >> 8)
-}
-
 /// Dispatcher worker in the low byte, queue priority in the next.
 pub const fn dispatch_info(worker: u32, priority: u32) -> i32 {
     bits_u32((worker & 0xff) | ((priority & 0xff) << 8))
@@ -451,10 +446,6 @@ pub const fn pointer_halves(pointer: u64) -> (i32, i32) {
     (pointer as u32 as i32, (pointer >> 32) as u32 as i32)
 }
 
-pub const fn pointer_from_halves(low: i32, high: i32) -> u64 {
-    (low as u32 as u64) | ((high as u32 as u64) << 32)
-}
-
 /// Bit pattern of a raw `u32`. The CSV column is signed; decode with [`u32_bits`].
 pub const fn bits_u32(value: u32) -> i32 {
     value as i32
@@ -491,25 +482,11 @@ pub const fn flush_narrow_word(pre: FlushFields, post: FlushFields) -> u32 {
         | ((post.slot_28 as u32) << 24)
 }
 
-pub const fn flush_narrow_parts(word: u32) -> (u8, u8, u8, u8) {
-    (
-        word as u8,
-        (word >> 8) as u8,
-        (word >> 16) as u8,
-        (word >> 24) as u8,
-    )
-}
-
 /// Bit 0 store executed, bit 1 `arm_drain`, bits 8..15 generation.
 pub const fn flush_plan_result(plan: FlushPlanDiagnostic) -> i32 {
     let store = plan.store_ran as u32;
     let drain = plan.arm_drain as u32;
     bits_u32(store | (drain << 1) | ((plan.generation as u32) << 8))
-}
-
-pub const fn flush_plan_parts(result: i32) -> (bool, bool, u8) {
-    let word = u32_bits(result);
-    (word & 1 != 0, (word >> 1) & 1 != 0, (word >> 8) as u8)
 }
 
 /// Point samples for one LessLag field flush. Widths stay in the documented columns.
@@ -659,6 +636,27 @@ mod tests {
         let mut out = Vec::new();
         trace.drain(&mut out);
         out
+    }
+    // Decoders for the production encoders above. The CSV readers live outside
+    // the plugin, so these oracles are test-only.
+    const fn core_info_parts(info: i32) -> (u8, u32) {
+        let word = u32_bits(info);
+        (word as u8, word >> 8)
+    }
+    const fn pointer_from_halves(low: i32, high: i32) -> u64 {
+        (low as u32 as u64) | ((high as u32 as u64) << 32)
+    }
+    const fn flush_narrow_parts(word: u32) -> (u8, u8, u8, u8) {
+        (
+            word as u8,
+            (word >> 8) as u8,
+            (word >> 16) as u8,
+            (word >> 24) as u8,
+        )
+    }
+    const fn flush_plan_parts(result: i32) -> (bool, bool, u8) {
+        let word = u32_bits(result);
+        (word & 1 != 0, (word >> 1) & 1 != 0, (word >> 8) as u8)
     }
     #[test]
     fn nested_spans_remain_valid_and_finish_at_duration() {

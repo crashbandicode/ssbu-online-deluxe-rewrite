@@ -245,26 +245,6 @@ pub fn profile_action(before: &Config, after: &Config) -> ProfileAction {
     }
 }
 
-/// Configured platform. This is the INI value, not a text-base guess.
-pub fn platform_label(platform: Platform) -> &'static str {
-    match platform {
-        Platform::Console => "Console",
-        Platform::Emulator => "Emulator",
-    }
-}
-
-/// Saved choice versus the live policy word.
-/// `applied` is false while the window is still awaiting the startup mode.
-pub fn net_profile_value(
-    saved: RenderMode,
-    armed: RenderMode,
-    textures: i32,
-    machine: crate::render_policy::Machine,
-    applied: bool,
-) -> String {
-    crate::render_policy::profile_text(saved, armed, textures, machine, applied)
-}
-
 /// Short third-column status. The profile cell itself stays the mode name.
 pub fn net_profile_status(
     saved: RenderMode,
@@ -681,42 +661,6 @@ mod tests {
                 RenderMode::LessLagDoubles
             ),
             "Auto:LLDbl"
-        );
-        assert_eq!(platform_label(crate::config::Platform::Console), "Console");
-        assert_eq!(
-            platform_label(crate::config::Platform::Emulator),
-            "Emulator"
-        );
-        let passthrough = crate::render_policy::Machine::passthrough();
-        assert_eq!(
-            net_profile_value(
-                RenderMode::LessLag,
-                RenderMode::Vanilla,
-                3,
-                passthrough,
-                true
-            ),
-            "LessLag*"
-        );
-        assert_eq!(
-            net_profile_value(
-                RenderMode::Vanilla,
-                RenderMode::Vanilla,
-                3,
-                passthrough,
-                true
-            ),
-            "Vanilla"
-        );
-        assert_eq!(
-            net_profile_value(
-                RenderMode::LessLag,
-                RenderMode::Vanilla,
-                3,
-                passthrough,
-                false
-            ),
-            "LessLag"
         );
         menu.selected = ROW_STEALTH;
         assert!(config.stealth);
