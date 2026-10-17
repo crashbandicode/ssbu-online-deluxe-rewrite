@@ -96,12 +96,6 @@ pub enum Code {
     /// Requested mode in the low byte, selected mode in the next, then auto,
     /// platform, cleanup hold, and scene-ready bits. `b` is the selection generation.
     AutoRequest = 74,
-    /// common.nro load observation. `a` is the module base, `b` is the symbol.
-    FighterModule = 75,
-    /// `call_line_status` offset in `a`. `b` is flags plus generation.
-    FighterSymbol = 76,
-    /// Two instruction words from the opt-in module probe. Not a hook site.
-    FighterWords = 77,
     /// Report push, pop, or clear. `a` is the kind, `b` is the level or count.
     ResolutionReport = 78,
     /// The original resolution call returned. `a` is the applied level.
@@ -112,11 +106,6 @@ pub enum Code {
     FighterMain = 81,
     /// Cut-in or Sephiroth start/end. Not a per-tick counter.
     FighterTransition = 82,
-    /// Opt-in `PROBE_CROP` view of a game `nvnWindowSetCrop`. Not main's crop.
-    ///
-    /// `a`/`b` come from [`crop_rect_event`], [`crop_cap_event`], or
-    /// [`crop_armed_event`]. Main's own crop stays [`Code::ResolutionCrop`].
-    CropObserve = 83,
     /// Native-window FPS++ phase in the low byte of `a` and the note in the
     /// next byte. `b` is 1 when the interval read back as applied. The
     /// tracked NVN window thread produces the pair. The diagnostics poll only
@@ -202,33 +191,6 @@ pub enum Code {
     /// profile, 8 uncapped_clocks). At boot, on every stock/OC change and
     /// once a minute. See `clock_probe`.
     ClockSample = 111,
-}
-
-/// Game SetCrop observations recorded before further calls are forwarded only.
-pub const CROP_OBSERVE_CAP: u32 = 32;
-const CROP_PRESENT_MARK: u64 = 1 << 63;
-
-/// `x,y,w,h` in the low 16 bits of each field. Values outside `0..=65535` truncate.
-pub const fn crop_rect_word(x: i32, y: i32, w: i32, h: i32) -> u64 {
-    (x as u16 as u64)
-        | ((y as u16 as u64) << 16)
-        | ((w as u16 as u64) << 32)
-        | ((h as u16 as u64) << 48)
-}
-
-/// Rect observation. Bit 63 of `b` is clear. There is no caller word.
-pub const fn crop_rect_event(present: u64, x: i32, y: i32, w: i32, h: i32) -> (u64, u64) {
-    (crop_rect_word(x, y, w, h), present & !CROP_PRESENT_MARK)
-}
-
-/// The observe cap was hit. Later SetCrop calls are not recorded.
-pub const fn crop_cap_event(present: u64) -> (u64, u64) {
-    (CROP_PRESENT_MARK, present & !CROP_PRESENT_MARK)
-}
-
-/// The wrapper was handed to the game once. Not a crop rectangle.
-pub const fn crop_armed_event() -> (u64, u64) {
-    (CROP_PRESENT_MARK | 1, 0)
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -338,8 +300,7 @@ mod tests {
     }
 
     #[test]
-    fn crop_observe_words_separate_rect_and_cap() {
-        assert_eq!(Code::CropObserve as u16, 83);
+    fn event_codes_keep_their_numbers() {
         assert_eq!(Code::FpsBoost as u16, 88);
         assert_eq!(Code::MenuOrder as u16, 89);
         assert_eq!(Code::RenderPollProbe as u16, 90);
@@ -362,19 +323,6 @@ mod tests {
         assert_eq!(Code::CoverageDump as u16, 109);
         assert_eq!(Code::StageLoaded as u16, 110);
         assert_eq!(Code::ClockSample as u16, 111);
-        let rect = crop_rect_event(4, 0, 0, 1024, 576);
-        assert_eq!(rect.0, crop_rect_word(0, 0, 1024, 576));
-        assert_eq!(rect.1, 4);
-        assert_eq!(
-            crop_rect_word(0, 0, 1920, 1080) >> 32,
-            u64::from(1920u16) | (u64::from(1080u16) << 16)
-        );
-        let cap = crop_cap_event(9);
-        assert_eq!(cap.0, 1u64 << 63);
-        assert_eq!(cap.1, 9);
-        assert_ne!(cap.0, rect.0);
-        assert_eq!(crop_armed_event(), ((1u64 << 63) | 1, 0));
-        assert_ne!(crop_armed_event().0, cap.0);
     }
     #[test]
     fn recursive_or_contended_logging_drops_instead_of_deadlocking() {

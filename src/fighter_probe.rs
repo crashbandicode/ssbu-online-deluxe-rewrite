@@ -5,10 +5,7 @@
 //! only: its fourth word moves `x8` into `x20`, so it is not the logical Main.
 //! Smashline's Main site is `common+0x3250`.
 
-use crate::diagnostics::Code;
-
 pub const WORD_COUNT: usize = 16;
-pub const EVENT_CAP: usize = 2 + WORD_COUNT;
 /// `lua2cpp::L2CFighterBase::call_line_status` offset inside `common`.
 pub const EXPORT_OFFSET: u64 = 0x9ea0;
 /// Smashline logical Main site inside `common`. Not the export above.
@@ -51,12 +48,6 @@ pub const CALL_LINE_SYMBOL: &[u8] = b"_ZN7lua2cpp14L2CFighterBase16call_line_sta
 pub const LOAD_MODULE_INTERNAL: &[u8] = b"_ZN2nn2ro18LoadModuleInternalEPNS0_6ModuleEPKvPvmib\0";
 /// Installed nnsdk 0.6.0 binding. The probe hooks this symbol, not an internal.
 pub const UNLOAD_MODULE: &[u8] = b"_ZN2nn2ro12UnloadModuleEPNS0_6ModuleE\0";
-
-const FLAG_LOOKUP: u64 = 1;
-const FLAG_SYMBOL_WORDS: u64 = 2;
-const FLAG_SITE_WORDS: u64 = 4;
-const FLAG_OFFSET_MATCH: u64 = 8;
-const FLAG_UNLOADED: u64 = 16;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ObserveState {
@@ -112,13 +103,6 @@ impl Observation {
             state: ObserveState::Idle,
         }
     }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ProbeEvent {
-    pub code: Code,
-    pub a: u64,
-    pub b: u64,
 }
 
 pub struct LoadView<'a> {
@@ -187,52 +171,7 @@ pub fn note_unload(current: Observation, module: u64, result: u32) -> Observatio
     }
 }
 
-pub fn events(obs: &Observation) -> (usize, [ProbeEvent; EVENT_CAP]) {
-    let blank = ProbeEvent {
-        code: Code::FighterModule,
-        a: 0,
-        b: 0,
-    };
-    let mut items = [blank; EVENT_CAP];
-    if obs.state == ObserveState::Idle {
-        return (0, items);
-    }
-    let mut len = 0;
-    items[len] = ProbeEvent {
-        code: Code::FighterModule,
-        a: obs.base,
-        b: obs.symbol,
-    };
-    len += 1;
-    let mut flags = (obs.generation as u64) << 32;
-    if obs.lookup_ok {
-        flags |= FLAG_LOOKUP;
-    }
-    if obs.symbol_readable {
-        flags |= FLAG_SYMBOL_WORDS;
-    }
-    if obs.site_readable {
-        flags |= FLAG_SITE_WORDS;
-    }
-    if obs.offset_matches_cross_check {
-        flags |= FLAG_OFFSET_MATCH;
-    }
-    if obs.state == ObserveState::Unloaded {
-        flags |= FLAG_UNLOADED;
-    }
-    items[len] = ProbeEvent {
-        code: Code::FighterSymbol,
-        a: obs.offset,
-        b: flags,
-    };
-    len += 1;
-    if obs.state != ObserveState::Unloaded {
-        len = push_words(&mut items, len, 0, obs.symbol_readable, &obs.symbol_words);
-        len = push_words(&mut items, len, 1, obs.site_readable, &obs.site_words);
-    }
-    (len, items)
-}
-
+/// Live Main-hook snapshot for the Performance row and `renderer-status.txt`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HookView {
     pub callback_armed: bool,
@@ -250,40 +189,6 @@ impl HookView {
     }
 }
 
-pub fn status_text(build_id: &str, obs: &Observation, view: HookView) -> String {
-    let cross = if obs.offset_matches_cross_check {
-        "match"
-    } else {
-        "differ"
-    };
-    let site_hook = if view.callback_armed {
-        "installed"
-    } else {
-        "not_installed"
-    };
-    let count_only = if view.count_only { "true" } else { "false" };
-    let cut_in = if view.cut_in_installed {
-        "true"
-    } else {
-        "false"
-    };
-    let armed = if view.callback_armed { "true" } else { "false" };
-    format!(
-        "build={build_id}\nstate={state}\ngeneration={generation}\nmodule={module:#x}\nbase={base:#x}\nsymbol={symbol:#x}\noffset={offset:#x}\ncross_check={cross}\nlookup_ok={lookup}\nsymbol_readable={symbol_readable}\nsite_readable={site_readable}\ncallback_armed={armed}\ncut_in_installed={cut_in}\ncount_only={count_only}\ncall_line_hook=not_installed\nsite_3250_hook={site_hook}\nsymbol_words={symbol_words}\nsite_words={site_words}\n",
-        state = obs.state.label(),
-        generation = obs.generation,
-        module = obs.module,
-        base = obs.base,
-        symbol = obs.symbol,
-        offset = obs.offset,
-        lookup = obs.lookup_ok,
-        symbol_readable = obs.symbol_readable,
-        site_readable = obs.site_readable,
-        symbol_words = hex_words(&obs.symbol_words),
-        site_words = hex_words(&obs.site_words),
-    )
-}
-
 fn exact_words(words: Option<&[u32]>) -> Option<[u32; WORD_COUNT]> {
     let words = words?;
     if words.len() != WORD_COUNT {
@@ -292,41 +197,6 @@ fn exact_words(words: Option<&[u32]>) -> Option<[u32; WORD_COUNT]> {
     let mut out = [0; WORD_COUNT];
     out.copy_from_slice(words);
     Some(out)
-}
-
-fn push_words(
-    items: &mut [ProbeEvent; EVENT_CAP],
-    mut len: usize,
-    site: u64,
-    readable: bool,
-    words: &[u32; WORD_COUNT],
-) -> usize {
-    if !readable {
-        return len;
-    }
-    let mut index = 0;
-    while index < WORD_COUNT {
-        let pair = index as u64 / 2;
-        items[len] = ProbeEvent {
-            code: Code::FighterWords,
-            a: (site << 32) | pair,
-            b: u64::from(words[index]) | (u64::from(words[index + 1]) << 32),
-        };
-        len += 1;
-        index += 2;
-    }
-    len
-}
-
-fn hex_words(words: &[u32; WORD_COUNT]) -> String {
-    let mut line = String::new();
-    for (index, word) in words.iter().enumerate() {
-        if index != 0 {
-            line.push(' ');
-        }
-        line.push_str(&format!("{word:08x}"));
-    }
-    line
 }
 
 pub const fn category_of(object_id: u32) -> u32 {
@@ -486,6 +356,7 @@ fn flag(value: bool) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::diagnostics::Code;
 
     fn words(fill: u32) -> [u32; WORD_COUNT] {
         let mut out = [0; WORD_COUNT];
@@ -506,12 +377,8 @@ mod tests {
         assert!(CALL_LINE_SYMBOL.ends_with(&[0]));
         assert!(LOAD_MODULE_INTERNAL.ends_with(&[0]));
         assert!(UNLOAD_MODULE.ends_with(&[0]));
-        assert_eq!(Code::FighterModule as u16, 75);
-        assert_eq!(Code::FighterSymbol as u16, 76);
-        assert_eq!(Code::FighterWords as u16, 77);
         assert_eq!(Code::ResolutionReport as u16, 78);
         assert_eq!(Code::FighterTransition as u16, 82);
-        assert_eq!(Code::CropObserve as u16, 83);
     }
 
     #[test]
@@ -567,30 +434,6 @@ mod tests {
         assert_ne!(next.offset, SITE_OFFSET);
         assert_eq!(next.symbol_words, symbol_words);
         assert_eq!(next.site_words, site_words);
-        let text = status_text("test", &next, HookView::idle());
-        assert!(text.contains("callback_armed=false\n"));
-        assert!(text.contains("cut_in_installed=false\n"));
-        assert!(text.contains("count_only=false\n"));
-        assert!(text.contains("call_line_hook=not_installed\n"));
-        assert!(text.contains("site_3250_hook=not_installed\n"));
-        assert!(text.contains("cross_check=match\n"));
-        let (len, events) = events(&next);
-        assert_eq!(len, EVENT_CAP);
-        assert_eq!(events[0].code, Code::FighterModule);
-        assert_eq!(events[0].a, 0x1000);
-        assert_eq!(events[0].b, 0xaea0);
-        assert_eq!(events[1].a, EXPORT_OFFSET);
-        assert_eq!(
-            events[1].b & 0xffff,
-            FLAG_LOOKUP | FLAG_SYMBOL_WORDS | FLAG_SITE_WORDS | FLAG_OFFSET_MATCH
-        );
-        assert_eq!(events[2].code, Code::FighterWords);
-        assert_eq!(events[2].a, 0);
-        assert_eq!(
-            events[2].b,
-            u64::from(symbol_words[0]) | (u64::from(symbol_words[1]) << 32)
-        );
-        assert_eq!(events[10].a, 1 << 32);
     }
 
     #[test]
@@ -670,8 +513,6 @@ mod tests {
         assert_eq!(cleared.base, 0);
         assert_eq!(cleared.symbol_words, [0; WORD_COUNT]);
         assert_eq!(cleared.generation, loaded.generation + 1);
-        let (len, _) = events(&cleared);
-        assert_eq!(len, 2);
         let again = note_load(
             cleared,
             LoadView {

@@ -121,13 +121,10 @@ fn store_policy(policy: Policy) {
     MAIN_THREAD_ONLY.store(policy.main_thread_only, Ordering::Relaxed);
 }
 
-/// Optional `dispatcher_backoff.ini` in the data directory, read once.
+/// Shipped default. `dispatcher_backoff.ini` was retired on 2026-10-16 and is
+/// not read.
 fn load_policy() -> Policy {
-    let path = std::path::Path::new(super::DATA_DIR).join("dispatcher_backoff.ini");
-    match std::fs::read_to_string(path) {
-        Ok(text) => Policy::parse(&text, Policy::DEFAULT),
-        Err(_) => Policy::DEFAULT,
-    }
+    Policy::DEFAULT
 }
 
 /// The calling thread is the SDK `MainThread`. Its `ThreadType` pointer is

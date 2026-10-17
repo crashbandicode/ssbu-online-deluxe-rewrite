@@ -1,27 +1,21 @@
 //! One `LoadModuleInternal` / `UnloadModule` chain for `common`.
 //!
-//! The sixteen-word dump stays behind `PROBE_FIGHTER_MODULE`. The same load
-//! calls the logical Main installer. The export is recorded and never hooked.
+//! A successful `common` load is observed (base, export, and the Main site
+//! words) and handed to the logical Main installer. The export is never hooked.
+//! The sixteen-word event dump and `fighter-module.txt` were removed on
+//! 2026-10-16; `PROBE_FIGHTER_MODULE` is ignored.
 
 use super::hang_trace::{self, Hook};
-use super::{fighter_main, logging, memory, record, Code, DATA_DIR};
+use super::{fighter_main, logging, memory, record, Code};
 use crate::fighter_probe::{self, LoadView, LOAD_MODULE_INTERNAL, SITE_OFFSET, WORD_COUNT};
 use crate::hook_chain::{plan_far_chain, EntryPlan};
 use skyline::hooks::A64HookFunction;
 use skyline::nn::ro::Module;
-use std::fs::File;
-use std::io::Write;
-use std::path::Path;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 
-const FLAG: &str = "PROBE_FIGHTER_MODULE";
-const STATUS_FILE: &str = "fighter-module.txt";
-
-static DUMP: AtomicBool = AtomicBool::new(false);
 static LOAD_ORIGINAL: AtomicUsize = AtomicUsize::new(0);
 static UNLOAD_ORIGINAL: AtomicUsize = AtomicUsize::new(0);
-static LAST_WRITTEN: AtomicU32 = AtomicU32::new(0);
 static STATE: Mutex<fighter_probe::Observation> = Mutex::new(fighter_probe::Observation::idle());
 
 type LoadFn = unsafe extern "C" fn(*mut Module, *const u8, *mut u8, usize, i32, bool) -> u32;
@@ -29,13 +23,7 @@ type UnloadFn = unsafe extern "C" fn(*mut Module) -> u32;
 
 pub(super) fn install() {
     fighter_main::configure();
-    let dump = Path::new(DATA_DIR).join(FLAG).exists();
-    DUMP.store(dump, Ordering::Release);
-    if dump {
-        logging::startup_phase("fighter_module_probe_begin");
-    } else {
-        logging::startup_phase("fighter_module_probe_off");
-    }
+    logging::startup_phase("fighter_module_probe_off");
     logging::startup_phase("fighter_module_hooks_begin");
     let load = lookup(LOAD_MODULE_INTERNAL);
     let unload = skyline::nn::ro::UnloadModule as *const () as usize;
@@ -60,27 +48,6 @@ pub(super) fn install() {
 
 pub(super) fn poll() {
     fighter_main::poll();
-    if !DUMP.load(Ordering::Acquire) {
-        return;
-    }
-    let observation = {
-        let guard = STATE.lock().unwrap_or_else(|err| err.into_inner());
-        *guard
-    };
-    if observation.generation == 0 || observation.generation == LAST_WRITTEN.load(Ordering::Acquire)
-    {
-        return;
-    }
-    let text = fighter_probe::status_text(
-        crate::build_info::BUILD_ID,
-        &observation,
-        fighter_main::view(),
-    );
-    if let Ok(mut file) = File::create(Path::new(DATA_DIR).join(STATUS_FILE)) {
-        if file.write_all(text.as_bytes()).is_ok() && file.sync_all().is_ok() {
-            LAST_WRITTEN.store(observation.generation, Ordering::Release);
-        }
-    }
 }
 
 fn lookup(symbol: &[u8]) -> usize {
@@ -229,7 +196,7 @@ unsafe extern "C" fn on_unload(module: *mut Module) -> u32 {
         let current = snapshot();
         let next = fighter_probe::note_unload(current, address, result);
         if next.generation != current.generation {
-            publish(next, DUMP.load(Ordering::Acquire));
+            publish(next);
             fighter_main::on_common_unloaded(address);
         }
     }
@@ -261,7 +228,7 @@ fn observe_load(module: *mut Module) {
         },
     );
     if next.generation != current.generation {
-        publish(next, DUMP.load(Ordering::Acquire));
+        publish(next);
         fighter_main::consider(&next);
     }
 }
@@ -335,16 +302,7 @@ fn snapshot() -> fighter_probe::Observation {
     *guard
 }
 
-fn publish(next: fighter_probe::Observation, record_events: bool) {
-    {
-        let mut guard = STATE.lock().unwrap_or_else(|err| err.into_inner());
-        *guard = next;
-    }
-    if !record_events {
-        return;
-    }
-    let (len, items) = fighter_probe::events(&next);
-    for event in items.into_iter().take(len) {
-        record(event.code, event.a, event.b);
-    }
+fn publish(next: fighter_probe::Observation) {
+    let mut guard = STATE.lock().unwrap_or_else(|err| err.into_inner());
+    *guard = next;
 }

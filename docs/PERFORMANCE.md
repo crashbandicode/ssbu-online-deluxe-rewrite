@@ -368,13 +368,14 @@ index/flush/poll counters, the global overlay and SGPO. For that core bundle,
 full console parity and end-to-end latency remain unverified. Live transitions
 in current source are a separate, later registration.
 
-An opt-in DUMP_PRESENTATION_HISTORY file installs symbol-bound layer lifetime
-observers and runs a finite history probe. presentation-history.txt records raw
-fields, query costs and explicit outcomes; no hook or query is installed without
+An opt-in DUMP_PRESENTATION_HISTORY file used to install symbol-bound layer lifetime
+observers and run a finite history probe. presentation-history.txt recorded raw
+fields, query costs and explicit outcomes; no hook or query was installed without
 the boot flag. The probe completed in Eden: history disabled gave empty data;
 enable_buffer_history=true gave queued entries but zero presented timestamps and
 GetLatestFrameNumber returned 0x1672. It ended as no_frames_yet. This is a negative
-result for usable presentation data in the tested startup window.
+result for usable presentation data in the tested startup window. The flag and
+both source files were removed on 2026-10-16; see the validation record.
 
 Eden's current public implementation gates GetBufferHistory on that setting and
 sets its presentation_time field inside QueueBuffer. That alone cannot establish

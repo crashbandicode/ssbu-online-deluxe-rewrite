@@ -28,22 +28,10 @@ the hook site, `Unavailable` when the game image does not match 13.0.5, and
 
 ## Tuning
 
-Tuning is optional. Create `sd:/ultimate/ssbu_online_deluxe_rewrite/dispatcher_backoff.ini`:
-
-```ini
-# idle passes to spin before the first sleep (default 16)
-spin_passes=16
-# sleep on every Nth idle pass after that (default 1)
-every_passes=1
-# first sleep and the cap of the doubling ramp, nanoseconds (default 5000 / 50000)
-base_ns=5000
-max_ns=50000
-# minimum gap between sleeps in microseconds (default 0 = none)
-cooldown_us=0
-# 1 lets worker dispatchers sleep too (default 0: MainThread only)
-all_threads=0
-# preset=measured reproduces the Eden diagnostic cadence (1 us once per 171 passes)
-```
+The sleep lengths are the shipped defaults: 16 idle passes spin, then 5 µs
+doubling to 50 µs on every later idle pass, main thread only. The optional
+`dispatcher_backoff.ini` override was removed on 2026-10-16 (last shipped in
+`be82f50`). A file by that name is ignored.
 
 `dispatcher_backoff=false` in `config.ini` (0.5.3) keeps the hook installed
 but never sleeps, so an A/B needs only an INI edit and a restart; the Backoff
