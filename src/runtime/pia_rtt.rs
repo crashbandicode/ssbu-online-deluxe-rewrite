@@ -13,8 +13,8 @@
 //! up or make an old sample look new.
 use super::{record, Code};
 use crate::pia_rtt::{
-    expire_board, expire_publication, Observation, Publication, Session, StationBoard, StationPick,
-    RTT_ARITHMETIC_GUARD, RTT_ARITHMETIC_OFFSET, RTT_SAMPLE_GUARD, RTT_SAMPLE_OFFSET,
+    expire_board, expire_publication, Observation, Publication, Session, Shown, StationBoard,
+    StationPick, RTT_ARITHMETIC_GUARD, RTT_ARITHMETIC_OFFSET, RTT_SAMPLE_GUARD, RTT_SAMPLE_OFFSET,
     SESSION_END_GUARD, SESSION_END_OFFSET, STATION_LEAVE_GUARD, STATION_LEAVE_OFFSET,
 };
 use skyline::hooks::InlineCtx;
@@ -33,7 +33,7 @@ static DRAW_GEN: AtomicU64 = AtomicU64::new(0);
 static STATE: Mutex<Session> = Mutex::new(Session::new());
 /// What the UI reads. The poll writes it under `lock`; readers `try_lock`
 /// and treat a busy lock as an unavailable publication or board.
-static SHOWN: Mutex<Shown> = Mutex::new(Shown {
+static SHOWN: Mutex<Published> = Mutex::new(Published {
     publication: Publication::off(1),
     board: StationBoard::unavailable(1),
     published_gen: 0,
@@ -43,7 +43,7 @@ static FOREIGN: AtomicU64 = AtomicU64::new(0);
 static CLEANUPS: AtomicU64 = AtomicU64::new(0);
 static DROPPED: AtomicU64 = AtomicU64::new(0);
 
-struct Shown {
+struct Published {
     publication: Publication,
     board: StationBoard,
     published_gen: u64,
@@ -61,40 +61,38 @@ fn try_lock<T>(mutex: &'static Mutex<T>) -> Option<MutexGuard<'static, T>> {
     }
 }
 
-/// Last poll's publication, the session epoch, and the two generations.
-/// A busy lock is an unavailable publication, which no generation can show.
-pub(super) fn current_publication() -> (Publication, u64, u64, u64) {
+/// One draw's reading of the last poll, aged to now. A busy lock is an
+/// unavailable value under generation 0, which no draw generation shows.
+fn read_shown<T>(
+    read: impl FnOnce(&Published, u64) -> T,
+    unavailable: impl FnOnce(u64) -> T,
+) -> Shown<T> {
     let epoch = EPOCH.load(Ordering::Acquire);
-    let (publication, published_gen) = match try_lock(&SHOWN) {
-        Some(shown) => (
-            expire_publication(shown.publication, tick(), epoch),
-            shown.published_gen,
-        ),
-        None => (Publication::unavailable(epoch), 0),
+    let (value, published_gen) = match try_lock(&SHOWN) {
+        Some(shown) => (read(&shown, epoch), shown.published_gen),
+        None => (unavailable(epoch), 0),
     };
-    (
-        publication,
+    Shown {
+        value,
         epoch,
         published_gen,
-        DRAW_GEN.load(Ordering::Acquire),
+        draw_gen: DRAW_GEN.load(Ordering::Acquire),
+    }
+}
+
+/// Last poll's publication.
+pub(super) fn current_publication() -> Shown<Publication> {
+    read_shown(
+        |shown, epoch| expire_publication(shown.publication, tick(), epoch),
+        Publication::unavailable,
     )
 }
 
-/// All-station snapshot from the last poll. A busy lock is unavailable.
-pub(super) fn current_board() -> (StationBoard, u64, u64, u64) {
-    let epoch = EPOCH.load(Ordering::Acquire);
-    let (board, published_gen) = match try_lock(&SHOWN) {
-        Some(shown) => (
-            expire_board(shown.board, tick(), epoch),
-            shown.published_gen,
-        ),
-        None => (StationBoard::unavailable(epoch), 0),
-    };
-    (
-        board,
-        epoch,
-        published_gen,
-        DRAW_GEN.load(Ordering::Acquire),
+/// All-station snapshot from the last poll.
+pub(super) fn current_board() -> Shown<StationBoard> {
+    read_shown(
+        |shown, epoch| expire_board(shown.board, tick(), epoch),
+        StationBoard::unavailable,
     )
 }
 
@@ -105,7 +103,7 @@ fn retire_publication(change: impl FnOnce()) {
     DRAW_GEN.fetch_add(1, Ordering::Release);
 }
 
-fn shown() -> MutexGuard<'static, Shown> {
+fn shown() -> MutexGuard<'static, Published> {
     SHOWN.lock().unwrap_or_else(PoisonError::into_inner)
 }
 

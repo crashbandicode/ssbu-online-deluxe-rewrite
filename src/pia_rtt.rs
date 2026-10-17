@@ -163,19 +163,38 @@ pub fn rtt_matches(identity: RttIdentity, publication: Publication, epoch: u64) 
         }
 }
 
+/// One draw's reading of the last poll: the value, the session epoch, the
+/// generation the poll published under and the current draw generation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Shown<T> {
+    pub value: T,
+    pub epoch: u64,
+    pub published_gen: u64,
+    pub draw_gen: u64,
+}
+
+impl<T> Shown<T> {
+    /// The poll that wrote `value` ran under the current draw generation.
+    pub fn current(&self) -> bool {
+        self.published_gen == self.draw_gen
+    }
+
+    fn with<U>(&self, value: U) -> Shown<U> {
+        Shown {
+            value,
+            epoch: self.epoch,
+            published_gen: self.published_gen,
+            draw_gen: self.draw_gen,
+        }
+    }
+}
+
 /// Measured ping when the publication is current: the diagnostic poll is the
 /// only writer of publication bytes, and a draw shows them only while the
 /// generation it published is still the current one. Otherwise an uncolored blank.
-pub fn present_published(
-    identity: RttIdentity,
-    publication: Publication,
-    session_epoch: u64,
-    published_generation: u64,
-    draw_generation: u64,
-) -> PresentedPing {
-    if published_generation == draw_generation && rtt_matches(identity, publication, session_epoch)
-    {
-        PresentedPing::from_publication(publication)
+pub fn present_published(identity: RttIdentity, shown: &Shown<Publication>) -> PresentedPing {
+    if shown.current() && rtt_matches(identity, shown.value, shown.epoch) {
+        PresentedPing::from_publication(shown.value)
     } else {
         blank_ping()
     }
@@ -206,22 +225,11 @@ pub fn expire_board(board: StationBoard, now_tick: u64, epoch: u64) -> StationBo
 }
 
 /// Ping for one station in this snapshot. A different station's number is not reused.
-pub fn present_station(
-    board: &StationBoard,
-    index: u8,
-    epoch: u64,
-    published_generation: u64,
-    draw_generation: u64,
-) -> PresentedPing {
-    let identity = RttIdentity::Station(index);
-    match board.station(index) {
-        Some(slot) if !board.busy && board.epoch == epoch => present_published(
-            identity,
-            *slot,
-            epoch,
-            published_generation,
-            draw_generation,
-        ),
+pub fn present_station(board: &Shown<StationBoard>, index: u8) -> PresentedPing {
+    match board.value.station(index) {
+        Some(slot) if !board.value.busy && board.value.epoch == board.epoch => {
+            present_published(RttIdentity::Station(index), &board.with(*slot))
+        }
         _ => blank_ping(),
     }
 }
@@ -231,19 +239,13 @@ pub fn present_station(
 /// `NetworkStability` orders Stable < Inconsistent < Unstable. The public manager
 /// FFI is not in the interface crate; this uses that order on the stations whose
 /// rings were published together.
-pub fn aggregate_stability(
-    board: &StationBoard,
-    stations: &[u8],
-    epoch: u64,
-    published_generation: u64,
-    draw_generation: u64,
-) -> Option<Stability> {
-    if board.busy || board.epoch != epoch || published_generation != draw_generation {
+pub fn aggregate_stability(board: &Shown<StationBoard>, stations: &[u8]) -> Option<Stability> {
+    if board.value.busy || board.value.epoch != board.epoch || !board.current() {
         return None;
     }
     stations
         .iter()
-        .filter_map(|index| board.station(*index)?.peer())
+        .filter_map(|index| board.value.station(*index)?.peer())
         .map(|(stability, _)| stability)
         .max_by_key(|stability| *stability as u8)
 }
@@ -863,6 +865,15 @@ mod tests {
         Publication::from_reading(Measured(20), 10, PER_MS, epoch, peer)
     }
 
+    fn shown<T>(value: T, epoch: u64, published_gen: u64, draw_gen: u64) -> Shown<T> {
+        Shown {
+            value,
+            epoch,
+            published_gen,
+            draw_gen,
+        }
+    }
+
     #[test]
     fn local_is_excluded_index_zero_is_valid_and_bad_rtts_keep_the_prior_sample() {
         let mut table = Table::new();
@@ -937,9 +948,9 @@ mod tests {
         assert!(!rtt_matches(RttIdentity::Station(9), old, 1));
         let republished = published(9, 1);
         assert!(rtt_matches(RttIdentity::Station(9), republished, 1));
-        let shown = present_published(RttIdentity::Station(9), republished, 1, 0, 0);
-        assert_eq!(shown.opponent, "20ms");
-        let hidden = present_published(RttIdentity::Station(4), republished, 1, 0, 0);
+        let visible = present_published(RttIdentity::Station(9), &shown(republished, 1, 0, 0));
+        assert_eq!(visible.opponent, "20ms");
+        let hidden = present_published(RttIdentity::Station(4), &shown(republished, 1, 0, 0));
         assert_eq!(hidden, blank_ping());
         assert!(!rtt_matches(RttIdentity::Station(9), republished, 2));
         assert!(!rtt_matches(RttIdentity::Baseline, old, 2));
@@ -953,22 +964,25 @@ mod tests {
     #[test]
     fn accepted_cleanup_hides_the_old_publication_until_poll() {
         let old = published(4, 1);
-        let shown = |identity: RttIdentity, publication: Publication, published: u64, draw: u64| {
-            present_published(identity, publication, 1, published, draw).opponent == "20ms"
-        };
-        assert!(shown(RttIdentity::Station(4), old, 0, 0));
-        assert!(shown(RttIdentity::Baseline, old, 0, 0));
+        let visible =
+            |identity: RttIdentity, publication: Publication, published: u64, draw: u64| {
+                let reading = shown(publication, 1, published, draw);
+                assert_eq!(reading.current(), published == draw);
+                present_published(identity, &reading).opponent == "20ms"
+            };
+        assert!(visible(RttIdentity::Station(4), old, 0, 0));
+        assert!(visible(RttIdentity::Baseline, old, 0, 0));
         for draw in 1..3 {
-            assert!(!shown(RttIdentity::Baseline, old, 0, draw));
-            assert!(!shown(RttIdentity::Station(4), old, 0, draw));
+            assert!(!visible(RttIdentity::Baseline, old, 0, draw));
+            assert!(!visible(RttIdentity::Station(4), old, 0, draw));
         }
-        assert!(shown(RttIdentity::Station(7), published(7, 1), 4, 4));
-        assert!(shown(RttIdentity::Baseline, old, 2, 2));
+        assert!(visible(RttIdentity::Station(7), published(7, 1), 4, 4));
+        assert!(visible(RttIdentity::Baseline, old, 2, 2));
         let replacement = published(9, 1);
-        assert!(shown(RttIdentity::Station(9), replacement, 2, 2));
-        assert!(!shown(RttIdentity::Station(4), replacement, 2, 2));
+        assert!(visible(RttIdentity::Station(9), replacement, 2, 2));
+        assert!(!visible(RttIdentity::Station(4), replacement, 2, 2));
         let blank = Publication::unavailable(1);
-        assert!(!shown(RttIdentity::Baseline, blank, 2, 2));
+        assert!(!visible(RttIdentity::Baseline, blank, 2, 2));
     }
 
     #[test]
@@ -1188,23 +1202,26 @@ mod tests {
         sample(&mut session, obs(9, 1, 20, now), 1, Index(9));
         let board = session.board_for(now, 1, [4, 9]);
         assert_eq!((board.len, board.busy), (2, false));
-        assert_eq!(present_station(&board, 4, 1, 3, 3).opponent, "5005ms");
-        assert_eq!(present_station(&board, 9, 1, 3, 3).opponent, "20ms");
-        assert_eq!(present_station(&board, 2, 1, 3, 3).opponent, "---");
-        assert_eq!(present_station(&board, 4, 1, 3, 4).opponent, "---");
-        let worst = aggregate_stability(&board, &[4, 9], 1, 3, 3);
+        let current = shown(board, 1, 3, 3);
+        assert_eq!(present_station(&current, 4).opponent, "5005ms");
+        assert_eq!(present_station(&current, 9).opponent, "20ms");
+        assert_eq!(present_station(&current, 2).opponent, "---");
+        assert_eq!(present_station(&shown(board, 1, 3, 4), 4).opponent, "---");
+        let worst = aggregate_stability(&current, &[4, 9]);
         assert_eq!(worst, Some(Stability::Unstable));
         let stable = Some(Stability::Stable);
-        assert_eq!(aggregate_stability(&board, &[9], 1, 3, 3), stable);
-        let aged = expire_board(board, TIMEOUT, 1);
-        assert_eq!(present_station(&aged, 4, 1, 3, 3).opponent, "---");
-        assert_eq!(present_station(&aged, 9, 1, 3, 3).opponent, "20ms");
-        assert_eq!(aggregate_stability(&aged, &[4, 9], 1, 3, 3), stable);
+        assert_eq!(aggregate_stability(&current, &[9]), stable);
+        assert_eq!(aggregate_stability(&shown(board, 1, 3, 4), &[9]), None);
+        let aged = shown(expire_board(board, TIMEOUT, 1), 1, 3, 3);
+        assert_eq!(present_station(&aged, 4).opponent, "---");
+        assert_eq!(present_station(&aged, 9).opponent, "20ms");
+        assert_eq!(aggregate_stability(&aged, &[4, 9]), stable);
         assert_eq!(expire_board(board, now, 2), StationBoard::unavailable(2));
         let busy = StationBoard::busy(1);
         assert_eq!(expire_board(busy, now, 1), busy);
-        assert_eq!(present_station(&busy, 9, 1, 3, 3).opponent, "---");
-        assert_eq!(aggregate_stability(&busy, &[9], 1, 3, 3), None);
+        let busy = shown(busy, 1, 3, 3);
+        assert_eq!(present_station(&busy, 9).opponent, "---");
+        assert_eq!(aggregate_stability(&busy, &[9]), None);
         let many = session.board_for(now, 1, [0u8; BOARD_CAP + 3]);
         assert_eq!(usize::from(many.len), BOARD_CAP);
     }

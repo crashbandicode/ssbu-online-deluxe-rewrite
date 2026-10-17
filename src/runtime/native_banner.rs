@@ -346,9 +346,7 @@ fn telemetry(room: Option<&str>) -> Option<Telemetry> {
 fn css_remote() -> (Vec<RemoteLine>, Option<[u8; 4]>) {
     let frame = crate::peer_transport::peer_frame();
     let identity = crate::peer_transport::display_identity(frame.selection);
-    let (publication, epoch, published_gen, draw_gen) = pia_rtt::current_publication();
-    let ping =
-        crate::pia_rtt::present_published(identity, publication, epoch, published_gen, draw_gen);
+    let ping = crate::pia_rtt::present_published(identity, &pia_rtt::current_publication());
     let color = ping.color.map(native_banner::ping_bytes);
     if !crate::peer_transport::station_connected(frame.selection) {
         return (Vec::new(), color);
@@ -361,7 +359,7 @@ fn arena_remotes() -> (Vec<RemoteLine>, Option<[u8; 4]>) {
     if roster.busy {
         return (Vec::new(), None);
     }
-    let (board, epoch, published_gen, draw_gen) = pia_rtt::current_board();
+    let board = pia_rtt::current_board();
     let mut listed = Vec::new();
     let mut lines = Vec::new();
     for peer in roster.peers.iter().take(usize::from(roster.len)) {
@@ -369,15 +367,13 @@ fn arena_remotes() -> (Vec<RemoteLine>, Option<[u8; 4]>) {
             continue;
         };
         listed.push(index);
-        let presented =
-            crate::pia_rtt::present_station(&board, index, epoch, published_gen, draw_gen);
+        let presented = crate::pia_rtt::present_station(&board, index);
         let suffix = native_banner::interface_suffix(peer.interface);
         lines.push(remote_line(peer, format!("{}{suffix}", presented.opponent)));
     }
-    let color =
-        crate::pia_rtt::aggregate_stability(&board, &listed, epoch, published_gen, draw_gen)
-            .map(crate::pia_rtt::ping_rgba)
-            .map(native_banner::ping_bytes);
+    let color = crate::pia_rtt::aggregate_stability(&board, &listed)
+        .map(crate::pia_rtt::ping_rgba)
+        .map(native_banner::ping_bytes);
     (lines, color)
 }
 
