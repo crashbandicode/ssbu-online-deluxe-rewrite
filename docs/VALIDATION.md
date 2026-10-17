@@ -2487,6 +2487,46 @@ gaps stated there: no NSO session, no first boot without `config.ini`, no
 plugin option edit, no own-page plugin, no console run. Both Eden profiles
 were restored afterwards (journal `RESTORED`, SHA-256 verified).
 
+### 0.5.3 — 2026-10-17: Tier 1 code reduction — 21 helpers with no production caller removed (host tests, Skyline build)
+
+Operator rule from the coverage campaign: code is not kept because a unit
+test exercises it. Commit 38179f7 (a Fable worktree agent, reviewed by the
+primary) removes the 21 production helpers that `coverage-1015/REPORT.md`
+§4 Tier 1 found referenced only from tests or from nothing: `menu::
+platform_label`/`net_profile_value`, `render_policy::profile_text`,
+`native_banner::local_update_accepted`/`displayed_network_count`/`walk_pane`/
+`text_fits` (and the `GraphNode` struct only `walk_pane` used), `pia_rtt::
+next_draw_generation` and the `Session::accept_sample/leave/cleanup/poll`
+wrappers (the `*_for` variants with an explicit `StationPick` are the
+production API), the `render_trace` const decoders `core_info_parts`/
+`pointer_from_halves`/`flush_narrow_parts`/`flush_plan_parts`, `resolution::
+Policy::dropped_transitions` and the free `update_settings`/`clear_reports`,
+`peer_transport::shown_peer`, `peer_passive::packet_prefix_accepted`. 154
+production lines gone, 284 deletions against 126 insertions overall. No
+behaviour change: no call site outside `mod tests` existed. Tests: four
+assertions/tests that specified nothing but a retired helper were deleted;
+the rest were rewritten against the production path (`profile_status`/
+`awaiting_index` for the profile label cases, `*_for(..., StationPick::
+Absent)`, `peer_frame().peer`, `transition_dropped`, and `perf_scaler`'s
+fixtures now use `resolution::reset_scene`/`retarget` instead of the removed
+wrappers — same asserted state; `reset_scene` also sets `dirty`, which no
+test observes); the render-trace decoders and the pane-walk oracle moved
+into their files' test modules so the encoder and `CSS_TITLE_WALK` tests
+still hold. One correction to the report: the resolution wrappers did have
+callers, in `perf_scaler.rs` tests. `PIA_MAGIC` gained a host-only
+`allow(dead_code)` (its production user `runtime/peer_observer.rs` is
+Switch-only). Gates: `cargo clippy --all-targets -- -D warnings`, 308 host
+tests, `cargo build --no-default-features`, Skyline release package
+`artifacts/9edfcedb1abb12cc/` (build `0.5.3-38179f792544-dirty-1792196741`,
+"dirty" from an untracked worktree directory since removed; NRO 1,486,848 B,
+SHA-256 `9edfcedb1abb12cca229b33f4f6346e708e93a9bb1de88b89725e0c87221cad6`).
+Not run in Eden or on the console; nothing in the change executes at run
+time. The NSO coverage campaign that would give the Tier 3 (Arena/Quickplay)
+evidence started the same evening on the LAN-NSO Eden but stopped at the
+Online tile (error 2306-0502: the fixture's companion service was not
+listening on 8443/8444); its partial profiles are in the evidence root's
+`coverage-nso-1016/`.
+
 ### 0.5.3 — 2026-10-16: `early_present` and `dispatcher_backoff` switches, Eden before/after clips (branch `docs/early-present-backoff-toggles`)
 
 Operator: make the early presentation and the dispatcher backoff switchable
