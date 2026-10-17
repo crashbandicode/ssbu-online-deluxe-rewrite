@@ -2527,6 +2527,54 @@ Online tile (error 2306-0502: the fixture's companion service was not
 listening on 8443/8444); its partial profiles are in the evidence root's
 `coverage-nso-1016/`.
 
+### 0.5.3 — 2026-10-17: reduction candidate ecb9923 benchmarked in Eden (latency, quota frame rate, captures, plugin pages)
+
+Operator: "Rerun the benchmarks after for frame reduction and test correction."
+Candidate package `artifacts/3f8855a2bec44ecc/` (build `0.5.3-ecb99238f02b-1792210040`,
+NRO 1,437,696 B) with the FX Control candidate `artifacts-fx/0c7e626d64f35128/`
+(SDK 5.0.0). All four passes are Eden measurements with Astra low driving the game
+and the primary running the scripts; evidence root `bench-reduction-1017/` (RESULTS.md,
+summary-table.md, reviewed-trials.json, trial images and CSVs, screenshots, receipts).
+
+- **Latency response trials, the README table (frame reduction).** Method and tools of
+  the 0.5.2 run (LATENCY_METHODOLOGY.md; Eden CLI-control `10bcd2d849`, isolated
+  profile, Training, Sephiroth vs Kazuya CPU Stop, `INPUT_RECEIPT`, 640×360 captures,
+  four profiles × two injection phases × three 20-image trials, replacement groups for
+  the two groups with a nonconsecutive window). Included R, 0.5.2 in brackets: Vanilla
+  6, 6, 6 / delayed 6, 6, 6, 7, 6 [6, 6, 6 / 6, 6, 6]; LessLag 3, 3, 3 / 3, 3, 3, 3
+  [3, 3, 3 / 3, 3, 3]; LLUltra 2, 2, 2 / 2, 2, 2 [2, 2, 2 / 2, 3, 3]; LLDoubles 4, 4, 4 /
+  4, 4, 4 [4, 4, 4 / 4, 4, 5]. Three trials excluded for a nonconsecutive present
+  identity (raw R 3, 3, 7), one manual pose review (reference image caught the fighter
+  settling; crouch at image 11, R 6). The savings (3 / 4 / 2 captured frames) are
+  unchanged. Profile switches needed ZR held (the 0.5.3 live-fight rule, which the
+  0.5.2 run predates).
+- **Frame rate under the console-calibrated quota.** Same Eden, profile and INI as the
+  2026-10-16 clips, `CPUQuota=175%`: character select 59.971 / 60.042 / 59.980 fps,
+  Training (Pyra vs Terry specials) 59.962 / 60.049 / 60.015 fps, against 59.98 / 60.04
+  / 60.02 and 59.98 / 60.06 / 59.99 on 2026-10-16. Performance page 60 and 58 fps,
+  Backoff 266/s and 1554/s at 50 µs.
+- **Capture correctness.** With `CAPTURE_CSS` and `CAPTURE_MATCH` present the
+  consolidated writer produced five CSS captures (30 s, 1,798–1,800 samples), a Training
+  capture (144.5 s), a Singles match (99.7 s) and the attract-mode Doubles demo (26.5 s),
+  every file footer `# complete=1`, and the unchanged `tools/analyze_timing.py` and
+  `tools/analyze_render_trace.py` parsed all of them; the latency run's ten 30 s
+  captures likewise. The group script learned to wait for the footer, because the new
+  writer streams from arm time. Console repeat of one timing, one CSS and one match
+  capture still owed for the parity claim.
+- **Plugin pages.** SDK 5 demo and FX Control candidate loaded together: FX registered
+  `99 0x1 0x4`; page cycle Settings → Plugins → FX Control → Performance → hidden;
+  Demo edits persisted (`enabled=on`, `mode=b`), FX fighter toggle and move variant
+  persisted and reverted through the INI, headers skipped by the selection. Not
+  regressions: the demo's Status row cycles Ready → Degraded → Failed by design; Training
+  draws the vertical tables (the compact strip is for ready Singles/Doubles); the tall FX
+  own page overlaps Training's "Total Damage" label at the right edge (pre-existing).
+  A version-2 registration in Eden was not run (host test covers the replay plugin's
+  shape).
+
+Profiles restored and verified after each session; no Eden, display or unit of another
+agent was touched. The candidate is not on the card; the operator's Switch run with the
+FX passes is the acceptance.
+
 ### 0.5.3 — 2026-10-17: captures and traces consolidated (host tests and Python analyzers only)
 
 Operator order after the capture plan (evidence root
