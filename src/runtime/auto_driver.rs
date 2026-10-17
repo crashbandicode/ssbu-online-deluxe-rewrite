@@ -256,7 +256,7 @@ pub(crate) fn set_scene(
             generation,
         );
         store_cleanup(active, generation);
-        super::match_capture::note_scene(previous_status, status);
+        super::capture::note_scene(previous_status, status);
         #[cfg(feature = "coverage")]
         super::coverage::note_scene(previous_status as u8, status as u8);
     }

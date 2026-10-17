@@ -54,7 +54,11 @@ pub(super) fn poll(iteration: u64) {
     let class = classify(mhz) as u8;
     let changed = LAST_CLASS.swap(class, Ordering::Relaxed) != class;
     if changed || iteration.is_multiple_of(LOG_EVERY) {
-        record(Code::ClockSample, u64::from(mhz), HOC_BITS.load(Ordering::Relaxed));
+        record(
+            Code::ClockSample,
+            u64::from(mhz),
+            HOC_BITS.load(Ordering::Relaxed),
+        );
     }
 }
 
@@ -69,7 +73,7 @@ fn sample() -> u32 {
         std::hint::black_box(acc);
         best = best.min(end.saturating_sub(start));
     }
-    let mhz = crate::clock_probe::mhz_from_sample(cycles, best, crate::timing::TICK_HZ);
+    let mhz = crate::clock_probe::mhz_from_sample(cycles, best, crate::capture::TICK_HZ);
     MHZ.store(mhz, Ordering::Relaxed);
     mhz
 }

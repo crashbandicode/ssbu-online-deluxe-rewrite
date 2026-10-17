@@ -107,7 +107,7 @@ unsafe fn deluxe_rewrite_select_index(ctx: &mut InlineCtx) {
     // A live two-texture policy emits 0 or 1 so that later %3 stays an identity.
     let output = crate::render_policy::index_value(input, decision, armed);
     ctx.registers[9].set_x(output as u64);
-    super::api_trace::mark_thread(crate::render_trace::KIND_INDEX, output as i32);
+    super::api_trace::mark_thread(crate::capture::KIND_INDEX, output as i32);
     INDEX_CALLS.fetch_add(1, Ordering::Relaxed);
     INDEX_PAIR.store(((input as u64) << 32) | output as u64, Ordering::Relaxed);
 }
@@ -180,38 +180,10 @@ unsafe fn deluxe_rewrite_flush_dispatches(object: *mut u8, flag: u32) {
     if fields && !object.is_null() {
         // Sizes independently checked against host ASM: u8, u32, u64, u8.
         // This is the engine-owned object argument, never a guessed global.
-        // The extra reads exist only while a finite API trace is active.
-        let tick = super::api_trace::start();
-        let pre = if tick != 0 {
-            Some(read_flush_fields(object))
-        } else {
-            None
-        };
-        let gate = match pre {
-            Some(sample) => sample.slot_18,
-            None => *object.add(0x1d18),
-        };
-        if gate != 0 && !skip_fields {
+        if *object.add(0x1d18) != 0 && !skip_fields {
             let previous = *object.add(0x1d20).cast::<u32>();
             *object.add(0x1d30).cast::<u64>() = u64::from((!previous) & 1);
             *object.add(0x1d28) = 1;
-        }
-        if let Some(pre) = pre {
-            let post = read_flush_fields(object);
-            for event in crate::render_trace::flush_field_events(
-                tick,
-                crate::render_trace::FlushPlanDiagnostic {
-                    calls: calls as i32,
-                    store_ran: pre.slot_18 != 0 && !skip_fields,
-                    arm_drain,
-                    generation,
-                    object: object as usize as u64,
-                },
-                pre,
-                post,
-            ) {
-                super::api_trace::TRACE.observe(event);
-            }
         }
     }
     FLUSH_CALLS.fetch_add(1, Ordering::Relaxed);
@@ -236,16 +208,6 @@ unsafe fn deluxe_rewrite_flush_dispatches(object: *mut u8, flag: u32) {
         && crate::render_policy::present_at_flush(crate::render_policy::load_decision())
     {
         super::nvn::present_at_flush();
-    }
-}
-
-/// Raw widths at the LessLag flush slots. Caller has a non-null object.
-unsafe fn read_flush_fields(object: *mut u8) -> crate::render_trace::FlushFields {
-    crate::render_trace::FlushFields {
-        slot_18: *object.add(0x1d18),
-        slot_20: *object.add(0x1d20).cast::<u32>(),
-        slot_28: *object.add(0x1d28),
-        slot_30: *object.add(0x1d30).cast::<u64>(),
     }
 }
 

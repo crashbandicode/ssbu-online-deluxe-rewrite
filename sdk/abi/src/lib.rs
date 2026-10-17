@@ -48,15 +48,17 @@
 
 use core::ffi::{c_char, c_void};
 
-/// Descriptor revision carried in [`PluginDesc::abi_version`]. Version 2 adds
-/// [`OptionDesc::choice_tones`] and [`OPTION_FLAG_READ_ONLY`]; version 3 keeps
-/// the same layouts and adds [`PLUGIN_FLAG_OWN_PAGE`] and [`MAX_OPTIONS_V3`];
-/// version 4 keeps the layouts again and adds the row kinds
-/// [`OPTION_FLAG_HEADER`] and [`OPTION_FLAG_INLINE`] and the larger
-/// [`MAX_OPTIONS`]. The host also accepts version 1 to 3 descriptors.
+/// Descriptor revision carried in [`PluginDesc::abi_version`]. Versions 2, 3
+/// and 4 share one layout ([`OptionDesc`], 56 bytes); each added flag bits
+/// and widened the option limit. Hosts since Deluxe 0.5.3 read every
+/// accepted version under the version 4 rules, so a version 2 or 3
+/// descriptor is validated exactly like a version 4 one.
 pub const ABI_VERSION: u32 = 4;
-/// Oldest descriptor revision the host accepts.
-pub const MIN_ABI_VERSION: u32 = 1;
+/// Oldest descriptor revision the host accepts. Versions 2 and 3 share the
+/// version 4 layout and are read under the version 4 rules. Version 1 (a
+/// 48-byte row without tones) is refused with [`REGISTER_ERR_ABI`]; no
+/// released plugin ever sent it.
+pub const MIN_ABI_VERSION: u32 = 2;
 /// Revision carried in [`PluginApiV1::abi_version`]. The exported table shape
 /// has not changed, so consumers built against version 1 keep matching it.
 pub const TABLE_VERSION: u32 = 1;
@@ -69,17 +71,10 @@ pub const API_SYMBOL_C: &[u8] = b"ssbu_online_deluxe_plugin_api_v1\0";
 
 /// Most plugins one host accepts.
 pub const MAX_PLUGINS: usize = 16;
-/// Most options one plugin may declare with a version 4 descriptor (a row per
-/// fighter plus a header and an inline row per move fits). Hosts read
-/// version 3 against [`MAX_OPTIONS_V3`] and versions 1 and 2 against
-/// [`MAX_OPTIONS_V2`].
+/// Most options one plugin may declare (a row per fighter plus a header and
+/// a variant row per move fits). Hosts before Deluxe 0.5.3 accepted 32 for a
+/// version 3 descriptor and 8 for version 2.
 pub const MAX_OPTIONS: usize = 64;
-/// Option limit for descriptor version 3, and for every host that predates
-/// version 4.
-pub const MAX_OPTIONS_V3: usize = 32;
-/// Option limit for descriptor versions 1 and 2, and for every host that
-/// predates version 3.
-pub const MAX_OPTIONS_V2: usize = 8;
 /// Most choices one option may declare. One choice makes a read-only status row.
 pub const MAX_CHOICES: usize = 16;
 /// Longest `id` in bytes, excluding the terminator. Lowercase ASCII, digits, `_`.
@@ -93,11 +88,9 @@ pub const MAX_PATH_LEN: usize = 255;
 /// Required prefix of `config_path`.
 pub const CONFIG_PATH_PREFIX: &str = "sd:/";
 
-/// `PluginDesc::flags` (version 3): draw this plugin on its own page in the
-/// window cycle (settings → plugins → each own page → performance), titled
-/// with the plugin label, instead of as a group on the shared Plugins page.
-/// Hosts before version 3 reject any non-zero `PluginDesc::flags`, so the
-/// SDK clears it when it retries with an older descriptor.
+/// `PluginDesc::flags`: draw this plugin on its own page in the window cycle
+/// (settings → plugins → each own page → performance), titled with the
+/// plugin label, instead of as a group on the shared Plugins page.
 pub const PLUGIN_FLAG_OWN_PAGE: u32 = 1 << 0;
 
 /// Exported host function name (0.5.0): `extern "C" fn() -> u32` returning
@@ -120,20 +113,19 @@ pub const ONLINE_CONTEXT_TRAINING: u32 = 1 << 3;
 
 /// `OptionDesc::flags`: never write this option even when the plugin persists.
 pub const OPTION_FLAG_NO_PERSIST: u32 = 1 << 0;
-/// `OptionDesc::flags` (version 2): a pure status row. Left/Right do nothing,
-/// `request` is never called, and the value shown is whatever `current`
-/// reports, so a multi-choice row can display state such as Ok/Warn/Fail.
+/// `OptionDesc::flags`: a pure status row. Left/Right do nothing, `request`
+/// is never called, and the value shown is whatever `current` reports, so a
+/// multi-choice row can display state such as Ok/Warn/Fail.
 pub const OPTION_FLAG_READ_ONLY: u32 = 1 << 1;
-/// `OptionDesc::flags` (version 4): a header. The row shows only its label,
-/// flush with the page: Up/Down skip it, Left/Right never reach it, `current`
-/// and `request` are never called and nothing is persisted. `choice_count`
-/// must be 0 and `choices`, `choice_values` and `choice_tones` null. Cannot
-/// be combined with [`OPTION_FLAG_INLINE`].
+/// `OptionDesc::flags`: a header. The row shows only its label, flush with
+/// the page: Up/Down skip it, Left/Right never reach it, `current` and
+/// `request` are never called and nothing is persisted. `choice_count` must
+/// be 0 and `choices`, `choice_values` and `choice_tones` null. Cannot be
+/// combined with [`OPTION_FLAG_INLINE`].
 pub const OPTION_FLAG_HEADER: u32 = 1 << 2;
-/// `OptionDesc::flags` (version 4): draw every choice on the row's one line,
-/// in order, with the current choice marked (`[Choice]`, in its tone) instead
-/// of showing the current choice alone. Left/Right still move the choice and
-/// the compact strip still shows `Label:Value`.
+/// `OptionDesc::flags`: accepted and drawn as an ordinary value row
+/// (`Label: current choice`). Hosts 0.5.3 before the consolidation drew every
+/// choice on the line; no released plugin sends this bit.
 pub const OPTION_FLAG_INLINE: u32 = 1 << 3;
 
 /// `choice_tones` entry: default text colour.
@@ -212,55 +204,24 @@ pub struct OptionDesc {
     pub choice_tones: *const u8,
 }
 
-/// One menu row as laid out by descriptor version 1 (48 bytes). Hosts read
-/// this layout when [`PluginDesc::abi_version`] is 1.
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-pub struct OptionDescV1 {
-    pub id: *const c_char,
-    pub label: *const c_char,
-    pub choices: *const *const c_char,
-    pub choice_count: u32,
-    pub flags: u32,
-    pub config_key: *const c_char,
-    pub choice_values: *const c_char,
-}
-
-impl OptionDescV1 {
-    /// Widens a version 1 row to the current layout with neutral tones.
-    pub const fn widen(self) -> OptionDesc {
-        OptionDesc {
-            id: self.id,
-            label: self.label,
-            choices: self.choices,
-            choice_count: self.choice_count,
-            flags: self.flags,
-            config_key: self.config_key,
-            choice_values: self.choice_values.cast::<*const c_char>(),
-            choice_tones: core::ptr::null(),
-        }
-    }
-}
-
 /// One plugin's registration.
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct PluginDesc {
-    /// `size_of::<PluginDesc>()` (72 in versions 1 and 2).
+    /// `size_of::<PluginDesc>()` (72).
     pub struct_size: u32,
-    /// [`ABI_VERSION`] for the layout of `options`: 2 for [`OptionDesc`],
-    /// 1 for [`OptionDescV1`]. A host that predates version 2 answers
-    /// [`REGISTER_ERR_ABI`] to a version 2 descriptor; the SDK then retries
-    /// with version 1 and no tones.
+    /// Descriptor revision, [`MIN_ABI_VERSION`] to [`ABI_VERSION`]; the SDK
+    /// always sends [`ABI_VERSION`]. Any other value answers
+    /// [`REGISTER_ERR_ABI`].
     pub abi_version: u32,
     /// Stable identifier, unique across plugins. Not displayed.
     pub id: *const c_char,
-    /// Display label. A single-option plugin shows this label in the strip.
+    /// Display label. Heads the plugin's rows on the shared Plugins page and
+    /// titles its own page.
     pub label: *const c_char,
     pub options: *const OptionDesc,
     pub option_count: u32,
-    /// `PLUGIN_FLAG_*` bits (version 3: [`PLUGIN_FLAG_OWN_PAGE`]); must be
-    /// zero in versions 1 and 2.
+    /// `PLUGIN_FLAG_*` bits ([`PLUGIN_FLAG_OWN_PAGE`]); zero otherwise.
     pub flags: u32,
     /// Opaque pointer handed back to every callback.
     pub user: *mut c_void,
@@ -348,14 +309,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn layout_is_fixed_per_version() {
-        assert_eq!(core::mem::size_of::<OptionDescV1>(), 48);
+    fn layout_is_fixed_and_versions_two_to_four_are_accepted() {
         assert_eq!(core::mem::size_of::<OptionDesc>(), 56);
         assert_eq!(core::mem::size_of::<PluginDesc>(), 72);
         assert_eq!(core::mem::size_of::<PluginApiV1>(), 32);
         assert_eq!(TABLE_VERSION, 1);
-        assert_eq!(ABI_VERSION, 4);
-        assert_eq!((MAX_OPTIONS, MAX_OPTIONS_V3, MAX_OPTIONS_V2), (64, 32, 8));
+        assert_eq!((MIN_ABI_VERSION, ABI_VERSION), (2, 4));
+        assert_eq!(MAX_OPTIONS, 64);
         assert_eq!(OPTION_FLAG_HEADER & OPTION_FLAG_INLINE, 0);
         assert_eq!(
             (OPTION_FLAG_HEADER | OPTION_FLAG_INLINE)
@@ -366,11 +326,11 @@ mod tests {
         assert!(table_matches(32, 1));
         assert!(!table_matches(32, 2));
         assert!(!table_matches(24, 1));
-        assert!(descriptor_version_supported(1));
+        assert!(!descriptor_version_supported(0));
+        assert!(!descriptor_version_supported(1));
         assert!(descriptor_version_supported(2));
         assert!(descriptor_version_supported(3));
         assert!(descriptor_version_supported(4));
-        assert!(!descriptor_version_supported(0));
         assert!(!descriptor_version_supported(5));
         assert_eq!(ONLINE_SYMBOL_C.len(), ONLINE_SYMBOL.len() + 1);
         assert_eq!(ONLINE_SYMBOL_C[ONLINE_SYMBOL.len()], 0);
@@ -383,19 +343,6 @@ mod tests {
         );
         assert!(valid_tones(&[0, 1, 2, 3]));
         assert!(!valid_tones(&[0, 4]));
-        let v1 = OptionDescV1 {
-            id: core::ptr::null(),
-            label: core::ptr::null(),
-            choices: core::ptr::null(),
-            choice_count: 2,
-            flags: OPTION_FLAG_NO_PERSIST,
-            config_key: core::ptr::null(),
-            choice_values: core::ptr::null(),
-        };
-        let widened = v1.widen();
-        assert_eq!(widened.choice_count, 2);
-        assert_eq!(widened.flags, OPTION_FLAG_NO_PERSIST);
-        assert!(widened.choice_tones.is_null());
         assert_eq!(API_SYMBOL_C.len(), API_SYMBOL.len() + 1);
         assert_eq!(&API_SYMBOL_C[..API_SYMBOL.len()], API_SYMBOL.as_bytes());
         assert_eq!(API_SYMBOL_C[API_SYMBOL.len()], 0);

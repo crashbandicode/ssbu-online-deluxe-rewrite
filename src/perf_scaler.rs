@@ -1,8 +1,11 @@
-//! Eight-entry cut-in and Sephiroth tick policy from the quickplay fork.
+//! Eight-entry cut-in tick policy from the quickplay fork, plus the 0.5.2
+//! move-table and adaptive triggers.
 //!
 //! Tokens are the resolution report tokens. This module does not read or write
 //! the game. The runtime calls it only after logical Main is armed and
-//! count-only mode is off.
+//! count-only mode is off. The fork's second trigger, Sephiroth's full-charge
+//! Gigaflare, was removed on 2026-10-17: the console measurement did not
+//! justify it.
 
 use crate::drs_triggers::MoveSet;
 use crate::resolution::{self, Level, PushResult, ReportToken};
@@ -17,10 +20,6 @@ pub const CUT_IN_OFFSET: usize = 0x06a_7100;
 /// 13.0.5 entry word at [`CUT_IN_OFFSET`].
 pub const CUT_IN_PROLOGUE: u32 = 0xd106_83ff;
 /// skyline-smash bed642e `lua_const.rs`.
-pub const EDGE_KIND: i32 = 0x59;
-pub const EDGE_SPECIAL_N_SHOOT: i32 = 0x1e5;
-pub const EDGE_CHARGE_KIND: i32 = 0x1100_0005;
-pub const CHARGE_FULL: i32 = 3;
 pub const ENTRY_ID_WORK: i32 = 0x1000_0000;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -59,7 +58,8 @@ struct CutSlot {
     token: AtomicU32,
 }
 
-struct EdgeSlot {
+/// One report with no cooldown: the adaptive trigger.
+struct ReportSlot {
     active: AtomicBool,
     token: AtomicU32,
 }
@@ -72,19 +72,17 @@ pub struct MainTick {
     pub kind: i32,
     pub slow: bool,
     pub status: i32,
-    pub charge: i32,
 }
 
 impl MainTick {
     /// A present entry with no slow-motion flag; tests and the runtime fill the rest.
-    pub const fn new(entry_id: i32, kind: i32, status: i32, charge: i32) -> Self {
+    pub const fn new(entry_id: i32, kind: i32, status: i32) -> Self {
         Self {
             entry_id,
             entry_present: true,
             kind,
             slow: false,
             status,
-            charge,
         }
     }
 }
@@ -116,7 +114,7 @@ impl CutSlot {
     }
 }
 
-impl EdgeSlot {
+impl ReportSlot {
     const fn new() -> Self {
         Self {
             active: AtomicBool::new(false),
@@ -128,10 +126,9 @@ impl EdgeSlot {
 pub struct Scaler {
     base: AtomicU8,
     cut_in: [CutSlot; ENTRIES],
-    edge: [EdgeSlot; ENTRIES],
     moves: [MoveSlot; ENTRIES],
     /// 0.5.2 experiment: the adaptive (frame-interval) report, one for the scene.
-    adaptive: EdgeSlot,
+    adaptive: ReportSlot,
     move_pushes: AtomicU64,
     move_pops: AtomicU64,
     adaptive_pushes: AtomicU64,
@@ -155,9 +152,8 @@ impl Scaler {
         Self {
             base: AtomicU8::new(base as u8),
             cut_in: [const { CutSlot::new() }; ENTRIES],
-            edge: [const { EdgeSlot::new() }; ENTRIES],
             moves: [const { MoveSlot::new() }; ENTRIES],
-            adaptive: EdgeSlot::new(),
+            adaptive: ReportSlot::new(),
             move_pushes: AtomicU64::new(0),
             move_pops: AtomicU64::new(0),
             adaptive_pushes: AtomicU64::new(0),
@@ -336,76 +332,24 @@ impl Scaler {
         Action::Cooling { left }
     }
 
-    pub fn sephiroth_tick(
-        &self,
-        entry_id: i32,
-        entry_present: bool,
-        status: i32,
-        charge: i32,
-    ) -> Action {
-        let Some(index) = entry_slot(entry_id, entry_present) else {
-            return Action::Ignored;
-        };
-        let slot = &self.edge[index];
-        let shooting = status == EDGE_SPECIAL_N_SHOOT && charge >= CHARGE_FULL;
-        if shooting {
-            if slot
-                .active
-                .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-                .is_err()
-            {
-                return Action::Held;
-            }
-            match resolution::push_report(intensive_level(self.base_level())) {
-                PushResult::Stored(token) => {
-                    slot.token.store(pack(token), Ordering::Release);
-                    Action::Started
-                }
-                PushResult::Ignored | PushResult::Full => {
-                    slot.active.store(false, Ordering::Release);
-                    Action::NotStored
-                }
-            }
-        } else if slot.active.load(Ordering::Acquire) {
-            if slot.token.load(Ordering::Acquire) == 0 {
-                return Action::Held;
-            }
-            pop_packed(&slot.token);
-            slot.active.store(false, Ordering::Release);
-            Action::Ended
-        } else {
-            Action::Idle
-        }
-    }
-
-    /// Both fork callbacks for one Main tick, plus the 0.5.2 move table.
-    /// Sephiroth runs only for Edge. The cut-in cooldown runs for every
-    /// present entry. `moves` is the enabled catalog mask (none = off).
-    pub fn on_main(
-        &self,
-        tick: MainTick,
-        moves: MoveSet,
-    ) -> (Action, Action, (Action, Option<u8>)) {
+    /// The cut-in cooldown for one Main tick, plus the 0.5.2 move table. The
+    /// cooldown runs for every present entry. `moves` is the enabled catalog
+    /// mask (none = off).
+    pub fn on_main(&self, tick: MainTick, moves: MoveSet) -> (Action, (Action, Option<u8>)) {
         let MainTick {
             entry_id,
             entry_present,
             kind,
             slow,
             status,
-            charge,
         } = tick;
         let cut = self.cut_in_tick(entry_id, entry_present, slow);
-        let edge = if kind == EDGE_KIND {
-            self.sephiroth_tick(entry_id, entry_present, status, charge)
-        } else {
-            Action::Ignored
-        };
         let moved = if moves.is_empty() && !self.moves_hold(entry_id, entry_present) {
             (Action::Ignored, None)
         } else {
             self.move_tick(entry_id, entry_present, kind, status, moves)
         };
-        (cut, edge, moved)
+        (cut, moved)
     }
 
     fn moves_hold(&self, entry_id: i32, entry_present: bool) -> bool {
@@ -419,10 +363,6 @@ impl Scaler {
             pop_packed(&slot.token);
             slot.cooldown
                 .store(CUT_IN_COOLDOWN_FRAMES, Ordering::Release);
-        }
-        for slot in &self.edge {
-            slot.active.store(false, Ordering::Release);
-            pop_packed(&slot.token);
         }
         for slot in &self.moves {
             slot.active.store(false, Ordering::Release);
@@ -481,13 +421,15 @@ mod tests {
 
     fn with_reports(base: Level, test: impl FnOnce(&Scaler)) {
         let _guard = LOCK.lock().unwrap_or_else(|err| err.into_inner());
-        resolution::clear_reports();
-        resolution::update_settings(Level::P1080, true);
+        // Production paths only: a scene reset drops live reports, a retarget
+        // sets the base level and the dynamic flag.
+        resolution::reset_scene();
+        resolution::retarget(Level::P1080, true);
         let scaler = Scaler::new(base);
         test(&scaler);
         scaler.clear();
-        resolution::clear_reports();
-        resolution::update_settings(Level::P1080, false);
+        resolution::reset_scene();
+        resolution::retarget(Level::P1080, false);
     }
 
     #[test]
@@ -501,7 +443,6 @@ mod tests {
         assert!(!cut_in_install_allowed(true, 0x5800_0051));
         assert!(!cut_in_install_allowed(true, 0));
         assert!(cut_in_install_allowed(true, CUT_IN_PROLOGUE));
-        assert_eq!(EDGE_CHARGE_KIND, 0x1100_0005);
         assert_eq!(ENTRY_ID_WORK, 0x1000_0000);
     }
 
@@ -561,7 +502,7 @@ mod tests {
     fn stale_token_does_not_pop_a_newer_report() {
         with_reports(Level::P1080, |scaler| {
             assert_eq!(scaler.cut_in_start(1, true), Action::Started);
-            resolution::clear_reports();
+            resolution::reset_scene();
             let kept = resolution::push_report(Level::P480);
             assert!(matches!(kept, PushResult::Stored(_)));
             for _ in 0..6 {
@@ -583,11 +524,11 @@ mod tests {
     #[test]
     fn dynamic_off_and_full_multiset_do_not_stick_active() {
         with_reports(Level::P1080, |scaler| {
-            resolution::update_settings(Level::P1080, false);
+            resolution::retarget(Level::P1080, false);
             assert_eq!(scaler.cut_in_start(0, true), Action::NotStored);
             assert_eq!(scaler.cut_in_tick(0, true, false), Action::Idle);
             assert_eq!(resolution::status().reports, 0);
-            resolution::update_settings(Level::P1080, true);
+            resolution::retarget(Level::P1080, true);
             let mut held = Vec::new();
             for _ in 0..8 {
                 held.push(match resolution::push_report(Level::P900) {
@@ -604,33 +545,20 @@ mod tests {
     }
 
     #[test]
-    fn sephiroth_tracks_only_a_full_special_n_shoot() {
+    fn main_tick_runs_only_the_cut_in_cooldown_and_the_move_table() {
         with_reports(Level::P1080, |scaler| {
-            assert_eq!(
-                scaler.sephiroth_tick(2, true, EDGE_SPECIAL_N_SHOOT, 2),
-                Action::Idle
-            );
-            assert_eq!(
-                scaler.sephiroth_tick(2, true, EDGE_SPECIAL_N_SHOOT, 3),
-                Action::Started
-            );
-            assert_eq!(
-                scaler.sephiroth_tick(2, true, EDGE_SPECIAL_N_SHOOT, 3),
-                Action::Held
-            );
-            assert_eq!(resolution::status().reports, 1);
-            assert_eq!(resolution::status().effective, Level::P720);
-            let (cut, edge, moved) =
-                scaler.on_main(MainTick::new(2, EDGE_KIND, 0, 3), MoveSet::NONE);
+            // Sephiroth (kind 0x59) in the old Gigaflare shoot status is an
+            // ordinary tick since 2026-10-17: no report, nothing to end.
+            let (cut, moved) = scaler.on_main(MainTick::new(2, 0x59, 0x1e5), MoveSet::NONE);
             assert_eq!(cut, Action::Idle);
-            assert_eq!(edge, Action::Ended);
             assert_eq!(moved, (Action::Ignored, None));
             assert_eq!(resolution::status().reports, 0);
-            let (_cut, ignored, _) = scaler.on_main(
-                MainTick::new(2, 0x1, EDGE_SPECIAL_N_SHOOT, 9),
-                MoveSet::NONE,
-            );
-            assert_eq!(ignored, Action::Ignored);
+            assert_eq!(scaler.cut_in_start(2, true), Action::Started);
+            let (cooling, moved) = scaler.on_main(MainTick::new(2, 0x59, 0x1e5), MoveSet::NONE);
+            assert_eq!(cooling, Action::Cooling { left: 6 });
+            assert_eq!(moved, (Action::Ignored, None));
+            assert_eq!(resolution::status().reports, 1);
+            scaler.clear();
             assert_eq!(resolution::status().reports, 0);
         });
     }
@@ -641,8 +569,7 @@ mod tests {
         with_reports(Level::P1080, |scaler| {
             let set = MoveSet::parse("pyra_side_b,kirby_hammer").unwrap();
             // Off: nothing happens even on a matching status.
-            let (_, _, off) =
-                scaler.on_main(MainTick::new(0, KIND_EFLAME, SPECIAL_S, 0), MoveSet::NONE);
+            let (_, off) = scaler.on_main(MainTick::new(0, KIND_EFLAME, SPECIAL_S), MoveSet::NONE);
             assert_eq!(off, (Action::Ignored, None));
             assert_eq!(resolution::status().reports, 0);
             // Pyra side special on entry 0, Kirby hammer on entry 1.
@@ -677,8 +604,7 @@ mod tests {
             );
             assert_eq!(resolution::status().reports, 1);
             // The mask going to none while a report is held still pops it.
-            let (_, _, released) =
-                scaler.on_main(MainTick::new(1, KIND_KIRBY, 0x1F3, 0), MoveSet::NONE);
+            let (_, released) = scaler.on_main(MainTick::new(1, KIND_KIRBY, 0x1F3), MoveSet::NONE);
             assert_eq!(released, (Action::Ended, Some(8)));
             assert_eq!(resolution::status().reports, 0);
             assert_eq!(scaler.counters().move_pops, 2);
@@ -707,26 +633,20 @@ mod tests {
             scaler.clear();
             assert!(!scaler.counters().adaptive_active);
             assert_eq!(resolution::status().reports, 0);
-            resolution::update_settings(Level::P1080, false);
+            resolution::retarget(Level::P1080, false);
             assert_eq!(scaler.adaptive_push(), Action::NotStored);
             assert!(!scaler.counters().adaptive_active);
         });
     }
 
     #[test]
-    fn cut_in_and_sephiroth_keep_separate_tokens() {
+    fn cut_in_and_adaptive_keep_separate_tokens() {
         with_reports(Level::P720, |scaler| {
             assert_eq!(scaler.cut_in_start(5, true), Action::Started);
-            assert_eq!(
-                scaler.sephiroth_tick(5, true, EDGE_SPECIAL_N_SHOOT, 4),
-                Action::Started
-            );
+            assert_eq!(scaler.adaptive_push(), Action::Started);
             assert_eq!(resolution::status().reports, 2);
             assert_eq!(resolution::status().effective, Level::P576);
-            assert_eq!(
-                scaler.sephiroth_tick(5, true, EDGE_SPECIAL_N_SHOOT - 1, 4),
-                Action::Ended
-            );
+            assert_eq!(scaler.adaptive_pop(), Action::Ended);
             assert_eq!(resolution::status().reports, 1);
             assert_eq!(resolution::status().effective, Level::P576);
             scaler.clear();

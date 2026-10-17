@@ -36,9 +36,6 @@ Under sd:/ultimate/ssbu_online_deluxe_rewrite/:
   `early_present_mismatches` for the present-at-flush path (0.4.0 LessLag;
   0.5.2 LLUltra and LLDoubles).
   Values are independent observations, not an atomic frame snapshot.
-- presentation-history.txt: bounded VI probe results, only when the boot flag
-  DUMP_PRESENTATION_HISTORY is present. No usable presented timestamps were obtained
-  in the tested stock Eden startup window. Remove the flag for ordinary tests.
 
 128 fixed-size events use a nonblocking try-lock. Game hooks do no file I/O; contention
 increments a dropped counter. Startup install checkpoints are synchronous. The sink reports
@@ -76,11 +73,11 @@ hidden, the match capture never arms and the exported online context reports
 nothing (it was part of the FX family until 0.4.2). DISABLE_BUFFER disables
 input-buffer writes. DISABLE_RENDERER skips
 experimental rendering text patches regardless of the INI request; actual mode
-stays Vanilla. DISABLE_PIA skips RTT and prevents the optional peer observer
-from installing. DISABLE_NATIVE skips the native banner hook. DISABLE_BACKOFF
-skips the dispatcher idle backoff (code 102 `a` = 4). All seven flags together,
-with DUMP_PRESENTATION_HISTORY absent, skip those hook families while retaining
-logging.
+stays Vanilla. DISABLE_PIA skips RTT, and the connection transport (which
+needs the Pia cleanup hook) then does not install either. DISABLE_NATIVE skips
+the native banner hook. DISABLE_BACKOFF
+skips the dispatcher idle backoff (code 102 `a` = 4). All seven flags together
+skip those hook families while retaining logging.
 Remove the disable flags to re-enable their hook families.
 DISABLE_FX and the PROBE_CRITICAL_SCREEN marker are ignored since 0.5.0: the
 FX hook family moved to the separate ssbu-fx-control plugin, which has its own
@@ -108,18 +105,16 @@ data directory and flags.
 | 33 / 34 / 35 | Renderer owner / caller / flush target diagnostics |
 | 36 | Pia RTT sample/cleanup and foreign/drop counters |
 | 48 | Render-opts teardown guard fired: a module unloaded between the frame's fighter recording and its post-scene hook, so the relocated model update and fighter worker were skipped and the game's own ordering runs for the next 180 frames. a = unload epoch, b = scene frame |
-| 37 / 38 | Opt-in parsed peer observation / bounded escaped name sample |
-| 39 / 40 | Peer observer drops / station identity mapping changes |
-| 41–45 | Opt-in read-only outgoing packet/header diagnostics; never packet writes |
 | 46 / 47 | Render-policy transition / refused transition or invalid post-setter count |
-| 64 / 65 | Sampled station-map reachability flags / mixed source ID |
+| 66–72 | Connection transport counters: handshake learned / confirmed, session cleanup, beacon writes/skips, payload writes/skips, stealth suppression, ambiguous mapping or busy gate |
+| 82 | Fighter transition edge: a = entry, action (1 start, 2 end) in bits 8–15, source in bits 16–23 (1 cut-in, 3 move table; 2 was the Sephiroth Gigaflare trigger, removed 2026-10-17) |
 | 98 | Overlay command edge: a = HID button mask; b = previous view, resulting view, Npad id, style flags and command-edge flags (bit 0 Down, bit 1 Plus/Minus). Style 0 means no device |
 | 99 | Plugin registered: a = handle (negative `REGISTER_ERR_*` code on error), b = accepted option count |
 | 100 | Plugins-page Left/Right edge: a = plugin index (bits 0–15) and option index (16–31); b = requested choice (0–15) and the plugin's `REQUEST_*` answer (16–23) |
 | 101 | Plugin INI persisted after a menu edit: a = plugin and option index as in 100; b = 1 success, 0 I/O error |
 | 102 | Dispatcher backoff install: a = 1 installed, 2 other owner patched the site, 3 site words differ from 13.0.5, 4 disabled by flag, 5 eligibility gate first passed (b = tick); otherwise b packs the policy (`spin_passes`, `base_ns / 1000`, `max_ns / 1000`) |
 | 103 | Dispatcher backoff counters, written only when they change: a = idle passes, b = sleeps (bits 0–47) and last sleep in µs (48–63) |
-| 104 | CSS capture startup: a = hook mask (bit 0 dispatcher registration, 1 dependency wait, 2 UI job; 7 = arming); b bit 0 `CAPTURE_CSS` flag, bit 1 `GetThreadPriority` resolved, bit 2 `GetThreadCoreMask` resolved |
+| 104 | CSS capture startup: a = hook mask (bit 0 dependency wait, bit 1 UI job; 3 = both, so `CAPTURE_CSS` can arm); b bit 0 `CAPTURE_CSS` flag. Before 2026-10-17 a bit 0 was the dispatcher-registration hook (7 = all three) and b bits 1–2 said whether `GetThreadPriority`/`GetThreadCoreMask` resolved |
 | 105 | Early present mismatch (two-image present-at-flush): a = 2 when the game then presented a different index than the early one, b = the game's index |
 | 106 | `CAPTURE_MATCH`: a = 0 startup (b = flag present), 1 stage entered (b = scene status), 2 stage left (b = previous status), 3 a running 30 s capture ended for a starting match (b = its id) |
 | 107 | Scene connection hold: a = 1 main-menu entry kept a stored Quickplay (b = hook address); a = 2 a Singles/Doubles stage under Quickplay without the online-latency hook was demoted to Offline (b = ticks since the stage load; the matching code 73 AutoContext row carries source `0x0ff11e`) |
@@ -130,8 +125,15 @@ data directory and flags.
 
 Codes 18–20 describe historical CSS builds; they are no longer emitted.
 Codes 11, 27–29, 84–87 and 91–97 were the character-FX records. They moved
-to the ssbu-fx-control plugin in 0.5.0 and are not reused here. In codes 6,
-8, 15 and 24 the field that carried the FX mode is always 0 since 0.5.0.
+to the ssbu-fx-control plugin in 0.5.0 and are not reused here. Codes 75–77
+and 83 were opt-in diagnostics retired on 2026-10-16. Codes 37–45, 64 and 65
+were the opt-in peer observer (parsed observation, name sample, drops, station
+map, the 41–45 send probe, the 64/65 station-map reachability sample) and 88
+was FPS++; both were removed on 2026-10-17. Code 89 (`MenuOrder`, one row per
+capture arm) stopped being emitted the same day when the captures were
+consolidated; its number stays reserved. None of these numbers is reused.
+In codes 6, 8, 15 and 24 the field that carried the FX mode is always 0 since
+0.5.0.
 Codes 12/13 mark character-select entry and exit (exit = one second without a CSS update).
 No game-owned pane or font is modified by the global window.
 
@@ -152,26 +154,16 @@ unique names to prevent dynamic symbol collisions. NVN bootstrap interposition
 chains other wrappers and records the entry word. See
 [dependency details](IMGUI_DEPENDENCY.md); future LessLag/acquire changes need new tests.
 
-## Optional peer observer
+## Connection transport
 
-`peer_observer=false` is the default. Set it to true before process startup
-only for a controlled diagnostic run. Both parsed-message and station-index
-instruction guards must match, and the Pia lifecycle hooks must be installed.
-The optional pre-encryption send probe has its own instruction checks. This
-does not enable peer metadata in the UI and never writes network packets.
-
-The observer validates body bounds against the accepted packet length before
-copying. A nonblocking gate protects its bounded queue and station generations;
-file output occurs on the diagnostic thread after releasing the gate. Missed
-observations are counted, and missed lifecycle notifications conservatively
-clear mappings. Names are escaped, truncated diagnostic samples. Mixed IDs are
-correlation values, not an anonymization guarantee. Observer events remain
-subject to the ordinary log size and crash-flush limits above.
-
-The map event queue can drop a one-shot update while retaining the in-memory
-mapping. Absence of code 40 alone does not prove the station hook failed. The
-64/65 reachability sample is diagnostic only and is not a coherent authorization
-record for packet writes.
+The parsed-message, station-index and pre-encryption send hooks install when
+their instruction guards match and the Pia lifecycle hooks are in (codes 4/5
+with the site offsets `0x153844`, `0x15f0b8`, `0x155878`). They feed the
+handshake table, bind station indices and commit the fork-compatible
+announcements; their counters are codes 66–72. The opt-in `peer_observer`
+ring, station map and send probe that used to share these hooks were removed
+on 2026-10-17. Mixed IDs in the transport rows are correlation values, not an
+anonymization guarantee.
 
 ## Live render profiles
 
@@ -196,22 +188,19 @@ present; zero is meaningful. Kind 12 is the selected value before the game's
 modulo-three instruction. These are CPU-side observations, not displayed frames
 or input-to-photon measurements.
 
-With the `CAPTURE_CSS` boot flag (0.3.1) the trace also carries: kind 60
-(index = dispatcher-backoff sleeps since the previous tracked present, result =
-their summed actual microseconds), 61 (index = longest single sleep in µs,
-result = idle streaks started), 62 (SDK `ThreadType` pointer halves, once per
-thread per capture), 63 (index = `nn::os::GetThreadPriority`, result = ideal
-core in the low byte and the affinity mask above it; -1 when the SDK symbol did
-not resolve), 64 (UI aggregate child registered: index = worker | priority << 8,
-result = thread label), 66 (span of a `main+0x354ccd0` dependency wait on any
-thread; index = awaited counter's offset from the text base, `0x5333160` being
-the UI barrier; result = thread label) and 77 (span of the UI job
-`main+0x375e260` on its worker; result = thread label). A kind 66 row whose
-label equals the kind 77 label is a wait nested inside the UI job. The label is
-the same pure hash for every kind; `tools/analyze_render_trace.py` recomputes it
-from kind 62 and reports a `css_capture` section. Event log code 104 gives the
-hook mask (7 = all three) and which SDK symbols resolved; codes 12/13 mark
-character-select entry and exit (exit = one second without a CSS update).
+With the `CAPTURE_CSS` boot flag (0.3.1) the trace also carries kind 66 (span
+of a `main+0x354ccd0` dependency wait on any thread; index = awaited counter's
+offset from the text base, `0x5333160` being the UI barrier; result = thread
+label) and 77 (span of the UI job `main+0x375e260` on its worker; result =
+thread label). A kind 66 row whose label equals the kind 77 label is a wait
+nested inside the UI job. The label is the same pure hash for every kind
+(`capture::thread_label`); `tools/analyze_render_trace.py` reports a
+`css_capture` section. Event log code 104 gives the hook mask (3 = both);
+codes 12/13 mark character-select entry and exit (exit = one second without a
+CSS update). Kinds 60–64 (per-frame backoff sleeps, SDK thread pointer,
+priority and core mask, the UI job's dispatch registration), 28 (menu resize)
+and 29–34 (LessLag flush-field samples) were retired on 2026-10-17 with their
+producers; the analyzer still decodes archived traces that carry them.
 
 With the `CAPTURE_MATCH` boot flag the same capture pair is armed on every
 stage load (the stage-setup hook classifies Singles, Doubles or Training;
@@ -222,12 +211,13 @@ Training status, so this is what ends a Training capture; code 106 `a=2`
 `b=0xC55`). The footer says `# reason=scene_end`; the ten-minute ceiling
 gives `elapsed`. A stage that loads while a match capture is still running
 ends it the same way and arms the next. Both CSVs stream from the
-diagnostics thread, which polls every 250 ms while a capture runs; the trace
-chunks pack `begin` relative to a per-chunk base, so a long capture keeps the
-20-byte row. A 30 s capture still running when a match starts is ended
+diagnostics thread, which polls every 250 ms while a capture runs and
+swap-drains each ring's 32-byte rows (4096 API rows, 256 callback rows,
+allocated at arm and freed with the export; a full ring counts rows as
+`skipped`). A 30 s capture still running when a match starts is ended
 (event log code 106 `a=3`) and the match capture arms once its export is
-done. `CAPTURE_MATCH` also installs the three `CAPTURE_CSS` hooks (rows
-62–66 and 77) without arming on character-select entry; put both flags on
+done. `CAPTURE_MATCH` also installs the two `CAPTURE_CSS` hooks (rows 66
+and 77) without arming on character-select entry; put both flags on
 the card for both captures. Code 106: `a=0` startup (`b` = flag present),
 `a=1` stage entered (`b` = status), `a=2` stage left (`b` = previous status),
 `a=3` a running 30 s capture ended for a starting match (`b` = its id).
@@ -254,17 +244,19 @@ The previous boot is kept as `hang-trace.previous.log`; the file rotates at 2 Mi
   Debug view's Performance table shows the same numbers as a `Memory` row),
   then calls since boot for
   `present` (tracked window), `backoff_pass` (idle hook entries),
-  `backoff_sleep`, the three `CAPTURE_CSS` hooks (`css_init`, `css_wait`,
-  `css_ui_job`), `fighter_load`/`fighter_unload` (`common` module chain),
+  `backoff_sleep`, the two `CAPTURE_CSS` hooks (`css_wait`, `css_ui_job`;
+  `css_init` went with its hook on 2026-10-17), `fighter_load`/
+  `fighter_unload` (`common` module chain),
   `fighter_main` (per-fighter tick) and `cut_in`. A hook that entered and has
   not returned shows `[ACTIVE xN age_ms=…]`; a growing age across heartbeats
   means the game is blocked inside or under that hook. Count-only signals
   never show ACTIVE.
-- `[HangTrace] first <hook>`: first call of each hook since the current scene
-  began, with its tick. Scene changes print `[HangTrace] scene a -> b` and
-  reset the first-firing marks.
+- `[HangTrace] scene a -> b`: the packed scene changed, with its tick. The
+  `[HangTrace] first <hook>` lines (first call of each hook per scene) were
+  dropped on 2026-10-17; the heartbeat's `ACTIVE`/age and the scene lines
+  answer the hang question.
 
-Zero-code bisection for a freeze: delete `CAPTURE_CSS` first (removes the three
+Zero-code bisection for a freeze: delete `CAPTURE_CSS` first (removes the two
 CSS hooks), then add `DISABLE_BACKOFF`, then the other `DISABLE_*` flags. The
 heartbeat keeps running with every family disabled.
 

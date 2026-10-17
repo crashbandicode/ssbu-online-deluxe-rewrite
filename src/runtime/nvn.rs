@@ -10,9 +10,7 @@ use std::{
     fs::File,
     io::Write,
     path::Path,
-    sync::atomic::{
-        AtomicBool, AtomicI32, AtomicI64, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering,
-    },
+    sync::atomic::{AtomicI32, AtomicI64, AtomicU64, AtomicUsize, Ordering},
 };
 type Ptr = *mut c_void;
 type Getter = unsafe extern "C" fn(Ptr, *const c_char) -> *const c_void;
@@ -29,10 +27,6 @@ static GET_TOTAL: AtomicUsize = AtomicUsize::new(0);
 static GET_INTERVAL: AtomicUsize = AtomicUsize::new(0);
 static SET_ACTIVE: AtomicUsize = AtomicUsize::new(0);
 static SET_CROP: AtomicUsize = AtomicUsize::new(0);
-/// 0 unread, 1 off, 2 on. The marker is consulted once.
-static CROP_PROBE: AtomicU8 = AtomicU8::new(0);
-static CROP_ARMED: AtomicBool = AtomicBool::new(false);
-static CROP_OBSERVED: AtomicU32 = AtomicU32::new(0);
 static WINDOW: AtomicUsize = AtomicUsize::new(0);
 static ACTIVE: AtomicI32 = AtomicI32::new(-1);
 /// The game's queue, from its first tracked present. Used by `present_at_flush`.
@@ -96,14 +90,6 @@ unsafe extern "C" fn get_proc(device: Ptr, name: *const c_char) -> *const c_void
             let raw = SET_CROP.load(Ordering::Acquire);
             if raw == 0 || raw == crop_wrapper_address() {
                 return next;
-            }
-            if crop_probe_enabled()
-                && CROP_ARMED
-                    .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-                    .is_ok()
-            {
-                let (a, b) = crate::diagnostics::crop_armed_event();
-                super::record(super::Code::CropObserve, a, b);
             }
             return window_set_crop as *const c_void;
         }
@@ -194,7 +180,6 @@ unsafe extern "C" fn window_initialize(window: Ptr, builder: *const c_void) -> u
         } else if TOTAL.load(Ordering::Relaxed) == 3 && ACTIVE.load(Ordering::Relaxed) == 3 {
             super::renderer::arm_mode(3);
         }
-        super::fps_boost::on_initialize(skyline::nn::os::GetSystemTick() as u64);
     }
     result
 }
@@ -206,7 +191,6 @@ unsafe extern "C" fn window_finalize(window: Ptr) {
         super::renderer::arm_mode(-1);
         ACTIVE.store(-1, Ordering::Relaxed);
         TOTAL.store(-1, Ordering::Relaxed);
-        super::fps_boost::on_finalize(skyline::nn::os::GetSystemTick() as u64);
     }
     let f: unsafe extern "C" fn(Ptr) = std::mem::transmute(FINALIZE.load(Ordering::Acquire));
     f(window);
@@ -301,21 +285,8 @@ fn remember_raw_crop(address: usize) {
     SET_CROP.store(address, Ordering::Release);
 }
 
-fn crop_probe_enabled() -> bool {
-    match CROP_PROBE.load(Ordering::Acquire) {
-        1 => return false,
-        2 => return true,
-        _ => {}
-    }
-    let on = Path::new(DATA_DIR).join("PROBE_CROP").exists();
-    let stored = if on { 2 } else { 1 };
-    let _ = CROP_PROBE.compare_exchange(0, stored, Ordering::AcqRel, Ordering::Acquire);
-    CROP_PROBE.load(Ordering::Acquire) == 2
-}
-
-/// Game SetCrop entry. Forwards the original arguments once. Code 83 is
-/// recorded only while `PROBE_CROP` is present. A fullscreen reset is reported
-/// to the resolution policy, which does not call [`set_crop`].
+/// Game SetCrop entry. Forwards the original arguments once. A fullscreen
+/// reset is reported to the resolution policy, which does not call [`set_crop`].
 #[inline(never)]
 unsafe extern "C" fn window_set_crop(window: Ptr, x: i32, y: i32, w: i32, h: i32) {
     let address = SET_CROP.load(Ordering::Acquire);
@@ -324,9 +295,6 @@ unsafe extern "C" fn window_set_crop(window: Ptr, x: i32, y: i32, w: i32, h: i32
     }
     let crop: unsafe extern "C" fn(Ptr, i32, i32, i32, i32) = std::mem::transmute(address);
     crop(window, x, y, w, h);
-    if crop_probe_enabled() {
-        note_crop_observe(x, y, w, h);
-    }
     let delay =
         crate::resolution::delay_for_profile(crate::render_policy::load_decision().committed);
     let _ = crate::resolution::rearm_fullscreen_reset(
@@ -340,27 +308,6 @@ unsafe extern "C" fn window_set_crop(window: Ptr, x: i32, y: i32, w: i32, h: i32
             height: h,
         },
     );
-}
-
-fn note_crop_observe(x: i32, y: i32, w: i32, h: i32) {
-    let seen = CROP_OBSERVED.load(Ordering::Relaxed);
-    if seen > crate::diagnostics::CROP_OBSERVE_CAP {
-        return;
-    }
-    if CROP_OBSERVED
-        .compare_exchange(seen, seen + 1, Ordering::AcqRel, Ordering::Acquire)
-        .is_err()
-    {
-        return;
-    }
-    let present = tracked_presents();
-    if seen == crate::diagnostics::CROP_OBSERVE_CAP {
-        let (a, b) = crate::diagnostics::crop_cap_event(present);
-        super::record(super::Code::CropObserve, a, b);
-        return;
-    }
-    let (rect_a, rect_b) = crate::diagnostics::crop_rect_event(present, x, y, w, h);
-    super::record(super::Code::CropObserve, rect_a, rect_b);
 }
 
 /// Present the image acquired this frame now, at the end of the flush that
@@ -410,13 +357,9 @@ unsafe extern "C" fn queue_present(queue: Ptr, window: Ptr, index: i32) {
         if !presented_early {
             super::resolution::on_present(window);
         }
-        super::fps_boost::on_present(tick);
         super::adaptive_drs::on_present(tick);
         super::dispatcher_backoff::note_present(tick);
         super::hang_trace::count(super::hang_trace::Hook::Present);
-        if super::api_trace::active() {
-            super::dispatcher_backoff::frame_rows(tick);
-        }
     }
     PRESENT_TICK.store(tick, Ordering::Relaxed);
     let n = PRESENTS.fetch_add(1, Ordering::Relaxed) + 1;
@@ -434,7 +377,7 @@ unsafe extern "C" fn queue_present(queue: Ptr, window: Ptr, index: i32) {
     if tracked {
         TRACKED_PRESENTS.fetch_add(1, Ordering::Relaxed);
         let before = OUTSTANDING.fetch_sub(1, Ordering::AcqRel);
-        let after = crate::render_trace::outstanding_after_present(before);
+        let after = crate::render_policy::outstanding_after_present(before);
         let shown = if after > i64::from(i32::MAX) {
             i32::MAX
         } else if after < i64::from(i32::MIN) {
@@ -442,7 +385,7 @@ unsafe extern "C" fn queue_present(queue: Ptr, window: Ptr, index: i32) {
         } else {
             after as i32
         };
-        super::api_trace::mark_thread(crate::render_trace::KIND_OUTSTANDING, shown);
+        super::api_trace::mark_thread(crate::capture::KIND_OUTSTANDING, shown);
         let saved = super::auto_driver::current_request();
         let snap = crate::render_policy::snapshot();
         let (active, allocated, fresh) = if snap.needs_fresh(saved, index, after) {
@@ -527,12 +470,6 @@ pub(super) fn write_status() {
             PRESENT_TICK.load(Ordering::Relaxed), ACQUIRE_TICK.load(Ordering::Relaxed));
         let _ = writeln!(
             file,
-            "fps_boost_status={}\nfps_boost_applied={}",
-            super::fps_boost::status_label(),
-            u8::from(super::fps_boost::applied())
-        );
-        let _ = writeln!(
-            file,
             "lesslag_fields_skip={}",
             u8::from(super::renderer::lesslag_fields_skipped())
         );
@@ -592,7 +529,7 @@ unsafe extern "C" fn sync_wait(sync: Ptr, timeout: u64) -> i32 {
     let kind = if timeout == u64::MAX && TEXTURE_SYNC.load(Ordering::Acquire) == sync as usize {
         3
     } else if timeout == u64::MAX {
-        crate::render_trace::KIND_SYNC_INFINITE_OTHER
+        crate::capture::KIND_SYNC_INFINITE_OTHER
     } else if timeout == 0 {
         4
     } else {

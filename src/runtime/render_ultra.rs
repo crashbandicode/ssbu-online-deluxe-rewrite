@@ -35,10 +35,7 @@ unsafe fn deluxe_rewrite_pre_present(ctx: &InlineCtx) {
             renderer::mode()
         },
     );
-    super::api_trace::mark_thread(
-        crate::render_trace::KIND_PRESENT_ENTRY,
-        i32::from(immediate),
-    );
+    super::api_trace::mark_thread(crate::capture::KIND_PRESENT_ENTRY, i32::from(immediate));
     if !immediate {
         ENTRIES.fetch_add(1, Ordering::Relaxed);
         return;
@@ -118,7 +115,7 @@ unsafe fn deluxe_rewrite_later_flush(ctx: &InlineCtx) {
             renderer::mode()
         },
     );
-    super::api_trace::mark_thread(crate::render_trace::KIND_LATE_FLUSH, i32::from(skip));
+    super::api_trace::mark_thread(crate::capture::KIND_LATE_FLUSH, i32::from(skip));
     if skip {
         LATE_SKIPS.fetch_add(1, Ordering::Relaxed);
     } else {

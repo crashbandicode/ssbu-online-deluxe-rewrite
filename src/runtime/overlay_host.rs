@@ -85,7 +85,6 @@ static CONTEXT_READY: AtomicBool = AtomicBool::new(false);
 static BACKEND_READY: AtomicBool = AtomicBool::new(false);
 static BOOTSTRAP_CALLS: AtomicU64 = AtomicU64::new(0);
 static LOG_COUNT: AtomicU64 = AtomicU64::new(0);
-static RESIZE_COUNT: AtomicU64 = AtomicU64::new(0);
 static LOGGER_GUARD: AtomicBool = AtomicBool::new(false);
 static DRAW: AtomicUsize = AtomicUsize::new(0);
 static EXTERNAL_CONTEXT: AtomicUsize = AtomicUsize::new(0);
@@ -192,22 +191,6 @@ unsafe extern "C" fn backend_logger(message: *const c_char, len: usize) {
 }
 
 unsafe fn observe_backend_log(message: *const c_char, len: usize) {
-    let resizing = if message.is_null() || len == 0 {
-        false
-    } else {
-        let n = len.min(512);
-        let bytes = std::slice::from_raw_parts(message.cast::<u8>(), n);
-        crate::render_trace::contains_resizing(bytes)
-    };
-    if resizing && embedded() {
-        let count = RESIZE_COUNT
-            .fetch_add(1, Ordering::Relaxed)
-            .saturating_add(1);
-        let tick = super::api_trace::start();
-        if tick != 0 {
-            super::api_trace::TRACE.observe(crate::render_trace::resize_event(tick, count));
-        }
-    }
     let n = LOG_COUNT.fetch_add(1, Ordering::Relaxed) + 1;
     if !(n <= 8 || n.is_multiple_of(256)) || message.is_null() || len == 0 {
         return;

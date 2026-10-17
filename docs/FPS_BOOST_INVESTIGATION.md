@@ -1,5 +1,7 @@
 # FPS++ investigation
 
+> History. The FPS++ feature this document investigates was removed 2026-10-17 (emulator-only, never applied in normal play); the key, row, chord, marker and event code 88 are gone. See [Rendering profiles](RENDERING.md#fps).
+
 ## Result (2026-10-07)
 
 The previously unidentified FPS-boost field is read by **nnSdk's native-window

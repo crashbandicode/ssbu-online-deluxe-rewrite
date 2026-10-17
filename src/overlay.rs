@@ -8,6 +8,8 @@ pub(crate) const L: u64 = 1 << 6;
 pub(crate) const R: u64 = 1 << 7;
 const ZL: u64 = 1 << 8;
 const ZR: u64 = 1 << 9;
+/// Only the retired-chord test presses X now.
+#[cfg(test)]
 const X: u64 = 1 << 2;
 const Y: u64 = 1 << 3;
 const PLUS_MINUS: u64 = (1 << 10) | (1 << 11);
@@ -117,8 +119,9 @@ impl CommandLatch {
 pub struct Overlay {
     pub view: View,
     pub menu: Menu,
-    /// Selected flattened row on the Plugins page or the current own page
-    /// (`plugin_api::rows_for`); reset when the view changes.
+    /// Selected row on the Plugins page or the current own page (an index
+    /// into `plugin_api::rows_for`, which on the shared page counts the group
+    /// rows); reset when the view changes.
     pub plugin_row: usize,
     /// Which own page is shown while `view == View::PluginPage`
     /// (index into `plugin_api::page_plugins`).
@@ -193,18 +196,7 @@ impl Overlay {
             config.streamer = !config.streamer;
             return true;
         }
-        // Fork FPS++ chord: L+R+ZL+X or L+R+ZR+X. Stored only on emulator.
-        if shoulders && buttons & (ZL | ZR) != 0 && pressed & X != 0 {
-            let next = crate::fps_boost::saved_after_toggle(
-                config.platform == crate::config::Platform::Emulator,
-                config.fps_boost,
-            );
-            if next == config.fps_boost {
-                return false;
-            }
-            config.fps_boost = next;
-            return true;
-        }
+        // The fork's FPS++ chord (L+R+ZL/ZR+X) left with FPS++ on 2026-10-17.
         if self.view != View::Settings && shoulders {
             if pressed & LEFT != 0 {
                 crate::peer_transport::cycle_peer(-1);
@@ -226,7 +218,7 @@ impl Overlay {
                         self.view,
                         self.page,
                         debug_modifier,
-                        !crate::plugin_api::plugin_rows(&snapshot).is_empty(),
+                        crate::plugin_api::has_shared_rows(&snapshot),
                         crate::plugin_api::page_plugins(&snapshot).len(),
                         config.hide_pages,
                     )
@@ -251,28 +243,29 @@ impl Overlay {
         }
         if matches!(self.view, View::Plugins | View::PluginPage) {
             // Plugin rows never touch `Config`; the plugin owns the change.
+            // Group and header rows never hold the selection.
             let page = (self.view == View::PluginPage).then_some(self.page);
             let snapshot = plugins.snapshot();
             let rows = crate::plugin_api::rows_for(&snapshot, page);
-            if rows.is_empty() {
-                return false;
-            }
-            // Header rows (descriptor version 4) never hold the selection.
-            let selectable = crate::plugin_api::row_selectable(&snapshot, &rows);
-            self.plugin_row = crate::plugin_api::clamp_selectable_row(self.plugin_row, &selectable);
-            if pressed & UP != 0 {
-                self.plugin_row =
-                    crate::plugin_api::move_selectable_row(self.plugin_row, -1, &selectable);
+            let direction: i8 = if pressed & UP != 0 {
+                -1
             } else if pressed & DOWN != 0 {
-                self.plugin_row =
-                    crate::plugin_api::move_selectable_row(self.plugin_row, 1, &selectable);
-            } else if !chord && pressed & (LEFT | RIGHT) != 0 {
-                if self.edit_hold && !edit_modifier(buttons) {
-                    return false;
+                1
+            } else {
+                0
+            };
+            self.plugin_row =
+                crate::plugin_api::move_selection(&snapshot, &rows, self.plugin_row, direction);
+            if direction == 0
+                && !chord
+                && pressed & (LEFT | RIGHT) != 0
+                && !(self.edit_hold && !edit_modifier(buttons))
+            {
+                if let Some(crate::plugin_api::PageRow::Option { plugin, option }) =
+                    rows.get(self.plugin_row)
+                {
+                    plugins.step(*plugin, *option, if pressed & LEFT != 0 { -1 } else { 1 });
                 }
-                let direction: i8 = if pressed & LEFT != 0 { -1 } else { 1 };
-                let row = rows[self.plugin_row];
-                plugins.step(row.plugin, row.option, direction);
             }
             return false;
         }
@@ -857,7 +850,10 @@ mod tests {
         assert_eq!(ui.view, View::Plugins);
         assert!(!ui.menu.open);
         ui.poll_with(0, &mut config, css, &registry);
-        // Unmodified D-pad edits the plugin row, not NetLatency or a native pane.
+        // Row 0 of the shared page is the "Demo" group row: the selection
+        // settles on the first option. Unmodified D-pad edits the plugin row,
+        // not NetLatency or a native pane.
+        assert_eq!(ui.plugin_row, 1);
         assert!(!ui.poll_with(RIGHT, &mut config, css, &registry));
         assert_eq!(config, Config::default());
         let step = registry.take_last_step().unwrap();
@@ -871,24 +867,25 @@ mod tests {
         assert_eq!(registry.take_last_step(), None);
         ui.poll_with(0, &mut config, css, &registry);
         ui.poll_with(DOWN, &mut config, css, &registry);
-        assert_eq!(ui.plugin_row, 1);
+        assert_eq!(ui.plugin_row, 2);
         ui.poll_with(0, &mut config, css, &registry);
         ui.poll_with(LEFT, &mut config, css, &registry);
         let step = registry.take_last_step().unwrap();
         assert_eq!((step.option, step.requested), (1, 0));
         ui.poll_with(0, &mut config, css, &registry);
         ui.poll_with(DOWN, &mut config, css, &registry);
-        assert_eq!(ui.plugin_row, 2);
+        assert_eq!(ui.plugin_row, 3);
         ui.poll_with(0, &mut config, css, &registry);
         // The single-choice status row is read-only.
         ui.poll_with(RIGHT, &mut config, css, &registry);
         assert_eq!(registry.take_last_step(), None);
         ui.poll_with(0, &mut config, css, &registry);
+        // Wrapping skips the group row in both directions.
         ui.poll_with(DOWN, &mut config, css, &registry);
-        assert_eq!(ui.plugin_row, 0);
+        assert_eq!(ui.plugin_row, 1);
         ui.poll_with(0, &mut config, css, &registry);
         ui.poll_with(UP, &mut config, css, &registry);
-        assert_eq!(ui.plugin_row, 2);
+        assert_eq!(ui.plugin_row, 3);
         ui.poll_with(0, &mut config, css, &registry);
         // Chord + Left/Right still cycles the peer rather than a plugin.
         ui.poll_with(L | R | RIGHT, &mut config, css, &registry);
@@ -944,24 +941,25 @@ mod tests {
     }
 
     #[test]
-    fn fps_chord_toggles_only_on_emulator() {
+    fn the_retired_fps_chord_changes_nothing() {
         let _gate = crate::peer_transport::global_gate();
         let mut ui = Overlay::default();
-        let mut config = Config::default();
-        assert!(!ui.poll(L | R | ZL | X, &mut config));
-        assert!(!config.fps_boost);
-        config.platform = crate::config::Platform::Emulator;
-        ui.poll(0, &mut config);
-        assert!(ui.poll(L | R | ZL | X, &mut config));
-        assert!(config.fps_boost);
-        ui.poll(0, &mut config);
-        assert!(ui.poll(L | R | ZR | X, &mut config));
-        assert!(!config.fps_boost);
-        config.fps_boost = true;
-        config.platform = crate::config::Platform::Console;
-        ui.poll(0, &mut config);
-        assert!(ui.poll(L | R | ZL | X, &mut config));
-        assert!(!config.fps_boost);
+        for platform in [
+            crate::config::Platform::Console,
+            crate::config::Platform::Emulator,
+        ] {
+            let mut config = Config {
+                platform,
+                ..Config::default()
+            };
+            let before = config.clone();
+            assert!(!ui.poll(L | R | ZL | X, &mut config));
+            ui.poll(0, &mut config);
+            assert!(!ui.poll(L | R | ZR | X, &mut config));
+            ui.poll(0, &mut config);
+            assert_eq!(config, before);
+            assert_eq!(ui.view, View::Hidden);
+        }
     }
 
     fn native(surface: crate::menu::NativeSurface, allow: bool) -> crate::menu::NativePads {

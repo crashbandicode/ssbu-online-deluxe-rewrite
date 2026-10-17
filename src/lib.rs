@@ -1,25 +1,24 @@
 //! Portable settings, policy and diagnostics; Switch hooks are isolated.
 pub mod auto_policy;
+pub mod capture;
 pub mod clock_probe;
 pub mod config;
 pub mod config_store;
+mod connection_transport;
 pub mod coverage_profile;
 pub mod diagnostics;
 pub mod dispatcher_backoff;
-pub mod fps_boost;
 pub mod hook_chain;
 pub mod hud_place;
 mod imgui_host;
 pub mod menu;
 pub mod native_banner;
 pub mod overlay;
-mod peer_observer;
 mod peer_passive;
 mod peer_transport;
 mod pia_rtt;
 pub mod plugin_api;
 pub mod policy;
-pub mod presentation;
 pub mod ui_safety;
 
 pub mod build_info {
@@ -31,7 +30,6 @@ pub mod fighter_probe;
 pub mod hang_trace;
 pub mod perf_scaler;
 pub mod render_policy;
-pub mod render_trace;
 pub mod resolution;
 #[cfg(target_os = "switch")]
 mod runtime;
@@ -49,6 +47,3 @@ pub fn select_user_profile(mode: config::RenderMode) {
 pub fn set_auto_profile(enabled: bool) {
     runtime::set_auto_profile(enabled);
 }
-#[cfg(any(target_os = "switch", test))]
-mod capture_export;
-pub mod timing;

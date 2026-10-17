@@ -4,10 +4,12 @@
 
 use core::ffi::c_char;
 use deluxe_plugin_sdk::{
-    abi, negotiated_descriptor_version, register_with, AtomicOptions, OptionSpec, PluginSpec,
-    RegisterError, RowLayout, Tone,
+    abi, register_with, AtomicOptions, OptionSpec, PluginSpec, RegisterError, RowLayout, Tone,
 };
-use ssbu_online_deluxe_rewrite::plugin_api::{plugin_rows, Registry, RequestStatus};
+use ssbu_online_deluxe_rewrite::plugin_api::{
+    has_shared_rows, move_selection, page_plugins, rows_for, selectable, PageRow, Registry,
+    RequestStatus, RowKind,
+};
 
 static HOST: Registry = Registry::new();
 
@@ -104,31 +106,21 @@ fn sdk_registration_reaches_the_host_registry_and_edits_round_trip() {
     assert_eq!(plugins[0].label, "Demo");
     assert_eq!(plugins[0].options[1].label, "Mode");
     assert_eq!(plugins[0].options[1].choices, vec!["A", "B", "C"]);
-    assert!(plugins[0].options[2].read_only());
+    assert_eq!(plugins[0].options[2].kind, RowKind::Status);
     assert_eq!(plugins[1].label, "Replay");
-    // The shared page holds the demo rows only; Replay has its own page.
+    // The shared page holds the demo group row and its three options; Replay
+    // has its own page without a group row.
     assert!(!plugins[0].own_page);
     assert!(plugins[1].own_page);
-    assert_eq!(plugin_rows(&plugins).len(), 3);
-    assert_eq!(
-        ssbu_online_deluxe_rewrite::plugin_api::page_plugins(&plugins),
-        vec![1]
-    );
-    assert_eq!(
-        ssbu_online_deluxe_rewrite::plugin_api::rows_for(&plugins, Some(0)).len(),
-        3
-    );
-    assert_eq!(
-        ssbu_online_deluxe_rewrite::plugin_api::rows_for(&plugins, Some(1)).len(),
-        0
-    );
-    // Version 3 descriptor accepted: tones, the read-only status row and the page flag arrive.
-    assert_eq!(
-        negotiated_descriptor_version(replay),
-        Some(abi::ABI_VERSION)
-    );
+    assert!(has_shared_rows(&plugins));
+    assert_eq!(rows_for(&plugins, None).len(), 4);
+    assert_eq!(rows_for(&plugins, None)[0], PageRow::Group(0));
+    assert_eq!(page_plugins(&plugins), vec![1]);
+    assert_eq!(rows_for(&plugins, Some(0)).len(), 3);
+    assert_eq!(rows_for(&plugins, Some(1)).len(), 0);
+    // Tones, the read-only status row and the page flag arrive in one call.
     assert_eq!(plugins[1].options[0].tone_of(1), abi::TONE_OK);
-    assert!(plugins[1].options[2].read_only());
+    assert_eq!(plugins[1].options[2].kind, RowKind::Status);
     assert!(!plugins[1].options[2].persist);
     let health = HOST.value(1, &plugins[1], 2);
     assert_eq!(
@@ -196,22 +188,21 @@ fn sdk_registration_reaches_the_host_registry_and_edits_round_trip() {
         unsafe { register_with(&TABLE, &BAD, &BAD_STATE) },
         Err(RegisterError::Invalid)
     );
-    assert_eq!(HOST.count(), 2);
+    assert_eq!(HOST.snapshot().len(), 2);
     assert_eq!(
         unsafe { (TABLE.host_status)() },
         abi::HOST_STATUS_MENU_ACTIVE
     );
 
-    // Version 4 rows through the real SDK: a header (no choices, so the SDK
-    // must send a null table, not an empty Vec's dangling pointer) and an
-    // inline row land in the registry with their kinds. FX Control 0.2.0's
-    // 39-row page was refused with -3 on the console for exactly this.
+    // A header through the real SDK (no choices, so the SDK must send a null
+    // table, not an empty Vec's dangling pointer) lands in the registry with
+    // its kind and is skipped by the selection. FX Control 0.2.0's 39-row
+    // page was refused with -3 on the console for exactly this.
     static GROUP_CHOICES: [&str; 3] = ["Original", "Variant 1", "Variant 2"];
     static GROUP_OPTIONS: [OptionSpec; 3] = [
         OptionSpec::new("kirby", "Kirby", &["On", "Off", "Reduced"]),
         OptionSpec::header("group_kirby", "Kirby"),
         OptionSpec {
-            layout: RowLayout::Inline,
             no_persist: true,
             ..OptionSpec::new("kirby_hammer", "Hammer", &GROUP_CHOICES)
         },
@@ -223,19 +214,21 @@ fn sdk_registration_reaches_the_host_registry_and_edits_round_trip() {
     static GROUP_STATE: AtomicOptions<3> = AtomicOptions::new([0, 0, 1]);
     let fx = unsafe { register_with(&TABLE, &GROUP_SPEC, &GROUP_STATE) }.unwrap();
     assert_eq!(fx.0, 2);
-    assert_eq!(negotiated_descriptor_version(fx), Some(4));
     let plugins = HOST.snapshot();
     let group = &plugins[2];
-    assert!(group.options[1].header && group.options[1].choices.is_empty());
-    assert!(!group.options[1].selectable() && group.options[1].read_only());
-    assert!(group.options[2].inline && !group.options[2].read_only());
+    assert_eq!(group.options[1].kind, RowKind::Header);
+    assert!(group.options[1].choices.is_empty());
+    assert_eq!(group.options[2].kind, RowKind::Value);
     assert_eq!(group.options[2].choices.len(), 3);
-    let rows = ssbu_online_deluxe_rewrite::plugin_api::rows_for(&plugins, Some(1));
+    let rows = rows_for(&plugins, Some(1));
     assert_eq!(rows.len(), 3);
     assert_eq!(
-        ssbu_online_deluxe_rewrite::plugin_api::row_selectable(&plugins, &rows),
+        rows.iter()
+            .map(|row| selectable(&plugins, *row))
+            .collect::<Vec<_>>(),
         vec![true, false, true]
     );
+    assert_eq!(move_selection(&plugins, &rows, 0, 1), 2);
     assert_eq!(HOST.value(2, group, 2).label, "Variant 1");
     assert_eq!(HOST.step(2, 1, 1), None, "header never steps");
     assert_eq!(HOST.step(2, 2, 1).unwrap().requested, 2);

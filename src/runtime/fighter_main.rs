@@ -12,7 +12,7 @@ use crate::fighter_probe::{
     self, ArmPlan, HookView, TickLog, AGENT_BATTLE_OBJECT, AGENT_MODULE_ACCESSOR, FIGHTER_CATEGORY,
     OBJECT_ID, OBJECT_KIND, OBJECT_MODULE_ACCESSOR, SITE_OFFSET,
 };
-use crate::perf_scaler::{self, Action, CUT_IN_OFFSET, EDGE_CHARGE_KIND, EDGE_KIND, ENTRY_ID_WORK};
+use crate::perf_scaler::{self, Action, CUT_IN_OFFSET, ENTRY_ID_WORK};
 use skyline::hooks::{getRegionAddress, A64HookFunction, A64InlineHook, InlineCtx, Region};
 use skyline::libc::c_void;
 use std::fs::File;
@@ -55,7 +55,6 @@ struct Sample {
     kind: i32,
     status: i32,
     slow: bool,
-    charge: i32,
 }
 
 pub(super) fn configure() {
@@ -272,19 +271,18 @@ unsafe fn fighter_main_body(this: u64) {
             if !ARMED.load(Ordering::Acquire) {
                 return;
             }
-            let (cut, edge, (moved, which)) = perf_scaler::global().on_main(
+            let (cut, (moved, which)) = perf_scaler::global().on_main(
                 perf_scaler::MainTick {
                     entry_id: sample.entry as i32,
                     entry_present: true,
                     kind: sample.kind,
                     slow: sample.slow,
                     status: sample.status,
-                    charge: sample.charge,
                 },
                 super::drs_moves(),
             );
+            // Source 2 was the Sephiroth Gigaflare trigger (removed 2026-10-17).
             note_transition(sample.entry, 1, cut);
-            note_transition(sample.entry, 2, edge);
             note_transition(sample.entry, 3, moved);
             note_move_trigger(sample.entry, which, moved);
         }
@@ -366,17 +364,11 @@ unsafe fn read_tick(this: u64) -> Result<Sample, u8> {
     };
     let status = status_kind(accessor as *mut c_void);
     let slow = is_slow(accessor as *mut c_void);
-    let charge = if !COUNT_ONLY.load(Ordering::Acquire) && kind == EDGE_KIND {
-        work_int(accessor as *mut c_void, EDGE_CHARGE_KIND)
-    } else {
-        0
-    };
     Ok(Sample {
         entry: entry as usize,
         kind,
         status,
         slow,
-        charge,
     })
 }
 

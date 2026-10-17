@@ -58,7 +58,7 @@ const SLOTS: usize = 8;
 
 /// A tracked present older than this means the renderer is not in its steady
 /// loop (startup, window re-creation, scene teardown): no sleep until it is.
-const PRESENT_STALE_TICKS: u64 = crate::timing::TICK_HZ / 4;
+const PRESENT_STALE_TICKS: u64 = crate::capture::TICK_HZ / 4;
 
 static INSTALLED: AtomicBool = AtomicBool::new(false);
 /// 0 unknown, 1 installed, 2 external owner, 3 words differ, 4 disabled.
@@ -72,12 +72,6 @@ static LAST_PRESENT_TICK: AtomicU64 = AtomicU64::new(0);
 /// Latched the first time the gate passed; shown as `Armed` until then.
 static ELIGIBLE: AtomicBool = AtomicBool::new(false);
 static GATED_SKIPS: AtomicU64 = AtomicU64::new(0);
-/// Per-frame aggregates for the CSS capture, swapped out at each tracked
-/// present. Sleep ticks are measured only while a finite API trace is active.
-static FRAME_SLEEPS: AtomicU64 = AtomicU64::new(0);
-static FRAME_SLEEP_TICKS: AtomicU64 = AtomicU64::new(0);
-static FRAME_MAX_SLEEP_TICKS: AtomicU64 = AtomicU64::new(0);
-static FRAME_STREAKS: AtomicU64 = AtomicU64::new(0);
 static SPIN_PASSES: AtomicU32 = AtomicU32::new(Policy::DEFAULT.spin_passes);
 static EVERY_PASSES: AtomicU32 = AtomicU32::new(Policy::DEFAULT.every_passes);
 static BASE_NS: AtomicU32 = AtomicU32::new(Policy::DEFAULT.base_ns);
@@ -121,13 +115,10 @@ fn store_policy(policy: Policy) {
     MAIN_THREAD_ONLY.store(policy.main_thread_only, Ordering::Relaxed);
 }
 
-/// Optional `dispatcher_backoff.ini` in the data directory, read once.
+/// Shipped default. `dispatcher_backoff.ini` was retired on 2026-10-16 and is
+/// not read.
 fn load_policy() -> Policy {
-    let path = std::path::Path::new(super::DATA_DIR).join("dispatcher_backoff.ini");
-    match std::fs::read_to_string(path) {
-        Ok(text) => Policy::parse(&text, Policy::DEFAULT),
-        Err(_) => Policy::DEFAULT,
-    }
+    Policy::DEFAULT
 }
 
 /// The calling thread is the SDK `MainThread`. Its `ThreadType` pointer is
@@ -275,7 +266,6 @@ unsafe fn dispatcher_idle_pass(ctx: &InlineCtx) {
     );
     if streak.idle_passes == 1 {
         IDLE_PASSES.fetch_add(1, Ordering::Relaxed);
-        FRAME_STREAKS.fetch_add(1, Ordering::Relaxed);
     }
     let Ok(nanoseconds) = decision else {
         return;
@@ -297,24 +287,14 @@ unsafe fn dispatcher_idle_pass(ctx: &InlineCtx) {
         return;
     }
     SLEEPS.fetch_add(1, Ordering::Relaxed);
-    FRAME_SLEEPS.fetch_add(1, Ordering::Relaxed);
     LAST_NS.store(nanoseconds, Ordering::Relaxed);
-    let timed = super::api_trace::active();
     super::hang_trace::enter_at(super::hang_trace::Hook::BackoffSleep, now);
     skyline::nn::os::SleepThread(skyline::nn::TimeSpan {
         nanoseconds: u64::from(nanoseconds),
     });
     super::hang_trace::exit(super::hang_trace::Hook::BackoffSleep);
-    if timed || cooldown != 0 {
-        let end = skyline::nn::os::GetSystemTick() as u64;
-        if cooldown != 0 {
-            LAST_SLEEP_END.store(end, Ordering::Relaxed);
-        }
-        if timed {
-            let slept = end.wrapping_sub(now);
-            FRAME_SLEEP_TICKS.fetch_add(slept, Ordering::Relaxed);
-            FRAME_MAX_SLEEP_TICKS.fetch_max(slept, Ordering::Relaxed);
-        }
+    if cooldown != 0 {
+        LAST_SLEEP_END.store(skyline::nn::os::GetSystemTick() as u64, Ordering::Relaxed);
     }
 }
 
@@ -327,20 +307,6 @@ pub(super) fn note_scene() {
 /// The tracked NVN window presented. Called from the present wrapper.
 pub(super) fn note_present(tick: u64) {
     LAST_PRESENT_TICK.store(tick, Ordering::Relaxed);
-}
-
-/// Present wrapper, only while a finite API trace is active: emit the two
-/// per-frame backoff rows and start the next frame's aggregates.
-pub(super) fn frame_rows(tick: u64) {
-    let sleeps = FRAME_SLEEPS.swap(0, Ordering::Relaxed);
-    let sleep_ticks = FRAME_SLEEP_TICKS.swap(0, Ordering::Relaxed);
-    let max_sleep = FRAME_MAX_SLEEP_TICKS.swap(0, Ordering::Relaxed);
-    let streaks = FRAME_STREAKS.swap(0, Ordering::Relaxed);
-    for event in
-        crate::render_trace::backoff_frame_events(tick, sleeps, sleep_ticks, max_sleep, streaks)
-    {
-        super::api_trace::TRACE.observe(event);
-    }
 }
 
 pub(super) fn install() {

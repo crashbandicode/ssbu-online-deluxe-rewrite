@@ -49,7 +49,8 @@ pub(super) fn startup_phase(phase: &str) {
     }
 }
 
-fn rotate(path: &Path) -> io::Result<File> {
+/// `<name>.log` becomes `<name>.previous.log`; also used by the hang trace.
+pub(super) fn rotate(path: &Path) -> io::Result<File> {
     if path.exists() {
         let previous = path.with_extension("previous.log");
         if previous.exists() {
@@ -120,7 +121,7 @@ pub(super) fn start(version: &str) {
     startup_phase("recorder_ready");
     let text_base =
         unsafe { skyline::hooks::getRegionAddress(skyline::hooks::Region::Text) as u64 };
-    super::peer_observer::refresh_local_facts();
+    super::connection_transport::refresh_local_facts();
     startup_phase("game_text_ready");
     let plugin_start = core::ptr::addr_of!(__text_start) as u64;
     let plugin_end = core::ptr::addr_of!(__bss_end) as u64;
@@ -211,22 +212,20 @@ pub(super) fn start(version: &str) {
             let mut dropped = 0;
             let mut iteration = 0u64;
             let mut error_reported = false;
-            let mut timing = super::timing::Service::default();
+            let mut capture = super::capture::Service::default();
             loop {
-                // A running capture drains its chunks twice per period so a
+                // A running capture drains its rings twice per period so a
                 // match's row rate has twice the headroom of the 30 s capture.
                 std::thread::sleep(Duration::from_millis(250));
-                if timing.capturing() {
-                    timing.poll();
+                if capture.capturing() {
+                    capture.poll();
                 }
                 std::thread::sleep(Duration::from_millis(250));
-                timing.poll();
+                capture.poll();
                 super::auto_driver::poll();
-                super::presentation::poll();
-                super::fps_boost::publish();
                 super::dispatcher_backoff::publish();
                 super::pia_rtt::poll();
-                super::peer_observer::poll();
+                super::connection_transport::poll();
                 super::fighter_probe::poll();
                 iteration += 1;
                 super::hang_trace::poll(iteration);

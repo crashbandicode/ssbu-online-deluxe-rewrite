@@ -1,7 +1,9 @@
 //! Fork-style global Player Info window. This window does not write panes.
 use super::{imgui::*, input, overlay_host, publish, record, settings, Code};
-use crate::menu::CompactField;
+use crate::menu::{strip_line, strip_segments, ProfileAction, Row};
 use crate::overlay::{FrameTimes, Overlay, View};
+use crate::pia_rtt::PresentedPing;
+use crate::plugin_api::{page_plugins, rows_for, PageRow, Registry, RowKind};
 use std::{sync::Mutex, time::Instant};
 
 struct UiState {
@@ -15,6 +17,17 @@ struct UiState {
 static UI: Mutex<Option<UiState>> = Mutex::new(None);
 static INSTALLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 const NO_TITLE_BAR: i32 = 1 << 0;
+/// Fields per compact-strip page. The strip never scales text below
+/// readability for a long plugin list; it pages instead.
+const STRIP_PAGE: usize = 4;
+/// Rows per vertical window before a plugin list is clipped around the selection.
+const TABLE_WINDOW: usize = 10;
+
+/// One opponent-column cell: text and colour.
+type Cell = (String, Option<Vec4>);
+/// The strip's first line (`rows` as coloured segments, or plain text in a
+/// colour when there are none) and its second line.
+type Strip = (Vec<Row>, String, Option<Vec4>, String);
 
 /// True once the menu draw callback was handed to the ImGui host.
 pub(super) fn installed() -> bool {
@@ -23,10 +36,8 @@ pub(super) fn installed() -> bool {
 
 unsafe fn text(value: &str) {
     // Explicit end pointer: values need neither NUL termination nor printf escaping.
-    igTextUnformatted(
-        value.as_ptr().cast(),
-        value.as_ptr().add(value.len()).cast(),
-    );
+    let end = value.as_ptr().add(value.len());
+    igTextUnformatted(value.as_ptr().cast(), end.cast());
 }
 
 unsafe fn row(label: &str, value: &str) {
@@ -37,35 +48,28 @@ unsafe fn row(label: &str, value: &str) {
     text(value);
 }
 
-unsafe fn begin_table(id: &[u8], label_width: f32) -> bool {
-    if !igBeginTable(id.as_ptr().cast(), 2, BORDERS, Vec2::default(), 0.0) {
+unsafe fn paint_text(value: &str, color: Option<Vec4>) {
+    if let Some(color) = color {
+        igPushStyleColor_Vec4(TEXT, color);
+    }
+    text(value);
+    if color.is_some() {
+        igPopStyleColor(1);
+    }
+}
+
+/// Bordered label and value columns, plus the untitled opponent column when
+/// `columns` is 3.
+unsafe fn begin_table(id: &[u8], columns: i32, label_width: f32) -> bool {
+    if !igBeginTable(id.as_ptr().cast(), columns, BORDERS, Vec2::default(), 0.0) {
         return false;
     }
     igTableSetupColumn(c"##label".as_ptr(), WIDTH_FIXED, label_width, 0);
     igTableSetupColumn(c"##value".as_ptr(), WIDTH_STRETCH, 1.0, 0);
-    true
-}
-
-/// Label, local "You", and one opponent column. The opponent name stays empty
-/// until a name source exists. Fork columns are not titled.
-unsafe fn begin_player_table(id: &[u8], label_width: f32) -> bool {
-    if !igBeginTable(id.as_ptr().cast(), 3, BORDERS, Vec2::default(), 0.0) {
-        return false;
+    if columns > 2 {
+        igTableSetupColumn(c"##peer".as_ptr(), WIDTH_STRETCH, 1.0, 0);
     }
-    igTableSetupColumn(c"##label".as_ptr(), WIDTH_FIXED, label_width, 0);
-    igTableSetupColumn(c"##you".as_ptr(), WIDTH_STRETCH, 1.0, 0);
-    igTableSetupColumn(c"##peer".as_ptr(), WIDTH_STRETCH, 1.0, 0);
     true
-}
-
-unsafe fn row3(label: &str, you: &str, peer: &str) {
-    igTableNextRow(0, 0.0);
-    igTableNextColumn();
-    text(label);
-    igTableNextColumn();
-    text(you);
-    igTableNextColumn();
-    text(peer);
 }
 
 /// Keep one near-transparent primitive like the fork: the backend requires a
@@ -77,164 +81,164 @@ unsafe fn hidden_window() {
     igSetNextWindowPos(Vec2::default(), ALWAYS, Vec2::default());
     igSetNextWindowSize(Vec2 { x: 1.0, y: 1.0 }, ALWAYS);
     igSetNextWindowBgAlpha(0.0);
-    if igBegin(
-        c"##deluxe_hidden".as_ptr(),
-        std::ptr::null_mut(),
-        HIDDEN_FLAGS,
-    ) {
+    let hidden = c"##deluxe_hidden".as_ptr();
+    if igBegin(hidden, std::ptr::null_mut(), HIDDEN_FLAGS) {
         let list = igGetWindowDrawList();
         if !list.is_null() {
             let p = igGetWindowPos();
-            ImDrawList_AddRectFilled(
-                list,
-                p,
-                Vec2 {
-                    x: p.x + 1.0,
-                    y: p.y + 1.0,
-                },
-                0x01000000,
-                0.0,
-                0,
-            );
+            let end = Vec2 {
+                x: p.x + 1.0,
+                y: p.y + 1.0,
+            };
+            ImDrawList_AddRectFilled(list, p, end, 0x01000000, 0.0, 0);
         }
     }
     igEnd();
     igPopStyleVar(3);
 }
 
+const fn rgb(r: f32, g: f32, b: f32) -> Vec4 {
+    Vec4 {
+        x: r,
+        y: g,
+        z: b,
+        w: 1.0,
+    }
+}
+
+/// Frame-time and `TONE_OK` green.
+const GREEN: Vec4 = rgb(0.45, 0.90, 0.45);
+/// Frame-time and `TONE_WARN` yellow.
+const YELLOW: Vec4 = rgb(0.95, 0.85, 0.25);
+/// Frame-time and `TONE_ERROR` red.
+const RED: Vec4 = rgb(0.95, 0.35, 0.35);
+/// Timing line without samples.
+const GREY: Vec4 = rgb(0.70, 0.70, 0.70);
+
 fn frame_color(mean: Option<f32>) -> Vec4 {
     match mean {
-        Some(ms) if ms > 19.17 => Vec4 {
-            x: 0.95,
-            y: 0.35,
-            z: 0.35,
-            w: 1.0,
-        },
-        Some(ms) if ms > 17.0 => Vec4 {
-            x: 0.95,
-            y: 0.85,
-            z: 0.25,
-            w: 1.0,
-        },
-        Some(_) => Vec4 {
-            x: 0.45,
-            y: 0.90,
-            z: 0.45,
-            w: 1.0,
-        },
-        None => Vec4 {
-            x: 0.45,
-            y: 0.90,
-            z: 0.45,
-            w: 1.0,
-        },
+        Some(ms) if ms > 19.17 => RED,
+        Some(ms) if ms > 17.0 => YELLOW,
+        _ => GREEN,
     }
 }
 
-fn latest_frame_time(frames: &FrameTimes) -> Option<f32> {
-    if frames.count == 0 {
-        return None;
-    }
-    let index = (frames.next + crate::overlay::FRAME_HISTORY - 1) % crate::overlay::FRAME_HISTORY;
-    Some(frames.values[index])
+/// The colour `pia_rtt` presents the opponent's ping in, when it has one.
+fn ping_color(ping: &PresentedPing) -> Option<Vec4> {
+    ping.color.map(|color| Vec4 {
+        x: color.r,
+        y: color.g,
+        z: color.b,
+        w: color.a,
+    })
 }
 
+/// Text colour for a plugin `TONE_*` byte; neutral keeps the style default.
+fn tone_color(tone: u8) -> Option<Vec4> {
+    match tone {
+        deluxe_plugin_abi::TONE_OK => Some(GREEN),
+        deluxe_plugin_abi::TONE_WARN => Some(YELLOW),
+        deluxe_plugin_abi::TONE_ERROR => Some(RED),
+        _ => None,
+    }
+}
+
+/// The strip's timing line and its colour: grey until a frame time exists.
 fn timing_line(frames: &FrameTimes) -> (String, Vec4) {
+    let history = crate::overlay::FRAME_HISTORY;
     let mean = frames.average();
-    let latest = latest_frame_time(frames);
-    let color = if mean.is_some() && latest.is_some() {
+    let latest = (frames.count > 0).then(|| frames.values[(frames.next + history - 1) % history]);
+    let color = if latest.is_some() {
         frame_color(mean)
     } else {
-        Vec4 {
-            x: 0.70,
-            y: 0.70,
-            z: 0.70,
-            w: 1.0,
-        }
+        GREY
     };
     (crate::menu::compact_timing_line(mean, latest), color)
 }
 
+/// One window row. `value` empty is a label-only row.
+fn entry(label: &str, value: &str, selected: bool) -> Row {
+    Row {
+        label: label.to_owned(),
+        value: value.to_owned(),
+        selected,
+        ..Row::default()
+    }
+}
+
+/// Facts the Performance table (`strip` false: long labels, the DRS move and
+/// adaptive detail, backoff, memory and clock) and the in-match strip (`strip`
+/// true: short labels and one `Adp` field) read from the same sources.
+fn perf_facts(width: f32, height: f32, strip: bool) -> Vec<(&'static str, String)> {
+    let on_off = |on: bool| if on { "On" } else { "Off" }.to_owned();
+    let label = |long: &'static str, short: &'static str| if strip { short } else { long };
+    let resolution = crate::resolution::status();
+    let fighter = super::fighter_main::view();
+    let settings = super::settings();
+    let counters = crate::perf_scaler::global().counters();
+    let armed = crate::resolution::triggers_available(fighter.callback_armed, fighter.count_only);
+    let triggers = if armed { "Available" } else { "Unavailable" };
+    let applied = crate::resolution::applied_label(resolution.applied);
+    let mut facts = vec![
+        (label("Resolution", "Res"), applied.to_owned()),
+        ("DRS", on_off(resolution.dynamic)),
+        (label("Triggers", "Trig"), triggers.to_owned()),
+    ];
+    let adaptive = &settings.drs_adaptive;
+    if !strip {
+        facts.push(("DRS moves", drs_moves_label(&settings, counters)));
+        facts.push(("DRS adaptive", drs_adaptive_label(&settings, counters)));
+    } else if !settings.drs_moves.is_empty() || adaptive.enabled {
+        let active = counters.adaptive_active || counters.move_active.is_some();
+        let mark = if active { "*" } else { "" };
+        facts.push(("Adp", format!("{}{mark}", on_off(adaptive.enabled))));
+    }
+    if width.is_finite() && height.is_finite() && width > 0.0 && height > 0.0 {
+        facts.push((label("Output", "Out"), format!("{width:.0}x{height:.0}")));
+    }
+    if !strip {
+        let (mhz, hoc) = (super::clock_probe::mhz(), super::clock_probe::hoc());
+        let memory = crate::hang_trace::memory_label(super::hang_trace::memory());
+        facts.push(("Backoff", super::dispatcher_backoff::status_label()));
+        facts.push(("Memory", memory));
+        facts.push(("Clock", crate::clock_probe::status_label(mhz, hoc)));
+    }
+    facts
+}
+
 /// The frame-time block of the vertical window. `graph` false (`perf_view=number`)
 /// prints the mean as text instead of the 180-sample plot, which is the one
-/// ImGui primitive here that scales with the sample count.
+/// ImGui primitive here that scales with the sample count. `ping` is the
+/// opponent's ping while the opponent column shows.
 unsafe fn performance(
     frames: &FrameTimes,
     width: f32,
     height: f32,
     sx: f32,
     sy: f32,
-    ping: &crate::pia_rtt::PresentedPing,
+    ping: Option<&PresentedPing>,
     graph: bool,
 ) {
-    if !begin_table(b"fps_info\0", 100.0 * sx) {
+    if !begin_table(b"fps_info\0", 2, 100.0 * sx) {
         return;
     }
-    if let Some(label) = &ping.performance {
+    if let Some(label) = ping.and_then(|ping| ping.performance.as_ref()) {
         igTableNextRow(0, 0.0);
         igTableNextColumn();
         text("Ping");
         igTableNextColumn();
-        if let Some(color) = ping.color {
-            igPushStyleColor_Vec4(
-                TEXT,
-                Vec4 {
-                    x: color.r,
-                    y: color.g,
-                    z: color.b,
-                    w: color.a,
-                },
-            );
-        }
-        text(label);
-        if ping.color.is_some() {
-            igPopStyleColor(1);
-        }
+        paint_text(label, ping.and_then(ping_color));
     }
-    let resolution = crate::resolution::status();
-    row(
-        "Resolution",
-        crate::resolution::applied_label(resolution.applied),
-    );
-    row("DRS", if resolution.dynamic { "On" } else { "Off" });
-    let fighter = super::fighter_main::view();
-    row(
-        "Triggers",
-        if crate::resolution::triggers_available(fighter.callback_armed, fighter.count_only) {
-            "Available"
-        } else {
-            "Unavailable"
-        },
-    );
-    let settings = super::settings();
-    let counters = crate::perf_scaler::global().counters();
-    row("DRS moves", &drs_moves_label(&settings, counters));
-    row("DRS adaptive", &drs_adaptive_label(&settings, counters));
-    if width.is_finite() && height.is_finite() && width > 0.0 && height > 0.0 {
-        row("Output", &format!("{width:.0}x{height:.0}"));
+    for (label, value) in perf_facts(width, height, false) {
+        row(label, &value);
     }
-    row("Backoff", &super::dispatcher_backoff::status_label());
-    row(
-        "Memory",
-        &crate::hang_trace::memory_label(super::hang_trace::memory()),
-    );
-    row(
-        "Clock",
-        &crate::clock_probe::status_label(super::clock_probe::mhz(), super::clock_probe::hoc()),
-    );
     let mean = frames.average();
     let color = frame_color(mean);
+    let fps = mean.map_or("---".to_owned(), |ms| format!("{:.0}", 1000.0 / ms));
     igPushStyleColor_Vec4(TEXT, color);
-    row(
-        "FPS",
-        &mean
-            .map(|ms| format!("{:.0}", 1000.0 / ms))
-            .unwrap_or_else(|| "---".into()),
-    );
+    row("FPS", &fps);
     igPopStyleColor(1);
-    let label = mean
-        .map(|ms| format!("{ms:.2} ms\0"))
-        .unwrap_or_else(|| "---\0".into());
+    let label = mean.map_or("---\0".to_owned(), |ms| format!("{ms:.2} ms\0"));
     if !graph {
         igPushStyleColor_Vec4(TEXT, color);
         row("FrameTime", label.trim_end_matches('\0'));
@@ -248,7 +252,10 @@ unsafe fn performance(
     igTableNextColumn();
     igPushStyleColor_Vec4(PLOT_LINES, color);
     igPushStyleColor_Vec4(PLOT_LINES_HOVERED, color);
-    let available = igGetContentRegionAvail();
+    let size = Vec2 {
+        x: igGetContentRegionAvail().x,
+        y: 60.0 * sy,
+    };
     igPlotLines_FloatPtr(
         c"##frametime".as_ptr(),
         frames.values.as_ptr(),
@@ -257,394 +264,11 @@ unsafe fn performance(
         label.as_ptr().cast(),
         0.0,
         35.0,
-        Vec2 {
-            x: available.x,
-            y: 60.0 * sy,
-        },
+        size,
         std::mem::size_of::<f32>() as i32,
     );
     igPopStyleColor(2);
     igEndTable();
-}
-
-struct SettingCell {
-    label: String,
-    local: String,
-    remote: String,
-    ping: bool,
-    compact: Option<CompactField>,
-}
-
-struct CompactLines {
-    first: String,
-    second: String,
-    first_color: Option<Vec4>,
-    second_color: Option<Vec4>,
-    /// When set, the first row is drawn as these `(text, tone)` segments on
-    /// one line instead of `first`; their concatenation equals `first`.
-    first_segments: Option<Vec<(String, u8)>>,
-}
-
-/// Text colour for a plugin `TONE_*` byte; neutral keeps the style default.
-fn tone_color(tone: u8) -> Option<Vec4> {
-    match tone {
-        deluxe_plugin_abi::TONE_OK => Some(Vec4 {
-            x: 0.45,
-            y: 0.90,
-            z: 0.45,
-            w: 1.0,
-        }),
-        deluxe_plugin_abi::TONE_WARN => Some(Vec4 {
-            x: 0.95,
-            y: 0.85,
-            z: 0.25,
-            w: 1.0,
-        }),
-        deluxe_plugin_abi::TONE_ERROR => Some(Vec4 {
-            x: 0.95,
-            y: 0.35,
-            z: 0.35,
-            w: 1.0,
-        }),
-        _ => None,
-    }
-}
-
-/// Unselected choices of an inline plugin row.
-const INLINE_DIM: Vec4 = Vec4 {
-    x: 0.55,
-    y: 0.57,
-    z: 0.60,
-    w: 1.0,
-};
-
-fn marked(on: bool, label: &str) -> String {
-    if on {
-        format!("> {label}")
-    } else {
-        label.to_owned()
-    }
-}
-
-/// Rows the settings window actually draws. Platform is omitted. FPS++ is
-/// omitted unless the configured platform is an emulator.
-fn setting_cells(
-    config: &crate::config::Config,
-    selected: usize,
-    peers_connected: bool,
-    compact_match: bool,
-    show_remote: bool,
-    frame: crate::peer_transport::PeerFrame,
-    ping_opponent: &str,
-) -> Vec<SettingCell> {
-    let mut cells = Vec::new();
-    let peer_name = if show_remote && frame.peer.known {
-        crate::peer_transport::name_label(&frame.peer.name, frame.peer.name_len)
-            .unwrap_or("Unavailable")
-            .to_owned()
-    } else if show_remote {
-        "Unavailable".to_owned()
-    } else {
-        String::new()
-    };
-    let peer_interface = if show_remote {
-        frame.peer.interface.to_owned()
-    } else {
-        String::new()
-    };
-    cells.push(SettingCell {
-        label: "Name".to_owned(),
-        local: "You".to_owned(),
-        remote: peer_name.clone(),
-        ping: false,
-        compact: None,
-    });
-    cells.push(SettingCell {
-        label: "Interface".to_owned(),
-        local: super::peer_observer::local_interface_label().to_owned(),
-        remote: peer_interface,
-        ping: false,
-        compact: None,
-    });
-    if peers_connected && (show_remote || compact_match) {
-        cells.push(SettingCell {
-            label: marked(selected == crate::menu::ROW_PEER, "Peer"),
-            local: if show_remote {
-                String::new()
-            } else {
-                "Hidden".to_owned()
-            },
-            remote: String::new(),
-            ping: false,
-            compact: Some(CompactField {
-                label: "Peer",
-                value: if show_remote {
-                    peer_name
-                } else {
-                    "Hidden".to_owned()
-                },
-                selected: selected == crate::menu::ROW_PEER,
-            }),
-        });
-    }
-    if show_remote {
-        cells.push(SettingCell {
-            label: "Ping".to_owned(),
-            local: "---".to_owned(),
-            remote: ping_opponent.to_owned(),
-            ping: true,
-            compact: None,
-        });
-    }
-    let buffer = if config.input_buffer == -1 {
-        "Auto".to_owned()
-    } else {
-        config.input_buffer.to_string()
-    };
-    let remote_latency = if show_remote {
-        crate::peer_transport::remote_latency_label(frame.peer.latency)
-    } else {
-        String::new()
-    };
-    cells.push(SettingCell {
-        label: marked(selected == crate::menu::ROW_NET_LATENCY, "NetLatency"),
-        local: buffer.clone(),
-        remote: remote_latency,
-        ping: false,
-        compact: Some(CompactField {
-            label: "Net",
-            value: buffer,
-            selected: selected == crate::menu::ROW_NET_LATENCY,
-        }),
-    });
-    let machine = crate::render_policy::load_machine();
-    let textures = super::nvn::active_count();
-    let applied = super::renderer::status() != "Awaiting window";
-    let auto = super::auto_driver::snapshot();
-    let profile = crate::fps_boost::append_applied_suffix(
-        &crate::auto_policy::profile_row_label(
-            config.auto_profile,
-            auto.ready,
-            config.render_mode,
-            auto.request,
-        ),
-        super::fps_boost::applied(),
-    );
-    let profile_state = crate::menu::net_profile_status(
-        auto.request,
-        super::renderer::mode(),
-        textures,
-        machine,
-        applied,
-    );
-    let peer_settings = if show_remote && frame.peer.known && !frame.peer.settings.is_empty() {
-        frame.peer.settings.to_owned()
-    } else if show_remote {
-        "---".to_owned()
-    } else {
-        String::new()
-    };
-    cells.push(SettingCell {
-        label: marked(selected == crate::menu::ROW_NET_PROFILE, "NetProfile"),
-        local: profile.clone(),
-        remote: peer_settings,
-        ping: false,
-        compact: Some(CompactField {
-            label: "Profile",
-            value: profile,
-            selected: selected == crate::menu::ROW_NET_PROFILE,
-        }),
-    });
-    cells.push(SettingCell {
-        label: "Status".to_owned(),
-        local: profile_state.to_owned(),
-        remote: String::new(),
-        ping: false,
-        compact: None,
-    });
-    let stealth =
-        crate::menu::stealth_value(super::stealth(), crate::peer_transport::latched_stealth())
-            .to_owned();
-    cells.push(SettingCell {
-        label: marked(selected == crate::menu::ROW_STEALTH, "Stealth"),
-        local: stealth.clone(),
-        remote: if show_remote {
-            "---".to_owned()
-        } else {
-            String::new()
-        },
-        ping: false,
-        compact: Some(CompactField {
-            label: "Stealth",
-            value: stealth,
-            selected: selected == crate::menu::ROW_STEALTH,
-        }),
-    });
-    let streamer = if config.streamer { "On" } else { "Off" }.to_owned();
-    cells.push(SettingCell {
-        label: marked(selected == crate::menu::ROW_STREAMER, "Streamer"),
-        local: streamer.clone(),
-        remote: if show_remote {
-            "---".to_owned()
-        } else {
-            String::new()
-        },
-        ping: false,
-        compact: Some(CompactField {
-            label: "Stream",
-            value: streamer,
-            selected: selected == crate::menu::ROW_STREAMER,
-        }),
-    });
-    if config.platform == crate::config::Platform::Emulator {
-        let fps =
-            crate::fps_boost::settings_value(config.fps_boost, super::fps_boost::status_label())
-                .to_owned();
-        cells.push(SettingCell {
-            label: marked(selected == crate::menu::ROW_FPS, "FPS++"),
-            local: fps.clone(),
-            remote: if show_remote {
-                "---".to_owned()
-            } else {
-                String::new()
-            },
-            ping: false,
-            compact: Some(CompactField {
-                label: "FPS++",
-                value: fps,
-                selected: selected == crate::menu::ROW_FPS,
-            }),
-        });
-    }
-    if config.platform == crate::config::Platform::Console {
-        let ultra = config.ultra_resolution.label().to_owned();
-        cells.push(SettingCell {
-            label: marked(selected == crate::menu::ROW_ULTRA_RES, "UltraRes"),
-            local: ultra.clone(),
-            remote: if show_remote {
-                "---".to_owned()
-            } else {
-                String::new()
-            },
-            ping: false,
-            compact: Some(CompactField {
-                label: "UltraRes",
-                value: ultra,
-                selected: selected == crate::menu::ROW_ULTRA_RES,
-            }),
-        });
-    }
-    // Window pages in the chord cycle and the frame-time presentation
-    // (0.5.3). Settings has no toggle: it is always in the cycle.
-    let pages = [
-        (
-            crate::menu::ROW_PAGE_PLUGINS,
-            "PluginsPage",
-            "PlugPg",
-            crate::config::page_label(config.hide_pages.plugins),
-        ),
-        (
-            crate::menu::ROW_PAGE_OWN,
-            "OwnPages",
-            "OwnPg",
-            crate::config::page_label(config.hide_pages.own_pages),
-        ),
-        (
-            crate::menu::ROW_PAGE_PERF,
-            "PerfPage",
-            "PerfPg",
-            crate::config::page_label(config.hide_pages.performance),
-        ),
-        (
-            crate::menu::ROW_PERF_VIEW,
-            "PerfView",
-            "PerfView",
-            config.perf_view.label(),
-        ),
-    ];
-    for (row, label, short, value) in pages {
-        cells.push(SettingCell {
-            label: marked(selected == row, label),
-            local: value.to_owned(),
-            remote: if show_remote {
-                "---".to_owned()
-            } else {
-                String::new()
-            },
-            ping: false,
-            compact: Some(CompactField {
-                label: short,
-                value: value.to_owned(),
-                selected: selected == row,
-            }),
-        });
-    }
-    cells
-}
-
-unsafe fn paint_text(value: &str, color: Option<Vec4>) {
-    if let Some(color) = color {
-        igPushStyleColor_Vec4(TEXT, color);
-        text(value);
-        igPopStyleColor(1);
-    } else {
-        text(value);
-    }
-}
-
-fn compact_fields_line(cells: &[SettingCell], peer_only: bool) -> String {
-    crate::menu::compact_fields_line(
-        cells.iter().filter_map(|cell| cell.compact.as_ref()),
-        peer_only,
-    )
-}
-
-fn compact_settings_lines(
-    cells: &[SettingCell],
-    show_remote: bool,
-    ping: &crate::pia_rtt::PresentedPing,
-    frames: &FrameTimes,
-) -> CompactLines {
-    let (timing, _) = timing_line(frames);
-    let mut supporting = Vec::with_capacity(5);
-    let peer = compact_fields_line(cells, true);
-    if !peer.is_empty() {
-        supporting.push(peer);
-    }
-    if show_remote {
-        if let Some(interface) = cells.iter().find(|cell| cell.label == "Interface") {
-            if !interface.remote.is_empty() {
-                supporting.push(format!("IF:{}", interface.remote));
-            }
-        }
-        supporting.push(format!("Ping:{}", ping.opponent));
-        if let Some(latency) = cells.iter().find(|cell| {
-            cell.compact
-                .as_ref()
-                .is_some_and(|field| field.label == "Net")
-        }) {
-            if !latency.remote.is_empty() && latency.remote != "---" {
-                supporting.push(format!("PeerNet:{}", latency.remote));
-            }
-        }
-        if let Some(profile) = cells.iter().find(|cell| {
-            cell.compact
-                .as_ref()
-                .is_some_and(|field| field.label == "Profile")
-        }) {
-            if !profile.remote.is_empty() && profile.remote != "---" {
-                supporting.push(format!("PeerProfile:{}", profile.remote));
-            }
-        }
-    }
-    supporting.push(timing);
-    CompactLines {
-        first: compact_fields_line(cells, false),
-        second: supporting.join("   "),
-        first_color: None,
-        second_color: None,
-        first_segments: None,
-    }
 }
 
 /// Debug-view text for the 0.5.2 move table: the enabled set, and the move
@@ -656,14 +280,14 @@ fn drs_moves_label(
     if settings.drs_moves.is_empty() {
         return "Off".to_owned();
     }
+    let moves = settings.drs_moves.serialize();
+    let table = &crate::drs_triggers::MOVES;
     let holding = counters
         .move_active
-        .and_then(|index| crate::drs_triggers::MOVES.get(usize::from(index)))
-        .map(|entry| entry.name);
-    match holding {
-        Some(name) => format!("{} ({name} active)", settings.drs_moves.serialize()),
-        None => settings.drs_moves.serialize(),
-    }
+        .and_then(|index| table.get(usize::from(index)));
+    holding.map_or(moves.clone(), |entry| {
+        format!("{moves} ({} active)", entry.name)
+    })
 }
 
 /// Debug-view text for the adaptive trigger: threshold and frame counts, and
@@ -672,279 +296,408 @@ fn drs_adaptive_label(
     settings: &crate::config::Config,
     counters: crate::perf_scaler::TriggerCounters,
 ) -> String {
-    if !settings.drs_adaptive.enabled {
+    let adaptive = &settings.drs_adaptive;
+    if !adaptive.enabled {
         return "Off".to_owned();
     }
-    format!(
-        "{} ms, {}/{} frames{}",
-        crate::drs_triggers::format_threshold(settings.drs_adaptive.threshold_hundredths_ms),
-        settings.drs_adaptive.trigger_frames,
-        settings.drs_adaptive.release_frames,
-        if counters.adaptive_active {
-            " (active)"
-        } else {
-            ""
-        }
-    )
-}
-
-fn compact_performance_lines(
-    frames: &FrameTimes,
-    width: f32,
-    height: f32,
-    show_remote: bool,
-    ping: &crate::pia_rtt::PresentedPing,
-) -> CompactLines {
-    let (timing, color) = timing_line(frames);
-    let resolution = crate::resolution::status();
-    let fighter = super::fighter_main::view();
-    let triggers =
-        crate::resolution::triggers_available(fighter.callback_armed, fighter.count_only);
-    let mut details = vec![
-        format!(
-            "Res:{}",
-            crate::resolution::applied_label(resolution.applied)
-        ),
-        format!("DRS:{}", if resolution.dynamic { "On" } else { "Off" }),
-        format!(
-            "Trig:{}",
-            if triggers { "Available" } else { "Unavailable" }
-        ),
-    ];
-    let counters = crate::perf_scaler::global().counters();
-    let settings = super::settings();
-    if !settings.drs_moves.is_empty() || settings.drs_adaptive.enabled {
-        details.push(format!(
-            "Adp:{}{}",
-            if settings.drs_adaptive.enabled {
-                "On"
-            } else {
-                "Off"
-            },
-            if counters.adaptive_active || counters.move_active.is_some() {
-                "*"
-            } else {
-                ""
-            }
-        ));
-    }
-    if width.is_finite() && height.is_finite() && width > 0.0 && height > 0.0 {
-        details.push(format!("Out:{width:.0}x{height:.0}"));
-    }
-    if show_remote {
-        details.push(format!("Ping:{}", ping.opponent));
-    }
-    CompactLines {
-        first: timing,
-        second: details.join("   "),
-        first_color: Some(color),
-        second_color: None,
-        first_segments: None,
-    }
-}
-
-/// Label of the plugin whose own page is `page`, when it exists.
-fn page_plugin_label(registry: &crate::plugin_api::Registry, page: usize) -> Option<String> {
-    let plugins = registry.snapshot();
-    crate::plugin_api::page_plugins(&plugins)
-        .get(page)
-        .map(|index| plugins[*index].label.clone())
-}
-
-/// Compact Plugins page (or one plugin's own page when `page` is set): one
-/// page of `Label:Value` fields containing the selection, then the page
-/// indicator and the same timing line Settings uses.
-fn compact_plugin_lines(
-    registry: &crate::plugin_api::Registry,
-    selected: usize,
-    frames: &FrameTimes,
-    page: Option<usize>,
-) -> CompactLines {
-    use crate::plugin_api::{compact_label, compact_line, compact_page, rows_for, COMPACT_PAGE};
-    let plugins = registry.snapshot();
-    let rows = rows_for(&plugins, page);
-    let (start, end, page_index, pages) = compact_page(selected, rows.len(), COMPACT_PAGE);
-    let fields: Vec<_> = rows[start..end]
-        .iter()
-        .enumerate()
-        .map(|(offset, row)| {
-            let plugin = &plugins[row.plugin];
-            let option = &plugin.options[row.option];
-            (
-                if page.is_some() {
-                    // The page is titled with the plugin; fields keep their own labels.
-                    option.label.clone()
-                } else {
-                    compact_label(&plugin.label, &option.label, plugin.options.len())
-                },
-                if option.header {
-                    // A header has no value: the empty label makes
-                    // `compact_segments` print the label alone.
-                    crate::plugin_api::ValueText {
-                        label: String::new(),
-                        pending: false,
-                        tone: deluxe_plugin_abi::TONE_NEUTRAL,
-                    }
-                } else {
-                    registry.value(row.plugin, plugin, row.option)
-                },
-                start + offset == selected,
-            )
-        })
-        .collect();
-    let title = page
-        .and_then(|page| page_plugin_label(registry, page))
-        .unwrap_or_else(|| "Plugins".to_owned());
-    let (timing, _) = timing_line(frames);
-    let (first, first_segments) = if fields.is_empty() {
-        (format!("{title}: none registered"), None)
+    let threshold = crate::drs_triggers::format_threshold(adaptive.threshold_hundredths_ms);
+    let active = if counters.adaptive_active {
+        " (active)"
     } else {
-        (
-            compact_line(&fields),
-            Some(crate::plugin_api::compact_segments(&fields)),
-        )
+        ""
     };
-    CompactLines {
-        first,
-        second: format!("{title} {page_index}/{pages}   {timing}"),
-        first_color: None,
-        second_color: None,
-        first_segments,
+    let (trigger, release) = (adaptive.trigger_frames, adaptive.release_frames);
+    format!("{threshold} ms, {trigger}/{release} frames{active}")
+}
+
+/// Peer facts of one draw, shared by the Settings, Performance and Debug views.
+struct PeerFacts {
+    frame: crate::peer_transport::PeerFrame,
+    /// A station is connected (the Peer row exists).
+    connected: bool,
+    /// The opponent column is visible (not Streamer, a station connected).
+    show_remote: bool,
+    ping: PresentedPing,
+}
+
+/// What one draw shows: the settings after this frame's edits, the scene, the peer facts.
+struct Frame {
+    config: crate::config::Config,
+    scene: super::auto_driver::Snapshot,
+    peers: PeerFacts,
+}
+
+/// The strip's short label for a Settings row; rows without one (Name,
+/// Interface, Ping, Status, and Peer, which has its own second-line entry)
+/// stay out of the strip's first line.
+fn short_label(label: &str) -> Option<&'static str> {
+    Some(match label {
+        "NetLatency" => "Net",
+        "NetProfile" => "Profile",
+        "Streamer" => "Stream",
+        "PluginsPage" => "PlugPg",
+        "OwnPages" => "OwnPg",
+        "PerfPage" => "PerfPg",
+        "Stealth" => "Stealth",
+        "UltraRes" => "UltraRes",
+        "PerfView" => "PerfView",
+        _ => return None,
+    })
+}
+
+/// The Settings rows the table draws (Platform is omitted; the Peer row only
+/// with the opponent column, which names the peer on the Name row), their
+/// opponent cells, and the strip's second-line facts: the Peer line with the
+/// name, or `Hidden` without that column, then the `IF:` / `Ping:` /
+/// `PeerNet:` / `PeerProfile:` facts with it.
+fn settings_rows(
+    config: &crate::config::Config,
+    selected: usize,
+    peers: &PeerFacts,
+    scene: &super::auto_driver::Snapshot,
+) -> (Vec<Row>, Vec<Cell>, Vec<String>) {
+    use crate::menu::{
+        ROW_NET_LATENCY, ROW_NET_PROFILE, ROW_PAGE_OWN, ROW_PAGE_PERF, ROW_PAGE_PLUGINS, ROW_PEER,
+        ROW_PERF_VIEW, ROW_STEALTH, ROW_STREAMER, ROW_ULTRA_RES,
+    };
+    let peer = &peers.frame.peer;
+    let name = crate::peer_transport::name_label(&peer.name, peer.name_len);
+    let peer_name = name.filter(|_| peer.known).unwrap_or("Unavailable");
+    let remote_latency = crate::peer_transport::remote_latency_label(peer.latency);
+    let announced = peer.known && !peer.settings.is_empty();
+    let peer_settings = if announced { peer.settings } else { "---" };
+    let profile = crate::auto_policy::profile_row_label(
+        config.auto_profile,
+        scene.ready,
+        config.render_mode,
+        scene.request,
+    );
+    let status = crate::menu::net_profile_status(
+        scene.request,
+        super::renderer::mode(),
+        super::nvn::active_count(),
+        crate::render_policy::load_machine(),
+        super::renderer::status() != "Awaiting window",
+    );
+    let latched = crate::peer_transport::latched_stealth();
+    let stealth = crate::menu::stealth_value(super::stealth(), latched);
+    let interface = super::connection_transport::local_interface_label();
+    let buffer = crate::native_banner::local_latency_label(config.input_buffer);
+    let streamer = if config.streamer { "On" } else { "Off" };
+    let ultra = config.ultra_resolution.label();
+    let (page, hide) = (crate::config::page_label, &config.hide_pages);
+    let (plug, own, perf) = (
+        page(hide.plugins),
+        page(hide.own_pages),
+        page(hide.performance),
+    );
+    let perf_view = config.perf_view.label();
+    let ping = ping_color(&peers.ping);
+    let (mut rows, mut cells, mut facts) = (Vec::new(), Vec::new(), Vec::new());
+    let mut push = |label: &str, row: Option<usize>, local: &str, remote: &str| {
+        cells.push((
+            remote.to_owned(),
+            (label == "Ping").then_some(ping).flatten(),
+        ));
+        rows.push(entry(label, local, row == Some(selected)));
+    };
+    push("Name", None, "You", peer_name);
+    push("Interface", None, interface, peer.interface);
+    if peers.connected {
+        let shown = peers.show_remote.then_some(peer_name).unwrap_or("Hidden");
+        facts.push(strip_line(&[entry("Peer", shown, selected == ROW_PEER)]));
+    }
+    if peers.show_remote {
+        push("Peer", Some(ROW_PEER), "", "");
+        push("Ping", None, "---", &peers.ping.opponent);
+    }
+    push(
+        "NetLatency",
+        Some(ROW_NET_LATENCY),
+        &buffer,
+        &remote_latency,
+    );
+    push("NetProfile", Some(ROW_NET_PROFILE), &profile, peer_settings);
+    push("Status", None, status, "");
+    push("Stealth", Some(ROW_STEALTH), stealth, "---");
+    push("Streamer", Some(ROW_STREAMER), streamer, "---");
+    if config.platform == crate::config::Platform::Console {
+        push("UltraRes", Some(ROW_ULTRA_RES), ultra, "---");
+    }
+    push("PluginsPage", Some(ROW_PAGE_PLUGINS), plug, "---");
+    push("OwnPages", Some(ROW_PAGE_OWN), own, "---");
+    push("PerfPage", Some(ROW_PAGE_PERF), perf, "---");
+    push("PerfView", Some(ROW_PERF_VIEW), perf_view, "---");
+    if peers.show_remote {
+        if !peer.interface.is_empty() {
+            facts.push(format!("IF:{}", peer.interface));
+        }
+        facts.push(format!("Ping:{}", peers.ping.opponent));
+        if remote_latency != "---" {
+            facts.push(format!("PeerNet:{remote_latency}"));
+        }
+        if peer_settings != "---" {
+            facts.push(format!("PeerProfile:{peer_settings}"));
+        }
+    }
+    (rows, cells, facts)
+}
+
+/// The drawn part of the shared Plugins page (`page` None) or one own page.
+struct PluginPage {
+    /// The own page's plugin label, or `Plugins`.
+    title: String,
+    /// The rows around the selection: a group row or header is label-only,
+    /// an option row carries the plugin's current value. The vertical table
+    /// adds `...` markers where the list continues past either end.
+    rows: Vec<Row>,
+    total: usize,
+    /// One-based strip page and page count.
+    page_index: usize,
+    pages: usize,
+}
+
+/// Builds the window of `size` rows around `selected` (`paged` for the
+/// strip). Only the windowed options are asked for `current`, once per frame;
+/// headers are never asked.
+fn plugin_rows(
+    registry: &Registry,
+    page: Option<usize>,
+    selected: usize,
+    size: usize,
+    paged: bool,
+) -> PluginPage {
+    let plugins = registry.snapshot();
+    let own = page.and_then(|page| page_plugins(&plugins).get(page).copied());
+    let title = own.map_or("Plugins".to_owned(), |index| plugins[index].label.clone());
+    let all = rows_for(&plugins, page);
+    let (start, end, page_index, pages) = crate::menu::window(selected, all.len(), size, paged);
+    let mut rows = Vec::with_capacity(end - start + 2);
+    if !paged && all.is_empty() {
+        rows.push(entry("Plugins", "none registered", false));
+    }
+    if !paged && start > 0 {
+        rows.push(entry("...", "", false));
+    }
+    rows.extend(
+        all[start..end]
+            .iter()
+            .enumerate()
+            .map(|(offset, row)| match *row {
+                PageRow::Group(plugin) => entry(&plugins[plugin].label, "", false),
+                PageRow::Option { plugin, option } => {
+                    let spec = &plugins[plugin].options[option];
+                    if spec.kind == RowKind::Header {
+                        return entry(&spec.label, "", false);
+                    }
+                    let value = registry.value(plugin, &plugins[plugin], option);
+                    Row {
+                        label: spec.label.clone(),
+                        value: value.label,
+                        tone: value.tone,
+                        pending: value.pending,
+                        selected: start + offset == selected,
+                    }
+                }
+            }),
+    );
+    if !paged && end < all.len() {
+        rows.push(entry("...", "", false));
+    }
+    PluginPage {
+        title,
+        rows,
+        total: all.len(),
+        page_index,
+        pages,
     }
 }
 
-/// Vertical Plugins page: a header row per plugin, then its option rows (an
-/// own page has no header: the window title names the plugin). Long lists
-/// are clipped to a window around the selection with `...` markers.
-unsafe fn draw_plugins_vertical(
-    registry: &crate::plugin_api::Registry,
-    selected: usize,
-    sx: f32,
-    page: Option<usize>,
+fn debug_rows(peers: &PeerFacts) -> Vec<Row> {
+    let commit = &crate::build_info::GIT_COMMIT[..crate::build_info::GIT_COMMIT.len().min(12)];
+    let tracker = if super::online::ready() {
+        "Ready"
+    } else {
+        "Unavailable"
+    };
+    let mut rows = vec![
+        ("Build", commit.to_owned()),
+        ("Renderer", super::renderer::mode().label().to_owned()),
+        ("Online tracker", tracker.to_owned()),
+        ("Engine", super::renderer::status().to_owned()),
+        ("Timing", super::capture::status().to_owned()),
+    ];
+    if peers.show_remote {
+        rows.push(("Ping detail", peers.ping.detail.to_owned()));
+    }
+    rows.push(("Capture", "L+R+Up (30 s)".to_owned()));
+    rows.push(("CSS capture", super::capture::css_label()));
+    rows.push(("Match capture", super::capture::match_label()));
+    rows.into_iter()
+        .map(|(label, value)| entry(label, &value, false))
+        .collect()
+}
+
+/// The vertical table: `rows` in two columns, or three with the opponent
+/// `remote` cells. A label-only row shows its label alone; any other row
+/// shows `indent` + label (`> ` when selected) and its value in its tone,
+/// with ` (pending)` while a plugin request is outstanding.
+unsafe fn draw_table(
+    id: &[u8],
+    label_width: f32,
+    rows: &[Row],
+    indent: &str,
+    remote: Option<&[Cell]>,
 ) {
-    use crate::plugin_api::{rows_for, vertical_window, VERTICAL_WINDOW};
-    if !begin_table(b"deluxe_plugins\0", 150.0 * sx) {
+    if !begin_table(id, if remote.is_some() { 3 } else { 2 }, label_width) {
         return;
     }
-    let plugins = registry.snapshot();
-    let rows = rows_for(&plugins, page);
-    if rows.is_empty() {
-        row("Plugins", "none registered");
-        igEndTable();
-        return;
-    }
-    let (start, end) = vertical_window(selected, rows.len(), VERTICAL_WINDOW);
-    if start > 0 {
-        row("...", "");
-    }
-    let mut previous_plugin = usize::MAX;
-    for (index, entry) in rows.iter().enumerate().take(end).skip(start) {
-        let plugin = &plugins[entry.plugin];
-        if page.is_none() && entry.plugin != previous_plugin {
-            row(&plugin.label, "");
-            previous_plugin = entry.plugin;
-        }
-        let option = &plugin.options[entry.option];
-        if option.header {
-            // Version 4 header: its label, flush with the page, never selected.
-            row(&option.label, "");
-            continue;
-        }
-        let value = registry.value(entry.plugin, plugin, entry.option);
+    for (index, row) in rows.iter().enumerate() {
         igTableNextRow(0, 0.0);
         igTableNextColumn();
-        text(&marked(index == selected, &format!("  {}", option.label)));
-        igTableNextColumn();
-        if option.inline {
-            // Version 4 inline row: every choice on the line, the current one
-            // bracketed in its tone, the others dimmed.
-            let current = plugin.current(entry.option);
-            let pieces = crate::plugin_api::inline_pieces(option, current, value.pending);
-            for (piece, (piece_text, tone, current_piece)) in pieces.iter().enumerate() {
-                if piece > 0 {
-                    igSameLine(0.0, 0.0);
-                }
-                let color = if *current_piece {
-                    tone_color(*tone)
-                } else {
-                    Some(INLINE_DIM)
-                };
-                paint_text(piece_text, color);
-            }
+        let mark = if row.selected { "> " } else { "" };
+        if row.value.is_empty() {
+            text(&format!("{mark}{}", row.label));
             continue;
         }
-        let value_text = if value.pending {
-            format!("{} (pending)", value.label)
-        } else {
-            value.label
-        };
-        paint_text(&value_text, tone_color(value.tone));
-    }
-    if end < rows.len() {
-        row("...", "");
+        text(&format!("{mark}{indent}{}", row.label));
+        igTableNextColumn();
+        let pending = if row.pending { " (pending)" } else { "" };
+        paint_text(&format!("{}{pending}", row.value), tone_color(row.tone));
+        if let Some((peer, color)) = remote.and_then(|cells| cells.get(index)) {
+            igTableNextColumn();
+            paint_text(peer, *color);
+        }
     }
     igEndTable();
 }
 
-unsafe fn draw_compact_lines(lines: &CompactLines) {
+/// The in-match strip: `rows` as one unwrapped line of coloured segments
+/// (each continues the previous with no extra spacing, so the row measures
+/// the same as `strip_line`), or `plain` in `color` when there are no rows;
+/// then `second`.
+unsafe fn draw_strip((rows, plain, color, second): &Strip) {
     igPushTextWrapPos(-1.0);
-    match &lines.first_segments {
-        Some(segments) => {
-            // One unwrapped line: each segment continues the previous with no
-            // extra spacing, so the row measures the same as `lines.first`.
-            for (index, (segment, tone)) in segments.iter().enumerate() {
-                if index > 0 {
-                    igSameLine(0.0, 0.0);
-                }
-                paint_text(segment, tone_color(*tone));
-            }
-        }
-        None => paint_text(&lines.first, lines.first_color),
+    if rows.is_empty() {
+        paint_text(plain, *color);
     }
-    if !lines.second.is_empty() {
-        paint_text(&lines.second, lines.second_color);
+    for (index, (segment, tone)) in strip_segments(rows).iter().enumerate() {
+        if index > 0 {
+            igSameLine(0.0, 0.0);
+        }
+        paint_text(segment, tone_color(*tone));
+    }
+    if !second.is_empty() {
+        text(second);
     }
     igPopTextWrapPos();
 }
 
-unsafe fn draw_settings_vertical(
-    cells: &[SettingCell],
-    remote: bool,
-    sx: f32,
-    ping_color: Option<Vec4>,
-) {
-    let began = if remote {
-        begin_player_table(b"conn_player_info\0", 110.0 * sx)
-    } else {
-        begin_table(b"conn_player_info\0", 110.0 * sx)
-    };
-    if !began {
-        return;
-    }
-    for cell in cells {
-        if remote {
-            if cell.ping {
-                igTableNextRow(0, 0.0);
-                igTableNextColumn();
-                text(&cell.label);
-                igTableNextColumn();
-                text(&cell.local);
-                igTableNextColumn();
-                paint_text(&cell.remote, ping_color);
-            } else {
-                row3(&cell.label, &cell.local, &cell.remote);
-            }
+/// Input, native-pad gating, profile actions, `publish`, the plugin
+/// reconcile and the chord records of one draw. Returns what the window shows.
+unsafe fn poll(ui: &mut UiState, sample: input::Sample) -> Frame {
+    let buttons = sample.buttons;
+    let mut config = settings();
+    let saved = config.clone();
+    let previous_view = ui.controls.view;
+    let command_edge = ui.controls.command_edge(buttons);
+    let (surface_gen, surface_kind) = super::native_banner::surface_sample();
+    let scene = super::auto_driver::snapshot();
+    let native = crate::menu::NativePads {
+        allow: crate::menu::native_banner_allowed(scene.ready, scene.connection, scene.status),
+        surface: crate::menu::NativeSurface::from_byte(if surface_gen != 0 {
+            surface_kind
         } else {
-            row(&cell.label, &cell.local);
+            0
+        }),
+        fresh: surface_gen != 0 && surface_gen != ui.surface_gen,
+    };
+    ui.surface_gen = surface_gen;
+    // Training and matches: a Left/Right edit in the window needs ZR held so
+    // a taunt or a stray press cannot change a setting mid-game (ZL + D-pad
+    // swaps the controlled fighter in Training).
+    ui.controls.edit_hold =
+        scene.ready && scene.status != crate::auto_policy::SceneStatus::Inactive;
+    if ui.controls.poll_native(buttons, &mut config, native) {
+        match crate::menu::profile_action(&saved, &config) {
+            ProfileAction::EnableAuto => {
+                crate::set_auto_profile(true);
+            }
+            ProfileAction::SelectManual(mode) => {
+                crate::set_auto_profile(false);
+                crate::select_user_profile(mode);
+            }
+            ProfileAction::Unchanged => {}
+        }
+        publish(&config);
+        // `a` carried the FX mode until 0.5.0 and is always 0 now.
+        record(Code::MenuChanged, 0, config.input_buffer as i64 as u64);
+    }
+    crate::plugin_api::REGISTRY.reconcile_pending();
+    if let Some(step) = crate::plugin_api::REGISTRY.take_last_step() {
+        record(
+            Code::PluginRequest,
+            (step.plugin as u64 & 0xffff) | ((step.option as u64 & 0xffff) << 16),
+            (step.requested as u64 & 0xffff) | ((u64::from(step.status.code()) & 0xff) << 16),
+        );
+    }
+    let view = ui.controls.view;
+    if let Some(edge) = command_edge {
+        let views = previous_view as u64 | ((view as u64) << 8);
+        let pad = (u64::from(sample.npad_id) << 16) | (u64::from(sample.style_flags) << 24);
+        record(
+            Code::OverlayCommand,
+            buttons,
+            views | pad | (u64::from(edge) << 56),
+        );
+    }
+    let frame = crate::peer_transport::peer_frame();
+    let connected = crate::peer_transport::station_connected(frame.selection);
+    let show_remote =
+        crate::peer_transport::opponent_column_visible(config.streamer, frame.selection);
+    if view == View::Settings {
+        let gate = crate::menu::row_gate(connected, config.platform);
+        if !crate::menu::row_visible(ui.controls.menu.selected, gate) {
+            ui.controls.menu.selected = crate::menu::move_row(ui.controls.menu.selected, 1, gate);
         }
     }
-    igEndTable();
+    let identity = if show_remote {
+        crate::peer_transport::display_identity(frame.selection)
+    } else {
+        crate::pia_rtt::RttIdentity::Busy
+    };
+    let ping = crate::pia_rtt::present_published(identity, &super::pia_rtt::current_publication());
+    super::capture::set_view(view as u8);
+    let pressed = buttons & !ui.previous_timing_buttons;
+    ui.previous_timing_buttons = buttons;
+    let shoulders = crate::overlay::L | crate::overlay::R;
+    let debug_chord = view == View::Debug && buttons & shoulders == shoulders;
+    if debug_chord && pressed & crate::overlay::UP != 0 {
+        super::capture::request();
+    }
+    #[cfg(feature = "coverage")]
+    if debug_chord && pressed & crate::overlay::LEFT != 0 {
+        super::coverage::request_manual();
+    }
+    if view != previous_view {
+        record(Code::OverlayView, previous_view as u64, view as u64);
+    }
+    let peers = PeerFacts {
+        frame,
+        connected,
+        show_remote,
+        ping,
+    };
+    Frame {
+        config,
+        scene,
+        peers,
+    }
 }
 
 unsafe extern "C" fn draw() {
     let sample = input::read();
-    let buttons = sample.buttons;
-    super::timing::observe(buttons);
+    super::capture::observe(sample.buttons);
     let Ok(mut guard) = UI.try_lock() else {
         return;
     };
@@ -967,290 +720,211 @@ unsafe extern "C" fn draw() {
         ui.frames
             .push(now.duration_since(previous).as_secs_f32() * 1000.0);
     }
-    let mut config = settings();
-    let saved = config.clone();
-    let previous_view = ui.controls.view;
-    let command_edge = ui.controls.command_edge(buttons);
-    let (surface_gen, surface_kind) = super::native_banner::surface_sample();
-    let surface_fresh = surface_gen != 0 && surface_gen != ui.surface_gen;
-    ui.surface_gen = surface_gen;
-    let scene = super::auto_driver::snapshot();
-    let native = crate::menu::NativePads {
-        allow: crate::menu::native_banner_allowed(scene.ready, scene.connection, scene.status),
-        surface: if surface_gen != 0 {
-            crate::menu::NativeSurface::from_byte(surface_kind)
-        } else {
-            crate::menu::NativeSurface::None
-        },
-        fresh: surface_fresh,
-    };
-    // Training and matches: a Left/Right edit in the window needs ZR held so
-    // a taunt or a stray press cannot change a setting mid-game (ZL + D-pad
-    // swaps the controlled fighter in Training).
-    ui.controls.edit_hold =
-        scene.ready && scene.status != crate::auto_policy::SceneStatus::Inactive;
-    if ui.controls.poll_native(buttons, &mut config, native) {
-        match crate::menu::profile_action(&saved, &config) {
-            crate::menu::ProfileAction::EnableAuto => {
-                crate::set_auto_profile(true);
-            }
-            crate::menu::ProfileAction::SelectManual(mode) => {
-                crate::set_auto_profile(false);
-                crate::select_user_profile(mode);
-            }
-            crate::menu::ProfileAction::Unchanged => {}
-        }
-        publish(&config);
-        // `a` carried the FX mode until 0.5.0 and is always 0 now.
-        record(Code::MenuChanged, 0, config.input_buffer as i64 as u64);
-    }
-    crate::plugin_api::REGISTRY.reconcile_pending();
-    if let Some(step) = crate::plugin_api::REGISTRY.take_last_step() {
-        record(
-            Code::PluginRequest,
-            (step.plugin as u64 & 0xffff) | ((step.option as u64 & 0xffff) << 16),
-            (step.requested as u64 & 0xffff) | ((u64::from(step.status.code()) & 0xff) << 16),
-        );
-    }
+    let frame = poll(ui, sample);
     let view = ui.controls.view;
-    if let Some(edge) = command_edge {
-        record(
-            Code::OverlayCommand,
-            buttons,
-            previous_view as u64
-                | ((view as u64) << 8)
-                | (u64::from(sample.npad_id) << 16)
-                | (u64::from(sample.style_flags) << 24)
-                | (u64::from(edge) << 56),
-        );
-    }
-    let frame = crate::peer_transport::peer_frame();
-    let connected = crate::peer_transport::station_connected(frame.selection);
-    let show_remote =
-        crate::peer_transport::opponent_column_visible(config.streamer, frame.selection);
-    if view == View::Settings {
-        let gate = crate::menu::row_gate(connected, config.platform);
-        if !crate::menu::row_visible(ui.controls.menu.selected, gate) {
-            ui.controls.menu.selected = crate::menu::move_row(ui.controls.menu.selected, 1, gate);
-        }
-    }
-    let (publication, epoch, published_gen, draw_gen) = super::pia_rtt::current_publication();
-    let identity = if show_remote {
-        crate::peer_transport::display_identity(frame.selection)
-    } else {
-        crate::pia_rtt::RttIdentity::Busy
-    };
-    let ping =
-        crate::pia_rtt::present_published(identity, publication, epoch, published_gen, draw_gen);
-    super::timing::set_view(view as u8);
-    let pressed = buttons & !ui.previous_timing_buttons;
-    ui.previous_timing_buttons = buttons;
-    let shoulders = crate::overlay::L | crate::overlay::R;
-    if view == View::Debug && buttons & shoulders == shoulders && pressed & crate::overlay::UP != 0
-    {
-        super::timing::request();
-    }
-    #[cfg(feature = "coverage")]
-    if view == View::Debug
-        && buttons & shoulders == shoulders
-        && pressed & crate::overlay::LEFT != 0
-    {
-        super::coverage::request_manual();
-    }
-    if view != previous_view {
-        record(Code::OverlayView, previous_view as u64, view as u64);
-    }
     if view == View::Hidden {
         hidden_window();
     } else {
-        let (width, height) = overlay_host::display_size();
-        let sx = width / 1920.0;
-        let sy = height / 1080.0;
-        let fps_visible = config.platform == crate::config::Platform::Emulator;
-        // SetNextWindowPos runs before this frame's window is measured. For a
-        // compact strip, use the maximum design width to preserve its left edge.
-        let scene = super::auto_driver::snapshot();
-        let shape = crate::menu::menu_shape(scene.ready, scene.status);
-        let info_view = match view {
-            View::Debug => crate::menu::InfoView::Debug,
-            View::Performance => crate::menu::InfoView::Performance,
-            View::Plugins | View::PluginPage => crate::menu::InfoView::Plugins,
-            View::Settings | View::Hidden => crate::menu::InfoView::Settings,
-        };
-        let own_page = (view == View::PluginPage).then_some(ui.controls.page);
-        let compact_strip = crate::menu::compact_strip(shape, info_view);
-        let window_width = crate::menu::pane_width(shape, info_view);
-        let configured = window_width * sx;
-        let x = if compact_strip {
-            ((width - configured) * 0.5).max(0.0)
-        } else {
-            crate::hud_place::origin_x(
-                crate::hud_place::on_right(scene.ready, scene.connection, scene.status),
-                width,
-                None,
-                configured,
-                crate::hud_place::margin_for(width),
-            )
-        };
-        let cells = (view == View::Settings).then(|| {
-            setting_cells(
-                &config,
-                ui.controls.menu.selected,
-                connected,
-                compact_strip,
-                show_remote,
-                frame,
-                &ping.opponent,
-            )
-        });
-        let compact_lines = if compact_strip {
-            match view {
-                View::Settings => cells
-                    .as_deref()
-                    .map(|cells| compact_settings_lines(cells, show_remote, &ping, &ui.frames)),
-                View::Performance => Some(compact_performance_lines(
-                    &ui.frames,
-                    width,
-                    height,
-                    show_remote,
-                    &ping,
-                )),
-                View::Plugins | View::PluginPage => Some(compact_plugin_lines(
-                    &crate::plugin_api::REGISTRY,
-                    ui.controls.plugin_row,
-                    &ui.frames,
-                    own_page,
-                )),
-                View::Hidden | View::Debug => None,
-            }
-        } else {
-            None
-        };
-        igSetNextWindowPos(Vec2 { x, y: 0.0 }, ALWAYS, Vec2::default());
-        igSetNextWindowSize(
-            Vec2 {
-                // Let ImGui fit compact rows to content. `configured` remains
-                // the positioning and adaptive-font width bound.
-                x: if compact_strip { 0.0 } else { configured },
-                // Zero requests ImGui's content-fit height. Compact match views
-                // contain only one or two unwrapped text lines.
-                y: 0.0,
-            },
-            ALWAYS,
-        );
-        if let Some(alpha) = crate::menu::match_window_alpha(shape) {
-            igSetNextWindowBgAlpha(alpha);
-        }
-        if compact_strip {
-            igPushStyleVar_Float(WINDOW_BORDER, 0.0);
-            igPushStyleVar_Vec2(
-                WINDOW_PADDING,
-                Vec2 {
-                    x: 12.0 * sx,
-                    y: 3.0 * sy,
-                },
-            );
-        }
-        let font_size = compact_lines
-            .as_ref()
-            .map(|lines| {
-                crate::menu::compact_font_size(&lines.first, &lines.second, configured, sx, sy)
-            })
-            .unwrap_or(16.0 * sy);
-        igPushFont(std::ptr::null_mut(), font_size);
-        // An own page is titled with its plugin's label. The `##` suffix keeps
-        // ImGui's window identity stable across plugins with the same label.
-        let page_title = own_page
-            .filter(|_| !compact_strip)
-            .and_then(|page| page_plugin_label(&crate::plugin_api::REGISTRY, page))
-            .and_then(|label| std::ffi::CString::new(format!("{label}##deluxe_plugin_page")).ok());
-        let title: *const std::ffi::c_char = match &page_title {
-            Some(title) => title.as_ptr(),
-            None if compact_strip => c"##deluxe_match_strip".as_ptr(),
-            None => c"Player Info".as_ptr(),
-        };
-        let flags = if compact_strip {
-            WINDOW_FLAGS | NO_TITLE_BAR
-        } else {
-            WINDOW_FLAGS
-        };
-        if igBegin(title, std::ptr::null_mut(), flags) {
-            if view == View::Settings {
-                let ping_color = ping.color.map(|color| Vec4 {
-                    x: color.r,
-                    y: color.g,
-                    z: color.b,
-                    w: color.a,
-                });
-                if !compact_strip {
-                    if let Some(cells) = cells.as_deref() {
-                        draw_settings_vertical(cells, show_remote, sx, ping_color);
-                    }
-                }
-            }
-            if matches!(view, View::Plugins | View::PluginPage) && !compact_strip {
-                draw_plugins_vertical(
-                    &crate::plugin_api::REGISTRY,
-                    ui.controls.plugin_row,
-                    sx,
-                    own_page,
-                );
-            }
-            if view == View::Debug && begin_table(b"deluxe_debug\0", 100.0 * sx) {
-                row(
-                    "Build",
-                    &crate::build_info::GIT_COMMIT[..crate::build_info::GIT_COMMIT.len().min(12)],
-                );
-                row("Renderer", super::renderer::mode().label());
-                row(
-                    "Online tracker",
-                    if super::online::ready() {
-                        "Ready"
-                    } else {
-                        "Unavailable"
-                    },
-                );
-                row("Engine", super::renderer::status());
-                if fps_visible {
-                    row("FPS++", super::fps_boost::status_label());
-                }
-                row("Timing", super::timing::status());
-                if show_remote {
-                    row("Ping detail", ping.detail);
-                }
-                row("Capture", "L+R+Up (30 s)");
-                row("CSS capture", &super::css_capture::status_label());
-                row("Match capture", &super::match_capture::status_label());
-                igEndTable();
-            }
-            if let Some(lines) = compact_lines.as_ref() {
-                draw_compact_lines(lines);
-            } else if !matches!(view, View::Plugins | View::PluginPage) {
-                let quiet_ping = crate::pia_rtt::PresentedPing {
-                    opponent: String::new(),
-                    performance: None,
-                    color: None,
-                    detail: "",
-                };
-                performance(
-                    &ui.frames,
-                    width,
-                    height,
-                    sx,
-                    sy,
-                    if show_remote { &ping } else { &quiet_ping },
-                    config.perf_view == crate::config::PerfView::Graph,
-                );
-            }
-        }
-        igEnd();
-        igPopFont();
-        if compact_strip {
-            igPopStyleVar(2);
-        }
+        draw_window(ui, view, &frame);
     }
     if sampled {
         record(Code::OverlayExited, ui.count, view as u64);
+    }
+}
+
+/// The ready-match strip of `view`: Settings fields with the Peer, opponent
+/// and timing facts; the plugin page with `title p/N` and the timing line;
+/// or the timing line over the short performance facts.
+fn strip_lines(
+    ui: &UiState,
+    view: View,
+    frame: &Frame,
+    page: Option<&PluginPage>,
+    display: Vec2,
+) -> Strip {
+    let peers = &frame.peers;
+    let (timing, color) = timing_line(&ui.frames);
+    match (view, page) {
+        (View::Settings, _) => {
+            let selected = ui.controls.menu.selected;
+            let (rows, _, mut facts) = settings_rows(&frame.config, selected, peers, &frame.scene);
+            facts.push(timing);
+            let short = |row: &Row| {
+                short_label(&row.label).map(|short| entry(short, &row.value, row.selected))
+            };
+            (
+                rows.iter().filter_map(short).collect(),
+                String::new(),
+                None,
+                facts.join("   "),
+            )
+        }
+        (View::Plugins | View::PluginPage, Some(page)) => {
+            let plain = format!("{}: none registered", page.title);
+            let second = format!(
+                "{} {}/{}   {timing}",
+                page.title, page.page_index, page.pages
+            );
+            (page.rows.clone(), plain, None, second)
+        }
+        _ => {
+            let facts = perf_facts(display.x, display.y, true).into_iter();
+            let mut details: Vec<String> = facts
+                .map(|(label, value)| format!("{label}:{value}"))
+                .collect();
+            if peers.show_remote {
+                details.push(format!("Ping:{}", peers.ping.opponent));
+            }
+            (Vec::new(), timing, Some(color), details.join("   "))
+        }
+    }
+}
+
+/// The vertical tables of `view`; Settings, Debug and Performance end with
+/// the frame-time block.
+unsafe fn draw_tables(
+    ui: &UiState,
+    view: View,
+    frame: &Frame,
+    page: Option<&PluginPage>,
+    scale: Vec2,
+    display: Vec2,
+) {
+    let peers = &frame.peers;
+    match (view, page) {
+        (View::Settings, _) => {
+            let selected = ui.controls.menu.selected;
+            let (rows, cells, _) = settings_rows(&frame.config, selected, peers, &frame.scene);
+            let remote = peers.show_remote.then_some(cells.as_slice());
+            draw_table(b"conn_player_info\0", 110.0 * scale.x, &rows, "", remote);
+        }
+        (View::Plugins | View::PluginPage, Some(page)) => {
+            // Option rows sit two spaces under their group row.
+            let indent = if page.total == 0 { "" } else { "  " };
+            return draw_table(
+                b"deluxe_plugins\0",
+                150.0 * scale.x,
+                &page.rows,
+                indent,
+                None,
+            );
+        }
+        (View::Debug, _) => draw_table(
+            b"deluxe_debug\0",
+            100.0 * scale.x,
+            &debug_rows(peers),
+            "",
+            None,
+        ),
+        _ => {}
+    }
+    let ping = peers.show_remote.then_some(&peers.ping);
+    let graph = frame.config.perf_view == crate::config::PerfView::Graph;
+    performance(
+        &ui.frames, display.x, display.y, scale.x, scale.y, ping, graph,
+    );
+}
+
+/// Positions, sizes and titles the visible window, then draws the view's
+/// body: the compact strip in a ready match, or the vertical tables.
+unsafe fn draw_window(ui: &UiState, view: View, frame: &Frame) {
+    let (width, height) = overlay_host::display_size();
+    let display = Vec2 {
+        x: width,
+        y: height,
+    };
+    let scale = Vec2 {
+        x: width / 1920.0,
+        y: height / 1080.0,
+    };
+    let scene = &frame.scene;
+    // SetNextWindowPos runs before this frame's window is measured. For a
+    // compact strip, use the maximum design width to preserve its left edge.
+    let shape = crate::menu::menu_shape(scene.ready, scene.status);
+    let info_view = match view {
+        View::Debug => crate::menu::InfoView::Debug,
+        View::Performance => crate::menu::InfoView::Performance,
+        View::Plugins | View::PluginPage => crate::menu::InfoView::Plugins,
+        View::Settings | View::Hidden => crate::menu::InfoView::Settings,
+    };
+    let compact = crate::menu::compact_strip(shape, info_view);
+    let configured = crate::menu::pane_width(shape, info_view) * scale.x;
+    let x = if compact {
+        ((width - configured) * 0.5).max(0.0)
+    } else {
+        let right = crate::hud_place::on_right(scene.ready, scene.connection, scene.status);
+        crate::hud_place::origin_x(
+            right,
+            width,
+            None,
+            configured,
+            crate::hud_place::margin_for(width),
+        )
+    };
+    let own = (view == View::PluginPage).then_some(ui.controls.page);
+    let page = matches!(view, View::Plugins | View::PluginPage).then(|| {
+        let size = if compact { STRIP_PAGE } else { TABLE_WINDOW };
+        plugin_rows(
+            &crate::plugin_api::REGISTRY,
+            own,
+            ui.controls.plugin_row,
+            size,
+            compact,
+        )
+    });
+    let strip = compact.then(|| strip_lines(ui, view, frame, page.as_ref(), display));
+    igSetNextWindowPos(Vec2 { x, y: 0.0 }, ALWAYS, Vec2::default());
+    // Let ImGui fit compact rows to content; `configured` remains the
+    // positioning and adaptive-font width bound. Zero height requests the
+    // content-fit height: compact views are one or two unwrapped lines.
+    let fit = if compact { 0.0 } else { configured };
+    igSetNextWindowSize(Vec2 { x: fit, y: 0.0 }, ALWAYS);
+    if let Some(alpha) = crate::menu::match_window_alpha(shape) {
+        igSetNextWindowBgAlpha(alpha);
+    }
+    if compact {
+        igPushStyleVar_Float(WINDOW_BORDER, 0.0);
+        let padding = Vec2 {
+            x: 12.0 * scale.x,
+            y: 3.0 * scale.y,
+        };
+        igPushStyleVar_Vec2(WINDOW_PADDING, padding);
+    }
+    let font_size = strip
+        .as_ref()
+        .map_or(16.0 * scale.y, |(rows, plain, _, second)| {
+            let first = if rows.is_empty() {
+                plain.clone()
+            } else {
+                strip_line(rows)
+            };
+            crate::menu::compact_font_size(&first, second, configured, scale.x, scale.y)
+        });
+    igPushFont(std::ptr::null_mut(), font_size);
+    // An own page is titled with its plugin's label. The `##` suffix keeps
+    // ImGui's window identity stable across plugins with the same label.
+    let own_title = page
+        .as_ref()
+        .filter(|_| own.is_some() && !compact)
+        .map(|page| &page.title);
+    let page_title = own_title
+        .and_then(|title| std::ffi::CString::new(format!("{title}##deluxe_plugin_page")).ok());
+    let title: *const std::ffi::c_char = match &page_title {
+        Some(title) => title.as_ptr(),
+        None if compact => c"##deluxe_match_strip".as_ptr(),
+        None => c"Player Info".as_ptr(),
+    };
+    let flags = WINDOW_FLAGS | if compact { NO_TITLE_BAR } else { 0 };
+    if igBegin(title, std::ptr::null_mut(), flags) {
+        match &strip {
+            Some(strip) => draw_strip(strip),
+            None => draw_tables(ui, view, frame, page.as_ref(), scale, display),
+        }
+    }
+    igEnd();
+    igPopFont();
+    if compact {
+        igPopStyleVar(2);
     }
 }
 

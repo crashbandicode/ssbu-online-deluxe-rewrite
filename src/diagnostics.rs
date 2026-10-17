@@ -9,7 +9,14 @@ pub const CAPACITY: usize = 128;
 
 /// Numbers are stable. Codes 11, 27 to 29, 84 to 87 and 91 to 97 were the
 /// character-FX records; they moved to the `ssbu-fx-control` plugin in 0.5.0
-/// and are not reused.
+/// and are not reused. Codes 75 to 77 and 83 were opt-in diagnostics retired
+/// on 2026-10-16. Codes 37 to 45, 64 and 65 were the opt-in peer observer
+/// (parsed observation, name sample, drops, station map, the 41 to 45 send
+/// probe, the 64/65 station-map reachability sample) and code 88 was FPS++;
+/// both were removed on 2026-10-17. Code 89 (`MenuOrder`, one row per capture
+/// arm) stopped being emitted the same day when the captures were
+/// consolidated; the variant stays so the number remains reserved. None of
+/// these numbers is reused.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u16)]
 pub enum Code {
@@ -51,20 +58,6 @@ pub enum Code {
     RenderCaller = 34,
     RenderFlushTarget = 35,
     PiaRtt = 36,
-    PeerObserve = 37,
-    PeerObserveName = 38,
-    PeerObserveDrop = 39,
-    PeerObserveMap = 40,
-    /// Outgoing plaintext packet header at the encrypt site.
-    SendPacket = 41,
-    /// Mixed source id plus the flag, kind, length, and inheritance mask.
-    SendIdentity = 42,
-    /// Mixed destination id and the receive-map index, when the id is known.
-    SendDestination = 43,
-    /// Kind 0x14 subtype-2 spare slot, or kind 0x58 type and Data baseline.
-    SendDetail = 44,
-    /// Send-site ring or unreadable packet drops.
-    SendDrop = 45,
     ProfileTransition = 46,
     ProfileRefused = 47,
     /// Render-opts teardown guard: a module unloaded between this frame's
@@ -72,10 +65,6 @@ pub enum Code {
     /// update and fighter worker were skipped and the game's own ordering
     /// runs for the quiet window. `a` is the unload epoch, `b` the frame.
     RenderTeardownGuard = 48,
-    /// Station-index hook reachability. `a` is hits since install; `b` is flags.
-    StationProbe = 64,
-    /// Mixed source id from that sample. `a` is `mix_id` after a successful read.
-    StationProbeId = 65,
     /// Mixed constant id learned from an inverse connection request.
     TransportHandshake = 66,
     /// Mixed constant id confirmed by a matching connection response.
@@ -96,12 +85,6 @@ pub enum Code {
     /// Requested mode in the low byte, selected mode in the next, then auto,
     /// platform, cleanup hold, and scene-ready bits. `b` is the selection generation.
     AutoRequest = 74,
-    /// common.nro load observation. `a` is the module base, `b` is the symbol.
-    FighterModule = 75,
-    /// `call_line_status` offset in `a`. `b` is flags plus generation.
-    FighterSymbol = 76,
-    /// Two instruction words from the opt-in module probe. Not a hook site.
-    FighterWords = 77,
     /// Report push, pop, or clear. `a` is the kind, `b` is the level or count.
     ResolutionReport = 78,
     /// The original resolution call returned. `a` is the applied level.
@@ -110,20 +93,13 @@ pub enum Code {
     ResolutionCrop = 80,
     /// `common` Main arm or rejection. `a` is the result, `b` is the detail.
     FighterMain = 81,
-    /// Cut-in or Sephiroth start/end. Not a per-tick counter.
+    /// Cut-in start/end. `a` is the entry, the action (1 start, 2 end) in bits
+    /// 8..15 and the source in bits 16..23: 1 cut-in, 3 a 0.5.2 move-table
+    /// edge. Source 2 was the Sephiroth Gigaflare trigger, removed 2026-10-17
+    /// and not reused. Not a per-tick counter.
     FighterTransition = 82,
-    /// Opt-in `PROBE_CROP` view of a game `nvnWindowSetCrop`. Not main's crop.
-    ///
-    /// `a`/`b` come from [`crop_rect_event`], [`crop_cap_event`], or
-    /// [`crop_armed_event`]. Main's own crop stays [`Code::ResolutionCrop`].
-    CropObserve = 83,
-    /// Native-window FPS++ phase in the low byte of `a` and the note in the
-    /// next byte. `b` is 1 when the interval read back as applied. The
-    /// tracked NVN window thread produces the pair. The diagnostics poll only
-    /// publishes it, and only when it changes.
-    FpsBoost = 88,
-    /// One capture arm. `a` is the API-trace id. `b` is 1 when the embedded
-    /// backend is the one that will be sampled. Not a per-frame record.
+    /// Reserved; no longer emitted (2026-10-17). Was one row per capture arm:
+    /// `a` the capture id, `b` 1 when the embedded backend was the sampled one.
     MenuOrder = 89,
     /// Startup-only PROBE_RENDER_POLL discriminator; not a shipping fix.
     /// a=1: execute the original zero-timeout render poll without changing profile.
@@ -157,10 +133,11 @@ pub enum Code {
     /// total sleeps in bits 0..47 and the last sleep length in microseconds
     /// in bits 48..63. Not a per-frame record.
     DispatcherBackoffStats = 103,
-    /// CSS capture startup. `a` is the installed hook mask: bit 0 dispatcher
-    /// registration, bit 1 dependency wait, bit 2 UI job (7 = arming). `b`
-    /// bit 0 is the `CAPTURE_CSS` flag, bit 1 `GetThreadPriority` resolved,
-    /// bit 2 `GetThreadCoreMask` resolved. Both zero: flag absent, no hooks.
+    /// CSS capture startup. Since 2026-10-17 `a` is the installed hook mask:
+    /// bit 0 dependency wait, bit 1 UI job (3 = both, arming possible); `b`
+    /// bit 0 is the `CAPTURE_CSS` flag. Both zero: no flag, no hooks. Before
+    /// that, `a` bit 0 was the dispatcher-registration hook (7 = all three)
+    /// and `b` bits 1–2 said whether the SDK thread-info symbols resolved.
     CssCapture = 104,
     /// Two-image LessLag presents at the flush. Only mismatches are recorded:
     /// `a` = 2 when the game then presented a different index than the one
@@ -202,33 +179,6 @@ pub enum Code {
     /// profile, 8 uncapped_clocks). At boot, on every stock/OC change and
     /// once a minute. See `clock_probe`.
     ClockSample = 111,
-}
-
-/// Game SetCrop observations recorded before further calls are forwarded only.
-pub const CROP_OBSERVE_CAP: u32 = 32;
-const CROP_PRESENT_MARK: u64 = 1 << 63;
-
-/// `x,y,w,h` in the low 16 bits of each field. Values outside `0..=65535` truncate.
-pub const fn crop_rect_word(x: i32, y: i32, w: i32, h: i32) -> u64 {
-    (x as u16 as u64)
-        | ((y as u16 as u64) << 16)
-        | ((w as u16 as u64) << 32)
-        | ((h as u16 as u64) << 48)
-}
-
-/// Rect observation. Bit 63 of `b` is clear. There is no caller word.
-pub const fn crop_rect_event(present: u64, x: i32, y: i32, w: i32, h: i32) -> (u64, u64) {
-    (crop_rect_word(x, y, w, h), present & !CROP_PRESENT_MARK)
-}
-
-/// The observe cap was hit. Later SetCrop calls are not recorded.
-pub const fn crop_cap_event(present: u64) -> (u64, u64) {
-    (CROP_PRESENT_MARK, present & !CROP_PRESENT_MARK)
-}
-
-/// The wrapper was handed to the game once. Not a crop rectangle.
-pub const fn crop_armed_event() -> (u64, u64) {
-    (CROP_PRESENT_MARK | 1, 0)
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -338,9 +288,12 @@ mod tests {
     }
 
     #[test]
-    fn crop_observe_words_separate_rect_and_cap() {
-        assert_eq!(Code::CropObserve as u16, 83);
-        assert_eq!(Code::FpsBoost as u16, 88);
+    fn event_codes_keep_their_numbers() {
+        assert_eq!(Code::PiaRtt as u16, 36);
+        assert_eq!(Code::ProfileTransition as u16, 46);
+        assert_eq!(Code::RenderTeardownGuard as u16, 48);
+        assert_eq!(Code::TransportHandshake as u16, 66);
+        assert_eq!(Code::FighterTransition as u16, 82);
         assert_eq!(Code::MenuOrder as u16, 89);
         assert_eq!(Code::RenderPollProbe as u16, 90);
         assert_eq!(Code::NullLatencyPointer as u16, 10);
@@ -362,19 +315,6 @@ mod tests {
         assert_eq!(Code::CoverageDump as u16, 109);
         assert_eq!(Code::StageLoaded as u16, 110);
         assert_eq!(Code::ClockSample as u16, 111);
-        let rect = crop_rect_event(4, 0, 0, 1024, 576);
-        assert_eq!(rect.0, crop_rect_word(0, 0, 1024, 576));
-        assert_eq!(rect.1, 4);
-        assert_eq!(
-            crop_rect_word(0, 0, 1920, 1080) >> 32,
-            u64::from(1920u16) | (u64::from(1080u16) << 16)
-        );
-        let cap = crop_cap_event(9);
-        assert_eq!(cap.0, 1u64 << 63);
-        assert_eq!(cap.1, 9);
-        assert_ne!(cap.0, rect.0);
-        assert_eq!(crop_armed_event(), ((1u64 << 63) | 1, 0));
-        assert_ne!(crop_armed_event().0, cap.0);
     }
     #[test]
     fn recursive_or_contended_logging_drops_instead_of_deadlocking() {

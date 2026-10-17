@@ -345,6 +345,12 @@ impl Snapshot {
     }
 }
 
+/// Tracked-window acquisitions still outstanding after one present returns.
+/// A real zero stays zero; an unmatched present becomes negative.
+pub const fn outstanding_after_present(before: i64) -> i64 {
+    before.wrapping_sub(1)
+}
+
 pub fn index_value(input: u32, decision: Decision, armed: RenderMode) -> u32 {
     if decision.live {
         return match decision.modulus {
@@ -867,24 +873,6 @@ pub fn diagnostic(event: &StepEvent) -> Option<(u16, u64, u64)> {
     }
 }
 
-pub fn profile_text(
-    saved: RenderMode,
-    armed: RenderMode,
-    textures: i32,
-    machine: Machine,
-    applied: bool,
-) -> String {
-    let name = saved.label();
-    if !applied {
-        return name.to_owned();
-    }
-    match profile_status(saved, armed, textures, machine, applied) {
-        "Active" | "Vanilla" => name.to_owned(),
-        "Swap" if awaiting_index(saved, machine) => name.to_owned(),
-        _ => format!("{name}*"),
-    }
-}
-
 pub fn profile_status(
     saved: RenderMode,
     armed: RenderMode,
@@ -1245,6 +1233,13 @@ pub fn publish_drain(generation: u8) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn present_return_keeps_a_real_zero_and_an_unmatched_present() {
+        assert_eq!(outstanding_after_present(1), 0);
+        assert_eq!(outstanding_after_present(0), -1);
+        assert_eq!(outstanding_after_present(2), 1);
+    }
 
     fn present(saved: RenderMode, index: i32, outstanding: i64, active: i32) -> PresentInput {
         PresentInput {
@@ -1635,10 +1630,6 @@ mod tests {
     fn active_requires_a_verified_count_and_the_cell_stays_short() {
         let vanilla = Machine::confirmed(Profile::Vanilla);
         assert_eq!(
-            profile_text(RenderMode::Vanilla, RenderMode::Vanilla, 3, vanilla, true),
-            "Vanilla"
-        );
-        assert_eq!(
             profile_status(RenderMode::Vanilla, RenderMode::Vanilla, 3, vanilla, true),
             "Active"
         );
@@ -1647,15 +1638,16 @@ mod tests {
             "Active"
         );
         for textures in [-1, 0, 1, 4] {
-            let label = profile_text(
-                RenderMode::Vanilla,
-                RenderMode::Vanilla,
-                textures,
-                vanilla,
-                true,
+            assert_ne!(
+                profile_status(
+                    RenderMode::Vanilla,
+                    RenderMode::Vanilla,
+                    textures,
+                    vanilla,
+                    true
+                ),
+                "Active"
             );
-            assert_eq!(label, "Vanilla*");
-            assert!(!label.contains("Active"));
             assert_ne!(
                 engine_status(RenderMode::Vanilla, RenderMode::Vanilla, textures, vanilla),
                 "Active"
@@ -1663,8 +1655,8 @@ mod tests {
         }
         let less = Machine::confirmed(Profile::LessLag);
         assert_eq!(
-            profile_text(RenderMode::LessLag, RenderMode::LessLag, 2, less, true),
-            "LessLag"
+            profile_status(RenderMode::LessLag, RenderMode::LessLag, 2, less, true),
+            "Active"
         );
         assert_ne!(
             engine_status(RenderMode::LessLag, RenderMode::LessLag, 3, less),
@@ -1676,22 +1668,19 @@ mod tests {
         );
         let (swap, _) = step(vanilla, present(RenderMode::LessLagUltra, 0, 0, 3));
         assert_eq!(
-            profile_text(RenderMode::LessLagUltra, RenderMode::Vanilla, 3, swap, true),
-            "LLUltra*"
-        );
-        assert_eq!(
             profile_status(RenderMode::LessLagUltra, RenderMode::Vanilla, 3, swap, true),
             "Swap"
         );
+        assert!(!awaiting_index(RenderMode::LessLagUltra, swap));
         assert_eq!(
-            profile_text(
+            profile_status(
                 RenderMode::LessLag,
                 RenderMode::Vanilla,
                 3,
                 Machine::passthrough(),
                 true
             ),
-            "LessLag*"
+            "Restart"
         );
         let labels = labels(vanilla);
         assert_eq!(labels.committed, "vanilla");
@@ -1761,10 +1750,8 @@ mod tests {
             profile_status(RenderMode::Vanilla, RenderMode::Vanilla, 3, committed, true),
             "Swap"
         );
-        assert_eq!(
-            profile_text(RenderMode::Vanilla, RenderMode::Vanilla, 3, committed, true),
-            "Vanilla"
-        );
+        // The committed buffer is still awaiting its index swap, not a refusal.
+        assert!(awaiting_index(RenderMode::Vanilla, committed));
         assert_eq!(
             engine_status(RenderMode::Vanilla, RenderMode::Vanilla, 3, committed),
             "Switching"

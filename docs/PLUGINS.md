@@ -44,7 +44,7 @@ your NRO still loads when Deluxe is not installed.
            no_persist: false,
            tones: Some(&TONES),              // "On" draws green
            read_only: false,
-           layout: RowLayout::Value,         // or Inline; OptionSpec::header() for a title row
+           layout: RowLayout::Value,         // or OptionSpec::header() for a title row
        }],
        config_path: Some("sd:/ultimate/my_plugin/config.ini"), // … into this file
        own_page: false,  // true = a page of the window cycle titled "Record"
@@ -71,16 +71,17 @@ your NRO still loads when Deluxe is not installed.
    }
    ```
 
-That is the whole integration. A plugin with many rows (one per fighter, say)
-sets `own_page: true` and gets its own page in the window cycle, titled with
-its label and visited after the shared Plugins page; up to 64 options fit
-(Deluxe 0.5.3, descriptor version 4; 32 on 0.5.0 to 0.5.2, and older hosts
-show the rows on the shared page and accept 8). Two row kinds group a long
-page (descriptor version 4): `OptionSpec::header(id, label)` is a title row
-that Up/Down skip, and `layout: RowLayout::Inline` draws every choice of a row
-on its one line with the current one bracketed, so a set such as
-`[Original]  Variant 1  Variant 2` is read at a glance. A plugin that scopes
-its behaviour to online play reads
+That is the whole integration. On the shared Plugins page each plugin's rows
+sit under a group row carrying its label (the strip shows the label, then the
+option labels). A plugin with many rows (one per fighter, say) sets
+`own_page: true` and gets its own page in the window cycle, titled with its
+label and visited after the shared Plugins page; up to 64 options fit.
+`OptionSpec::header(id, label)` is a title row that Up/Down skip, for
+grouping a long page. The SDK sends descriptor version 4 only; a Deluxe 0.5.3
+host accepts versions 2, 3 and 4 under the same rules (they share one
+layout), so plugins built against the 2.0.0 or 3.0.0 SDK keep registering,
+and an older host answers `RegisterError::Abi` with no retry. A plugin that
+scopes its behaviour to online play reads
 `deluxe_plugin_sdk::host_online_context()` instead of hooking the game's
 scene sites itself: it returns the host's ready / online / match / training
 bits, or `None` when Deluxe is absent or older than 0.5.0.
@@ -89,8 +90,9 @@ bits, or `None` when Deluxe is absent or older than 0.5.0.
 first plugin built this way. It is the character-FX feature that Deluxe
 carried until 0.5.0, now a separate NRO: an own page titled **FX Control**
 with a scope row, an all-fighters row, one row per covered fighter and, under
-a header per fighter, an inline row per move selecting its Reduced variant.
-Its Online scope reads `host_online_context()`.
+a header per fighter, a value row per move selecting its Reduced variant
+(every non-header row is a `RowLayout::Value`). Its Online scope reads
+`host_online_context()`.
 
 `request` is a request, not a command: return
 `Pending` to apply a change later (the row shows `(pending)` until `current`

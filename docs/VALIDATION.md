@@ -1684,7 +1684,9 @@ while the game runs, after a symbol-level pass over the 0.3.6 ELF:
   `hang-trace.log` and no crash report names `deluxe-diagnostics`.
 - Pia RTT station table (`pia_rtt::Session`, 253 slots × 100-sample ring,
   about 107 KB, non-zero initialised so it sat in `.data`) is no longer a
-  static. `runtime::pia_rtt::STATE` is `Mutex<Option<Box<Session>>>`: the
+  static. (Superseded 2026-10-17: the table is sixteen keyed slots, about
+  7 KB, and is a plain static again; `WANT_SESSION`, `new_boxed` and the
+  dropped first sample are gone. See the `pia_rtt.rs` cut entry under 0.5.3.) `runtime::pia_rtt::STATE` is `Mutex<Option<Box<Session>>>`: the
   first RTT sample of the process sets `WANT_SESSION`, the next diagnostics
   poll (≤ 500 ms) allocates with `Session::new_boxed` (zeroed heap block plus
   three scalar writes; equality with `Session::new()` is tested) and the table
@@ -2486,6 +2488,687 @@ removal list. Scenario
 gaps stated there: no NSO session, no first boot without `config.ini`, no
 plugin option edit, no own-page plugin, no console run. Both Eden profiles
 were restored afterwards (journal `RESTORED`, SHA-256 verified).
+
+### 0.5.3 — 2026-10-17: native banner and Player Info window cut to one text builder, one style decision and one row model (host tests, Skyline build)
+
+Same file-by-file reduction order as the two cuts below. Plan: evidence root
+`reduction-1017/PLAN-native-ui.md`. Commits a21394c (native banner, host and
+runtime) and 160efc0 (window, plus `pia_rtt::Shown<T>`) on `work/native-ui-1017`
+from `reduction-candidate` 93116e7.
+
+Production code lines (code-audit classifier, comments/blanks/test modules
+excluded): `src/native_banner.rs` 507 → 256 (tests 532 → 248, 18 → 9 tests);
+`src/runtime/native_banner.rs` 1,358 → 689; `src/runtime/ui.rs` 1,051 → 820;
+`src/pia_rtt.rs` 641 → 637; `src/runtime/pia_rtt.rs` 230 → 226; `src/menu.rs`
+430 and `src/overlay.rs` 297 unchanged. Net −1,159. The plan's host (≤ 260)
+and runtime (≤ 700) targets are met; the window's ≤ 600 is not: every view,
+row, strip, chord and record is kept, and about 220 of the remaining lines are
+ImGui calls, record encodings and struct literals that rustfmt lays out one
+argument per line (`fn_call_width` 60, `struct_lit_width` 18).
+
+Removed, host: `LineParts`, `PaintInput`, `PaintOutcome`, `BannerPaint`,
+`Observe`, `observe_style`, `telemetry_text`, `with_room_id`, `arena_status`,
+`banner_paint`, `font_for`, `material_for`, `colors_for`, `font_choice`,
+`arena_y`, `style_matches`, `show_native_remote`, `local_wireless_text`,
+`visible_network_count`, `store_scan_count`, `ldn_symbols_usable`,
+`LDN_INITIALIZED`, `LDN_INITIALIZE` / `LDN_GET_STATE` / `LDN_SCAN`,
+`bound_bytes`, `main_data_end`, `is_arena_room_name` (the `ARENA_ROOM_NAME`
+const remains), `remote_line_max()` (now the `REMOTE_LINE_MAX` const);
+`local_count_active` lost its `symbols_ready` and `identity_ok` parameters.
+Added: `status_text`, `paint`, `PaneKind`, `Style`, `Styled`, an owned
+`RemoteLine`, `local_lobby_text`. Runtime banner: `install_ldn`,
+`symbol_mapped`, `hook_symbol`, `on_ldn_initialize`, `on_ldn_scan`,
+`network_state`, `lookup_symbol`, the `LDN_*` / `ORIGINAL_*` / `GET_STATE` /
+`SCAN_COUNT` / `LDN_READY` statics, `snapshot`, `arena_parts`, `arena_text`,
+`ArenaLine` / `ArenaParts`, `empty_slot`, `store_text`, `store_bytes`,
+`slot_text`, `names_equal`, `find_slot`, `address_slot`, `free_slot`,
+`clear_arena`, `clear_arena_state`, `pane_name_at`, `parent_of`,
+`pane_from_link`, `mapped_span`, `raw_name`, `pack_half`; `apply_pos_y` is
+folded into `apply_style`, `read_material` / `write_material` into one
+`material`, `copy_name` is `pane_name`. Window: `SettingCell`,
+`CompactLines`, `setting_cells`, `settings_strip`, `marked`,
+`compact_settings_lines`, `compact_performance_lines`, `compact_plugin_lines`,
+`draw_settings_vertical`, `draw_plugins_vertical`, `draw_rows` (now
+`draw_table`), `draw_compact_lines` (now `draw_strip`), `draw_debug` (now
+`debug_rows`), `plugin_page` (now `plugin_rows`), `latest_frame_time` (folded
+into `timing_line`). `pia_rtt`: `current_publication()` and `current_board()`
+return `Shown<T>`; `present_published`, `present_station` and
+`aggregate_stability` take it instead of three generation numbers.
+
+Behaviour changes, recorded in `docs/FORK_PARITY.md` and
+`docs/NATIVE_DISPLAY.md`: Streamer's restore of a pane is one-shot and no
+longer re-fires when only the live font drifted from the saved one; the
+local-wireless lobby pane goes through the same per-pane capture as the title
+panes, shows the input buffer behind the marker outside Streamer and the game's
+own captured count text in Streamer (the fork's `nn::ldn` hooks and bare scan
+count are gone). Diagnostics only: the install records `HookRejected` for a
+refused CSS or arena site (was a log line); a rejected pane open records one
+`PaneRejected` and one `PaneField(address, vtable)` instead of four fields;
+the chained text setter records one `Compatibility` row.
+
+Gates: 233 host tests plus the SDK round-trip, host clippy with warnings
+denied, no-default build, rustfmt, Skyline release build
+`0.5.3-160efc058ba2-1792252181` (NRO 1,437,696 bytes, SHA-256
+`e2b0a365a1876921…`, the same size as the ecb9923 candidate). Not run in Eden
+or on the console. Owed before the branch merges: CSS title and Streamer
+restore, the local-wireless lobby pane in both Streamer states, the arena pane
+(NSO), and the window's vertical tables and ready-match strip.
+
+### 0.5.3 — 2026-10-17: Tier 1 code reduction — 21 helpers with no production caller removed (host tests, Skyline build)
+
+Operator rule from the coverage campaign: code is not kept because a unit
+test exercises it. Commit 38179f7 (a Fable worktree agent, reviewed by the
+primary) removes the 21 production helpers that `coverage-1015/REPORT.md`
+§4 Tier 1 found referenced only from tests or from nothing: `menu::
+platform_label`/`net_profile_value`, `render_policy::profile_text`,
+`native_banner::local_update_accepted`/`displayed_network_count`/`walk_pane`/
+`text_fits` (and the `GraphNode` struct only `walk_pane` used), `pia_rtt::
+next_draw_generation` and the `Session::accept_sample/leave/cleanup/poll`
+wrappers (the `*_for` variants with an explicit `StationPick` are the
+production API), the `render_trace` const decoders `core_info_parts`/
+`pointer_from_halves`/`flush_narrow_parts`/`flush_plan_parts`, `resolution::
+Policy::dropped_transitions` and the free `update_settings`/`clear_reports`,
+`peer_transport::shown_peer`, `peer_passive::packet_prefix_accepted`. 154
+production lines gone, 284 deletions against 126 insertions overall. No
+behaviour change: no call site outside `mod tests` existed. Tests: four
+assertions/tests that specified nothing but a retired helper were deleted;
+the rest were rewritten against the production path (`profile_status`/
+`awaiting_index` for the profile label cases, `*_for(..., StationPick::
+Absent)`, `peer_frame().peer`, `transition_dropped`, and `perf_scaler`'s
+fixtures now use `resolution::reset_scene`/`retarget` instead of the removed
+wrappers — same asserted state; `reset_scene` also sets `dirty`, which no
+test observes); the render-trace decoders and the pane-walk oracle moved
+into their files' test modules so the encoder and `CSS_TITLE_WALK` tests
+still hold. One correction to the report: the resolution wrappers did have
+callers, in `perf_scaler.rs` tests. `PIA_MAGIC` gained a host-only
+`allow(dead_code)` (its production user `runtime/peer_observer.rs` is
+Switch-only). Gates: `cargo clippy --all-targets -- -D warnings`, 308 host
+tests, `cargo build --no-default-features`, Skyline release package
+`artifacts/9edfcedb1abb12cc/` (build `0.5.3-38179f792544-dirty-1792196741`,
+"dirty" from an untracked worktree directory since removed; NRO 1,486,848 B,
+SHA-256 `9edfcedb1abb12cca229b33f4f6346e708e93a9bb1de88b89725e0c87221cad6`).
+Not run in Eden or on the console; nothing in the change executes at run
+time. The NSO coverage campaign that would give the Tier 3 (Arena/Quickplay)
+evidence started the same evening on the LAN-NSO Eden but stopped at the
+Online tile (error 2306-0502: the fixture's companion service was not
+listening on 8443/8444); its partial profiles are in the evidence root's
+`coverage-nso-1016/`.
+
+### 0.5.3 — 2026-10-17: latency response trials repeated on candidate package `5357da2626a98fb9` (Eden) — frame reduction unchanged
+
+Operator: "redo the test to make sure that we still have the same frame
+reduction for input latency on the reduction candidate." Same method,
+Eden, isolated profile and scripts as the benchmark entry below (evidence
+root `bench-latency-5357-1017/`: `RESULTS.md`, `summary-table.md`,
+`reviewed-trials.json`, `trials/`, `ui/`, `DRIVE-LOG-BENCH.md`,
+`staging-receipt.json` restored and verified). Every API CSV header carries
+`build=0.5.3-962eb3d1d19f-1792252459`.
+
+Included trials, R = images from injection to the first crouch image, normal
+phase / delayed phase 8: Vanilla 6, 6, 6, 6 / 7, 6, 6, 7; LessLag 3, 3, 3, 3 /
+3, 3, 3, 3; LLUltra 2, 2, 2 / 3, 2, 2; LLDoubles 4, 4, 4 / 4, 4, 4. Savings
+against the same-session Vanilla are three, four and two images, unchanged
+from 0.5.2 and from the first candidate run; every included trial satisfies
+R = M + D. Eight trials were excluded for a nonconsecutive present identity in
+the critical window (host capture hiccups) and replaced by extra groups; no
+manual pose overrides. The Vanilla delayed phase read 7 on two of four
+trials (present delta 3 instead of 2 on the three-image ring), variance of
+the Vanilla baseline that the earlier runs also showed once. The quota
+frame-rate, capture and plugin-page checks were not repeated on this
+package; their code paths changed only in the window drawing and the pane
+text, which the console run covers.
+
+### 0.5.3 — 2026-10-17: per-file reduction pass complete — candidate package `5357da2626a98fb9` (host tests, Skyline build)
+
+The three per-file plans (`peer_transport.rs`, `pia_rtt.rs`, native banner +
+window; entries below) are merged on `reduction-candidate` 962eb3d. Totals
+against `main` be82f50 (code-audit classifier, comments/blanks/test modules
+excluded): Deluxe `src/` 22,253 → 15,332 production lines (−6,921, −31.1 %);
+`sdk/` 861 → 754; test lines inside `src/` 11,008 → 7,886; 68 → 60 files.
+Per file: `peer_transport.rs` 1,388 → 739, `pia_rtt.rs` 1,010 → 637,
+`runtime/pia_rtt.rs` 364 → 226, `native_banner.rs` 544 → 256,
+`runtime/native_banner.rs` 1,364 → 689, `runtime/ui.rs` 1,182 → 820
+(operator targets of ≈ 700 / ≈ 400 / ≈ 800 for the three groups: the first met,
+the second and third not; what remains is guard windows, consumer-facing
+types, ImGui call plumbing and event-record packings, and each entry below
+lists the features that would have to go to reach the figure). Full table:
+evidence root `reduction-1017/LOC-BY-FILE.md`.
+
+Gates on 962eb3d: 233 host tests + SDK round-trip, host clippy with warnings
+denied, no-default build, rustfmt, Skyline release build
+`0.5.3-962eb3d1d19f-1792252459`: NRO 1,437,696 bytes, SHA-256
+`5357da2626a98fb9776237774cecf473280272d2c2e3fc48deffe2511bda78b5`, module
+`e79d250c843c3725…`, ELF `32768a2ad5a9f002…`. Package: evidence root
+`artifacts/5357da2626a98fb9/`; staged with the unchanged FX Control candidate
+`0c7e626d…` in `candidate-1017/` for the operator's Switch run. The SDK and
+ABI did not change in this pass, so the FX Control build from the benchmark
+entry still pairs with it.
+
+Behaviour changes carried by this pass, all recorded in `docs/FORK_PARITY.md`
+and `docs/NATIVE_DISPLAY.md`: one-shot announcement write (no revert on a
+racing cleanup); a contention tick on busy UI snapshots; the first RTT sample
+is kept; more than sixteen fresh RTT stations evict the stalest; one-shot
+Streamer restore on the native panes; the local-wireless lobby pane shows the
+input buffer behind the marker and restores the game's own count text in
+Streamer (the fork's `nn::ldn` hooks are not reproduced). Not run in Eden or
+on the console. The console run owed from the benchmark entry now also has to
+show: CSS and arena pane text and Streamer restore, the lobby pane in both
+Streamer states, the window's tables and in-match strip, and the transport
+handshake / RTT / names / announce.
+
+### 0.5.3 — 2026-10-17: `pia_rtt.rs` cut to sixteen keyed stations and one publication lock (host tests, Skyline build)
+
+Plan: evidence root `reduction-1017/PLAN-pia-rtt.md` (items A–J). Commit
+e7fce5c on `work/pia-rtt-1017` (from `reduction-candidate` a6e4a01).
+
+Production code lines (code-audit classifier): `src/pia_rtt.rs` 990 → 641
+(tests 623 → 379, 27 → 20 tests, one new: a seventeenth fresh station evicts
+the stalest); `src/runtime/pia_rtt.rs` 370 → 230;
+`src/runtime/connection_transport.rs` 305 → 291 and `src/runtime/hooks.rs`
+66 → 81 (one `guard_matches` instead of two copies). Net −488. The plan's
+host target of ≤ 500 was not reached: about 160 of the remaining lines are
+the four 64-byte guard windows and the declared types the consumers use
+(`Observation`, `PingGap`, `PingRgba`, `RttIdentity`, `Publication`,
+`StationBoard`, `PresentedPing`, …), and rustfmt lays every kept
+five-parameter signature (`present_published`, `present_station`,
+`aggregate_stability`, `Publication::from_reading`) out one parameter per
+line. Removed: the 253-slot table (`STATION_SLOTS`, ~107 KB) for
+`STATION_CAP = 16` slots keyed by station index, `Session::new_boxed`,
+`StationBoard::empty`, the `PING_*` colour consts, `format_*_ping`,
+`rtt_published`, `stability_rank`, the `REASON_*` consts with `reason_of` /
+`gap_of` (`PingGap` is `repr(u8)` and gains `Off`), the unread counters
+`rejected_negative` / `rejected_index` / `rejected_overflow` / `leaves`,
+`Ring.sum` and the test-only `latest`, `fresh_stamp` / `stamp_for` /
+`fresh_peer`, the four `accept_*_for` entry points (one `Session::accept`
+with the update closure), the `Default` impls; in the runtime `WANT_SESSION`,
+the boxed `Option<Session>`, the two seqlocks (`PUB_*`, `BOARD_*`, five
+`[AtomicU64; 8]` arrays) for one `Mutex<Shown>` written by the poll and read
+with `try_lock`, and the "station table allocated" log line. Every
+consumer-facing name and signature is unchanged (`native_banner.rs` tests use
+`ping_rgba(Stability::Stable)` for the deleted `PING_STABLE`).
+
+Behaviour changes, recorded in `docs/FORK_PARITY.md`: the first RTT sample
+of the process is stored instead of dropped while the table was being
+allocated, and more than sixteen simultaneously fresh stations evict the one
+with the oldest sample (arenas hold eight). The ~7 KB `Session` is a static
+again (`.data`), replacing the 107 KB heap table of 0.3.7.
+
+Gates: 242 host tests + SDK round-trip, host clippy with warnings denied,
+no-default build, rustfmt, Skyline release build `0.5.3-e7fce5ca3833-1792249232`
+(NRO 1,445,888 bytes, SHA-256 `4076fe8275b91b2a…`; +4 KB over the
+`peer_transport.rs` cut's `f5b60530…`, page rounding of the static table).
+Not run in Eden or on the console; the owed console checks for the transport
+(handshake, RTT, names, announce) now also cover this cut.
+
+### 0.5.3 — 2026-10-17: `peer_transport.rs` cut to its production surface (host tests, Skyline build)
+
+Operator: "take each file as its own plan and get the code down without reducing
+functionality … don't just shift the code to other files". Plan:
+evidence root `reduction-1017/PLAN-peer-transport.md`. Commit 7e6097e on
+`reduction-candidate` (plus ec250b4 docs, 26620e4 rustfmt-only fixes in
+`clock_probe.rs`, `coverage_profile.rs`, `runtime/clock_probe.rs`).
+
+Production code lines (code-audit classifier, comments/blanks/test modules
+excluded): `src/peer_transport.rs` 1,378 → 739 (tests 1,132 → 499, 25 → 8
+tests covering the same behaviours); `src/peer_passive.rs` 261 → 258;
+`src/runtime/connection_transport.rs` 342 → 305; `src/runtime/pia_rtt.rs`
+360 → 370 (the station list that `publication_targets` used to build). Net
+−669. Removed: the `View` intermediate and its u8 code tables
+(`settings_code`, `label_from_code`, `display_latency`), the four separate
+gate-entry copies (one `with_table` remains), `PublicationTargets`,
+`RequestParse`/`ConnectionRequest`/`Direction`/`PendingStore`, `AnnounceMode`
+(a 1:1 copy of `render_policy::Profile`), `encode_v3` (inlined),
+`TransportCounters`/eleven counter statics (one `[AtomicU64; 10]` indexed by
+`Counter`), `spare_tag_offset` (shares `peer_passive::beacon_tag_offset`),
+`Table.epoch`, the test-only production functions, and in the runtime the
+`SavedBody` save/revert path. Every consumer-facing name and the `ShownPeer`
+fields are unchanged; `settings_label` now returns the final `++` label.
+
+Behaviour changes, both recorded in `docs/FORK_PARITY.md` (Names / peer
+settings row): the send hook applies the planned beacon and v3 bytes once and
+no longer saves and reverts them when a cleanup races the store (they are the
+rewrite's own announcement in its own packet, already addressed to the
+departing peer); and UI snapshots that meet a busy gate now count a
+`Contentions` tick (surfaces in `TransportSkip`), which they did not before.
+No packet or display behaviour changed.
+
+Gates: 249 host tests + SDK round-trip, host clippy with warnings denied,
+no-default build, rustfmt, Skyline release build `0.5.3-26620e452923-1792247628`
+(NRO 1,441,792 bytes, SHA-256 `f5b60530b6005163…`; the 4 KB growth over
+`3f8855a2…` is page rounding, the `.text` shrank). Not run in Eden or on the
+console; the owed console checks for the transport (handshake, RTT, names,
+announce) now also cover this cut.
+
+### 0.5.3 — 2026-10-17: reduction candidate ecb9923 benchmarked in Eden (latency, quota frame rate, captures, plugin pages)
+
+Operator: "Rerun the benchmarks after for frame reduction and test correction."
+Candidate package `artifacts/3f8855a2bec44ecc/` (build `0.5.3-ecb99238f02b-1792210040`,
+NRO 1,437,696 B) with the FX Control candidate `artifacts-fx/0c7e626d64f35128/`
+(SDK 5.0.0). All four passes are Eden measurements with Astra low driving the game
+and the primary running the scripts; evidence root `bench-reduction-1017/` (RESULTS.md,
+summary-table.md, reviewed-trials.json, trial images and CSVs, screenshots, receipts).
+
+- **Latency response trials, the README table (frame reduction).** Method and tools of
+  the 0.5.2 run (LATENCY_METHODOLOGY.md; Eden CLI-control `10bcd2d849`, isolated
+  profile, Training, Sephiroth vs Kazuya CPU Stop, `INPUT_RECEIPT`, 640×360 captures,
+  four profiles × two injection phases × three 20-image trials, replacement groups for
+  the two groups with a nonconsecutive window). Included R, 0.5.2 in brackets: Vanilla
+  6, 6, 6 / delayed 6, 6, 6, 7, 6 [6, 6, 6 / 6, 6, 6]; LessLag 3, 3, 3 / 3, 3, 3, 3
+  [3, 3, 3 / 3, 3, 3]; LLUltra 2, 2, 2 / 2, 2, 2 [2, 2, 2 / 2, 3, 3]; LLDoubles 4, 4, 4 /
+  4, 4, 4 [4, 4, 4 / 4, 4, 5]. Three trials excluded for a nonconsecutive present
+  identity (raw R 3, 3, 7), one manual pose review (reference image caught the fighter
+  settling; crouch at image 11, R 6). The savings (3 / 4 / 2 captured frames) are
+  unchanged. Profile switches needed ZR held (the 0.5.3 live-fight rule, which the
+  0.5.2 run predates).
+- **Frame rate under the console-calibrated quota.** Same Eden, profile and INI as the
+  2026-10-16 clips, `CPUQuota=175%`: character select 59.971 / 60.042 / 59.980 fps,
+  Training (Pyra vs Terry specials) 59.962 / 60.049 / 60.015 fps, against 59.98 / 60.04
+  / 60.02 and 59.98 / 60.06 / 59.99 on 2026-10-16. Performance page 60 and 58 fps,
+  Backoff 266/s and 1554/s at 50 µs.
+- **Capture correctness.** With `CAPTURE_CSS` and `CAPTURE_MATCH` present the
+  consolidated writer produced five CSS captures (30 s, 1,798–1,800 samples), a Training
+  capture (144.5 s), a Singles match (99.7 s) and the attract-mode Doubles demo (26.5 s),
+  every file footer `# complete=1`, and the unchanged `tools/analyze_timing.py` and
+  `tools/analyze_render_trace.py` parsed all of them; the latency run's ten 30 s
+  captures likewise. The group script learned to wait for the footer, because the new
+  writer streams from arm time. Console repeat of one timing, one CSS and one match
+  capture still owed for the parity claim.
+- **Plugin pages.** SDK 5 demo and FX Control candidate loaded together: FX registered
+  `99 0x1 0x4`; page cycle Settings → Plugins → FX Control → Performance → hidden;
+  Demo edits persisted (`enabled=on`, `mode=b`), FX fighter toggle and move variant
+  persisted and reverted through the INI, headers skipped by the selection. Not
+  regressions: the demo's Status row cycles Ready → Degraded → Failed by design; Training
+  draws the vertical tables (the compact strip is for ready Singles/Doubles); the tall FX
+  own page overlaps Training's "Total Damage" label at the right edge (pre-existing).
+  A version-2 registration in Eden was not run (host test covers the replay plugin's
+  shape).
+
+Profiles restored and verified after each session; no Eden, display or unit of another
+agent was touched. The candidate is not on the card; the operator's Switch run with the
+FX passes is the acceptance.
+
+### 0.5.3 — 2026-10-17: captures and traces consolidated (host tests and Python analyzers only)
+
+Operator order after the capture plan (evidence root
+`reduction-1017/PLAN-captures.md`, a read-only investigation of 690dc57):
+consolidate the "captures and traces" bucket towards the plan's floor while
+keeping every capability the console used in the 15 Oct campaign. Worktree
+branch from main 74991cf.
+
+- **Module layout.** `src/capture.rs` (pure, host-tested) replaces
+  `src/timing.rs`, `src/render_trace.rs` and `src/capture_export.rs`: the
+  constants and the kept kind constants (12–17, 27, 66, 77), `thread_label`,
+  `image_offset`, `request_label`, `Finish`, one `Ring<T: Entry>` with
+  `Sample` (callback row) and `Event` (API row) as its two 32-byte row
+  types, `Stream`-keyed `header`/`rows`/`footer`, and the status phases.
+  `src/runtime/capture.rs` replaces `runtime/timing.rs`,
+  `runtime/match_capture.rs` and the arming, visit and status parts of
+  `runtime/css_capture.rs`: one `PENDING` request byte (match > controller
+  > CSS > `CAPTURE_TIMING` file), one `FLAGS` byte for `CAPTURE_CSS` and
+  `CAPTURE_MATCH`, `note_css_frame` (code 12, CSS arming and the match
+  end-by-CSS; `online.rs` no longer calls a separate `note_css`, because the
+  same character-select hook reaches `note_css_frame` on every update,
+  before the pane walk that gated the old call), `note_stage`/`note_scene`,
+  the three Debug rows and the `Service` that streams both CSVs.
+  `runtime/css_capture.rs` keeps only the two hooks (dependency wait, UI
+  job) and their install; `runtime/api_trace.rs` gains `point`.
+  `outstanding_after_present` moved to `render_policy.rs` with its test;
+  `logging::rotate` is shared with the hang trace.
+- **Dropped by name.** Trace kinds 60/61 (the per-frame backoff rows,
+  `backoff_frame_events`, `frame_rows`, the `FRAME_*` aggregates and the
+  timed branch in `dispatcher_backoff.rs`, the `nvn.rs` call), 62/63
+  (`describe_thread`, `GET_PRIORITY`/`GET_CORE_MASK`, `THREADS`, `core_info`),
+  64 and the `INIT_WORKER` hook (`child_of_ui_aggregate`, `dispatch_info`,
+  `SUBMIT_WORKER`/`UI_AGGREGATE`), 28 (`contains_resizing`, `resize_event`,
+  `RESIZE_COUNT`; the scan of every backend log line is gone), 29–34
+  (`FlushFields`, `FlushPlanDiagnostic`, `flush_field_events`,
+  `read_flush_fields`; the field store in the flush hook stays, gated on
+  `+0x1d18` directly), `ticks_to_us`, `pointer_halves`, `bits_u32`; event
+  code 89 (`MenuOrder`, reserved by comment); `Finish::Capacity` (a full
+  ring counts rows as `skipped` and never ends a capture); the two-chunk
+  20-byte `.bss` packing (`Packed`, `Chunk`, `take_chunk`,
+  `CHUNK_HALF_RANGE`); the `[HangTrace] first <hook>` lines (`first_line`,
+  `note_first`, `first_tick`, `reported_first`) and the `css_init`
+  heartbeat field; the duplicate `rotate` and `TICK_HZ`; the test-only
+  production code (`Snapshot` ×2, `write_csv` ×2, `u32_bits`, `Default` ×2,
+  `export_ready_csvs`, `controller_request_busy`, `write_buffered`,
+  `Stream::closed`).
+- **Race fix (plan §4.3; inferred, never observed in a capture).** The old
+  `take_ready` discarded rows still in the buffer but reported `total`, so a
+  hook that finished the capture between the poll's `drain` and its
+  `take_ready` lost its last rows while the footer counted them, and the
+  analyzers would have rejected the file. `Ring::take_ready(out)` now hands
+  the final rows over under the same lock that counted them (test
+  `take_ready_hands_over_the_final_rows_so_the_count_matches`). Drains swap
+  buffers, O(1) under the lock, instead of copying.
+- **Byte-identical.** `timing-<id>.csv` (schema 2) and `api-<id>.csv`
+  (schema 1) including the clock lines after the column line, pinned by the
+  golden test `golden_csv_bytes_for_both_streams`; the `timing-status.txt`
+  strings; the heartbeat line minus `css_init=`; the four triggers (Debug
+  chord, `CAPTURE_TIMING` label, `CAPTURE_CSS` entry, `CAPTURE_MATCH`
+  stage); the `Timing`, `CSS capture` and `Match capture` rows (the CSS
+  row's mask wording is now 0x3); the export (`create_new`, 64 KiB buffer,
+  flush, `sync_all`, Exporting before any CSV work, Saved only after both
+  footers and the saved status). `tools/analyze_timing.py`,
+  `tools/analyze_render_trace.py`, `tools/frame_windows.py` and their tests
+  are unchanged (30 passed, one pre-existing skip). Code 104's `a` is now
+  the two-bit mask (bit 0 wait, bit 1 job; 3 = both) and `b` keeps only bit
+  0; `diagnostics.rs` and DEBUGGING.md say so.
+- **Behaviour changes called out.** Capacity no longer ends a callback
+  capture; API rows are skipped only when the 4096-row ring is full (the
+  old two-chunk headroom or better); the API storage moved from 80 KiB of
+  resident `.bss` to the heap at arm (0 idle; 272 KiB peak, as before; a
+  low heap now refuses the arm visibly with `timing capture could not be
+  armed`); a match request arriving under a 30 s capture replaces, rather
+  than queues behind, a pending controller request; an arm that fails to
+  open the API file no longer also creates the timing file. The ring is
+  generic over the row type (the plan's second option in §3.3 item 4), so
+  `buttons` keeps all 64 bits instead of being truncated to 32.
+- **Lines** (production = before `#[cfg(test)] mod tests`, base 74991cf):
+  bucket 2,436 → 1,579 (−35 %). `capture.rs` 483 (plan about 240; was
+  `timing.rs` 364 + `render_trace.rs` 630 + `capture_export.rs` 91),
+  `runtime/capture.rs` 562 (plan about 300; was `runtime/timing.rs` 446 +
+  `match_capture.rs` 105 + about 70 of `css_capture.rs`),
+  `runtime/api_trace.rs` 45 → 52 (plan about 35), `runtime/css_capture.rs`
+  333 → 115 (plan about 60), `hang_trace.rs` 162 → 148 (plan about 75),
+  `runtime/hang_trace.rs` 260 → 219 (plan about 110). Elsewhere −84:
+  `renderer.rs` −38, `dispatcher_backoff.rs` −31, `overlay_host.rs` −17,
+  `response_probe.rs` −6, `nvn.rs` −3, `logging.rs` +1, `diagnostics.rs` +4,
+  `render_policy.rs` +6. Net −941 production lines; `git diff --stat`
+  against 74991cf: 31 files, +1,612 / −3,172. The plan's floor of about 820
+  was not reached: its §3.3 estimates undercounted rustfmt'd, documented
+  Rust by about 2× (every §3.3 item is implemented, nothing beyond the §3.1
+  kept capabilities remains, and the §3.6 cuts were declined), and the
+  number was not chased by stripping comments or compressing formatting.
+- Host tests 274 → 265 (20 deleted with the old modules, 10 new in
+  `capture.rs`, one moved to `render_policy.rs`, the five `hang_trace.rs`
+  tests adapted to nine hooks and no first lines). Gates: `cargo clippy
+  --all-targets -- -D warnings`, `cargo test` (265 unit + 1 integration),
+  `cargo build --no-default-features`, `cargo fmt -- --check` (clean except
+  `clock_probe.rs`, `coverage_profile.rs` and `runtime/clock_probe.rs`,
+  which were already unformatted on main and are left alone), `python3 -m
+  unittest discover -s tools -p "test_*.py"`. The Skyline build is the
+  parent's: `runtime/` compiles only there, and nothing here is claimed as
+  runtime-verified. Console parity is still owed: one `CAPTURE_TIMING` 30 s
+  capture, one `CAPTURE_CSS` capture and one Training `CAPTURE_MATCH` on the
+  card, each analysed with the unchanged tools, plus continuing
+  `hang-trace.log` heartbeats.
+### 0.5.3 — 2026-10-17: plugin API host and window pages consolidated; SDK 5.0.0 (host tests only)
+
+Operator order after the reduction plan
+(`reduction-1017/PLAN-plugin-api.md` in the evidence root, §4a, §4b, §5, §7,
+§8). Branch off 74991cf. Nothing here is runtime-verified.
+
+- **Version policy.** The host accepts descriptor versions 2, 3 and 4 under
+  one rule set (the version 4 rules: every option flag, the own-page plugin
+  flag, 64 options) and refuses 1 with `REGISTER_ERR_ABI`
+  (`abi::MIN_ABI_VERSION = 2`, `descriptor_version_supported = 2..=4`). The
+  three versions share one 56-byte row layout, so this is strictly more
+  permissive for every known sender: smash-replay-to-mp4 (version 2, five
+  rows, SDK pin `fa479944`) and FX Control 0.1.x copies (version 3) keep their
+  rows unchanged. Version 1 was only ever sent by unreleased 2026-10-12 SDK
+  builds. The per-version flag and limit tables, `OptionDescV1`/`widen`,
+  `MAX_OPTIONS_V3`/`V2` are gone.
+- **Host rewrite** (`src/plugin_api.rs`): one `RowKind { Value, Status,
+  Header }` replaces the `locked`/`header`/`inline` bools; one `copy_str`
+  replaces `bounded_cstr`/`owned_id`/`owned_label`/`owned_checked`;
+  `parse_descriptor` returns a `Plugin` (no `ParsedPlugin`); `Registry::value`
+  is a pure getter (pending is cleared and persisted only by
+  `reconcile_pending`, run before every draw); `PageRow { Group, Option }`,
+  `rows_for`, `selectable`, `move_selection` and one `wrap` replace
+  `PluginRow`, `plugin_rows`, `plugin_page_rows`, `cycle_choice`,
+  `move_plugin_row`, `row_selectable`, `move_selectable_row`,
+  `clamp_selectable_row`; `compact_page`/`vertical_window` merged into
+  `menu::window`, `compact_segments` moved to `menu::strip_segments`,
+  `compact_label`/`compact_line`/`inline_pieces`/`count`/`persisted_value`
+  dropped. Pending-request handling stays (the replay plugin's "Stop rec" row
+  answers `Pending`, verified in its source).
+- **Window pages** (`src/runtime/ui.rs`, Switch-only, compiled by reasoning):
+  one `menu::Row` model feeds the vertical table and the strip for Settings
+  cells and plugin rows alike; `draw_rows` is the one 2- or 3-column drawer
+  (`draw_settings_vertical` and `draw_plugins_vertical` build its input);
+  `plugin_page` asks `current` only for the windowed rows; `rgb` + `GREEN` /
+  `YELLOW` / `RED` / `GREY` consts; `setting_cells` is closure-driven with one
+  `dash()` and a toggles table, returning the strip's remote facts instead of
+  the strip finding cells by label; `perf_facts(strip)` is the one source for
+  the Performance table and strip; `draw` keeps input, polling and records and
+  `draw_window` the frame and body dispatch; `auto_driver::snapshot()` runs
+  once per draw; the quiet-ping copy is gone (`performance` takes
+  `Option<&PresentedPing>`). Rendered text is unchanged except as listed
+  below.
+- **Visible changes** (also in `docs/FORK_PARITY.md`): version 1 refused;
+  versions 2/3 read under the version 4 rules; `OPTION_FLAG_INLINE` draws as
+  a value row; the shared Plugins page has a group row per plugin, so the
+  strip shows the plugin label as a header segment and then the plain option
+  labels (was `Plugin.Option`, or the plugin label alone for a one-option
+  plugin) and the selection index counts group rows (first option is row 1);
+  a pending change applied between `reconcile_pending` and the draw shows
+  `(pending)` one frame longer; code 99 logs one line per registration.
+- **SDK and ABI 5.0.0** (removed public items): the SDK sends version 4 only
+  and calls the host once; the version 3/2/1 retry chain, `v1_option_descs`,
+  `NEGOTIATED_VERSIONS`/`negotiated_descriptor_version`, `needs_version_4` and
+  `RowLayout::Inline` are gone; `option_flags` lost its version parameter.
+  The exported symbol, `TABLE_VERSION`, the 72-byte `PluginDesc`, the 56-byte
+  `OptionDesc`, every flag bit, tone byte, error code and `ONLINE_*` are byte
+  for byte as before; `ssbu_online_deluxe_online_context_v1` and the
+  `PluginApiV1` table are untouched. Demo: drops the
+  `negotiated_descriptor_version` log.
+- **FX Control must change** (per the plan's §5; done by the parent in
+  `/home/intpa/ssbu-fx-control`): `Cargo.toml:22` bump the SDK `rev` to this
+  commit; `src/runtime/plugin.rs:7-10` drop `negotiated_descriptor_version`
+  from the import and `:38` record `b` as
+  `u64::from(deluxe_plugin_sdk::abi::ABI_VERSION)` (or drop it; code
+  `PluginRegistered`'s `b` meaning changes, update its diagnostics doc if
+  present) and `:52` the println; `src/menu.rs:346` delete the
+  `needs_version_4` assertion and `:347-350` replace the `RowLayout::Inline`
+  loop with "every non-header row is `RowLayout::Value`". Runtime behaviour
+  does not change (FX Control already needs a version 4 host); ship FX
+  Control and Deluxe together. The replay plugin needs nothing.
+- **Production lines** (physical lines before the first `#[cfg(test)]`, as
+  the plan counts): `src/plugin_api.rs` 903 → 664 (plan ≈300; the plan's
+  figure left out the ≈200-line `Registry` it keeps and rustfmt's layout of
+  `parse_descriptor`); `src/runtime/plugin_export.rs` 138 → 135 (plan ≈100;
+  `flush_persistence` and the online export are untouched by order);
+  `src/runtime/ui.rs` 1,235 → 1,170 in all, plugin drawing ≈220 → ≈165
+  (plan ≈60) and Deluxe's own drawing ≈1,015 → ≈1,005 (plan ≈790: every §4b
+  idea is applied, but rustfmt expands the table-driven cells and fact lists
+  back to one field per line); `src/overlay.rs` 369 → 371 (plugin navigation
+  27 → 22; plan ≈30 for the whole bucket); `src/menu.rs` 479 → 531
+  (`CompactField`/`compact_fields_line` 30 out, `Row`/`strip_segments`/
+  `strip_line`/`window` 82 in; plan ≈45); `sdk/abi/src/lib.rs` 345 → 306;
+  `sdk/sdk/src/lib.rs` 828 → 703; `tests/plugin_sdk_roundtrip.rs` 243 → 236.
+  `git diff --stat 74991cf`: 15 files, +1,578 / −2,143.
+- **Tests.** Host 274 → 275 (`plugin_api` 17 incl. the new
+  `replay_plugin_version_two_descriptor_registers_with_rows_tones_and_pending`:
+  a raw version 2 descriptor shaped like the replay plugin's five rows, two
+  persisted toggles, a six-choice toned status row, a tone-only row, an
+  editable `no_persist` row answering `Pending`; `menu` gains
+  `windows_page_the_strip_and_centre_the_table` and the `strip_rows_…` rewrite
+  of the `CompactField` tests; overlay row indices shift by the group row),
+  plus the SDK round-trip (1), SDK 23 + 1 doc-test, ABI 2. Gates: `cargo
+  clippy --all-targets -- -D warnings`, `cargo test --workspace`, `cargo
+  build --no-default-features`, `cargo fmt -- --check` (clean on every touched
+  file; the four pre-existing unformatted files are left alone), `cargo test`
+  in `sdk/sdk` and `sdk/abi`, `cargo build` of the demo. The Skyline build of
+  the NRO and the demo NRO are the parent's.
+- **Still owed:** an Eden run with the demo plugin as the replay plugin's
+  stand-in (built at `e4ef935`, SDK 2.0.0, sends version 2: shared page with
+  its group row, tones, read-only rows, `config_path` writes) and with the FX
+  Control page (own page, headers, 33 rows, persistence of `scope` and the
+  fighter rows), and the console. Claim nothing beyond the host tests until
+  then.
+
+### 0.5.3 — 2026-10-17: removed the opt-in peer observer, FPS++ and the Gigaflare DRS trigger (host tests only)
+
+Operator order after the coverage campaign: three features go, with no other
+behaviour change. Branch `work/reduction-1017` from main 690dc57.
+
+- **Opt-in peer observer** (`peer_observer`, default false, never enabled on
+  any card or Eden profile). `src/peer_observer.rs` and
+  `src/runtime/peer_observer.rs` are gone. The runtime file was not
+  observer-only: it also carried the live connection transport (the
+  parsed-message hook feeding `observe_incoming`, the station-index hook
+  binding stations, the pre-encryption send hook committing announcements,
+  the nifm interface byte and the code 66–72 counters). Those parts moved
+  unchanged to `src/runtime/connection_transport.rs`, and the hook sites,
+  guards, `mix_id`, `kind_of`, `header_span` and `message_body_range` they
+  read to `src/connection_transport.rs`. Removed: the observation ring, the
+  station map and its generation table, the `invalidate_index` /
+  `invalidate_session` calls from `runtime/pia_rtt.rs`, the station-probe
+  flags, the send-site probe (`diagnose_send`, `SendBuild`, the 17-event
+  report, `stamp_send_seq`), name decoding, `inherit_header`, and the
+  `drain_station_probe` / `drain_send` publishers. Event codes 37–45, 64 and
+  65 were only ever recorded by the observer (verified: codes 41–45 reached
+  the log only through `publish_send`, which ran under the flag) and are
+  retired by comment in `diagnostics.rs`; 66–72 stay. The stale
+  `peer_transport.rs` comment claiming the station-map hook was part of the
+  observer is corrected (it always installed on its guard alone).
+- **FPS++** (`fps_boost`, `ALLOW_FPS_BOOST`, emulator-only, reported
+  Unsupported in every normal build). `src/fps_boost.rs` and
+  `src/runtime/fps_boost.rs` are gone, with the NVN window
+  initialize/finalize/present callbacks, the Settings row (`ROW_FPS`; the
+  `ROW_*` constants are renumbered, `ROW_COUNT` 11 → 10), the Debug-view
+  row, the L+R+ZL/ZR+X chord, the `++` suffix on the local profile label in
+  the window and both native banners, the `fps_boost_status` and
+  `fps_boost_applied` lines of `renderer-status.txt`, and event code 88
+  (retired by comment). `Announce.boost_applied` and the `announce_from`
+  parameter are gone, so our v3 payload never sets fork bit 14; a peer's bit
+  14 is still decoded as `++` (test `peer_bit_14_still_decodes_as_boost_and_is_never_sent`).
+- **Sephiroth Gigaflare DRS trigger.** `perf_scaler::sephiroth_tick`, the
+  `edge` slots, `EDGE_KIND` / `EDGE_SPECIAL_N_SHOOT` / `EDGE_CHARGE_KIND` /
+  `CHARGE_FULL`, `MainTick.charge` and the `WorkModule` charge read in
+  `runtime/fighter_main.rs::read_tick` are gone; `on_main` now returns the
+  cut-in action and the move-table pair. The cut-in trigger, the 0.5.2 move
+  table (entry, kind and status are still sampled every tick) and the
+  adaptive trigger are untouched. Code 82 keeps source 1 (cut-in) and 3
+  (move table); source 2 is retired by comment. Reason: the 2026-10-15
+  console redo had Vanilla and LessLag hold 60 through the move.
+- **Legacy keys.** `config::parse` rejects unknown keys and the runtime would
+  then reset the user's INI, and existing cards carry `peer_observer=` and
+  `fps_boost=` lines. Both are now ignored legacy keys like `effects` /
+  `effects_scope` (any value, any order, duplicates allowed) and the writer
+  no longer emits them; test
+  `removed_peer_observer_and_fps_boost_keys_are_ignored_and_not_written_back`.
+- **Lines** (`git diff --stat main`: 31 files, +885 / −4,507; src alone
+  −4,434). Dedicated modules, split at their `#[cfg(test)]` boundary:
+  peer observer 1,981 production + 735 test lines deleted, of which 536
+  production lines (147 host + 389 runtime) are the re-homed transport, plus
+  91 new transport tests; FPS++ 805 production + 473 test lines deleted.
+  Shared-file edits (approximate, by hunk): peer observer about 57 production
+  and 20 test lines, FPS++ about 128 production and 93 test lines (menu,
+  overlay, config, UI, banners, NVN status, transport, diagnostics),
+  Gigaflare 88 production (76 `perf_scaler.rs`, 11 `fighter_main.rs`, one
+  comment in `diagnostics.rs`) and 37 test lines. Host tests 300 → 274.
+- Skyline release package `artifacts/7ea17849ef97f044/` (build
+  `0.5.3-49fbfe169695-1792208004`, NRO 1,441,792 B, SHA-256
+  `7ea17849ef97f0442ce731df9f4bc25a1a59ea9b75b54251583ec90fd19fdff1`),
+  built by the primary after reviewing the commit; 20,480 B smaller than the
+  previous package. Not deployed to the card; the first console run is the
+  parity check for the re-homed transport (handshake, announce, station
+  binding, RTT display) and for the cut-in trigger without Gigaflare.
+- Gates on this commit: `cargo clippy --all-targets -- -D warnings`, `cargo
+  test` (274 passed), `cargo build --no-default-features`, `cargo fmt --
+  --check` (clean on every touched file; `clock_probe.rs`,
+  `coverage_profile.rs`, `runtime/clock_probe.rs` and `runtime/timing.rs`
+  were already unformatted on main and are left alone). The Skyline build and
+  any console or Eden run are the parent's; nothing here is claimed as
+  runtime-verified.
+
+### 0.5.3 — 2026-10-17: two-host NSO session — arena, Quickplay, Background and Co-op matches reached; category A is live code
+
+Operator: "you need two eden instances to run quickplay or arenas" … "can you
+not do it?" — so this thread started the companion itself on the Surface (its
+owner's bounded launcher, own unit names, one-hour cap 01:48–02:48Z), ran the
+Yoga coverage peer on NSO profile `b` (account 49154, coverage build
+292a402a…, LessLag, `platform=console`, player 2 enabled) and drove the Ally's
+fixture slot `a` (account 49153, the owner's tested Windows profile) over ssh
+through the owner's own harness (scheduled-task launch into the desktop,
+named-pipe control client, renderer capture). Two Astra low drivers, one per
+peer. Display fix first (same evening): the Qt software-keyboard dialog that
+had segfaulted weston's Xwayland three times survives on a **rootful Xwayland
+without weston's window manager** (`coverage-nso-1016/display-rootful.ps1`;
+offline proof on the Stage Builder name prompt, then live on Create Arena).
+Reached on the coverage peer: Quickplay Solo match 1 (dropped for inactivity
+while the driver worked the overlay; hooks ran), **public arena COV created
+from the Yoga through the Qt dialog, Ally joined, round 1 played to results**,
+round 2 cut by the Ally launcher's 30-minute cap, arena closed; **Quickplay
+match 2 complete with results**; **Background Matchmaking matched from the
+main menu and completed**; **Co-op 2v2 complete** (Dark Samus + Ness vs Shulk
++ Corrin); Debug-view manual snapshot; collect. Result
+(`tools/coverage/report.py`, `compare.py` against the 2026-10-15 table): 927
+of 1,466 functions executed; **29 functions / 464 lines executed that no
+campaign had reached** — exactly category A (arena room init/update, arena
+status/parts/text, room-id decode, `banner_peers`, the PIA station board).
+They are live; nothing new to remove. 300 functions (2,640 lines) never ran in
+either campaign and are all accounted for (removed tiers, FPS++, DRS, plugin
+option edits/own pages, the opt-in peer observer, arena-name bookkeeping).
+**Finding for review:** the scene-entry hooks `deluxe_rewrite_arena`
+(0x22d9fa0) and `deluxe_rewrite_background_matchmaking` (0x22da090) never fired
+through a real arena lobby and a real background match, and
+`deluxe_rewrite_quickplay` (0x22da160) fired in one process (nso-a3) but zero
+times in the two-host process despite four searches; matches were still
+classified through `stage_setup` and the character-select classifier
+(`mark_match` 58 times), so the product behaved, but the Arena/Quickplay
+connection distinction did not come from those hooks here. Harness notes:
+same-host two-peer pairing fails (2618-0502); the Ally's run cap is 30 minutes
+(relaunch under a new phase takes a minute); "No" on rematch prompts was never
+explicitly captured. Evidence: evidence root `coverage-nso-1016/` (REPORT.md
+§0, NOTES.md, DRIVE-LOG*.md, `profraw/nso-b2/`, `report-two-host/`,
+`compare-two-host/`, screenshots of both peers); both Yoga profiles restored
+byte for byte, the Ally's tasks removed, all Edens and displays of this thread
+stopped; the companion units expire on their own.
+
+### 0.5.3 — 2026-10-17: NSO coverage campaign on the LAN-NSO Eden (no new removal evidence)
+
+Operator request: finish the code-reduction measurement against the other
+agent's "LAN NSO" Eden (commit 289c4684e7, private companion for auth,
+matchmaking and NAT check) so the Quickplay, Arena and Doubles paths that no
+emulator session had reached get coverage. Coverage build
+`artifacts/292a402ab785fec9/` (0.5.3 be82f50, `"variant": "coverage"`),
+NSO profile `a` staged with it (LessLag, `platform=console`, player 2 enabled),
+Astra low drivers, three runs of peer a and one of peer b (profile `b`, second
+address on the same host), companion window 00:29–01:29Z. Reached: Online →
+Smash with the window shown and cycled, Quickplay Solo and Co-op waiting rooms
+(window shown there too), Background Matchmaking started, kept alive through
+Training and cancelled, Spectate ("Failed to play replay"), the Create Arena
+settings screen, the public arena list, a Debug-view manual snapshot. Not
+reached: an arena lobby (Create Arena → Next opens the game's text-entry
+applet and Eden's applet window segfaults the headless Xwayland on the Yoga,
+three times, taking Eden down with `std::bad_alloc`) and a connected Quickplay
+match (the companion paired the two peers but the connection failed with
+2618-0502 "One or more other consoles are not responding"; two addresses on
+one host behave like the fixture's unsupported same-IP case). Result
+(`tools/coverage/report.py` over four scenario sets, joined by function name
+with the 2026-10-15 table): 774 of 1,466 instrumented functions executed; **no
+function executed here that the 2026-10-15 campaign had not executed**; 329
+functions (3,104 lines) never ran in either campaign, and every one is already
+accounted for (Tier 1 and Tier 2 removed on main, FPS++ gate, DRS experiment,
+plugin option edits/own pages, and the ~750 lines of category A arena/match
+code that needs a lobby or a connected match). Category A stays. Next NSO
+attempt needs a display that survives the applet window and a second host as
+the peer. Evidence: evidence root `coverage-nso-1016/` (REPORT.md, NOTES.md,
+DRIVE-LOG*.md, profiles, reports, receipts; both NSO profiles restored byte for
+byte). Tier 2 gates on the merge 55d2c74: `cargo clippy --all-targets -- -D
+warnings`, 300 host tests, `cargo build --no-default-features`, Skyline
+release package `artifacts/c408b41dc14f6c61/` (build
+`0.5.3-55d2c7402673-1792198537`, NRO 1,462,272 B, SHA-256
+`c408b41dc14f6c61e8704a70529687b8f77a23997ebe8ceeab9d777794b70a07`); not
+deployed to the card.
+
+### 0.5.3 — 2026-10-16: retired five opt-in diagnostics
+
+The coverage campaign's Tier 2 probes are removed. They last shipped in
+`be82f506cd33ef8c8dc017e754597d45893c1ecd`. Retired: `DUMP_PRESENTATION_HISTORY`
+(the `nn::vi` frame-history dump; Eden returned no usable presented timestamps,
+and the CSV captures plus present-at-flush superseded it), `PROBE_FIGHTER_MODULE`
+(the sixteen-word event and `fighter-module.txt` dump; the `common` load/unload
+observation and logical Main arm stay), `DUMP_RENDER_PROBE` (the 5 October
+read-only range dump), `PROBE_CROP` (the code-83 SetCrop log; the crop wrapper
+and fullscreen rearm stay), and `dispatcher_backoff.ini` (the override parser;
+the shipped default policy stays, with `dispatcher_backoff=false` and
+`DISABLE_BACKOFF` as the off switches). Event codes 75, 76, 77 and 83 are no
+longer emitted. Flag-absent hooks, defaults and the other event codes are
+unchanged. No console run of this commit.
 
 ### 0.5.3 — 2026-10-16: `early_present` and `dispatcher_backoff` switches, Eden before/after clips (branch `docs/early-present-backoff-toggles`)
 

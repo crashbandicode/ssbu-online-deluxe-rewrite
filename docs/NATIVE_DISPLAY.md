@@ -9,7 +9,10 @@ remains available in the window's Interface row.
 
 Streamer restores the original title, font, colors and background. Turning it
 off restores the status display. Font sizes are absolute, not multiplied by the
-current size, so repeated edits do not enlarge the text.
+current size, so repeated edits do not enlarge the text. Since 2026-10-17 the
+restore is a one-shot: it fires while the pane still shows this mod's text (or
+right after the game refreshed the words under this mod's style) and no longer
+re-fires when only the live font drifted from the saved one.
 
 ![Training character select with the native status line](media/training-css.png)
 
@@ -50,14 +53,30 @@ not change simulation, networking, rendering policy or input handling.
 - The window remains the settings editor. The fork's native D-pad edits are
   ported (`overlay.rs` `poll_with`, `menu.rs` `apply_native_edges`) and have
   required ZL held since 0.4.1, because the D-pad also moves the game's own
-  cursor. The LDN scan count is captured (`runtime/native_banner.rs`
-  `store_scan_count`).
+  cursor.
+- The local-wireless lobby pane (`set_text_dev_count`, captured at the scene
+  entry `0x1bd45e0` and written at the game's count update `0x1bd7a80`) shows
+  the input buffer behind the same marker as the titles. Since 2026-10-17 it
+  goes through the same per-pane capture as the CSS and arena panes: Streamer
+  restores the game's own captured count text once and leaves the pane to the
+  game, whose count refresh lands after this mod's write in the call that
+  refreshes it and is captured again as the pane's game text. The fork's
+  `nn::ldn::Initialize` / `Scan` hooks and its bare scan-count number are not
+  reproduced. The 13.0.5 image shows the hook sits directly after the dirty
+  query at the site entry (`blr x8; tbz w0, #0` on the `+0x180` sub-object),
+  and the latency text observed on Eden lobbies shows the game's own write is
+  not unconditional per call.
 - CSS status is available offline too. Offline screens omit the opponent line.
 - Arena lists the known mapped remote stations (up to eight lines, local and
-  unmapped stations omitted; `runtime/native_banner.rs` `arena_parts`), each
+  unmapped stations omitted; `runtime/native_banner.rs` `arena_remotes`), each
   with name, profile, input buffer, RTT and the announced interface suffix when
   known. Its room-ID path, style and positioning are implemented but require an
   actual NSO arena test on Switch.
+- One text builder (`native_banner::status_text`) formats the CSS line and the
+  arena roster, so the CSS fields take the arena byte bounds (name ≤ 40 bytes,
+  profile ≤ 9, latency ≤ 4, ping ≤ 17); one style decision
+  (`native_banner::paint`) chooses between the Streamer restore and the
+  telemetry write for every pane kind (2026-10-17).
 - Original styles are captured and restored instead of assuming the fork's
   hard-coded default title styles. The CSS original function runs before the
   display update; this ordering is covered by the emulator tests below.

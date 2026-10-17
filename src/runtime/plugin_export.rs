@@ -9,8 +9,8 @@ use skyline::libc::c_char;
 use std::ffi::CString;
 use std::sync::OnceLock;
 
-// The table shape is version 1 and stays so; descriptor versions 1 and 2 are
-// both accepted by `register` (see `plugin_api::parse_descriptor`).
+// The table shape is version 1 and stays so; `register` accepts descriptor
+// versions 2 to 4 under one rule set (see `plugin_api::parse_descriptor`).
 static TABLE: abi::PluginApiV1 = abi::PluginApiV1 {
     struct_size: core::mem::size_of::<abi::PluginApiV1>() as u32,
     abi_version: abi::TABLE_VERSION,
@@ -30,27 +30,24 @@ pub unsafe extern "C" fn ssbu_online_deluxe_plugin_api_v1() -> *const abi::Plugi
     &TABLE
 }
 
+/// Code 99: `a` is the handle (or the negative error), `b` the option count.
 unsafe extern "C" fn register(desc: *const abi::PluginDesc) -> i32 {
     let result = crate::plugin_api::REGISTRY.register_raw(desc);
-    let accepted = if result >= 0 {
-        crate::plugin_api::REGISTRY
-            .snapshot()
-            .get(result as usize)
-            .map(|p| p.options.len() as u64)
-            .unwrap_or(0)
-    } else {
-        0
-    };
-    record(Code::PluginRegistered, result as i64 as u64, accepted);
-    if result >= 0 {
-        skyline::println!(
-            "[Deluxe] plugin registered: handle {} with {} option(s)",
-            result,
-            accepted
-        );
-    } else {
-        skyline::println!("[Deluxe] plugin registration refused: code {}", result);
-    }
+    let options = usize::try_from(result)
+        .ok()
+        .and_then(|handle| {
+            crate::plugin_api::REGISTRY
+                .snapshot()
+                .get(handle)
+                .map(|p| p.options.len())
+        })
+        .unwrap_or(0);
+    record(Code::PluginRegistered, result as i64 as u64, options as u64);
+    skyline::println!(
+        "[Deluxe] plugin registration: handle {} with {} option(s) (negative = refused)",
+        result,
+        options
+    );
     result
 }
 
