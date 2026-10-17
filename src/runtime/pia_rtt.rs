@@ -97,10 +97,10 @@ pub(super) fn poll() {
     }
     let now = unsafe { skyline::nn::os::GetSystemTick() as u64 };
     let generation = DRAW_GEN.load(Ordering::Acquire);
-    let targets = crate::peer_transport::publication_targets();
+    let (frame, roster) = crate::peer_transport::banner_peers();
     let Ok(mut slot) = lock_session() else {
         DROPPED.fetch_add(1, Ordering::Relaxed);
-        if targets.busy {
+        if roster.busy {
             write_board(crate::pia_rtt::StationBoard::busy(
                 EPOCH.load(Ordering::Acquire),
             ));
@@ -113,11 +113,21 @@ pub(super) fn poll() {
         record(Code::PiaRtt, u64::MAX, 0);
         skyline::println!("[Deluxe] Pia RTT station table allocated");
     }
-    let stations = &targets.stations[..usize::from(targets.len)];
+    let mut stations = [0u8; crate::peer_transport::REMOTE_CAP];
+    let mut len = 0usize;
+    for index in roster.peers[..usize::from(roster.len)]
+        .iter()
+        .filter_map(|peer| peer.station)
+    {
+        stations[len] = index;
+        len += 1;
+    }
+    let stations = &stations[..len];
+    let selected = station_pick(frame.selection);
     let (publication, board) = match slot.as_deref_mut() {
         Some(session) => {
-            session.accept_poll_for(now, epoch, targets.selected);
-            let board = if targets.busy {
+            session.accept_poll_for(now, epoch, selected);
+            let board = if roster.busy {
                 crate::pia_rtt::StationBoard::busy(epoch)
             } else {
                 session.board_for(now, epoch, stations)
@@ -126,7 +136,7 @@ pub(super) fn poll() {
             (session.publication(), board)
         }
         None => {
-            let board = if targets.busy {
+            let board = if roster.busy {
                 crate::pia_rtt::StationBoard::busy(epoch)
             } else {
                 crate::pia_rtt::StationBoard::empty(epoch, stations)
@@ -226,8 +236,8 @@ fn store_counters(session: &Session) {
     CLEANUPS.store(session.cleanups(), Ordering::Relaxed);
 }
 
-fn station_pick() -> crate::pia_rtt::StationPick {
-    match crate::peer_transport::selection_snapshot() {
+fn station_pick(selection: crate::peer_transport::Selection) -> crate::pia_rtt::StationPick {
+    match selection {
         crate::peer_transport::Selection::Station(index) => {
             crate::pia_rtt::StationPick::Index(index)
         }
@@ -367,7 +377,7 @@ unsafe fn deluxe_rewrite_observe_rtt_sample(ctx: &InlineCtx) {
         now_tick: ctx.registers[22].x(),
         ticks_per_ms: ctx.registers[8].x(),
     };
-    let station = station_pick();
+    let station = station_pick(crate::peer_transport::selection_snapshot());
     match with_session(|session, epoch| session.accept_sample_for(sample, epoch, station)) {
         // Existing path: a stale protocol table was replaced. Drop every
         // mapped id. This does not name the old or new protocol.
@@ -394,7 +404,7 @@ unsafe fn deluxe_rewrite_observe_rtt_sample(ctx: &InlineCtx) {
 unsafe fn deluxe_rewrite_observe_station_left(ctx: &InlineCtx) {
     let protocol = ctx.registers[0].x();
     let remote = ctx.registers[1].w();
-    let station = station_pick();
+    let station = station_pick(crate::peer_transport::selection_snapshot());
     match with_session(|session, epoch| session.accept_leave_for(protocol, remote, epoch, station))
     {
         Access::Done(true) => {
@@ -411,7 +421,7 @@ unsafe fn deluxe_rewrite_observe_station_left(ctx: &InlineCtx) {
 #[skyline::hook(offset = SESSION_END_OFFSET, inline)]
 unsafe fn deluxe_rewrite_observe_session_end(ctx: &InlineCtx) {
     let protocol = ctx.registers[0].x();
-    let station = station_pick();
+    let station = station_pick(crate::peer_transport::selection_snapshot());
     match with_session(|session, epoch| session.accept_cleanup_for(protocol, epoch, station)) {
         Access::Done(true) => {
             begin_publication_retirement();

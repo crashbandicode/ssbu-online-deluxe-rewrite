@@ -15,19 +15,12 @@ use crate::connection_transport::{
     STATION_INDEX_GUARD, STATION_INDEX_OFFSET, WIRE_LEN_MAX, WIRE_LEN_MIN,
 };
 use crate::peer_passive::{custom_write_allowed, MESSAGE_AREA_MAX, PIA_MAGIC};
+use crate::peer_transport::{BodyWrite, Counter};
 use skyline::hooks::{getRegionAddress, InlineCtx, Region};
 use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
 
-static LOG_LEARNED: AtomicU64 = AtomicU64::new(0);
-static LOG_CONFIRMED: AtomicU64 = AtomicU64::new(0);
-static LOG_CLEANUPS: AtomicU64 = AtomicU64::new(0);
-static LOG_BEACON_WRITES: AtomicU64 = AtomicU64::new(0);
-static LOG_BEACON_SKIPS: AtomicU64 = AtomicU64::new(0);
-static LOG_PAYLOAD_WRITES: AtomicU64 = AtomicU64::new(0);
-static LOG_PAYLOAD_SKIPS: AtomicU64 = AtomicU64::new(0);
-static LOG_STEALTH: AtomicU64 = AtomicU64::new(0);
-static LOG_AMBIGUOUS: AtomicU64 = AtomicU64::new(0);
-static LOG_CONTENTIONS: AtomicU64 = AtomicU64::new(0);
+/// Transport counter values already drained into events, indexed by [`Counter`].
+static LOGGED: [AtomicU64; 10] = [const { AtomicU64::new(0) }; 10];
 /// Cached `nn::nifm::GetInternetConnectionStatus` type byte. `0` is unknown.
 static LOCAL_INTERFACE: AtomicU8 = AtomicU8::new(0);
 
@@ -243,22 +236,14 @@ fn observe_send_packet(packet: u64) {
     if !magic_ok || area_len == 0 || !custom_write_allowed(version_flags) {
         return;
     }
-    let area_bytes = &area[..area_len];
-    let mut saved = [None; 8];
     crate::peer_transport::commit_outgoing(
         version_flags,
         connection_id,
-        area_bytes,
+        &area[..area_len],
         Some(current_announce()),
         LOCAL_INTERFACE.load(Ordering::Relaxed),
         super::stealth(),
-        |writes, revert| {
-            if revert {
-                restore_body_writes(&saved);
-            } else {
-                saved = stage_body_writes(packet, area_len, writes);
-            }
-        },
+        |writes| apply_body_writes(packet, area_len, writes),
     );
 }
 
@@ -266,7 +251,7 @@ fn observe_send_packet(packet: u64) {
 ///
 /// Menus and matches use the same rule. A saved mode is not sent while the
 /// machine is passthrough, and core modes are not a live profile. Auto is not
-/// a wire value. `Profile::Doubles` is `AnnounceMode::LessLagDoubles`. The
+/// a wire value. `Profile::Doubles` is the fork's `less_lag_doubles` bits. The
 /// resolution discriminant and dynamic-resolution bit are the configured
 /// state. A rejected resolution guard keeps that bit clear. Saved latency is
 /// unchanged.
@@ -288,13 +273,6 @@ fn current_announce() -> crate::peer_transport::Announce {
     )
 }
 
-#[derive(Clone, Copy)]
-struct SavedBody {
-    addr: usize,
-    bytes: [u8; 4],
-    len: u8,
-}
-
 fn body_addr(packet: u64, area_len: usize, at: usize, len: usize) -> Option<usize> {
     let end = at.checked_add(len)?;
     if len == 0 || len > 4 || end > area_len {
@@ -309,78 +287,65 @@ fn body_addr(packet: u64, area_len: usize, at: usize, len: usize) -> Option<usiz
     Some(start)
 }
 
-fn stage_body_writes(
-    packet: u64,
-    area_len: usize,
-    writes: &[Option<crate::peer_transport::BodyWrite>],
-) -> [Option<SavedBody>; 8] {
-    let mut saved = [None; 8];
-    for (slot, write) in saved.iter_mut().zip(writes.iter().flatten()) {
+/// Stores the planned announcement bytes into our own outgoing packet. Nothing
+/// is saved or put back: a cleanup racing this store cannot corrupt peer state,
+/// and the packet is already addressed to the departing peer (2026-10-17).
+fn apply_body_writes(packet: u64, area_len: usize, writes: &[Option<BodyWrite>]) {
+    for write in writes.iter().flatten() {
         let len = usize::from(write.len);
         let Some(start) = body_addr(packet, area_len, write.at, len) else {
             continue;
         };
-        let mut bytes = [0u8; 4];
         unsafe {
-            core::ptr::copy_nonoverlapping(start as *const u8, bytes.as_mut_ptr(), len);
             core::ptr::copy_nonoverlapping(write.bytes.as_ptr(), start as *mut u8, len);
-        }
-        *slot = Some(SavedBody {
-            addr: start,
-            bytes,
-            len: write.len,
-        });
-    }
-    saved
-}
-
-fn restore_body_writes(saved: &[Option<SavedBody>]) {
-    for slot in saved.iter().flatten() {
-        let len = usize::from(slot.len);
-        unsafe {
-            core::ptr::copy_nonoverlapping(slot.bytes.as_ptr(), slot.addr as *mut u8, len);
         }
     }
 }
 
 fn drain_transport() {
-    let now = crate::peer_transport::counters();
-    let learned = counter_delta(now.learned, &LOG_LEARNED);
+    let last_mix = crate::peer_transport::last_mix();
+    let learned = counter_delta(Counter::Learned);
     if learned != 0 {
-        record(Code::TransportHandshake, now.last_mix, learned);
+        record(Code::TransportHandshake, last_mix, learned);
     }
-    let confirmed = counter_delta(now.confirmed, &LOG_CONFIRMED);
+    let confirmed = counter_delta(Counter::Confirmed);
     if confirmed != 0 {
-        record(Code::TransportConfirm, now.last_mix, confirmed);
+        record(Code::TransportConfirm, last_mix, confirmed);
     }
-    let cleanups = counter_delta(now.cleanups, &LOG_CLEANUPS);
+    let cleanups = counter_delta(Counter::Cleanups);
     if cleanups != 0 {
         record(Code::TransportCleanup, cleanups, 0);
     }
-    let beacon_writes = counter_delta(now.beacon_writes, &LOG_BEACON_WRITES);
-    let beacon_skips = counter_delta(now.beacon_skips, &LOG_BEACON_SKIPS);
-    if beacon_writes != 0 || beacon_skips != 0 {
-        record(Code::TransportBeacon, beacon_writes, beacon_skips);
+    let (writes, skips) = (
+        counter_delta(Counter::BeaconWrites),
+        counter_delta(Counter::BeaconSkips),
+    );
+    if writes != 0 || skips != 0 {
+        record(Code::TransportBeacon, writes, skips);
     }
-    let payload_writes = counter_delta(now.payload_writes, &LOG_PAYLOAD_WRITES);
-    let payload_skips = counter_delta(now.payload_skips, &LOG_PAYLOAD_SKIPS);
-    if payload_writes != 0 || payload_skips != 0 {
-        record(Code::TransportPayload, payload_writes, payload_skips);
+    let (writes, skips) = (
+        counter_delta(Counter::PayloadWrites),
+        counter_delta(Counter::PayloadSkips),
+    );
+    if writes != 0 || skips != 0 {
+        record(Code::TransportPayload, writes, skips);
     }
-    let stealth = counter_delta(now.stealth_suppress, &LOG_STEALTH);
+    let stealth = counter_delta(Counter::StealthSuppress);
     if stealth != 0 {
-        record(Code::TransportStealth, stealth, now.last_mix);
+        record(Code::TransportStealth, stealth, last_mix);
     }
-    let ambiguous = counter_delta(now.ambiguous, &LOG_AMBIGUOUS);
-    let contentions = counter_delta(now.contentions, &LOG_CONTENTIONS);
+    let (ambiguous, contentions) = (
+        counter_delta(Counter::Ambiguous),
+        counter_delta(Counter::Contentions),
+    );
     if ambiguous != 0 || contentions != 0 {
         record(Code::TransportSkip, ambiguous, contentions);
     }
 }
 
-fn counter_delta(now: u64, slot: &AtomicU64) -> u64 {
-    let previous = slot.swap(now, Ordering::Relaxed);
-    now.wrapping_sub(previous)
+fn counter_delta(counter: Counter) -> u64 {
+    let now = crate::peer_transport::counter(counter);
+    now.wrapping_sub(LOGGED[counter as usize].swap(now, Ordering::Relaxed))
 }
 
 #[skyline::hook(offset = SEND_PLAINTEXT_OFFSET, inline)]

@@ -161,8 +161,8 @@ pub fn walk_messages<'a>(
             cursor = end;
             (Some(kind), Some(arg))
         };
-        let first_u64 = read_be_u64(rest, flags, FIRST_U64_PRESENT, &mut cursor)?;
-        let second_u64 = read_be_u64(rest, flags, SECOND_U64_PRESENT, &mut cursor)?;
+        let first_u64 = read_flagged_u64(rest, flags, FIRST_U64_PRESENT, &mut cursor)?;
+        let second_u64 = read_flagged_u64(rest, flags, SECOND_U64_PRESENT, &mut cursor)?;
         let body_bytes = usize::from(framed_len);
         let Some(body_end) = cursor.checked_add(body_bytes) else {
             return Err(ParseError::Truncated);
@@ -190,7 +190,7 @@ pub fn walk_messages<'a>(
     Ok(count)
 }
 
-fn read_be_u64(
+fn read_flagged_u64(
     rest: &[u8],
     flags: u8,
     bit: u8,
@@ -199,16 +199,15 @@ fn read_be_u64(
     if flags & bit == 0 {
         return Ok(None);
     }
-    let Some(end) = cursor.checked_add(8) else {
-        return Err(ParseError::Truncated);
-    };
-    if end > rest.len() {
-        return Err(ParseError::Truncated);
-    }
-    let mut bytes = [0u8; 8];
-    bytes.copy_from_slice(&rest[*cursor..end]);
-    *cursor = end;
-    Ok(Some(u64::from_be_bytes(bytes)))
+    let value = read_be_u64(rest, *cursor).ok_or(ParseError::Truncated)?;
+    *cursor += 8;
+    Ok(Some(value))
+}
+
+/// Big-endian `u64` at `at`. `None` when the eight bytes run past the end.
+pub fn read_be_u64(bytes: &[u8], at: usize) -> Option<u64> {
+    let raw = bytes.get(at..at.checked_add(8)?)?;
+    Some(u64::from_be_bytes(raw.try_into().ok()?))
 }
 
 /// Fork `PiaCustomNetPacket` (`version`, `latency_bits`, native LE `u16`).
@@ -305,34 +304,38 @@ pub fn read_response_beacon(body: &[u8]) -> Beacon {
     if body.len() < 2 || body[0] != 2 || body[1] != 0 {
         return Beacon::NotThisBody;
     }
-    if body.len() < BEACON_HEADER + LOCATION_STRIDE {
-        return Beacon::NotRead;
-    }
-    let span = body.len() - BEACON_HEADER;
-    let nslots = span / LOCATION_STRIDE;
-    let count = usize::from(body[0x38]);
-    if nslots < count {
-        return Beacon::NotRead;
-    }
-    if nslots == count {
-        return Beacon::NoSpareSlot;
-    }
-    let end = BEACON_HEADER + nslots * LOCATION_STRIDE;
-    let (Some(tag_at), Some(iface_at)) = (end.checked_sub(0x54), end.checked_sub(0x53)) else {
-        return Beacon::NotRead;
+    let Some(tag_at) = beacon_tag_offset(body) else {
+        let spare = body.len() >= BEACON_HEADER + LOCATION_STRIDE
+            && (body.len() - BEACON_HEADER) / LOCATION_STRIDE == usize::from(body[0x38]);
+        return if spare {
+            Beacon::NoSpareSlot
+        } else {
+            Beacon::NotRead
+        };
     };
-    if iface_at >= body.len() {
-        return Beacon::NotRead;
-    }
-    let tag = body[tag_at];
-    if tag != BEACON_TAG {
+    if body[tag_at] != BEACON_TAG {
         return Beacon::TagMissing;
     }
-    let raw = body[iface_at];
+    let raw = body[tag_at + 1];
     Beacon::Tagged {
         raw,
         interface: clamp_observed_interface(raw),
     }
+}
+
+/// Offset of the spare tail slot's tag byte in a kind-`0x14` subtype-2 body
+/// (the interface byte follows it). `None` when the manager would not read
+/// one: another body, a short body, or `nslots <= count` (`0x2c3c`-`0x2c88`).
+pub fn beacon_tag_offset(body: &[u8]) -> Option<usize> {
+    if body.len() < BEACON_HEADER + LOCATION_STRIDE || body[0] != 2 || body[1] != 0 {
+        return None;
+    }
+    let nslots = (body.len() - BEACON_HEADER) / LOCATION_STRIDE;
+    if nslots <= usize::from(body[0x38]) {
+        return None;
+    }
+    let tag_at = (BEACON_HEADER + nslots * LOCATION_STRIDE).checked_sub(0x54)?;
+    (tag_at + 1 < body.len()).then_some(tag_at)
 }
 
 #[cfg(test)]
