@@ -55,7 +55,11 @@ impl Sections<'_> {
 
     /// Bytes `write_profraw` produces for these sections.
     pub fn profraw_len(&self) -> usize {
-        HEADER_WORDS * 8 + self.data.len() + self.counters.len() + self.names.len() + pad8(self.names.len())
+        HEADER_WORDS * 8
+            + self.data.len()
+            + self.counters.len()
+            + self.names.len()
+            + pad8(self.names.len())
     }
 
     fn validate(&self) -> io::Result<()> {

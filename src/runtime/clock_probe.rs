@@ -54,7 +54,11 @@ pub(super) fn poll(iteration: u64) {
     let class = classify(mhz) as u8;
     let changed = LAST_CLASS.swap(class, Ordering::Relaxed) != class;
     if changed || iteration.is_multiple_of(LOG_EVERY) {
-        record(Code::ClockSample, u64::from(mhz), HOC_BITS.load(Ordering::Relaxed));
+        record(
+            Code::ClockSample,
+            u64::from(mhz),
+            HOC_BITS.load(Ordering::Relaxed),
+        );
     }
 }
 

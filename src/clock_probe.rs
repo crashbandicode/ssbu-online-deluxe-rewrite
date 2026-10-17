@@ -41,7 +41,10 @@ pub struct HocState {
 
 impl HocState {
     pub const fn bits(self) -> u64 {
-        (self.kip as u64) | (self.autostart as u64) << 1 | (self.title_profile as u64) << 2 | (self.uncapped as u64) << 3
+        (self.kip as u64)
+            | (self.autostart as u64) << 1
+            | (self.title_profile as u64) << 2
+            | (self.uncapped as u64) << 3
     }
 
     pub const fn from_bits(bits: u64) -> Self {
@@ -202,7 +205,10 @@ mod tests {
         assert_eq!(parse_hoc_config(capped), (false, false));
         assert_eq!(parse_hoc_config(""), (false, false));
         // uncapped_clocks only counts in [values].
-        assert_eq!(parse_hoc_config("[01006A800016E000]\nuncapped_clocks=1\n"), (true, false));
+        assert_eq!(
+            parse_hoc_config("[01006A800016E000]\nuncapped_clocks=1\n"),
+            (true, false)
+        );
     }
 
     #[test]
@@ -235,12 +241,18 @@ mod tests {
             uncapped: false,
         };
         assert_eq!(status_label(1021, hoc), "1021 MHz stock, HOC kip+clk+smash");
-        assert_eq!(status_label(1783, HocState::default()), "1783 MHz OC, HOC none");
+        assert_eq!(
+            status_label(1783, HocState::default()),
+            "1783 MHz OC, HOC none"
+        );
         assert_eq!(status_label(0, HocState::default()), "--- MHz, HOC none");
         assert_eq!(
             header_lines(1021, hoc),
             "# clock_mhz=1021\n# clock=stock\n# hoc=kip+clk+smash"
         );
-        assert_eq!(status_lines(0, HocState::default()), "clock_mhz=0\nclock=unknown\nhoc=none");
+        assert_eq!(
+            status_lines(0, HocState::default()),
+            "clock_mhz=0\nclock=unknown\nhoc=none"
+        );
     }
 }
