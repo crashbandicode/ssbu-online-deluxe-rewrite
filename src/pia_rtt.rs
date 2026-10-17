@@ -17,6 +17,10 @@
 //! intentionally omitted so a steady sample is Stable immediately. A gap of
 //! three seconds resets the ring before the next push. Empty and stale
 //! readings publish no stability colour.
+//!
+//! The table holds [`STATION_CAP`] stations keyed by index (twice the
+//! handshake table; arenas hold eight). A new station takes a free slot, else
+//! the one with the oldest sample.
 
 /// Closed-manager window. Samples past this are not part of the mean.
 pub const RING_CAP: usize = 100;
@@ -27,7 +31,8 @@ pub const STALE_MS: u64 = 3_000;
 /// match; a larger gap means that assumption failed.
 pub const CLOCK_SKEW_MS: u64 = 60_000;
 pub const MAX_STATION_INDEX: u8 = 252;
-const STATION_SLOTS: usize = MAX_STATION_INDEX as usize + 1;
+/// Stations kept at once.
+pub const STATION_CAP: usize = 16;
 
 /// `.text+0x15f104`, 64 bytes. Covers the signed divide through `umaddl`.
 pub const RTT_ARITHMETIC_OFFSET: usize = 0x15f104;
@@ -79,6 +84,20 @@ pub enum PingReading {
     Unavailable(PingGap),
 }
 
+/// Why there is no measured ping. The discriminant is the published reason
+/// byte; `1` is a measurement.
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PingGap {
+    NoneFresh = 0,
+    MultiplePeers = 2,
+    OtherProtocol = 3,
+    Stale = 4,
+    /// The observer hooks are not installed.
+    Off = 5,
+    Clock = 6,
+}
+
 /// Fork display colours. Empty and stale readings have no colour.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PingRgba {
@@ -95,47 +114,16 @@ pub enum Stability {
     Unstable = 2,
 }
 
-pub const PING_STABLE: PingRgba = PingRgba {
-    r: 0.45,
-    g: 0.90,
-    b: 0.45,
-    a: 1.0,
-};
-pub const PING_INCONSISTENT: PingRgba = PingRgba {
-    r: 0.95,
-    g: 0.85,
-    b: 0.25,
-    a: 1.0,
-};
-pub const PING_UNSTABLE: PingRgba = PingRgba {
-    r: 0.95,
-    g: 0.35,
-    b: 0.35,
-    a: 1.0,
-};
-
 /// No stability and no station. `0` is a valid station, so it is not the sentinel.
 pub const NO_PEER: u64 = 0xffff;
 
 pub fn ping_rgba(stability: Stability) -> PingRgba {
-    match stability {
-        Stability::Stable => PING_STABLE,
-        Stability::Inconsistent => PING_INCONSISTENT,
-        Stability::Unstable => PING_UNSTABLE,
-    }
-}
-
-/// Opponent cell. Invalid interface metadata contributes an empty suffix.
-pub fn format_opponent_ping(mean: Option<u64>) -> String {
-    match mean {
-        Some(ms) => format!("{ms}ms"),
-        None => "---".to_owned(),
-    }
-}
-
-/// Performance-view cell. Shown only for one fresh peer.
-pub fn format_performance_ping(mean: u64) -> String {
-    format!("{mean} ms")
+    let (r, g, b) = match stability {
+        Stability::Stable => (0.45, 0.90, 0.45),
+        Stability::Inconsistent => (0.95, 0.85, 0.25),
+        Stability::Unstable => (0.95, 0.35, 0.35),
+    };
+    PingRgba { r, g, b, a: 1.0 }
 }
 
 pub fn pack_peer(stability: Stability, station: u8) -> u64 {
@@ -150,10 +138,7 @@ pub fn unpack_peer(peer: u64) -> Option<(Stability, u8)> {
         _ => return None,
     };
     let station = (peer >> 8) as u8;
-    if station > MAX_STATION_INDEX {
-        return None;
-    }
-    Some((stability, station))
+    (station <= MAX_STATION_INDEX).then_some((stability, station))
 }
 
 /// Which station a draw is allowed to attach a published ping to.
@@ -170,32 +155,17 @@ pub enum RttIdentity {
 /// True only when this publication is the same station as the draw snapshot
 /// and belongs to the current session epoch.
 pub fn rtt_matches(identity: RttIdentity, publication: Publication, epoch: u64) -> bool {
-    if publication.epoch != epoch {
-        return false;
-    }
-    match identity {
-        RttIdentity::Busy => false,
-        RttIdentity::Station(index) => {
-            matches!(publication.reading(), PingReading::Measured(_))
-                && unpack_peer(publication.peer).is_some_and(|(_, station)| station == index)
+    publication.epoch == epoch
+        && match identity {
+            RttIdentity::Busy => false,
+            RttIdentity::Station(index) => publication.station() == Some(index),
+            RttIdentity::Baseline => publication.measured(),
         }
-        RttIdentity::Baseline => matches!(publication.reading(), PingReading::Measured(_)),
-    }
 }
 
-/// The diagnostic poll is the only writer of publication bytes. A draw shows
-/// them only while the generation it published is still the current one.
-pub fn rtt_published(
-    identity: RttIdentity,
-    publication: Publication,
-    session_epoch: u64,
-    published_generation: u64,
-    draw_generation: u64,
-) -> bool {
-    published_generation == draw_generation && rtt_matches(identity, publication, session_epoch)
-}
-
-/// Measured ping when the publication is current. Otherwise an uncolored blank.
+/// Measured ping when the publication is current: the diagnostic poll is the
+/// only writer of publication bytes, and a draw shows them only while the
+/// generation it published is still the current one. Otherwise an uncolored blank.
 pub fn present_published(
     identity: RttIdentity,
     publication: Publication,
@@ -203,27 +173,17 @@ pub fn present_published(
     published_generation: u64,
     draw_generation: u64,
 ) -> PresentedPing {
-    if rtt_published(
-        identity,
-        publication,
-        session_epoch,
-        published_generation,
-        draw_generation,
-    ) {
+    if published_generation == draw_generation && rtt_matches(identity, publication, session_epoch)
+    {
         PresentedPing::from_publication(publication)
     } else {
-        PresentedPing {
-            opponent: format_opponent_ping(None),
-            performance: None,
-            color: None,
-            detail: "no peer",
-        }
+        blank_ping()
     }
 }
 
 fn blank_ping() -> PresentedPing {
     PresentedPing {
-        opponent: format_opponent_ping(None),
+        opponent: "---".to_owned(),
         performance: None,
         color: None,
         detail: "no peer",
@@ -232,15 +192,14 @@ fn blank_ping() -> PresentedPing {
 
 /// Age every slot with its own sample tick. A retired generation hides the board.
 pub fn expire_board(board: StationBoard, now_tick: u64, epoch: u64) -> StationBoard {
-    if board.busy {
-        return StationBoard::busy(epoch);
-    }
-    if board.epoch != epoch {
-        return StationBoard::unavailable(epoch);
+    if board.busy || board.epoch != epoch {
+        return StationBoard {
+            busy: board.busy,
+            ..StationBoard::unavailable(epoch)
+        };
     }
     let mut aged = board;
-    let count = usize::from(aged.len).min(BOARD_CAP);
-    for slot in aged.slots.iter_mut().take(count) {
+    for slot in aged.slots.iter_mut().take(usize::from(aged.len)) {
         *slot = expire_publication(*slot, now_tick, epoch);
     }
     aged
@@ -254,31 +213,16 @@ pub fn present_station(
     published_generation: u64,
     draw_generation: u64,
 ) -> PresentedPing {
-    if board.busy || board.epoch != epoch || published_generation != draw_generation {
-        return blank_ping();
-    }
-    let Some(slot) = board
-        .slots
-        .iter()
-        .take(usize::from(board.len))
-        .find(|slot| unpack_peer(slot.peer).is_some_and(|(_, station)| station == index))
-    else {
-        return blank_ping();
-    };
-    present_published(
-        RttIdentity::Station(index),
-        *slot,
-        epoch,
-        published_generation,
-        draw_generation,
-    )
-}
-
-fn stability_rank(stability: Stability) -> u8 {
-    match stability {
-        Stability::Stable => 0,
-        Stability::Inconsistent => 1,
-        Stability::Unstable => 2,
+    let identity = RttIdentity::Station(index);
+    match board.station(index) {
+        Some(slot) if !board.busy && board.epoch == epoch => present_published(
+            identity,
+            *slot,
+            epoch,
+            published_generation,
+            draw_generation,
+        ),
+        _ => blank_ping(),
     }
 }
 
@@ -297,126 +241,55 @@ pub fn aggregate_stability(
     if board.busy || board.epoch != epoch || published_generation != draw_generation {
         return None;
     }
-    let mut worst: Option<Stability> = None;
-    for index in stations {
-        let Some(slot) = board
-            .slots
-            .iter()
-            .take(usize::from(board.len))
-            .find(|slot| unpack_peer(slot.peer).is_some_and(|(_, station)| station == *index))
-        else {
-            continue;
-        };
-        if !matches!(slot.reading(), PingReading::Measured(_)) {
-            continue;
-        }
-        let Some((stability, station)) = unpack_peer(slot.peer) else {
-            continue;
-        };
-        if station != *index {
-            continue;
-        }
-        worst = Some(match worst {
-            Some(current) if stability_rank(current) >= stability_rank(stability) => current,
-            _ => stability,
-        });
-    }
-    worst
+    stations
+        .iter()
+        .filter_map(|index| board.station(*index)?.peer())
+        .map(|(stability, _)| stability)
+        .max_by_key(|stability| *stability as u8)
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PingGap {
-    NoneFresh,
-    Stale,
-    MultiplePeers,
-    OtherProtocol,
-    Clock,
-}
-
-/// Fixed ring. `count` is the number of initialized samples, never `count + 1`.
-/// The closed manager's warmup loop also reads one never-written zero. That
-/// zero is not included here: a steady sample is Stable from the first push.
+/// One station's ring. `count` is the number of initialized samples, never
+/// `count + 1`. The closed manager's warmup loop also reads one never-written
+/// zero. That zero is not included here: a steady sample is Stable from the
+/// first push.
 #[derive(Clone, Copy)]
-#[cfg_attr(test, derive(PartialEq, Eq))]
-struct Ring {
+struct Slot {
     samples: [u32; RING_CAP],
     count: u8,
     head: u8,
-    sum: u64,
-}
-
-impl Ring {
-    const EMPTY: Self = Self {
-        samples: [0; RING_CAP],
-        count: 0,
-        head: 0,
-        sum: 0,
-    };
-
-    fn reset(&mut self) {
-        *self = Self::EMPTY;
-    }
-
-    fn push(&mut self, sample: u32) {
-        let index = usize::from(self.head);
-        if usize::from(self.count) == RING_CAP {
-            self.sum -= u64::from(self.samples[index]);
-        }
-        self.samples[index] = sample;
-        self.sum += u64::from(sample);
-        self.head = if index + 1 == RING_CAP {
-            0
-        } else {
-            self.head.wrapping_add(1)
-        };
-        if usize::from(self.count) < RING_CAP {
-            self.count += 1;
-        }
-    }
-
-    fn initialized(&self) -> &[u32] {
-        &self.samples[..usize::from(self.count)]
-    }
-
-    #[cfg(test)]
-    fn latest(&self) -> Option<u32> {
-        if self.count == 0 {
-            return None;
-        }
-        let last = if self.head == 0 {
-            RING_CAP - 1
-        } else {
-            usize::from(self.head) - 1
-        };
-        Some(self.samples[last])
-    }
-}
-
-#[derive(Clone, Copy)]
-#[cfg_attr(test, derive(PartialEq, Eq))]
-struct Slot {
-    ring: Ring,
+    station: u8,
     tick: u64,
     occupied: bool,
 }
 
 impl Slot {
     const EMPTY: Self = Self {
-        ring: Ring::EMPTY,
+        samples: [0; RING_CAP],
+        count: 0,
+        head: 0,
+        station: 0,
         tick: 0,
         occupied: false,
     };
+
+    fn push(&mut self, sample: u32, tick: u64) {
+        self.samples[usize::from(self.head)] = sample;
+        self.head = (self.head + 1) % RING_CAP as u8;
+        self.count = (self.count + 1).min(RING_CAP as u8);
+        self.tick = tick;
+        self.occupied = true;
+    }
+
+    fn initialized(&self) -> &[u32] {
+        &self.samples[..usize::from(self.count)]
+    }
 }
 
 /// Integer mean of initialized samples. `None` when the window is empty.
 pub fn window_mean(samples: &[u32]) -> Option<u64> {
-    if samples.is_empty() {
-        return None;
-    }
-    let sum = samples
-        .iter()
-        .fold(0u128, |sum, sample| sum + u128::from(*sample));
-    Some((sum / (samples.len() as u128)) as u64)
+    let sum: u128 = samples.iter().map(|sample| u128::from(*sample)).sum();
+    sum.checked_div(samples.len() as u128)
+        .map(|mean| mean as u64)
 }
 
 /// Sample variance of initialized samples only.
@@ -427,51 +300,32 @@ pub fn window_mean(samples: &[u32]) -> Option<u64> {
 /// negative delta. The manager's unfilled loop bound of `counter + 1` is not
 /// reproduced.
 pub fn window_stability(samples: &[u32]) -> Option<Stability> {
-    let n = samples.len();
-    if n == 0 {
-        return None;
-    }
     let avg = i128::from(window_mean(samples)?);
-    let mut var_sum = 0u128;
-    for sample in samples {
-        let delta = i128::from(*sample) - avg;
-        let magnitude = delta.unsigned_abs();
-        var_sum += magnitude * magnitude;
-    }
-    let denom = if n == RING_CAP { 99u128 } else { n as u128 };
-    Some(if var_sum <= 25 * denom {
-        Stability::Stable
-    } else if var_sum <= 100 * denom {
-        Stability::Inconsistent
-    } else {
-        Stability::Unstable
+    let var_sum: u128 = samples
+        .iter()
+        .map(|sample| (i128::from(*sample) - avg).unsigned_abs().pow(2))
+        .sum();
+    let n = samples.len() as u128;
+    let denom = if n == RING_CAP as u128 { 99 } else { n };
+    Some(match var_sum {
+        sum if sum <= 25 * denom => Stability::Stable,
+        sum if sum <= 100 * denom => Stability::Inconsistent,
+        _ => Stability::Unstable,
     })
 }
 
 #[derive(Clone)]
-#[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct Table {
     protocol: u64,
     local: u8,
     ticks_per_ms: u64,
-    slots: [Slot; STATION_SLOTS],
-    foreign_protocol: u64,
-    foreign_tick: u64,
-    foreign_per_ms: u64,
+    slots: [Slot; STATION_CAP],
+    /// Another live protocol's last sample: protocol, tick, ticks per ms.
+    foreign: Option<(u64, u64, u64)>,
     pub samples: u64,
-    pub rejected_negative: u64,
-    pub rejected_index: u64,
-    pub rejected_overflow: u64,
     pub foreign_samples: u64,
-    pub leaves: u64,
     pub cleanups: u64,
     last_tick: u64,
-}
-
-impl Default for Table {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 impl Table {
@@ -480,16 +334,10 @@ impl Table {
             protocol: 0,
             local: 0xfd,
             ticks_per_ms: 0,
-            slots: [Slot::EMPTY; STATION_SLOTS],
-            foreign_protocol: 0,
-            foreign_tick: 0,
-            foreign_per_ms: 0,
+            slots: [Slot::EMPTY; STATION_CAP],
+            foreign: None,
             samples: 0,
-            rejected_negative: 0,
-            rejected_index: 0,
-            rejected_overflow: 0,
             foreign_samples: 0,
-            leaves: 0,
             cleanups: 0,
             last_tick: 0,
         }
@@ -498,103 +346,80 @@ impl Table {
     /// `true` when a different protocol replaced a fully stale table and the
     /// slots were cleared. Callers must not treat that as a named identity.
     pub fn observe_rtt(&mut self, sample: Observation) -> bool {
-        if sample.protocol == 0 || sample.ticks_per_ms == 0 {
-            self.rejected_index += 1;
-            return false;
-        }
-        let Some(remote) = station_index(sample.remote) else {
-            self.rejected_index += 1;
+        let remote = station_index(sample.remote);
+        let local = station_index(u32::from(sample.local));
+        let (Some(remote), Some(local), Ok(rtt_ms)) = (remote, local, u32::try_from(sample.rtt_ms))
+        else {
             return false;
         };
-        if station_index(u32::from(sample.local)).is_none() {
-            self.rejected_index += 1;
+        if sample.protocol == 0 || sample.ticks_per_ms == 0 || remote == local {
             return false;
         }
-        if sample.rtt_ms < 0 {
-            self.rejected_negative += 1;
+        let adopted = self.protocol != 0 && self.protocol != sample.protocol;
+        if adopted && !self.all_current_stale(sample.now_tick) {
+            self.foreign = Some((sample.protocol, sample.now_tick, sample.ticks_per_ms));
+            self.foreign_samples += 1;
             return false;
         }
-        let Ok(rtt_ms) = u32::try_from(sample.rtt_ms) else {
-            self.rejected_overflow += 1;
-            return false;
-        };
-        if remote == sample.local {
-            return false;
+        if adopted {
+            self.slots = [Slot::EMPTY; STATION_CAP];
         }
-        let mut adopted = false;
-        if self.protocol == 0 {
-            self.protocol = sample.protocol;
-            if self.foreign_protocol == sample.protocol {
-                self.clear_foreign();
-            }
-        } else if self.protocol != sample.protocol {
-            if !self.all_current_stale(sample.now_tick) {
-                self.foreign_protocol = sample.protocol;
-                self.foreign_tick = sample.now_tick;
-                self.foreign_per_ms = sample.ticks_per_ms;
-                self.foreign_samples += 1;
-                return false;
-            }
-            self.clear_slots();
-            self.protocol = sample.protocol;
-            self.local = 0xfd;
-            self.clear_foreign();
-            adopted = true;
+        if adopted
+            || self
+                .foreign
+                .is_some_and(|(protocol, ..)| protocol == sample.protocol)
+        {
+            self.foreign = None;
         }
-        self.local = sample.local;
-        let reset = {
-            let slot = &self.slots[usize::from(remote)];
-            slot.occupied
-                && self.ticks_per_ms != 0
-                && matches!(
-                    age_ms(sample.now_tick, slot.tick, self.ticks_per_ms),
-                    Age::Ms(age) if age >= STALE_MS
-                )
-        };
-        if reset {
-            let slot = &mut self.slots[usize::from(remote)];
-            slot.ring.reset();
-            slot.occupied = false;
-        }
+        self.protocol = sample.protocol;
+        self.local = local;
+        let at = self.claim(remote, sample.now_tick);
+        self.slots[at].push(rtt_ms, sample.now_tick);
         self.ticks_per_ms = sample.ticks_per_ms;
-        let slot = &mut self.slots[usize::from(remote)];
-        slot.ring.push(rtt_ms);
-        slot.tick = sample.now_tick;
-        slot.occupied = true;
         self.samples += 1;
         self.last_tick = sample.now_tick;
         adopted
     }
 
-    fn clear_slots(&mut self) {
-        self.slots.fill(Slot::EMPTY);
+    fn find(&self, station: u8) -> Option<usize> {
+        self.slots
+            .iter()
+            .position(|slot| slot.occupied && slot.station == station)
+    }
+
+    /// The station's slot, emptied after a [`STALE_MS`] gap; else a free slot;
+    /// else the slot with the oldest sample.
+    fn claim(&mut self, station: u8, now_tick: u64) -> usize {
+        let at = match self.find(station) {
+            Some(at) if !matches!(self.age(&self.slots[at], now_tick), Some(age) if age >= STALE_MS) =>
+            {
+                return at;
+            }
+            Some(at) => at,
+            None => self
+                .slots
+                .iter()
+                .enumerate()
+                .min_by_key(|(_, slot)| (slot.occupied, slot.tick))
+                .map_or(0, |(at, _)| at),
+        };
+        self.slots[at] = Slot {
+            station,
+            ..Slot::EMPTY
+        };
+        at
+    }
+
+    fn age(&self, slot: &Slot, now_tick: u64) -> Option<u64> {
+        age_ms(now_tick, slot.tick, self.ticks_per_ms)
     }
 
     /// True when every stored sample is older than [`STALE_MS`], or none remain.
     fn all_current_stale(&self, now_tick: u64) -> bool {
-        !self.slots.iter().any(|slot| {
-            slot.occupied
-                && matches!(
-                    age_ms(now_tick, slot.tick, self.ticks_per_ms),
-                    Age::Ms(age) if age < STALE_MS
-                )
-        })
-    }
-
-    fn fresh_stamp(&self, now_tick: u64) -> (u64, u64) {
-        for index in 0..=MAX_STATION_INDEX {
-            let slot = &self.slots[usize::from(index)];
-            if !slot.occupied || index == self.local {
-                continue;
-            }
-            if matches!(
-                age_ms(now_tick, slot.tick, self.ticks_per_ms),
-                Age::Ms(age) if age < STALE_MS
-            ) {
-                return (slot.tick, self.ticks_per_ms);
-            }
-        }
-        (0, 0)
+        !self
+            .slots
+            .iter()
+            .any(|slot| slot.occupied && fresh(self.age(slot, now_tick)))
     }
 
     pub fn station_left(&mut self, protocol: u64, remote: u32) -> bool {
@@ -604,8 +429,9 @@ impl Table {
         if protocol == 0 || protocol != self.protocol {
             return false;
         }
-        self.slots[usize::from(remote)] = Slot::EMPTY;
-        self.leaves += 1;
+        if let Some(at) = self.find(remote) {
+            self.slots[at] = Slot::EMPTY;
+        }
         true
     }
 
@@ -613,8 +439,11 @@ impl Table {
         if protocol == 0 {
             return false;
         }
-        if protocol == self.foreign_protocol {
-            self.clear_foreign();
+        if self
+            .foreign
+            .is_some_and(|(foreign, ..)| foreign == protocol)
+        {
+            self.foreign = None;
         }
         if protocol != self.protocol {
             return false;
@@ -623,172 +452,95 @@ impl Table {
         self.local = 0xfd;
         self.ticks_per_ms = 0;
         self.last_tick = 0;
-        self.clear_slots();
+        self.slots = [Slot::EMPTY; STATION_CAP];
         self.cleanups += 1;
         true
     }
 
-    pub fn reading(&self, now_tick: u64) -> PingReading {
+    /// The single fresh remote station, else the gap found in the same pass:
+    /// another live protocol, several peers, nothing stored, clock, stale.
+    fn fresh_remote(&self, now_tick: u64) -> Result<usize, PingGap> {
         if self.foreign_fresh(now_tick) {
-            return PingReading::Unavailable(PingGap::OtherProtocol);
+            return Err(PingGap::OtherProtocol);
         }
-        let mut fresh_count = 0u16;
-        let mut fresh_rtt = 0i64;
-        let mut occupied = 0u16;
-        let mut freshest = u64::MAX;
-        let mut backwards = false;
-        for index in 0..=MAX_STATION_INDEX {
-            let slot = &self.slots[usize::from(index)];
-            if !slot.occupied {
+        let (mut found, mut occupied, mut freshest, mut skewed) = (None, false, u64::MAX, false);
+        for (at, slot) in self
+            .slots
+            .iter()
+            .enumerate()
+            .filter(|(_, slot)| slot.occupied)
+        {
+            occupied = true;
+            let Some(age) = self.age(slot, now_tick) else {
+                skewed = true;
                 continue;
-            }
-            occupied += 1;
-            match age_ms(now_tick, slot.tick, self.ticks_per_ms) {
-                Age::Backwards => backwards = true,
-                Age::Unknown => {}
-                Age::Ms(age) => {
-                    freshest = freshest.min(age);
-                    if age < STALE_MS && index != self.local {
-                        fresh_count += 1;
-                        fresh_rtt = window_mean(slot.ring.initialized())
-                            .map(|mean| mean as i64)
-                            .unwrap_or(0);
-                    }
-                }
+            };
+            freshest = freshest.min(age);
+            if age < STALE_MS && slot.station != self.local && found.replace(at).is_some() {
+                return Err(PingGap::MultiplePeers);
             }
         }
-        if fresh_count > 1 {
-            return PingReading::Unavailable(PingGap::MultiplePeers);
+        match found {
+            Some(at) => Ok(at),
+            None if !occupied => Err(PingGap::NoneFresh),
+            None if skewed || freshest >= CLOCK_SKEW_MS => Err(PingGap::Clock),
+            None => Err(PingGap::Stale),
         }
-        if fresh_count == 1 {
-            return PingReading::Measured(fresh_rtt);
-        }
-        if occupied == 0 {
-            return PingReading::Unavailable(PingGap::NoneFresh);
-        }
-        if backwards || freshest >= CLOCK_SKEW_MS {
-            return PingReading::Unavailable(PingGap::Clock);
-        }
-        PingReading::Unavailable(PingGap::Stale)
     }
 
-    /// One station's mean. A missing, local, or stale station is not replaced.
-    pub fn reading_for(&self, index: u8, now_tick: u64) -> (PingReading, u64) {
+    /// One mapped station. A missing, local, or stale station is not replaced.
+    fn station(&self, index: u8, now_tick: u64) -> Result<usize, PingGap> {
         if self.foreign_fresh(now_tick) {
-            return (PingReading::Unavailable(PingGap::OtherProtocol), NO_PEER);
+            return Err(PingGap::OtherProtocol);
         }
-        if index > MAX_STATION_INDEX || index == self.local {
-            return (PingReading::Unavailable(PingGap::NoneFresh), NO_PEER);
-        }
-        let slot = &self.slots[usize::from(index)];
-        if !slot.occupied {
-            return (PingReading::Unavailable(PingGap::NoneFresh), NO_PEER);
-        }
-        match age_ms(now_tick, slot.tick, self.ticks_per_ms) {
-            Age::Ms(age) if age < STALE_MS => {
-                let mean = window_mean(slot.ring.initialized())
-                    .map(|value| value as i64)
-                    .unwrap_or(0);
-                let peer = window_stability(slot.ring.initialized())
-                    .map(|stability| pack_peer(stability, index))
-                    .unwrap_or(NO_PEER);
-                (PingReading::Measured(mean), peer)
-            }
-            Age::Ms(_) => (PingReading::Unavailable(PingGap::Stale), NO_PEER),
-            Age::Backwards | Age::Unknown => (PingReading::Unavailable(PingGap::Clock), NO_PEER),
+        let found = self.find(index).filter(|_| index != self.local);
+        let at = found.ok_or(PingGap::NoneFresh)?;
+        match self.age(&self.slots[at], now_tick) {
+            Some(age) if age < STALE_MS => Ok(at),
+            Some(_) => Err(PingGap::Stale),
+            None => Err(PingGap::Clock),
         }
     }
 
-    fn stamp_for(&self, index: u8) -> (u64, u64) {
-        if index > MAX_STATION_INDEX {
-            return (0, 0);
-        }
-        let slot = &self.slots[usize::from(index)];
-        if slot.occupied {
-            (slot.tick, self.ticks_per_ms)
-        } else {
-            (0, 0)
-        }
-    }
-
-    fn fresh_peer(&self, now_tick: u64) -> Option<(Stability, u8)> {
-        let mut found = None;
-        for index in 0..=MAX_STATION_INDEX {
-            let slot = &self.slots[usize::from(index)];
-            if !slot.occupied || index == self.local {
-                continue;
-            }
-            if matches!(
-                age_ms(now_tick, slot.tick, self.ticks_per_ms),
-                Age::Ms(age) if age < STALE_MS
-            ) {
-                if found.is_some() {
-                    return None;
-                }
-                found = Some((window_stability(slot.ring.initialized())?, index));
-            }
-        }
-        found
-    }
-
-    fn clear(&mut self) {
-        self.protocol = 0;
-        self.local = 0xfd;
-        self.ticks_per_ms = 0;
-        self.clear_slots();
-        self.foreign_protocol = 0;
-        self.foreign_tick = 0;
-        self.foreign_per_ms = 0;
-        self.samples = 0;
-        self.rejected_negative = 0;
-        self.rejected_index = 0;
-        self.rejected_overflow = 0;
-        self.foreign_samples = 0;
-        self.leaves = 0;
-        self.cleanups = 0;
-        self.last_tick = 0;
+    /// A found station's mean, stability and sample stamp, or the gap.
+    fn publication_of(&self, found: Result<usize, PingGap>, epoch: u64) -> Publication {
+        let Ok(at) = found else {
+            return Publication::blank(found.unwrap_err(), epoch);
+        };
+        let slot = &self.slots[at];
+        let samples = slot.initialized();
+        let mean = window_mean(samples).map_or(0, |mean| mean as i64);
+        let peer = window_stability(samples)
+            .map_or(NO_PEER, |stability| pack_peer(stability, slot.station));
+        let (tick, per_ms) = (slot.tick, self.ticks_per_ms);
+        Publication::from_reading(PingReading::Measured(mean), tick, per_ms, epoch, peer)
     }
 
     fn foreign_fresh(&self, now_tick: u64) -> bool {
-        self.foreign_protocol != 0
-            && matches!(
-                age_ms(now_tick, self.foreign_tick, self.foreign_per_ms),
-                Age::Ms(age) if age < STALE_MS
-            )
-    }
-
-    fn clear_foreign(&mut self) {
-        self.foreign_protocol = 0;
-        self.foreign_tick = 0;
-        self.foreign_per_ms = 0;
+        self.foreign
+            .is_some_and(|(_, tick, per_ms)| fresh(age_ms(now_tick, tick, per_ms)))
     }
 }
 
 /// `0..=252`. Values above that include the `0xFD` / `0xFE` / `0xFF` sentinels.
 pub fn station_index(raw: u32) -> Option<u8> {
-    let Ok(index) = u8::try_from(raw) else {
+    u8::try_from(raw)
+        .ok()
+        .filter(|index| *index <= MAX_STATION_INDEX)
+}
+
+/// Milliseconds since `sample_tick`. `None` when the clock rate is unknown or
+/// the clock went backwards; both read as a clock fault.
+fn age_ms(now_tick: u64, sample_tick: u64, ticks_per_ms: u64) -> Option<u64> {
+    if ticks_per_ms == 0 || now_tick < sample_tick {
         return None;
-    };
-    if index > MAX_STATION_INDEX {
-        None
-    } else {
-        Some(index)
     }
+    Some((now_tick - sample_tick) / ticks_per_ms)
 }
 
-enum Age {
-    Ms(u64),
-    Backwards,
-    Unknown,
+fn fresh(age: Option<u64>) -> bool {
+    age.is_some_and(|age| age < STALE_MS)
 }
-
-pub const REASON_NONE: u8 = 0;
-pub const REASON_MEASURED: u8 = 1;
-pub const REASON_MULTIPLE: u8 = 2;
-pub const REASON_OTHER: u8 = 3;
-pub const REASON_STALE: u8 = 4;
-pub const REASON_OFF: u8 = 5;
-pub const REASON_CLOCK: u8 = 6;
 
 /// Mapped remotes published together. Eight matches the handshake table.
 pub const BOARD_CAP: usize = 8;
@@ -803,32 +555,31 @@ pub struct StationBoard {
 }
 
 impl StationBoard {
-    pub fn unavailable(epoch: u64) -> Self {
-        let slot = Publication::unavailable(epoch);
+    pub const fn unavailable(epoch: u64) -> Self {
         Self {
             len: 0,
             busy: false,
             epoch,
-            slots: [slot; BOARD_CAP],
+            slots: [Publication::unavailable(epoch); BOARD_CAP],
         }
     }
 
-    pub fn busy(epoch: u64) -> Self {
+    pub const fn busy(epoch: u64) -> Self {
         Self {
             busy: true,
             ..Self::unavailable(epoch)
         }
     }
 
-    /// What an empty table publishes for `stations`: every requested slot
-    /// unavailable. Used while no session table has been allocated, so it
-    /// must match `Session::board_for` on an empty session (tested).
-    pub fn empty(epoch: u64, stations: &[u8]) -> Self {
-        let mut board = Self::unavailable(epoch);
-        board.len = stations.len().min(BOARD_CAP) as u8;
-        board
+    fn station(&self, index: u8) -> Option<&Publication> {
+        self.slots
+            .iter()
+            .take(usize::from(self.len))
+            .find(|slot| slot.station() == Some(index))
     }
 }
+
+const UNAVAILABLE: u64 = 1 << 63;
 
 /// One UI publication. `bits` packs the reading and the reason together.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -843,17 +594,20 @@ pub struct Publication {
 }
 
 impl Publication {
-    pub fn unavailable(epoch: u64) -> Self {
-        Self::from_reading(
-            PingReading::Unavailable(PingGap::NoneFresh),
-            0,
-            0,
-            epoch,
-            NO_PEER,
-        )
+    const fn blank(gap: PingGap, epoch: u64) -> Self {
+        Self::from_reading(PingReading::Unavailable(gap), 0, 0, epoch, NO_PEER)
     }
 
-    pub fn from_reading(
+    pub const fn unavailable(epoch: u64) -> Self {
+        Self::blank(PingGap::NoneFresh, epoch)
+    }
+
+    /// The value shown while the observer hooks are not installed.
+    pub const fn off(epoch: u64) -> Self {
+        Self::blank(PingGap::Off, epoch)
+    }
+
+    pub const fn from_reading(
         reading: PingReading,
         tick: u64,
         ticks_per_ms: u64,
@@ -872,62 +626,59 @@ impl Publication {
     pub fn reading(self) -> PingReading {
         unpack_reading(self.bits)
     }
-}
 
-pub fn detail_text(reason: u8) -> &'static str {
-    match reason {
-        REASON_MEASURED => "1 peer",
-        REASON_MULTIPLE => "multiple peers",
-        REASON_OTHER => "other session",
-        REASON_STALE => "stale",
-        REASON_CLOCK => "clock",
-        REASON_OFF => "hooks not installed",
-        _ => "no peer",
+    fn measured(self) -> bool {
+        self.bits & UNAVAILABLE == 0
+    }
+
+    /// Stability and station of a measured publication.
+    fn peer(self) -> Option<(Stability, u8)> {
+        self.measured().then(|| unpack_peer(self.peer)).flatten()
+    }
+
+    fn station(self) -> Option<u8> {
+        self.peer().map(|(_, station)| station)
     }
 }
 
-pub fn pack_reading(reading: PingReading) -> u64 {
+fn detail_text(reading: PingReading) -> &'static str {
     match reading {
-        PingReading::Measured(ms) if ms >= 0 => {
-            let magnitude = (ms as u64).min((1u64 << 55) - 1);
-            u64::from(REASON_MEASURED) | (magnitude << 8)
-        }
-        PingReading::Measured(_) => (1u64 << 63) | u64::from(REASON_CLOCK),
-        PingReading::Unavailable(gap) => (1u64 << 63) | u64::from(reason_of(gap)),
+        PingReading::Measured(_) => "1 peer",
+        PingReading::Unavailable(PingGap::NoneFresh) => "no peer",
+        PingReading::Unavailable(PingGap::MultiplePeers) => "multiple peers",
+        PingReading::Unavailable(PingGap::OtherProtocol) => "other session",
+        PingReading::Unavailable(PingGap::Stale) => "stale",
+        PingReading::Unavailable(PingGap::Off) => "hooks not installed",
+        PingReading::Unavailable(PingGap::Clock) => "clock",
+    }
+}
+
+/// Bit 63 set: unavailable, reason in the low byte. Clear: reason `1` in the
+/// low byte and the milliseconds (55 bits) from bit 8.
+pub const fn pack_reading(reading: PingReading) -> u64 {
+    match reading {
+        PingReading::Measured(ms) if ms >= 0 => 1 | ((ms as u64 & ((1 << 55) - 1)) << 8),
+        PingReading::Measured(_) => UNAVAILABLE | PingGap::Clock as u64,
+        PingReading::Unavailable(gap) => UNAVAILABLE | gap as u64,
     }
 }
 
 pub fn unpack_reading(bits: u64) -> PingReading {
-    if bits & (1u64 << 63) != 0 {
-        PingReading::Unavailable(gap_of((bits & 0xff) as u8))
-    } else {
-        PingReading::Measured((bits >> 8) as i64)
+    if bits & UNAVAILABLE == 0 {
+        return PingReading::Measured((bits >> 8) as i64);
     }
-}
-
-fn reason_of(gap: PingGap) -> u8 {
-    match gap {
-        PingGap::NoneFresh => REASON_NONE,
-        PingGap::MultiplePeers => REASON_MULTIPLE,
-        PingGap::OtherProtocol => REASON_OTHER,
-        PingGap::Stale => REASON_STALE,
-        PingGap::Clock => REASON_CLOCK,
-    }
-}
-
-fn gap_of(reason: u8) -> PingGap {
-    match reason {
-        REASON_MULTIPLE => PingGap::MultiplePeers,
-        REASON_OTHER => PingGap::OtherProtocol,
-        REASON_STALE => PingGap::Stale,
-        REASON_CLOCK => PingGap::Clock,
+    PingReading::Unavailable(match (bits & 0xff) as u8 {
+        2 => PingGap::MultiplePeers,
+        3 => PingGap::OtherProtocol,
+        4 => PingGap::Stale,
+        5 => PingGap::Off,
+        6 => PingGap::Clock,
         _ => PingGap::NoneFresh,
-    }
+    })
 }
 
 /// Table plus the epoch that makes a missed leave or cleanup discard old slots.
 #[derive(Clone)]
-#[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct Session {
     table: Table,
     applied: u64,
@@ -935,39 +686,11 @@ pub struct Session {
 }
 
 impl Session {
-    const INITIAL_PUBLICATION: Publication = Publication {
-        bits: (1u64 << 63) | (REASON_OFF as u64),
-        tick: 0,
-        ticks_per_ms: 0,
-        epoch: 1,
-        peer: NO_PEER,
-    };
-
     pub const fn new() -> Self {
         Self {
             table: Table::new(),
             applied: 1,
-            publication: Self::INITIAL_PUBLICATION,
-        }
-    }
-
-    /// The same empty session on the heap. The 253 station slots are about
-    /// 107 KB and all zero, so the allocation is zeroed in place and only the
-    /// three non-zero scalars are written: no 107 KB temporary on the caller's
-    /// stack and no copy of the table in the NRO image. Equality with `new()`
-    /// is tested.
-    pub fn new_boxed() -> Box<Self> {
-        let mut boxed: Box<std::mem::MaybeUninit<Self>> = Box::new_zeroed();
-        // SAFETY: every field of Session, Table, Slot, Ring and Publication is
-        // an integer or a bool, and all-zero is a valid value for each. The
-        // fields that `new()` sets to non-zero values are written below, through
-        // raw pointers so no reference to uninitialized memory is formed.
-        unsafe {
-            let session = boxed.as_mut_ptr();
-            std::ptr::addr_of_mut!((*session).table.local).write(0xfd);
-            std::ptr::addr_of_mut!((*session).applied).write(1);
-            std::ptr::addr_of_mut!((*session).publication).write(Self::INITIAL_PUBLICATION);
-            boxed.assume_init()
+            publication: Publication::off(1),
         }
     }
 
@@ -975,121 +698,54 @@ impl Session {
         self.publication
     }
 
-    #[cfg(test)]
-    fn stored_rtt(&self, index: u8) -> Option<i64> {
-        let slot = self.table.slots[usize::from(index)];
-        if slot.occupied {
-            slot.ring.latest().map(i64::from)
-        } else {
-            None
-        }
+    pub fn table(&self) -> &Table {
+        &self.table
     }
 
-    pub fn samples(&self) -> u64 {
-        self.table.samples
-    }
-
-    pub fn foreign_samples(&self) -> u64 {
-        self.table.foreign_samples
-    }
-
-    pub fn cleanups(&self) -> u64 {
-        self.table.cleanups
-    }
-
-    pub fn accept_sample_for(
+    /// Apply one hook or poll update at `epoch`, then republish for `station`.
+    /// A changed epoch (a missed leave or cleanup) discards the table first.
+    /// `clock` only decides which samples are still fresh; `None` is the last
+    /// sample's tick. A measurement keeps the RTT sample's own tick, so a
+    /// later poll cannot make that sample new.
+    pub fn accept(
         &mut self,
-        sample: Observation,
         epoch: u64,
         station: StationPick,
+        clock: Option<u64>,
+        update: impl FnOnce(&mut Table) -> bool,
     ) -> bool {
-        self.reconcile(epoch);
-        let adopted = self.table.observe_rtt(sample);
-        self.publish(sample.now_tick, epoch, station);
-        adopted
-    }
-
-    pub fn accept_leave_for(
-        &mut self,
-        protocol: u64,
-        remote: u32,
-        epoch: u64,
-        station: StationPick,
-    ) -> bool {
-        self.reconcile(epoch);
-        let cleared = self.table.station_left(protocol, remote);
-        self.publish(self.table.last_tick, epoch, station);
-        cleared
-    }
-
-    pub fn accept_cleanup_for(&mut self, protocol: u64, epoch: u64, station: StationPick) -> bool {
-        self.reconcile(epoch);
-        let cleared = self.table.session_end(protocol);
-        self.publish(self.table.last_tick, epoch, station);
-        cleared
-    }
-
-    pub fn accept_poll_for(&mut self, now_tick: u64, epoch: u64, station: StationPick) {
-        self.reconcile(epoch);
-        self.publish(now_tick, epoch, station);
-    }
-
-    fn reconcile(&mut self, epoch: u64) {
-        if self.applied == epoch {
-            return;
+        if self.applied != epoch {
+            self.table = Table::new();
+            self.applied = epoch;
+            self.publication = Publication::unavailable(epoch);
         }
-        self.table.clear();
-        self.applied = epoch;
-        self.publication = Publication::unavailable(epoch);
-    }
-
-    /// `clock` only decides which samples are still fresh. A measurement keeps
-    /// the RTT sample's own tick, so a later poll cannot make that sample new.
-    fn publish(&mut self, clock: u64, epoch: u64, station: StationPick) {
-        let (reading, tick, ticks_per_ms, peer) = match station {
-            StationPick::Index(index) => {
-                let (reading, peer) = self.table.reading_for(index, clock);
-                let (tick, ticks_per_ms) = match reading {
-                    PingReading::Measured(_) => self.table.stamp_for(index),
-                    PingReading::Unavailable(_) => (0, 0),
-                };
-                (reading, tick, ticks_per_ms, peer)
-            }
-            StationPick::Busy => (PingReading::Unavailable(PingGap::NoneFresh), 0, 0, NO_PEER),
-            StationPick::Absent => {
-                let reading = self.table.reading(clock);
-                match reading {
-                    PingReading::Measured(_) => {
-                        let (tick, ticks_per_ms) = self.table.fresh_stamp(clock);
-                        let peer = self
-                            .table
-                            .fresh_peer(clock)
-                            .map(|(stability, station)| pack_peer(stability, station))
-                            .unwrap_or(NO_PEER);
-                        (reading, tick, ticks_per_ms, peer)
-                    }
-                    PingReading::Unavailable(_) => (reading, 0, 0, NO_PEER),
-                }
-            }
+        let changed = update(&mut self.table);
+        let clock = clock.unwrap_or(self.table.last_tick);
+        let found = match station {
+            StationPick::Index(index) => self.table.station(index, clock),
+            StationPick::Busy => Err(PingGap::NoneFresh),
+            StationPick::Absent => self.table.fresh_remote(clock),
         };
-        self.publication = Publication::from_reading(reading, tick, ticks_per_ms, epoch, peer);
+        self.publication = self.table.publication_of(found, epoch);
+        changed
     }
 
     /// Every requested station at one clock. Each slot keeps that station's sample tick.
-    pub fn board_for(&self, clock: u64, epoch: u64, stations: &[u8]) -> StationBoard {
-        if self.applied != epoch {
-            return StationBoard::unavailable(epoch);
-        }
+    pub fn board_for(
+        &self,
+        clock: u64,
+        epoch: u64,
+        stations: impl IntoIterator<Item = u8>,
+    ) -> StationBoard {
         let mut board = StationBoard::unavailable(epoch);
-        for index in stations.iter().take(BOARD_CAP).copied() {
-            let (reading, peer) = self.table.reading_for(index, clock);
-            let (tick, ticks_per_ms) = match reading {
-                PingReading::Measured(_) => self.table.stamp_for(index),
-                PingReading::Unavailable(_) => (0, 0),
-            };
-            let at = usize::from(board.len);
-            board.slots[at] = Publication::from_reading(reading, tick, ticks_per_ms, epoch, peer);
-            board.len = board.len.saturating_add(1);
+        if self.applied != epoch {
+            return board;
+        }
+        for (slot, index) in board.slots.iter_mut().zip(stations) {
+            *slot = self
+                .table
+                .publication_of(self.table.station(index, clock), epoch);
+            board.len += 1;
         }
         board
     }
@@ -1103,37 +759,19 @@ pub enum StationPick {
     Busy,
 }
 
-impl Default for Session {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 /// Age a publication when the table lock is unavailable. A missed lifecycle
 /// epoch forces unavailable. A measured value expires at [`STALE_MS`].
 pub fn expire_publication(published: Publication, now_tick: u64, epoch: u64) -> Publication {
     if published.epoch != epoch {
         return Publication::unavailable(epoch);
     }
-    if !matches!(published.reading(), PingReading::Measured(_)) {
+    if !published.measured() {
         return published;
     }
     match age_ms(now_tick, published.tick, published.ticks_per_ms) {
-        Age::Ms(age) if age < STALE_MS => published,
-        Age::Ms(_) => Publication::from_reading(
-            PingReading::Unavailable(PingGap::Stale),
-            0,
-            0,
-            epoch,
-            NO_PEER,
-        ),
-        _ => Publication::from_reading(
-            PingReading::Unavailable(PingGap::Clock),
-            0,
-            0,
-            epoch,
-            NO_PEER,
-        ),
+        Some(age) if age < STALE_MS => published,
+        Some(_) => Publication::blank(PingGap::Stale, epoch),
+        None => Publication::blank(PingGap::Clock, epoch),
     }
 }
 
@@ -1148,403 +786,35 @@ pub struct PresentedPing {
 
 impl PresentedPing {
     pub fn from_publication(publication: Publication) -> Self {
-        let detail = detail_text((publication.bits & 0xff) as u8);
-        match publication.reading() {
-            PingReading::Measured(ms) if ms >= 0 => {
-                let mean = ms as u64;
-                let color =
-                    unpack_peer(publication.peer).map(|(stability, _)| ping_rgba(stability));
-                Self {
-                    opponent: format_opponent_ping(Some(mean)),
-                    performance: Some(format_performance_ping(mean)),
-                    color,
-                    detail,
-                }
-            }
-            _ => Self {
-                opponent: format_opponent_ping(None),
-                performance: None,
-                color: None,
+        let reading = publication.reading();
+        let detail = detail_text(reading);
+        let PingReading::Measured(ms) = reading else {
+            return Self {
                 detail,
-            },
+                ..blank_ping()
+            };
+        };
+        Self {
+            opponent: format!("{ms}ms"),
+            performance: Some(format!("{ms} ms")),
+            color: publication
+                .peer()
+                .map(|(stability, _)| ping_rgba(stability)),
+            detail,
         }
     }
-}
-
-fn age_ms(now_tick: u64, sample_tick: u64, ticks_per_ms: u64) -> Age {
-    if ticks_per_ms == 0 {
-        return Age::Unknown;
-    }
-    if now_tick < sample_tick {
-        return Age::Backwards;
-    }
-    Age::Ms(now_tick.saturating_sub(sample_tick) / ticks_per_ms)
 }
 
 #[cfg(test)]
 mod tests {
+    use super::PingGap::{MultiplePeers, NoneFresh, OtherProtocol, Stale};
+    use super::PingReading::{Measured, Unavailable};
+    use super::StationPick::{Absent, Busy, Index};
     use super::*;
 
     const PER_MS: u64 = 1_000;
     const PROTOCOL: u64 = 0x1000;
-
-    fn obs(remote: u32, local: u8, rtt_ms: i64, now_tick: u64) -> Observation {
-        Observation {
-            protocol: PROTOCOL,
-            remote,
-            local,
-            rtt_ms,
-            now_tick,
-            ticks_per_ms: PER_MS,
-        }
-    }
-
-    #[test]
-    fn boxed_session_equals_the_const_session() {
-        let boxed = Session::new_boxed();
-        assert!(*boxed == Session::new());
-        assert_eq!(boxed.publication(), Session::INITIAL_PUBLICATION);
-        assert_eq!(boxed.table.local, 0xfd);
-        assert_eq!(boxed.applied, 1);
-        let mut live = Session::new_boxed();
-        live.accept_sample_for(obs(3, 1, 20, 1_000), 1, StationPick::Absent);
-        assert_eq!(live.publication().reading(), PingReading::Measured(20));
-        assert_eq!(live.samples(), 1);
-    }
-
-    #[test]
-    fn missing_table_publishes_like_an_empty_one() {
-        let stations = [3u8, 7, 1];
-        for (epoch, pick) in [
-            (1, StationPick::Absent),
-            (5, StationPick::Index(3)),
-            (9, StationPick::Busy),
-        ] {
-            let mut session = Session::new_boxed();
-            session.accept_poll_for(123_456, epoch, pick);
-            assert_eq!(session.publication(), Publication::unavailable(epoch));
-            assert_eq!(
-                session.board_for(123_456, epoch, &stations),
-                StationBoard::empty(epoch, &stations)
-            );
-        }
-        let many = [0u8; BOARD_CAP + 3];
-        assert_eq!(StationBoard::empty(2, &many).len as usize, BOARD_CAP);
-        assert_eq!(StationBoard::empty(2, &[]).len, 0);
-    }
-
-    #[test]
-    fn local_peer_is_excluded_and_index_zero_can_be_the_opponent() {
-        let mut table = Table::new();
-        table.observe_rtt(obs(4, 4, 12, 0));
-        table.observe_rtt(obs(0, 4, 9, 0));
-        assert_eq!(table.reading(0), PingReading::Measured(9));
-    }
-
-    #[test]
-    fn zero_rtt_is_a_measurement() {
-        let mut table = Table::new();
-        table.observe_rtt(obs(2, 1, 0, 0));
-        assert_eq!(table.reading(0), PingReading::Measured(0));
-    }
-
-    #[test]
-    fn negative_rtt_is_rejected_without_clearing_a_prior_sample() {
-        let mut table = Table::new();
-        table.observe_rtt(obs(2, 1, 5, 0));
-        table.observe_rtt(obs(2, 1, -1, PER_MS));
-        assert_eq!(table.rejected_negative, 1);
-        assert_eq!(table.reading(PER_MS), PingReading::Measured(5));
-    }
-
-    #[test]
-    fn sample_expires_at_three_seconds() {
-        let mut table = Table::new();
-        table.observe_rtt(obs(2, 1, 15, 0));
-        let fresh = STALE_MS * PER_MS - 1;
-        let stale = STALE_MS * PER_MS;
-        assert_eq!(table.reading(fresh), PingReading::Measured(15));
-        assert_eq!(
-            table.reading(stale),
-            PingReading::Unavailable(PingGap::Stale)
-        );
-    }
-
-    #[test]
-    fn leave_clears_an_index_and_the_next_sample_reuses_it() {
-        let mut table = Table::new();
-        table.observe_rtt(obs(2, 1, 10, 0));
-        table.station_left(PROTOCOL, 2);
-        assert_eq!(
-            table.reading(0),
-            PingReading::Unavailable(PingGap::NoneFresh)
-        );
-        table.observe_rtt(obs(2, 1, 4, PER_MS));
-        assert_eq!(table.reading(PER_MS), PingReading::Measured(4));
-    }
-
-    #[test]
-    fn session_cleanup_drops_peers_and_a_new_protocol_starts_empty() {
-        let mut table = Table::new();
-        table.observe_rtt(obs(2, 1, 10, 0));
-        table.observe_rtt(obs(3, 1, 11, 0));
-        table.session_end(PROTOCOL);
-        assert_eq!(
-            table.reading(0),
-            PingReading::Unavailable(PingGap::NoneFresh)
-        );
-        table.observe_rtt(Observation {
-            protocol: PROTOCOL + 1,
-            remote: 6,
-            local: 5,
-            rtt_ms: 7,
-            now_tick: PER_MS,
-            ticks_per_ms: PER_MS,
-        });
-        assert_eq!(table.reading(PER_MS), PingReading::Measured(7));
-        assert_eq!(table.cleanups, 1);
-    }
-
-    #[test]
-    fn two_fresh_peers_are_not_labeled_as_one_opponent() {
-        let mut table = Table::new();
-        table.observe_rtt(obs(2, 1, 10, 0));
-        table.observe_rtt(obs(3, 1, 40, 0));
-        assert_eq!(
-            table.reading(0),
-            PingReading::Unavailable(PingGap::MultiplePeers)
-        );
-        let (ann, peer) = table.reading_for(2, 0);
-        assert_eq!(ann, PingReading::Measured(10));
-        assert_eq!(unpack_peer(peer).map(|(_, station)| station), Some(2));
-        let (bob, peer) = table.reading_for(3, 0);
-        assert_eq!(bob, PingReading::Measured(40));
-        assert_eq!(unpack_peer(peer).map(|(_, station)| station), Some(3));
-        assert_eq!(
-            table.reading_for(1, 0).0,
-            PingReading::Unavailable(PingGap::NoneFresh)
-        );
-        table.station_left(PROTOCOL, 3);
-        assert_eq!(table.reading(0), PingReading::Measured(10));
-        let mut session = Session::new();
-        session.accept_sample_for(at(PROTOCOL, 2, 1, 10, 0), 1, StationPick::Index(2));
-        session.accept_sample_for(at(PROTOCOL, 3, 1, 40, 0), 1, StationPick::Index(2));
-        assert_eq!(session.publication().reading(), PingReading::Measured(10));
-        assert_eq!(
-            unpack_peer(session.publication().peer).map(|(_, station)| station),
-            Some(2)
-        );
-        session.accept_poll_for(0, 1, StationPick::Index(3));
-        assert_eq!(session.publication().reading(), PingReading::Measured(40));
-        session.accept_poll_for(0, 1, StationPick::Busy);
-        assert_eq!(
-            session.publication().reading(),
-            PingReading::Unavailable(PingGap::NoneFresh)
-        );
-        session.accept_poll_for(0, 1, StationPick::Absent);
-        assert_eq!(
-            session.publication().reading(),
-            PingReading::Unavailable(PingGap::MultiplePeers)
-        );
-    }
-
-    fn published(station: u8, epoch: u64) -> Publication {
-        Publication::from_reading(
-            PingReading::Measured(20),
-            10,
-            PER_MS,
-            epoch,
-            pack_peer(Stability::Stable, station),
-        )
-    }
-
-    #[test]
-    fn a_changed_peer_hides_the_old_rtt_until_the_same_station_is_republished() {
-        let old = published(4, 1);
-        assert!(rtt_matches(RttIdentity::Station(4), old, 1));
-        assert!(!rtt_matches(RttIdentity::Station(9), old, 1));
-        let republished = published(9, 1);
-        assert!(rtt_matches(RttIdentity::Station(9), republished, 1));
-        assert_eq!(
-            present_published(RttIdentity::Station(9), republished, 1, 0, 0).opponent,
-            "20ms"
-        );
-        let hidden = present_published(RttIdentity::Station(4), republished, 1, 0, 0);
-        assert_eq!(hidden.opponent, "---");
-        assert!(hidden.performance.is_none());
-        assert!(hidden.color.is_none());
-        assert!(!rtt_matches(RttIdentity::Station(9), republished, 2));
-        assert!(!rtt_matches(RttIdentity::Baseline, old, 2));
-        assert!(!rtt_matches(RttIdentity::Busy, old, 1));
-        assert!(rtt_matches(RttIdentity::Baseline, old, 1));
-        let blank = Publication::unavailable(1);
-        assert!(!rtt_matches(RttIdentity::Baseline, blank, 1));
-        assert!(!rtt_matches(RttIdentity::Station(4), blank, 1));
-    }
-
-    #[test]
-    fn accepted_cleanup_hides_the_old_publication_until_poll() {
-        let old = published(4, 1);
-        let mut draw = 0u64;
-        let mut published_gen = 0u64;
-        assert!(rtt_published(
-            RttIdentity::Station(4),
-            old,
-            1,
-            published_gen,
-            draw
-        ));
-        assert!(rtt_published(
-            RttIdentity::Baseline,
-            old,
-            1,
-            published_gen,
-            draw
-        ));
-        draw = draw.wrapping_add(1);
-        assert!(!rtt_published(
-            RttIdentity::Baseline,
-            old,
-            1,
-            published_gen,
-            draw
-        ));
-        assert!(!rtt_published(
-            RttIdentity::Station(4),
-            old,
-            1,
-            published_gen,
-            draw
-        ));
-        draw = draw.wrapping_add(1);
-        assert!(!rtt_published(
-            RttIdentity::Baseline,
-            old,
-            1,
-            published_gen,
-            draw
-        ));
-        assert!(!rtt_published(
-            RttIdentity::Station(4),
-            old,
-            1,
-            published_gen,
-            draw
-        ));
-        assert_eq!(
-            present_published(RttIdentity::Baseline, old, 1, published_gen, draw).opponent,
-            "---"
-        );
-        let active = published(7, 1);
-        let active_draw = 4u64;
-        assert!(rtt_published(
-            RttIdentity::Station(7),
-            active,
-            1,
-            active_draw,
-            active_draw
-        ));
-        assert!(rtt_published(
-            RttIdentity::Baseline,
-            active,
-            1,
-            active_draw,
-            active_draw
-        ));
-        assert!(rtt_published(RttIdentity::Baseline, old, 1, draw, draw));
-        let replacement = published(9, 1);
-        published_gen = draw;
-        assert!(rtt_published(
-            RttIdentity::Station(9),
-            replacement,
-            1,
-            published_gen,
-            draw
-        ));
-        assert!(!rtt_published(
-            RttIdentity::Station(4),
-            replacement,
-            1,
-            published_gen,
-            draw
-        ));
-        assert!(!rtt_published(
-            RttIdentity::Baseline,
-            Publication::unavailable(1),
-            1,
-            published_gen,
-            draw
-        ));
-    }
-
-    #[test]
-    fn another_live_protocol_hides_the_current_peer_until_it_expires() {
-        let mut table = Table::new();
-        table.observe_rtt(obs(2, 1, 10, 0));
-        table.observe_rtt(Observation {
-            protocol: PROTOCOL + 8,
-            remote: 9,
-            local: 1,
-            rtt_ms: 80,
-            now_tick: 0,
-            ticks_per_ms: PER_MS,
-        });
-        assert_eq!(table.samples, 1);
-        assert_eq!(
-            table.reading(0),
-            PingReading::Unavailable(PingGap::OtherProtocol)
-        );
-        let edge = STALE_MS * PER_MS;
-        table.observe_rtt(obs(2, 1, 10, edge));
-        assert_eq!(table.reading(edge), PingReading::Measured(10));
-    }
-
-    #[test]
-    fn sentinels_are_rejected_and_252_is_kept() {
-        assert_eq!(station_index(252), Some(252));
-        assert_eq!(station_index(0xfd), None);
-        assert_eq!(station_index(0xfe), None);
-        assert_eq!(station_index(0xff), None);
-        let mut table = Table::new();
-        table.observe_rtt(obs(0xfd, 1, 5, 0));
-        table.observe_rtt(obs(252, 1, 6, 0));
-        assert_eq!(table.rejected_index, 1);
-        assert_eq!(table.reading(0), PingReading::Measured(6));
-    }
-
-    #[test]
-    fn foreign_and_unknown_protocol_leaves_do_not_retire_a_current_station() {
-        let foreign = PROTOCOL + 8;
-        let mut session = Session::new();
-        session.accept_sample_for(at(PROTOCOL, 2, 1, 10, 0), 1, StationPick::Absent);
-        session.accept_sample_for(at(foreign, 9, 1, 80, PER_MS), 1, StationPick::Absent);
-        // Numeric station indices alone cannot associate another protocol's
-        // leave with our connected opponent. This result gates runtime cleanup.
-        assert!(!session.accept_leave_for(foreign, 2, 1, StationPick::Absent));
-        assert!(!session.accept_leave_for(PROTOCOL + 3, 2, 1, StationPick::Absent));
-        assert_eq!(session.stored_rtt(2), Some(10));
-        assert!(session.accept_leave_for(PROTOCOL, 2, 1, StationPick::Absent));
-        assert_eq!(session.stored_rtt(2), None);
-    }
-
-    #[test]
-    fn cleanup_of_a_different_protocol_keeps_the_current_peer() {
-        let mut table = Table::new();
-        table.observe_rtt(obs(2, 1, 10, 0));
-        table.session_end(PROTOCOL + 3);
-        assert_eq!(table.reading(0), PingReading::Measured(10));
-        assert_eq!(table.cleanups, 0);
-    }
-
-    #[test]
-    fn guard_windows_are_the_verified_nso_bytes() {
-        assert_eq!(RTT_ARITHMETIC_GUARD.len(), 64);
-        assert_eq!(&RTT_ARITHMETIC_GUARD[56..], &RTT_SAMPLE_GUARD[..8]);
-        assert_eq!(&RTT_SAMPLE_GUARD[..4], &[0x80, 0x2a, 0xab, 0x9b]);
-        assert_eq!(&STATION_LEAVE_GUARD[..4], &[0x09, 0x80, 0x41, 0x39]);
-        assert_eq!(&SESSION_END_GUARD[..4], &[0xf5, 0x0f, 0x1d, 0xf8]);
-        assert_eq!(RTT_SAMPLE_OFFSET - RTT_ARITHMETIC_OFFSET, 0x38);
-    }
+    const TIMEOUT: u64 = STALE_MS * PER_MS;
 
     fn at(protocol: u64, remote: u32, local: u8, rtt_ms: i64, now_tick: u64) -> Observation {
         Observation {
@@ -1557,148 +827,256 @@ mod tests {
         }
     }
 
-    #[test]
-    fn background_then_continuing_match_adopts_only_after_the_first_is_stale() {
-        let mut session = Session::new();
-        let epoch = 1;
-        let background = PROTOCOL;
-        let match_protocol = PROTOCOL + 4;
-        session.accept_sample_for(at(background, 2, 1, 50, 0), epoch, StationPick::Absent);
-        session.accept_sample_for(at(background, 3, 1, 60, 0), epoch, StationPick::Absent);
-        session.accept_sample_for(
-            at(match_protocol, 7, 5, 12, PER_MS),
-            epoch,
-            StationPick::Absent,
-        );
-        assert_eq!(
-            session.publication().reading(),
-            PingReading::Unavailable(PingGap::OtherProtocol)
-        );
-        assert_eq!(session.stored_rtt(2), Some(50));
-        let later = STALE_MS * PER_MS;
-        session.accept_sample_for(
-            at(match_protocol, 7, 5, 12, later),
-            epoch,
-            StationPick::Absent,
-        );
-        assert_eq!(session.publication().reading(), PingReading::Measured(12));
-        assert_eq!(session.stored_rtt(2), None);
-        assert_eq!(session.stored_rtt(3), None);
-        assert_eq!(session.stored_rtt(7), Some(12));
+    fn obs(remote: u32, local: u8, rtt_ms: i64, now_tick: u64) -> Observation {
+        at(PROTOCOL, remote, local, rtt_ms, now_tick)
+    }
+
+    fn read(table: &Table, now: u64) -> PingReading {
+        table.publication_of(table.fresh_remote(now), 1).reading()
+    }
+
+    fn read_for(table: &Table, index: u8, now: u64) -> Publication {
+        table.publication_of(table.station(index, now), 1)
+    }
+
+    fn sample(session: &mut Session, seen: Observation, epoch: u64, pick: StationPick) -> bool {
+        session.accept(epoch, pick, Some(seen.now_tick), |t| t.observe_rtt(seen))
+    }
+
+    fn poll(session: &mut Session, now: u64, epoch: u64, pick: StationPick) {
+        session.accept(epoch, pick, Some(now), |_| false);
+    }
+
+    fn leave(session: &mut Session, protocol: u64, remote: u32) -> bool {
+        session.accept(1, Absent, None, |t| t.station_left(protocol, remote))
+    }
+
+    /// The station's stored mean, whatever the clock or another protocol says.
+    fn stored(session: &Session, index: u8) -> Option<u64> {
+        let table = &session.table;
+        let at = table.find(index)?;
+        window_mean(table.slots[at].initialized())
+    }
+
+    fn published(station: u8, epoch: u64) -> Publication {
+        let peer = pack_peer(Stability::Stable, station);
+        Publication::from_reading(Measured(20), 10, PER_MS, epoch, peer)
     }
 
     #[test]
-    fn adopting_a_stale_protocol_reports_the_slot_clear() {
+    fn local_is_excluded_index_zero_is_valid_and_bad_rtts_keep_the_prior_sample() {
+        let mut table = Table::new();
+        table.observe_rtt(obs(4, 4, 12, 0));
+        table.observe_rtt(obs(0, 4, 9, 0));
+        assert_eq!(read(&table, 0), Measured(9));
+        let mut table = Table::new();
+        table.observe_rtt(obs(2, 1, 0, 0));
+        assert_eq!(read(&table, 0), Measured(0));
+        table.observe_rtt(obs(2, 1, -1, PER_MS));
+        table.observe_rtt(obs(2, 1, i64::MAX, PER_MS));
+        assert_eq!(table.samples, 1);
+        assert_eq!(read(&table, PER_MS), Measured(0));
+    }
+
+    #[test]
+    fn sample_expires_at_three_seconds_and_a_leave_frees_the_index() {
+        let mut table = Table::new();
+        table.observe_rtt(obs(2, 1, 15, 0));
+        assert_eq!(read(&table, TIMEOUT - 1), Measured(15));
+        assert_eq!(read(&table, TIMEOUT), Unavailable(Stale));
+        assert!(table.station_left(PROTOCOL, 2));
+        assert_eq!(read(&table, 0), Unavailable(NoneFresh));
+        table.observe_rtt(obs(2, 1, 4, PER_MS));
+        assert_eq!(read(&table, PER_MS), Measured(4));
+    }
+
+    #[test]
+    fn cleanup_drops_peers_and_a_new_protocol_starts_empty() {
+        let mut table = Table::new();
+        table.observe_rtt(obs(2, 1, 10, 0));
+        table.observe_rtt(obs(3, 1, 11, 0));
+        assert!(!table.session_end(PROTOCOL + 3));
+        assert_eq!(table.cleanups, 0);
+        assert!(table.session_end(PROTOCOL));
+        assert_eq!(read(&table, 0), Unavailable(NoneFresh));
+        table.observe_rtt(at(PROTOCOL + 1, 6, 5, 7, PER_MS));
+        assert_eq!(read(&table, PER_MS), Measured(7));
+        assert_eq!(table.cleanups, 1);
+    }
+
+    #[test]
+    fn two_fresh_peers_are_not_labeled_as_one_opponent() {
+        let mut table = Table::new();
+        table.observe_rtt(obs(2, 1, 10, 0));
+        table.observe_rtt(obs(3, 1, 40, 0));
+        assert_eq!(read(&table, 0), Unavailable(MultiplePeers));
+        let ann = read_for(&table, 2, 0);
+        assert_eq!(ann.reading(), Measured(10));
+        assert_eq!(ann.peer(), Some((Stability::Stable, 2)));
+        assert_eq!(read_for(&table, 3, 0).reading(), Measured(40));
+        assert_eq!(read_for(&table, 1, 0).reading(), Unavailable(NoneFresh));
+        table.station_left(PROTOCOL, 3);
+        assert_eq!(read(&table, 0), Measured(10));
         let mut session = Session::new();
-        assert!(!session.accept_sample_for(at(PROTOCOL, 2, 1, 10, 0), 1, StationPick::Absent));
-        assert!(!session.accept_sample_for(at(PROTOCOL, 2, 1, 11, PER_MS), 1, StationPick::Absent));
-        assert!(!session.accept_sample_for(
-            at(PROTOCOL + 1, 4, 1, 12, PER_MS),
-            1,
-            StationPick::Absent
-        ));
-        assert_eq!(session.stored_rtt(2), Some(11));
-        assert!(session.accept_sample_for(
-            at(PROTOCOL + 1, 4, 1, 12, (STALE_MS + 1) * PER_MS),
-            1,
-            StationPick::Absent
-        ));
-        assert_eq!(session.stored_rtt(2), None);
-        assert_eq!(session.stored_rtt(4), Some(12));
+        sample(&mut session, obs(2, 1, 10, 0), 1, Index(2));
+        sample(&mut session, obs(3, 1, 40, 0), 1, Index(2));
+        assert_eq!(session.publication().reading(), Measured(10));
+        assert_eq!(session.publication().station(), Some(2));
+        poll(&mut session, 0, 1, Index(3));
+        assert_eq!(session.publication().reading(), Measured(40));
+        poll(&mut session, 0, 1, Busy);
+        assert_eq!(session.publication().reading(), Unavailable(NoneFresh));
+        poll(&mut session, 0, 1, Absent);
+        assert_eq!(session.publication().reading(), Unavailable(MultiplePeers));
+    }
+
+    #[test]
+    fn a_changed_peer_hides_the_old_rtt_until_the_same_station_is_republished() {
+        let old = published(4, 1);
+        assert!(rtt_matches(RttIdentity::Station(4), old, 1));
+        assert!(!rtt_matches(RttIdentity::Station(9), old, 1));
+        let republished = published(9, 1);
+        assert!(rtt_matches(RttIdentity::Station(9), republished, 1));
+        let shown = present_published(RttIdentity::Station(9), republished, 1, 0, 0);
+        assert_eq!(shown.opponent, "20ms");
+        let hidden = present_published(RttIdentity::Station(4), republished, 1, 0, 0);
+        assert_eq!(hidden, blank_ping());
+        assert!(!rtt_matches(RttIdentity::Station(9), republished, 2));
+        assert!(!rtt_matches(RttIdentity::Baseline, old, 2));
+        assert!(!rtt_matches(RttIdentity::Busy, old, 1));
+        assert!(rtt_matches(RttIdentity::Baseline, old, 1));
+        let blank = Publication::unavailable(1);
+        assert!(!rtt_matches(RttIdentity::Baseline, blank, 1));
+        assert!(!rtt_matches(RttIdentity::Station(4), blank, 1));
+    }
+
+    #[test]
+    fn accepted_cleanup_hides_the_old_publication_until_poll() {
+        let old = published(4, 1);
+        let shown = |identity: RttIdentity, publication: Publication, published: u64, draw: u64| {
+            present_published(identity, publication, 1, published, draw).opponent == "20ms"
+        };
+        assert!(shown(RttIdentity::Station(4), old, 0, 0));
+        assert!(shown(RttIdentity::Baseline, old, 0, 0));
+        for draw in 1..3 {
+            assert!(!shown(RttIdentity::Baseline, old, 0, draw));
+            assert!(!shown(RttIdentity::Station(4), old, 0, draw));
+        }
+        assert!(shown(RttIdentity::Station(7), published(7, 1), 4, 4));
+        assert!(shown(RttIdentity::Baseline, old, 2, 2));
+        let replacement = published(9, 1);
+        assert!(shown(RttIdentity::Station(9), replacement, 2, 2));
+        assert!(!shown(RttIdentity::Station(4), replacement, 2, 2));
+        let blank = Publication::unavailable(1);
+        assert!(!shown(RttIdentity::Baseline, blank, 2, 2));
+    }
+
+    #[test]
+    fn another_live_protocol_hides_the_current_peer_until_it_expires() {
+        let mut table = Table::new();
+        table.observe_rtt(obs(2, 1, 10, 0));
+        table.observe_rtt(at(PROTOCOL + 8, 9, 1, 80, 0));
+        assert_eq!((table.samples, table.foreign_samples), (1, 1));
+        assert_eq!(read(&table, 0), Unavailable(OtherProtocol));
+        table.observe_rtt(obs(2, 1, 10, TIMEOUT));
+        assert_eq!(read(&table, TIMEOUT), Measured(10));
+    }
+
+    #[test]
+    fn sentinels_are_rejected_and_252_is_kept() {
+        assert_eq!(station_index(252), Some(252));
+        assert_eq!([0xfd, 0xfe, 0xff].map(station_index), [None; 3]);
+        let mut table = Table::new();
+        table.observe_rtt(obs(0xfd, 1, 5, 0));
+        table.observe_rtt(obs(252, 1, 6, 0));
+        assert_eq!(table.samples, 1);
+        assert_eq!(read(&table, 0), Measured(6));
+    }
+
+    #[test]
+    fn foreign_and_unknown_protocol_leaves_do_not_retire_a_current_station() {
+        let foreign = PROTOCOL + 8;
+        let mut session = Session::new();
+        sample(&mut session, obs(2, 1, 10, 0), 1, Absent);
+        sample(&mut session, at(foreign, 9, 1, 80, PER_MS), 1, Absent);
+        // Numeric station indices alone cannot associate another protocol's
+        // leave with our connected opponent. This result gates runtime cleanup.
+        assert!(!leave(&mut session, foreign, 2));
+        assert!(!leave(&mut session, PROTOCOL + 3, 2));
+        assert_eq!(stored(&session, 2), Some(10));
+        assert!(leave(&mut session, PROTOCOL, 2));
+        assert_eq!(stored(&session, 2), None);
+    }
+
+    #[test]
+    fn adoption_waits_until_the_first_protocol_is_stale_and_reports_the_clear() {
+        let mut session = Session::new();
+        let game = PROTOCOL + 4;
+        assert!(!sample(&mut session, obs(2, 1, 50, 0), 1, Absent));
+        assert!(!sample(&mut session, obs(3, 1, 60, 0), 1, Absent));
+        assert!(!sample(&mut session, at(game, 7, 5, 12, PER_MS), 1, Absent));
+        assert_eq!(session.publication().reading(), Unavailable(OtherProtocol));
+        assert_eq!(stored(&session, 2), Some(50));
+        assert!(sample(&mut session, at(game, 7, 5, 12, TIMEOUT), 1, Absent));
+        assert_eq!(session.publication().reading(), Measured(12));
+        assert_eq!(stored(&session, 2), None);
+        assert_eq!(stored(&session, 3), None);
+        assert_eq!(stored(&session, 7), Some(12));
     }
 
     #[test]
     fn alternating_live_protocols_never_pick_one() {
         let mut session = Session::new();
-        let epoch = 1;
-        let primary = PROTOCOL;
         let other = PROTOCOL + 9;
-        session.accept_sample_for(at(primary, 2, 1, 10, 0), epoch, StationPick::Absent);
-        assert_eq!(session.publication().reading(), PingReading::Measured(10));
+        sample(&mut session, obs(2, 1, 10, 0), 1, Absent);
+        assert_eq!(session.publication().reading(), Measured(10));
         for step in 1..6u64 {
             let now = step * 200 * PER_MS;
-            let sample = if step % 2 == 0 {
-                at(primary, 2, 1, 10, now)
+            let next = if step % 2 == 0 {
+                obs(2, 1, 10, now)
             } else {
                 at(other, 8, 4, 90, now)
             };
-            session.accept_sample_for(sample, epoch, StationPick::Absent);
-            assert_eq!(
-                session.publication().reading(),
-                PingReading::Unavailable(PingGap::OtherProtocol)
-            );
-            assert_eq!(session.stored_rtt(8), None);
+            sample(&mut session, next, 1, Absent);
+            assert_eq!(session.publication().reading(), Unavailable(OtherProtocol));
+            assert_eq!(stored(&session, 8), None);
         }
     }
 
     #[test]
     fn missed_lifecycle_drops_the_old_peer_until_a_new_sample() {
         let mut session = Session::new();
-        let mut epoch = 1u64;
-        session.accept_sample_for(at(PROTOCOL, 2, 1, 40, 0), epoch, StationPick::Absent);
-        assert_eq!(session.publication().reading(), PingReading::Measured(40));
-        epoch += 1;
-        session.accept_poll_for(500 * PER_MS, epoch, StationPick::Absent);
-        assert_eq!(session.stored_rtt(2), None);
-        assert_eq!(
-            session.publication().reading(),
-            PingReading::Unavailable(PingGap::NoneFresh)
-        );
-        session.accept_sample_for(
-            at(PROTOCOL, 2, 1, 4, 600 * PER_MS),
-            epoch,
-            StationPick::Absent,
-        );
-        assert_eq!(session.publication().reading(), PingReading::Measured(4));
+        sample(&mut session, obs(2, 1, 40, 0), 1, Absent);
+        assert_eq!(session.publication().reading(), Measured(40));
+        poll(&mut session, 500 * PER_MS, 2, Absent);
+        assert_eq!(stored(&session, 2), None);
+        assert_eq!(session.publication().reading(), Unavailable(NoneFresh));
+        assert_eq!(session.board_for(500 * PER_MS, 1, [2]).len, 0);
+        sample(&mut session, obs(2, 1, 4, 600 * PER_MS), 2, Absent);
+        assert_eq!(session.publication().reading(), Measured(4));
     }
 
     #[test]
-    fn poll_without_the_table_expires_a_measured_value() {
-        let mut session = Session::new();
-        session.accept_sample_for(at(PROTOCOL, 2, 1, 40, 0), 1, StationPick::Absent);
-        let published = session.publication();
-        assert_eq!(
-            expire_publication(published, STALE_MS * PER_MS - 1, 1).reading(),
-            PingReading::Measured(40)
-        );
-        let expired = expire_publication(published, STALE_MS * PER_MS, 1);
-        assert_eq!(expired.reading(), PingReading::Unavailable(PingGap::Stale));
-        assert_eq!(
-            expire_publication(expired, STALE_MS * PER_MS * 4, 1).reading(),
-            PingReading::Unavailable(PingGap::Stale)
-        );
-        assert_eq!(
-            expire_publication(published, PER_MS, 2).reading(),
-            PingReading::Unavailable(PingGap::NoneFresh)
-        );
-    }
-
-    #[test]
-    fn repeated_poll_keeps_the_sample_tick_until_the_reader_expires_it() {
+    fn poll_keeps_the_sample_tick_until_the_reader_expires_it() {
         let mut session = Session::new();
         let sample_tick = 50 * PER_MS;
-        session.accept_sample_for(at(PROTOCOL, 2, 1, 33, sample_tick), 1, StationPick::Absent);
-        assert_eq!(session.publication().tick, sample_tick);
-        let still_fresh = sample_tick + (STALE_MS - 1) * PER_MS;
-        session.accept_poll_for(still_fresh, 1, StationPick::Absent);
-        assert_eq!(session.publication().tick, sample_tick);
-        assert_eq!(session.publication().reading(), PingReading::Measured(33));
-        let stale_at = sample_tick + STALE_MS * PER_MS;
-        assert_eq!(
-            expire_publication(session.publication(), stale_at, 1).reading(),
-            PingReading::Unavailable(PingGap::Stale)
-        );
-        session.accept_poll_for(stale_at, 1, StationPick::Absent);
-        assert_ne!(session.publication().tick, stale_at);
-        assert_eq!(
-            session.publication().reading(),
-            PingReading::Unavailable(PingGap::Stale)
-        );
-        session.accept_poll_for(stale_at + 10 * PER_MS, 1, StationPick::Absent);
-        assert_eq!(
-            session.publication().reading(),
-            PingReading::Unavailable(PingGap::Stale)
-        );
+        sample(&mut session, obs(2, 1, 33, sample_tick), 1, Absent);
+        let first = session.publication();
+        assert_eq!(first.tick, sample_tick);
+        poll(&mut session, sample_tick + TIMEOUT - 1, 1, Absent);
+        assert_eq!(session.publication(), first);
+        let stale_at = sample_tick + TIMEOUT;
+        let expired = expire_publication(first, stale_at, 1);
+        assert_eq!(expired.reading(), Unavailable(Stale));
+        assert_eq!(expired.peer, NO_PEER);
+        assert_eq!(expire_publication(expired, stale_at * 4, 1), expired);
+        assert_eq!(expire_publication(first, stale_at - 1, 1), first);
+        let reset = expire_publication(first, PER_MS, 2);
+        assert_eq!(reset, Publication::unavailable(2));
+        poll(&mut session, stale_at, 1, Absent);
+        assert_eq!(session.publication(), expired);
+        poll(&mut session, stale_at + 10 * PER_MS, 1, Absent);
+        assert_eq!(session.publication(), expired);
     }
 
     #[test]
@@ -1710,8 +1088,10 @@ mod tests {
         assert_eq!(window_mean(&steady), Some(20));
         let mut table = Table::new();
         table.observe_rtt(obs(2, 1, 20, 0));
-        assert_eq!(table.reading(0), PingReading::Measured(20));
-        assert_eq!(table.fresh_peer(0), Some((Stability::Stable, 2)));
+        let publication = table.publication_of(table.fresh_remote(0), 1);
+        assert_eq!(publication.reading(), Measured(20));
+        assert_eq!(publication.peer(), Some((Stability::Stable, 2)));
+        assert_eq!((publication.tick, publication.ticks_per_ms), (0, PER_MS));
     }
 
     #[test]
@@ -1721,18 +1101,17 @@ mod tests {
             *sample = if index % 2 == 0 { 45 } else { 55 };
         }
         assert_eq!(window_mean(&alternating), Some(50));
-        assert_eq!(
-            window_stability(&alternating),
-            Some(Stability::Inconsistent)
-        );
+        let inconsistent = Some(Stability::Inconsistent);
+        assert_eq!(window_stability(&alternating), inconsistent);
         for (index, sample) in alternating.iter_mut().enumerate() {
             *sample = if index % 2 == 0 { 40 } else { 60 };
         }
         assert_eq!(window_stability(&alternating), Some(Stability::Unstable));
         assert_eq!(window_stability(&[45, 55]), Some(Stability::Stable));
-        assert_eq!(window_stability(&[10, 30]), Some(Stability::Inconsistent));
+        assert_eq!(window_stability(&[10, 30]), inconsistent);
         assert_eq!(window_stability(&[0, u32::MAX]), Some(Stability::Unstable));
         assert!(window_stability(&[]).is_none());
+        assert!(window_mean(&[]).is_none());
     }
 
     #[test]
@@ -1741,84 +1120,102 @@ mod tests {
         for index in 0..100 {
             table.observe_rtt(obs(2, 1, 5, index * PER_MS));
         }
-        assert_eq!(table.reading(99 * PER_MS), PingReading::Measured(5));
+        assert_eq!(read(&table, 99 * PER_MS), Measured(5));
         table.observe_rtt(obs(2, 1, 105, 99 * PER_MS));
-        assert_eq!(table.reading(99 * PER_MS), PingReading::Measured(6));
-        let stale_push = 99 * PER_MS + STALE_MS * PER_MS;
+        assert_eq!(read(&table, 99 * PER_MS), Measured(6));
+        let stale_push = 99 * PER_MS + TIMEOUT;
         table.observe_rtt(obs(2, 1, 10, stale_push));
-        assert_eq!(table.reading(stale_push), PingReading::Measured(10));
+        assert_eq!(read(&table, stale_push), Measured(10));
         table.station_left(PROTOCOL, 2);
-        assert_eq!(
-            table.reading(stale_push),
-            PingReading::Unavailable(PingGap::NoneFresh)
-        );
+        assert_eq!(read(&table, stale_push), Unavailable(NoneFresh));
         table.observe_rtt(obs(2, 1, 4, stale_push));
-        assert_eq!(table.reading(stale_push), PingReading::Measured(4));
+        assert_eq!(read(&table, stale_push), Measured(4));
         table.session_end(PROTOCOL);
-        table.observe_rtt(Observation {
-            protocol: PROTOCOL + 1,
-            remote: 6,
-            local: 5,
-            rtt_ms: 8,
-            now_tick: stale_push,
-            ticks_per_ms: PER_MS,
-        });
-        assert_eq!(table.reading(stale_push), PingReading::Measured(8));
-        assert_eq!(table.fresh_peer(stale_push), Some((Stability::Stable, 6)));
+        table.observe_rtt(at(PROTOCOL + 1, 6, 5, 8, stale_push));
+        let publication = table.publication_of(table.fresh_remote(stale_push), 1);
+        assert_eq!(publication.reading(), Measured(8));
+        assert_eq!(publication.peer(), Some((Stability::Stable, 6)));
+    }
+
+    #[test]
+    fn a_seventeenth_fresh_station_evicts_the_stalest() {
+        let mut table = Table::new();
+        for station in 0..STATION_CAP as u32 {
+            let tick = (u64::from(station) + 1) * 100 * PER_MS;
+            table.observe_rtt(obs(station + 1, 0, 10 + i64::from(station), tick));
+        }
+        let now = (STATION_CAP as u64 + 1) * 100 * PER_MS;
+        assert_eq!(read_for(&table, 1, now).reading(), Measured(10));
+        table.observe_rtt(obs(40, 0, 99, now));
+        assert_eq!(read_for(&table, 40, now).reading(), Measured(99));
+        assert_eq!(read_for(&table, 1, now).reading(), Unavailable(NoneFresh));
+        assert_eq!(read_for(&table, 2, now).reading(), Measured(11));
+        assert_eq!(read_for(&table, 16, now).reading(), Measured(25));
+        table.observe_rtt(obs(2, 0, 13, now));
+        assert_eq!(read_for(&table, 2, now).reading(), Measured(12));
+        assert_eq!(table.samples, STATION_CAP as u64 + 2);
     }
 
     #[test]
     fn overflow_is_rejected_and_a_stale_snapshot_has_no_colour() {
         let mut session = Session::new();
-        session.accept_sample_for(at(PROTOCOL, 2, 1, 20, 0), 1, StationPick::Absent);
-        session.accept_sample_for(at(PROTOCOL, 2, 1, i64::MAX, PER_MS), 1, StationPick::Absent);
-        assert_eq!(session.publication().reading(), PingReading::Measured(20));
-        assert_eq!(session.table.rejected_overflow, 1);
+        sample(&mut session, obs(2, 1, 20, 0), 1, Absent);
+        sample(&mut session, obs(2, 1, i64::MAX, PER_MS), 1, Absent);
+        assert_eq!(session.publication().reading(), Measured(20));
+        assert_eq!(session.table().samples, 1);
         let presented = PresentedPing::from_publication(session.publication());
         assert_eq!(presented.opponent, "20ms");
         assert_eq!(presented.performance.as_deref(), Some("20 ms"));
-        assert_eq!(presented.color, Some(PING_STABLE));
-        assert_eq!(ping_rgba(Stability::Inconsistent), PING_INCONSISTENT);
-        assert_eq!(ping_rgba(Stability::Unstable), PING_UNSTABLE);
-        let expired = expire_publication(session.publication(), STALE_MS * PER_MS, 1);
+        assert_eq!(presented.color, Some(ping_rgba(Stability::Stable)));
+        assert_eq!(presented.detail, "1 peer");
+        let expired = expire_publication(session.publication(), TIMEOUT, 1);
         let stale = PresentedPing::from_publication(expired);
         assert_eq!(stale.opponent, "---");
         assert_eq!(stale.performance, None);
         assert_eq!(stale.color, None);
-        assert_eq!(expired.peer, NO_PEER);
+        assert_eq!(stale.detail, "stale");
+        let off = PresentedPing::from_publication(Publication::off(1));
+        assert_eq!(off.detail, "hooks not installed");
+        assert_eq!(Publication::off(1), Session::new().publication());
     }
 
     #[test]
     fn board_keeps_each_station_age_and_the_worst_color() {
         let mut session = Session::new();
-        session.accept_sample_for(obs(4, 1, 10, 0), 1, StationPick::Index(4));
-        session.accept_sample_for(obs(4, 1, 10_000, 0), 1, StationPick::Index(4));
-        let now = STALE_MS * PER_MS - 1;
-        session.accept_sample_for(obs(9, 1, 20, now), 1, StationPick::Index(9));
-        let board = session.board_for(now, 1, &[4, 9]);
-        assert_eq!(board.len, 2);
-        assert!(!board.busy);
+        sample(&mut session, obs(4, 1, 10, 0), 1, Index(4));
+        sample(&mut session, obs(4, 1, 10_000, 0), 1, Index(4));
+        let now = TIMEOUT - 1;
+        sample(&mut session, obs(9, 1, 20, now), 1, Index(9));
+        let board = session.board_for(now, 1, [4, 9]);
+        assert_eq!((board.len, board.busy), (2, false));
         assert_eq!(present_station(&board, 4, 1, 3, 3).opponent, "5005ms");
         assert_eq!(present_station(&board, 9, 1, 3, 3).opponent, "20ms");
         assert_eq!(present_station(&board, 2, 1, 3, 3).opponent, "---");
         assert_eq!(present_station(&board, 4, 1, 3, 4).opponent, "---");
-        assert_eq!(
-            aggregate_stability(&board, &[4, 9], 1, 3, 3),
-            Some(Stability::Unstable)
-        );
-        assert_eq!(
-            aggregate_stability(&board, &[9], 1, 3, 3),
-            Some(Stability::Stable)
-        );
-        let aged = expire_board(board, STALE_MS * PER_MS, 1);
+        let worst = aggregate_stability(&board, &[4, 9], 1, 3, 3);
+        assert_eq!(worst, Some(Stability::Unstable));
+        let stable = Some(Stability::Stable);
+        assert_eq!(aggregate_stability(&board, &[9], 1, 3, 3), stable);
+        let aged = expire_board(board, TIMEOUT, 1);
         assert_eq!(present_station(&aged, 4, 1, 3, 3).opponent, "---");
         assert_eq!(present_station(&aged, 9, 1, 3, 3).opponent, "20ms");
-        assert_eq!(
-            aggregate_stability(&aged, &[4, 9], 1, 3, 3),
-            Some(Stability::Stable)
-        );
+        assert_eq!(aggregate_stability(&aged, &[4, 9], 1, 3, 3), stable);
+        assert_eq!(expire_board(board, now, 2), StationBoard::unavailable(2));
         let busy = StationBoard::busy(1);
+        assert_eq!(expire_board(busy, now, 1), busy);
         assert_eq!(present_station(&busy, 9, 1, 3, 3).opponent, "---");
         assert_eq!(aggregate_stability(&busy, &[9], 1, 3, 3), None);
+        let many = session.board_for(now, 1, [0u8; BOARD_CAP + 3]);
+        assert_eq!(usize::from(many.len), BOARD_CAP);
+    }
+
+    #[test]
+    fn guard_windows_are_the_verified_nso_bytes() {
+        assert_eq!(RTT_ARITHMETIC_GUARD.len(), 64);
+        assert_eq!(&RTT_ARITHMETIC_GUARD[56..], &RTT_SAMPLE_GUARD[..8]);
+        assert_eq!(&RTT_SAMPLE_GUARD[..4], &[0x80, 0x2a, 0xab, 0x9b]);
+        assert_eq!(&STATION_LEAVE_GUARD[..4], &[0x09, 0x80, 0x41, 0x39]);
+        assert_eq!(&SESSION_END_GUARD[..4], &[0xf5, 0x0f, 0x1d, 0xf8]);
+        assert_eq!(RTT_SAMPLE_OFFSET - RTT_ARITHMETIC_OFFSET, 0x38);
     }
 }

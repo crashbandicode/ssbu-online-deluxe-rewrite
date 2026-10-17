@@ -8,6 +8,7 @@
 //!
 //! The opt-in peer observer that shared these hooks (ring, station map,
 //! send probe; config key `peer_observer`) was removed on 2026-10-17.
+use super::hooks::guard_matches;
 use super::{record, Code};
 use crate::connection_transport::{
     kind_of, message_body_range, MessageBody, MESSAGE_SOURCE_OFFSET, PARSED_MESSAGE_GUARD,
@@ -16,7 +17,7 @@ use crate::connection_transport::{
 };
 use crate::peer_passive::{custom_write_allowed, MESSAGE_AREA_MAX, PIA_MAGIC};
 use crate::peer_transport::{BodyWrite, Counter};
-use skyline::hooks::{getRegionAddress, InlineCtx, Region};
+use skyline::hooks::InlineCtx;
 use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
 
 /// Transport counter values already drained into events, indexed by [`Counter`].
@@ -101,22 +102,6 @@ pub(super) fn install() {
 pub(super) fn poll() {
     refresh_local_facts();
     drain_transport();
-}
-
-unsafe fn guard_matches(offset: usize, expected: &[u8]) -> bool {
-    let base = getRegionAddress(Region::Text) as usize;
-    let end = getRegionAddress(Region::Rodata) as usize;
-    let Some(address) = base.checked_add(offset) else {
-        return false;
-    };
-    let Some(stop) = address.checked_add(expected.len()) else {
-        return false;
-    };
-    if address % 4 != 0 || stop > end {
-        return false;
-    }
-    let bytes = std::slice::from_raw_parts(address as *const u8, expected.len());
-    bytes == expected
 }
 
 fn read_at<T: Copy>(base: u64, offset: usize) -> Option<T> {

@@ -616,7 +616,7 @@ fn cap_str(text: &str, max_bytes: usize) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pia_rtt::{PingRgba, PING_STABLE};
+    use crate::pia_rtt::{ping_rgba, PingRgba, Stability};
 
     /// Host model of the runtime pane graph for checking the CSS walk constants.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1052,7 +1052,7 @@ mod tests {
             }),
             [0, 255, 0, 255]
         );
-        let stable = ping_bytes(PING_STABLE);
+        let stable = ping_bytes(ping_rgba(Stability::Stable));
         assert!(stable[1] > stable[0]);
         assert_eq!(stable[0], stable[2]);
         assert_eq!(stable[3], 255);

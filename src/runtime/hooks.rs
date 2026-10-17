@@ -31,6 +31,23 @@ pub(super) unsafe fn preflight(offset: usize) -> bool {
     true
 }
 
+/// True when the 4-byte-aligned `.text+offset` window holds exactly `expected`.
+pub(super) unsafe fn guard_matches(offset: usize, expected: &[u8]) -> bool {
+    let base = getRegionAddress(Region::Text) as usize;
+    let end = getRegionAddress(Region::Rodata) as usize;
+    let Some(address) = base.checked_add(offset) else {
+        return false;
+    };
+    let Some(stop) = address.checked_add(expected.len()) else {
+        return false;
+    };
+    if address % 4 != 0 || stop > end {
+        return false;
+    }
+    let bytes = std::slice::from_raw_parts(address as *const u8, expected.len());
+    bytes == expected
+}
+
 #[skyline::hook(offset = ONLINE_LATENCY, inline)]
 unsafe fn deluxe_rewrite_set_online_latency(ctx: &InlineCtx) {
     super::online::mark_match();
