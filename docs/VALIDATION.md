@@ -1684,7 +1684,9 @@ while the game runs, after a symbol-level pass over the 0.3.6 ELF:
   `hang-trace.log` and no crash report names `deluxe-diagnostics`.
 - Pia RTT station table (`pia_rtt::Session`, 253 slots × 100-sample ring,
   about 107 KB, non-zero initialised so it sat in `.data`) is no longer a
-  static. `runtime::pia_rtt::STATE` is `Mutex<Option<Box<Session>>>`: the
+  static. (Superseded 2026-10-17: the table is sixteen keyed slots, about
+  7 KB, and is a plain static again; `WANT_SESSION`, `new_boxed` and the
+  dropped first sample are gone. See the `pia_rtt.rs` cut entry under 0.5.3.) `runtime::pia_rtt::STATE` is `Mutex<Option<Box<Session>>>`: the
   first RTT sample of the process sets `WANT_SESSION`, the next diagnostics
   poll (≤ 500 ms) allocates with `Session::new_boxed` (zeroed heap block plus
   three scalar writes; equality with `Session::new()` is tested) and the table
@@ -2526,6 +2528,50 @@ evidence started the same evening on the LAN-NSO Eden but stopped at the
 Online tile (error 2306-0502: the fixture's companion service was not
 listening on 8443/8444); its partial profiles are in the evidence root's
 `coverage-nso-1016/`.
+
+### 0.5.3 — 2026-10-17: `pia_rtt.rs` cut to sixteen keyed stations and one publication lock (host tests, Skyline build)
+
+Plan: evidence root `reduction-1017/PLAN-pia-rtt.md` (items A–J). Commit
+e7fce5c on `work/pia-rtt-1017` (from `reduction-candidate` a6e4a01).
+
+Production code lines (code-audit classifier): `src/pia_rtt.rs` 990 → 641
+(tests 623 → 379, 27 → 20 tests, one new: a seventeenth fresh station evicts
+the stalest); `src/runtime/pia_rtt.rs` 370 → 230;
+`src/runtime/connection_transport.rs` 305 → 291 and `src/runtime/hooks.rs`
+66 → 81 (one `guard_matches` instead of two copies). Net −488. The plan's
+host target of ≤ 500 was not reached: about 160 of the remaining lines are
+the four 64-byte guard windows and the declared types the consumers use
+(`Observation`, `PingGap`, `PingRgba`, `RttIdentity`, `Publication`,
+`StationBoard`, `PresentedPing`, …), and rustfmt lays every kept
+five-parameter signature (`present_published`, `present_station`,
+`aggregate_stability`, `Publication::from_reading`) out one parameter per
+line. Removed: the 253-slot table (`STATION_SLOTS`, ~107 KB) for
+`STATION_CAP = 16` slots keyed by station index, `Session::new_boxed`,
+`StationBoard::empty`, the `PING_*` colour consts, `format_*_ping`,
+`rtt_published`, `stability_rank`, the `REASON_*` consts with `reason_of` /
+`gap_of` (`PingGap` is `repr(u8)` and gains `Off`), the unread counters
+`rejected_negative` / `rejected_index` / `rejected_overflow` / `leaves`,
+`Ring.sum` and the test-only `latest`, `fresh_stamp` / `stamp_for` /
+`fresh_peer`, the four `accept_*_for` entry points (one `Session::accept`
+with the update closure), the `Default` impls; in the runtime `WANT_SESSION`,
+the boxed `Option<Session>`, the two seqlocks (`PUB_*`, `BOARD_*`, five
+`[AtomicU64; 8]` arrays) for one `Mutex<Shown>` written by the poll and read
+with `try_lock`, and the "station table allocated" log line. Every
+consumer-facing name and signature is unchanged (`native_banner.rs` tests use
+`ping_rgba(Stability::Stable)` for the deleted `PING_STABLE`).
+
+Behaviour changes, recorded in `docs/FORK_PARITY.md`: the first RTT sample
+of the process is stored instead of dropped while the table was being
+allocated, and more than sixteen simultaneously fresh stations evict the one
+with the oldest sample (arenas hold eight). The ~7 KB `Session` is a static
+again (`.data`), replacing the 107 KB heap table of 0.3.7.
+
+Gates: 242 host tests + SDK round-trip, host clippy with warnings denied,
+no-default build, rustfmt, Skyline release build `0.5.3-e7fce5ca3833-1792249232`
+(NRO 1,445,888 bytes, SHA-256 `4076fe8275b91b2a…`; +4 KB over the
+`peer_transport.rs` cut's `f5b60530…`, page rounding of the static table).
+Not run in Eden or on the console; the owed console checks for the transport
+(handshake, RTT, names, announce) now also cover this cut.
 
 ### 0.5.3 — 2026-10-17: `peer_transport.rs` cut to its production surface (host tests, Skyline build)
 

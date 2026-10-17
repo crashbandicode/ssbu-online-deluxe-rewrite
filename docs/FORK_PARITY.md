@@ -251,7 +251,16 @@ reported declined-rematch path and hardware export completion are not yet accept
   peers remain available. Vanilla profile selection is not a disconnect signal.
 - The transport is installed before the optional `peer_observer` diagnostic toggle.
   Unknown or foreign RTT protocols cannot retire a peer merely because their
-  numeric station indices overlap. `src/runtime/pia_rtt.rs` matches 62a exactly.
+  numeric station indices overlap. `src/runtime/pia_rtt.rs` matched 62a exactly
+  until the 2026-10-17 cut (`work/pia-rtt-1017`): the station table now holds
+  sixteen slots keyed by station index instead of one slot per possible index,
+  lives in a plain `static Mutex<Session>` rather than a heap box allocated by
+  the first poll, and the UI reads one `Mutex` of the last poll's publication
+  and board instead of two seqlocks. Two observable differences: the first RTT
+  sample of the process is stored instead of dropped, and more than sixteen
+  simultaneously fresh stations evict the one with the oldest sample (arenas
+  hold eight). Hooks, epoch and draw-generation gating, staleness, protocol
+  adoption and the displayed values are unchanged.
 
 All 261 host tests, warning-free host/Skyline Clippy, no-default and release builds,
 and exact packaging checks passed. The final archive matches all 76 source files;
