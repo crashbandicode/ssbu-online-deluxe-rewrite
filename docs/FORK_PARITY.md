@@ -415,7 +415,8 @@ Match class (`net/mod.rs`, all installed at `:374-390`):
 Native panes and streamer mode are live. `ui/native/mod.rs` `install()` is
 commented (`:381-382`); the menu hooks above still call
 `update_css_ui`, `update_local_online_ui`, and `update_online_arena_ui`.
-Streamer mode is L+R+ZL/ZR+Y and replaces latency/ping text with the LDN
+Streamer mode is L+R+ZL/ZR+Y (the rewrite accepts only L+R+ZR+Y since
+0.5.7) and replaces latency/ping text with the LDN
 network count (`native/mod.rs:47-58`, `:221-228`). Station cycle is
 ZL+ZR+Left/Right or L+R+Left/Right (`:32-44`).
 

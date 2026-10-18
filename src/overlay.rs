@@ -193,7 +193,11 @@ impl Overlay {
         let pressed = buttons & !self.previous_buttons;
         self.previous_buttons = buttons;
         let shoulders = buttons & (L | R) == L | R;
-        if shoulders && buttons & (ZL | ZR) != 0 && pressed & Y != 0 {
+        // Streamer (0.5.7): L+R with ZR held, then Y. ZR is the same hold every
+        // window edit needs; the ZL variant was retired after it flipped
+        // Streamer on unnoticed during the 2026-10-18 console session (ZL is
+        // also Training's controlled-fighter swap modifier).
+        if shoulders && edit_modifier(buttons) && pressed & Y != 0 {
             config.streamer = !config.streamer;
             return true;
         }
@@ -935,7 +939,15 @@ mod tests {
         let mut ui = Overlay::default();
         let mut config = Config::default();
         assert!(!config.streamer);
-        assert!(ui.poll(L | R | ZL | Y, &mut config));
+        // 0.5.7: ZR held is the only Streamer chord; the ZL variant is inert.
+        assert!(!ui.poll(L | R | ZL | Y, &mut config));
+        assert!(!config.streamer);
+        ui.poll(0, &mut config);
+        assert!(ui.poll(L | R | ZR | Y, &mut config));
+        assert!(config.streamer);
+        ui.poll(0, &mut config);
+        // Both triggers together are neither hold.
+        assert!(!ui.poll(L | R | ZL | ZR | Y, &mut config));
         assert!(config.streamer);
         ui.poll(0, &mut config);
         assert!(ui.poll(L | R | ZR | Y, &mut config));
@@ -943,6 +955,7 @@ mod tests {
         ui.poll(0, &mut config);
         let before = config.clone();
         assert!(!ui.poll(L | R | RIGHT, &mut config));
+        assert!(!ui.poll(L | R | Y, &mut config));
         assert_eq!(config, before);
         assert!(!ui.poll(ZL | ZR | LEFT, &mut config));
         assert_eq!(ui.view, View::Hidden);

@@ -10,12 +10,15 @@ delivered as **one NRO**: rendering profiles that cut input latency, a global
 Player Info window, the native character-select status line and network
 display. No overclocking.
 
-**Current version: 0.5.6** (2026-10-18; Forgejo release v0.5.6, on the card since 2026-10-18 with its first boot pending). 0.5.6 makes
+**Current version: 0.5.7** (2026-10-18; release pending): the Streamer toggle is
+L+R + **ZR** + Y only, since the ZL variant flipped it on unnoticed during a
+console session. 0.5.6 (Forgejo release v0.5.6, on the card and booted) makes
 **Vanilla+** the default mode: the Vanilla profile keeps the game's three-image
 swap chain but presents at the flush, as the other profiles do; **L+R+X**
 toggles it, and `vanilla_plus=false` in the INI turns it off (see Rendering
 profiles below). It rests on code reasoning and console traces of the previous
-build, with no console run yet, so its check is owed. 0.5.6 also lets console
+build; the first console boot showed no early-present mismatch over 89,500
+presents, and the visual check is still owed. 0.5.6 also lets console
 LLUltra render at the native **1080p** (`ultra_resolution=1080` or the UltraRes
 row; the default stays 576p; the operator reports that 720p LLUltra held 60
 under Horizon OC, an uncaptured observation) and requires **ZR** for every

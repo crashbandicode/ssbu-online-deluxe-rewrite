@@ -1,6 +1,6 @@
 # Resume and test plan
 
-Updated 2026-10-18 for Deluxe 0.5.6 (commits `fb2012a` + docs `6180325`, Forgejo release v0.5.6; 0.5.5 is `6a9e61a`, Forgejo release v0.5.5; 0.5.4 is `a63bc8c`). Read [STATUS.md](STATUS.md)
+Updated 2026-10-18 for Deluxe 0.5.7 (commit pending; 0.5.6 is `fb2012a`, Forgejo release v0.5.6 and booted on the console; 0.5.5 is `6a9e61a`; 0.5.4 is `a63bc8c`). Read [STATUS.md](STATUS.md)
 for what is implemented and which evidence exists, the newest entries of
 [VALIDATION.md](VALIDATION.md) for the exact packages and gates, and `git log`.
 Live operational state (card deployments and their receipts, Eden profiles,
@@ -18,9 +18,17 @@ outside this repository, not here.
   (`Vanilla+*`, `Auto:Van+`); **L+R+X** (neither ZL nor ZR held) toggles it
   live and saves it; no separate NetProfile entry. Host gates: 237 + 1 tests,
   clippy with warnings denied, the no-default-features build. Justified by code
-  reasoning and the 0.5.4 console API traces in Vanilla, with **no console run
-  yet**; step 12 below is the check. The card holds 0.5.6 since
-  2026-10-18 (installed over 0.5.5, rollback archive kept); first boot pending.
+  reasoning and the 0.5.4 console API traces in Vanilla, and the first console
+  boot the same evening showed 0 early-present mismatches over 89,500
+  presents in menus, CSS and Training (see VALIDATION); the visual and
+  latency check of step 12 is still the operator's call. The card holds 0.5.6
+  since 2026-10-18 (installed over 0.5.5, rollback archive kept).
+- 0.5.7 (commit pending, NRO `<NRO-SHA>`): the Streamer chord is L+R + **ZR** +
+  Y only; the ZL variant does nothing. The evening's online session ended with
+  `streamer=true` saved on the card without the operator meaning it, which is
+  why the opponent's connection did not show; the card config was set back to
+  `streamer=false` and `input_buffer=auto` by hand. Console check: L+R+ZL+Y
+  changes nothing, L+R+ZR+Y flips the Streamer row.
 - 0.5.6 also carries two operator changes of 2026-10-18 21:16Z. **UltraRes
   1080p:** `ultra_resolution=1080` and the UltraRes row (576p → 720p → 1080p →
   576p) let console LLUltra render at the native 1080p, dynamic resolution
@@ -34,7 +42,7 @@ outside this repository, not here.
 - The operator dropped the FX measurement cells A–R on 2026-10-18 ("I'm not
   going to do all the effects testing"); the per-move ledger stays in the
   evidence root (`MOVE-LEDGER.md`).
-- The last released Deluxe is 0.5.5 (commit `6a9e61a`, Forgejo release v0.5.5, on the card since 2026-10-18 with its first boot pending, NRO `cf57cf80f25f2e837deabaf859489dc00653692c269fb4a6e2069a6a1b9bf8c2`): the live-peer
+- The last released Deluxe is 0.5.5 (commit `6a9e61a`, Forgejo release v0.5.5, on the card for a few hours on 2026-10-18 and replaced by 0.5.6 without booting, NRO `cf57cf80f25f2e837deabaf859489dc00653692c269fb4a6e2069a6a1b9bf8c2`): the live-peer
   requirement for the operator's declined-rematch report. The opponent column,
   the strip's `Peer:` line, the Ping cell, the peer-dependent rows and the
   native CSS remote line need an RTT sample for the selected station within

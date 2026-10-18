@@ -1,6 +1,6 @@
 # Implementation and validation status
 
-Updated 2026-10-18 for 0.5.6 (commits `fb2012a` + docs `6180325`, Forgejo release v0.5.6; 0.5.5 is `6a9e61a`, docs `2bb6974`, Forgejo release v0.5.5; 0.5.4 is `a63bc8c`). The rewrite is one Rust/Skyline
+Updated 2026-10-18 for 0.5.7 (commit pending; 0.5.6 is `fb2012a` + docs `6180325`, Forgejo release v0.5.6; 0.5.5 is `6a9e61a`, Forgejo release v0.5.5; 0.5.4 is `a63bc8c`). The rewrite is one Rust/Skyline
 NRO for Smash 13.0.5. Auto is enabled by default; it chooses Vanilla (Vanilla+
 since 0.5.6) in menus,
 offline play and Training, LessLag for console online singles, LLUltra for
@@ -26,7 +26,7 @@ the operator's Switch, recorded with its build hash in [VALIDATION.md](VALIDATIO
 | LLDoubles | Three textures, OneBehind, render sequencing, resolution scaling | b19 linked Auto/LLDoubles team match completed through results/CSS; Eden response trials keep the two-image saving after present-at-flush (0.5.2) |
 | Auto | Scene, connection and fighter-count policy; preserves saved manual choice; Quickplay hold and stale demotion (0.4.2) | Training/menu Vanilla, b19 linked doubles LLDoubles, d9 linked singles LLUltra and cleanup Vanilla passed in Eden; 0.4.2 console results in VALIDATION.md |
 | Present at the flush | Two-image LessLag presents the acquired image at the flush that submits it (0.4.0); extended to every committed render-opts profile in 0.5.2; `early_present=false` switches it off (0.5.3) | Console-verified for LessLag on the character select (49.9 → 59.85 fps, 0.4.0). LLUltra/LLDoubles extension: Eden response trials (savings of 3, 4 and 2 images against Vanilla, unchanged through the 0.5.4 candidate); console LLUltra captures above. Before/after clips at the console-calibrated 175 % CPU quota in [EMULATOR_METHOD.md](EMULATOR_METHOD.md) |
-| Vanilla+ | Vanilla keeps the game's three-image swap chain but presents the acquired image at the flush that carried that frame's last submission, one CPU update earlier than the game does (0.5.6). INI key `vanilla_plus` (default true, live); L+R+X toggles it and saves; the NetProfile row, strip and native banner read `Vanilla+` / `Vanilla+*` / `Auto:Van+`; `early_present=false` still disables it. Operator decision 2026-10-18: ship it as the default mode. [Rendering profiles](RENDERING.md#vanilla-056) | Host-tested only (237 + 1 tests). Reasoning from the 0.5.4 console API trace in Vanilla (the acquired image is complete at the flush; presenting there saves about 9–13 ms of display latency). No console run yet: menus, CSS and Training visual check, 60 fps, `early_presents` advancing with `early_present_mismatches=0`, the chord round trip and a latency comparison are owed |
+| Vanilla+ | Vanilla keeps the game's three-image swap chain but presents the acquired image at the flush that carried that frame's last submission, one CPU update earlier than the game does (0.5.6). INI key `vanilla_plus` (default true, live); L+R+X toggles it and saves; the NetProfile row, strip and native banner read `Vanilla+` / `Vanilla+*` / `Auto:Van+`; `early_present=false` still disables it. Operator decision 2026-10-18: ship it as the default mode. [Rendering profiles](RENDERING.md#vanilla-056) | Host-tested only (237 + 1 tests). Reasoning from the 0.5.4 console API trace in Vanilla (the acquired image is complete at the flush; presenting there saves about 9–13 ms of display latency). First console boot 2026-10-18 evening: `early_presents` 89,483 = skips, `early_present_mismatches=0` over 89,500 presents in menus, CSS and Training; the visual check, the chord round trip and a latency comparison are still owed |
 | Dispatcher backoff | Idle-pass sleep with growing pauses; `dispatcher_backoff=false` switches it off (0.5.3), `DISABLE_BACKOFF` unchanged | Eden before/after clips (sleeps per second and frame rate at the 175 % quota); the switch itself is not yet booted on the console |
 | Resolution / DRS | Cut-in trigger (shipped); per-move catalog `drs_moves=` and the adaptive trigger `drs_adaptive=` with threshold/trigger/release keys (0.5.2, experiment). The built-in Sephiroth Gigaflare trigger was removed in 0.5.4 (commit 49fbfe1) | The cut-in trigger drops resolution on the console (ledger observation). The 0.5.2 triggers have been on the card since 2026-10-15 with no hardware result yet; the resolution-comparison cells were dropped from the test plan with the other FX cells (operator, 2026-10-18). LLUltra's base level is the UltraRes setting above |
 | Fighter Main | Guarded read-only fighter status callback, bounded report tokens | Two count-only Training sessions passed approximate tick-frequency checks; count mode installs no cut-in hook or reports |
@@ -49,7 +49,17 @@ the operator's Switch, recorded with its build hash in [VALIDATION.md](VALIDATIO
 | Coverage build | Cargo feature `coverage`, raw profile writer, event code 109, manual snapshots from the Debug view (0.5.2) | Eden only. 2026-10-17 trace: 1,192 instrumented functions, 1,047 executed, 145 never executed. 2026-10-18 LAN Online run (two modded peers, NSO scenes only): 893 executed, 299 never executed, 12 functions new against the 10-17 report; [DEBUGGING.md](DEBUGGING.md) |
 | Removed in 0.5.4 | The opt-in peer observer, FPS++ (emulator-only diagnostic), the Gigaflare DRS trigger, five opt-in diagnostics, 21 helpers without a production caller; `peer_observer=` and `fps_boost=` are ignored legacy keys. Per-file reduction: `src/` 22,253 → 15,332 production lines (−31.1 %) | Host gates on every step; Eden latency, quota frame-rate, capture and plugin-page passes on the candidate. Console: the 0.5.4 first boot is the acceptance test. [FPS boost history](FPS_BOOST_INVESTIGATION.md) |
 
-## Current: 0.5.6
+## Current: 0.5.7
+
+0.5.7 (2026-10-18; commit pending, NRO `<NRO-SHA>`) puts the Streamer chord
+behind ZR: L+R + **ZR** + Y toggles Streamer, the ZL variant does nothing.
+Reason: after the evening's 0.5.6 online session the card's saved config had
+`streamer=true` and the operator had never meant to hide the opponent; the
+chord had flipped it unnoticed during window use (ZL is also Training's
+controlled-fighter swap modifier). ZR is already the hold every window edit
+needs. Host-tested; no console run of 0.5.7 yet.
+
+### 0.5.6
 
 0.5.6 (2026-10-18; commit `fb2012a`, Forgejo release v0.5.6, NRO `df757ce2f8130fddd0c2ba69e35c0f2dd7eae5505365ce969ec88134a2fadad9`) makes
 **Vanilla+** the default mode, on the operator's decision of 2026-10-18
@@ -89,7 +99,7 @@ setting. The window-closed native pane edits (ZL + D-pad) are unchanged.
 in the evidence root.
 
 Host gates: 237 + 1 tests, clippy with warnings denied, the
-no-default-features build. **No console run yet**; installed on the card on 2026-10-18 over 0.5.5 (rollback archive kept), first boot pending.
+no-default-features build. **Console:** installed on the card on 2026-10-18 over 0.5.5 (rollback archive kept) and booted the same evening: clean boot, Vanilla+ with 0 early-present mismatches over 89,500 presents in menus, CSS and Training, one online Singles match (details in the 0.5.6 VALIDATION entry); LLUltra 1080p and the ZR-hold round trip are unchecked.
 The checks owed are the Vanilla+, 1080p LLUltra and ZR-hold rows of the test
 plan in [NEXT_SESSION.md](NEXT_SESSION.md); the full account is the 0.5.6
 entry of [VALIDATION.md](VALIDATION.md).
@@ -109,7 +119,7 @@ sample for the selected station within 10 s, and event code 112 records each
 time a bound station goes silent. Host gates: 235 + 1 tests, clippy with
 warnings denied, the no-default-features build; the Skyline build is the
 release asset. **Not verified on the console**; installed on the card on
-2026-10-18 over 0.5.4 (rollback archive kept), first boot pending. The checks owed are step 11 of the
+2026-10-18 over 0.5.4 and replaced by 0.5.6 the same evening without booting. The checks owed are step 11 of the
 test plan in [NEXT_SESSION.md](NEXT_SESSION.md); the full account is the
 0.5.5 entry of [VALIDATION.md](VALIDATION.md). The station-left hook is still
 uninstrumented, so which leave variant the console sends stays unknown.

@@ -2783,7 +2783,7 @@ ELF `d2c3605a…`. Released as Forgejo v0.5.5 (release 394, NRO and manifest
 attached, download readback matched) and installed on the card the same
 evening over the 0.5.4 NRO, which had booted once (operator, 2026-10-18
 afternoon: menus, overlay and Training fine; FX cells not run); the 0.5.4 NRO
-is kept as `backups/pre-055-cf57cf80f25f2e83.nro`. First boot of 0.5.5 pending.
+is kept as `backups/pre-055-cf57cf80f25f2e83.nro`. 0.5.5 was replaced on the card by 0.5.6 the same evening without booting.
 
 **Eden smoke of the 0.5.5 NRO (emulator evidence, 19:21–19:40Z).** Both
 LAN-Online profiles staged with `cf57cf80…`, same card-like INI. One full
@@ -2816,6 +2816,31 @@ runtime's decline behave like NSO's so that Eden can exercise this path.
 Evidence outside Git: `~/.local/share/ssbu-mod-backups/plugin-api-tangent-20261012/rematch-1018/`
 (`FINDINGS.md`, `screens/`, `profraw/al-a5/final/` and `al-b5/final/`, the
 endgame and keepalive logs).
+
+### 0.5.7 — 2026-10-18: Streamer chord behind ZR
+
+After the evening's first 0.5.6 online session the operator reported that
+the opponent's connection "didn't show at all in the menu". The card's saved
+`config.ini` (pulled over MTP afterwards, `switch-mtp-056/logs-online-1018/`)
+had `streamer=true`; the previous boot's `config.previous.ini` had it too,
+while the afternoon's 0.5.4 config had `streamer=false`. Streamer hides the
+opponent column, the strip's peer facts and the native CSS remote line by
+design, so the display was correct for its setting; the setting itself had
+flipped unnoticed, most plausibly through the L+R + ZL/ZR + Y chord during
+window use (ZL is also Training's controlled-fighter swap modifier, and the
+session shows many window-chord presses). The live-peer rule was not
+involved: the log has no code 112, the handshake and confirm fired, 494 RTT
+samples arrived and the session cleaned up at the end.
+
+Change: the Streamer chord is L+R with **ZR** held, then Y, the same hold
+every window edit has needed since 0.5.6; the ZL variant and ZL+ZR together
+do nothing (`src/overlay.rs`, `edit_modifier`). No INI change. The operator's
+card config was set back to `streamer=false` and `input_buffer=auto` by hand
+over MTP the same evening (receipt `switch-mtp-056/CONFIG-EDIT-2245.json`).
+Host gates: 237 + 1 tests (the Streamer chord test now asserts the ZL variant
+is inert), `cargo clippy --all-targets -- -D warnings`, `cargo build
+--no-default-features`, Skyline package NRO SHA-256 `<NRO-SHA>`. Owed on the
+console: L+R+ZL+Y changes nothing, L+R+ZR+Y toggles the Streamer row.
 
 ### 0.5.6 — 2026-10-18: Vanilla+ (default), UltraRes 1080p, ZR-hold for every window edit
 
@@ -2928,7 +2953,7 @@ option and variant code is unchanged.
 warnings` clean, `cargo build --no-default-features` ok, for the whole 0.5.6
 tree. Skyline package NRO SHA-256 `df757ce2f8130fddd0c2ba69e35c0f2dd7eae5505365ce969ec88134a2fadad9`. Released as Forgejo v0.5.6 (release
 395, NRO and manifest attached, download readback matched) and installed on the card the same
-evening over 0.5.5 (ackups/pre-056-df757ce2f8130fdd.nro keeps 0.5.5); first boot pending.
+evening over 0.5.5 (`backups/pre-056-df757ce2f8130fdd.nro` keeps 0.5.5). **First console boot of 0.5.6 (same evening, operator; logs pulled over MTP to `switch-mtp-056/logs-online-1018/`):** clean boot, hooks installed, clock 1642–1788 MHz under Horizon OC. Vanilla+ ran in the menus, the character select and Training: `renderer-status.txt` ended at `present_calls=89500 early_presents=89483 early_present_skips=89483 early_present_mismatches=0`, so on hardware too every early present was matched by one skipped game present. One online Quickplay Singles match ran in manual LessLag with a locked render cadence (`timing-3592420657006.csv`: 217 s, p50 16.667 ms, p99 16.871 ms, 40 intervals above 20 ms mostly at the start and the results transition, two mid-match hitches of 63 and 77 ms, 5 one-second windows below 59 of 217) while the hang trace shows the simulation stalling and catching up (fighter `main` ticks 106–168 per second against the nominal 120, presents flat at 60): the operator's "most unstable match" was the connection, with a manual `input_buffer=3`, not frame drops; the API trace shows no GPU or sync stall. The missing opponent column was `streamer=true` in the saved config (see the 0.5.7 entry). LLUltra 1080p and the ZR-hold round trip were not exercised.
 
 **Eden smoke of the Vanilla+ build (emulator evidence, 21:02–21:17Z).** The
 Vanilla+ code of `ee5c6ce` (dirty-tree package `96a03725…`, before the 1080p
