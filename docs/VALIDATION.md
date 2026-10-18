@@ -2817,6 +2817,156 @@ Evidence outside Git: `~/.local/share/ssbu-mod-backups/plugin-api-tangent-202610
 (`FINDINGS.md`, `screens/`, `profraw/al-a5/final/` and `al-b5/final/`, the
 endgame and keepalive logs).
 
+### 0.5.6 — 2026-10-18: Vanilla+ (default), UltraRes 1080p, ZR-hold for every window edit
+
+Three changes in one release: Vanilla+ (present at the flush in the game's
+three-image shape, on by default), the native 1080p option for console LLUltra
+and the ZR hold for every window edit, plus a plan change (the FX measurement
+cells are dropped). Vanilla+ is the Decision through Code paragraphs below; the
+other items follow them.
+
+**Decision.** Operator, 2026-10-18 about 20:50Z: "ship it with the next version
+as vanilla+ and make it the default mode… togglable by holding L+R+X instead of
+a separate scrolled entry." So the change is a flag, not a fifth profile: new
+INI key `vanilla_plus`, default true, live. With it on, the Vanilla profile keeps
+the game's own three-image swap chain but presents the acquired image at the
+flush that carried that frame's last submission, one CPU update earlier than the
+game presents it, exactly as the render-opts profiles do (LessLag since 0.4.0,
+LLUltra and LLDoubles since 0.5.2). `render_mode` defaults to `vanilla` and
+`auto_profile` to `true`, so the shipped default is now Vanilla+, and Auto's
+Vanilla choice outside matches is Vanilla+ too. No console run of 0.5.6 exists;
+nothing here is a console result for this build.
+
+**Why it should be safe: code reasoning plus console traces of the previous
+build.** The console API trace of 0.5.4 in Vanilla, Training at 60 fps, from the
+2026-10-18 first-boot logs (`switch-mtp-055/logs-firstboot-1018/deluxe/api-3207722793418.csv`
+in the evidence root), shows per loop iteration: PRESENT(idx), then
+ACQUIRE(idx+1), then about 6 ms, then a single FLUSH span (the frame's last
+submission, 4 µs after the late-flush marker), then about 9 ms of update, then
+the next PRESENT of the index that was acquired at the previous loop head. So
+in the game's three-image shape the acquired image is already complete at that
+flush, and presenting it there saves the 9 ms or so of update that the game
+waits through first, about 9–13 ms of display latency in the trace. The ring,
+the acquire, the game's loop bookkeeping and the fighter simulation are not
+touched. The 0.5.2 LessLag traces (`api-2214438549910.csv`) show the same index
+relationship for the early present. The runtime presents `PENDING_INDEX`, the
+index the loop-head acquire returned (`src/runtime/nvn.rs::present_at_flush`),
+and the game's own present of that index is skipped through the existing
+`EarlyPresent` and mismatch accounting (event code 105, unchanged). This is an
+inference from the traces; the frame-time and latency effect of the change has
+not been measured.
+
+**Code.** `src/config.rs` (the `vanilla_plus` field, default true, parse slot
+17, serialized last after `dispatcher_backoff`, tests for the default, the
+round trip, rejected values and duplicates), `src/render_policy.rs`
+(`present_at_flush(decision, vanilla_plus)` also allows `Profile::Vanilla` when
+the flag is on; tests), `src/runtime/renderer.rs` (the flush hook passes the
+flag), `src/runtime/mod.rs` (the `VANILLA_PLUS` atomic, `settings()`,
+`publish()`, `vanilla_plus_enabled()`), `src/overlay.rs` (chord **L+R+X** with
+neither ZL nor ZR held toggles the flag live and saves it, `ConfigSaved`, code
+24; L+R+ZL/ZR+X, the fork's retired FPS++ chord, still does nothing; test),
+`src/auto_policy.rs::profile_row_label(…, vanilla_plus)` (tests) with callers in
+`src/runtime/ui.rs`, `src/runtime/native_banner.rs` and a `src/menu.rs` test,
+and `config/default.ini` (`vanilla_plus=true`). UI: no new NetProfile entry; the
+NetProfile row, the in-match strip's `Profile:` field and the native CSS
+banner's `You:` field read `Vanilla+` (manual), `Vanilla+*` (cleanup hold) and
+`Auto:Van+` (Auto) with the flag on, and plain `Vanilla`, `Vanilla*` and
+`Auto:Van` with it off. `early_present=false` still disables every early
+present, Vanilla+ included. The peer exchange still announces Vanilla, because
+the ring shape is unchanged. Version 0.5.5 → 0.5.6 (Cargo.toml and Cargo.lock).
+
+**UltraRes 1080p** (operator, 2026-10-18 21:16Z: "also enable 1080p llultra").
+Code: `src/config.rs` adds `UltraResolution::P1080` (key `1080`, label `1080p`,
+`Level::P1080`); the Settings row's `cycle` walks 576p → 720p → 1080p → 576p
+with Right and backwards with Left (it swapped two values before); the INI
+error reads `ultra_resolution must be 576, 720 or 1080`. 1080 had been dropped
+at the operator's request when the option was added in 0.5.3 and is now back at
+the operator's request. `src/runtime/mod.rs` stores the choice as a byte
+(`ULTRA_RES`, `UltraResolution::to_byte` / `from_byte`: 0 = 576, 1 = 720,
+2 = 1080) instead of the old 720 boolean (`ULTRA_720`). The default stays 576;
+only console LLUltra reads it, emulator profiles and the other console profiles
+ignore the key, and dynamic resolution still steps down from the chosen base
+(1080p → 720p → 576p, 576p and below → 480p), so at 1080p only the cut-in, move
+table and adaptive triggers lower it. The config test covers all three values
+(parse, serialize round trip, byte round trip, cycle in both directions,
+labels) and rejects `900`, `480`, `720p`, `1080p`, an empty value and `true`.
+Reasoning, **operator-reported and uncaptured:** "an OC made 720p LLUltra
+locked 60" (Horizon OC 2.6.0, installed 2026-10-16; the operator's statement,
+no capture, so the build, clock state and moves played are unrecorded and it is
+not a result of this repository). The 0.5.3 analysis put LLUltra's limit at
+CPU work plus GPU time inside one vblank (GPU about 3.4–5.3 ms at 576p); if an
+overclock lets 720p fit, the native level is the next thing to try. Whether
+1080p fits is unmeasured, on a stock or an overclocked console. Host-tested
+only.
+
+**ZR hold for every window edit** (operator, same message: "make it so no
+matter what when the menu is open you have to hold ZR to change even outside of
+training and matches"). `src/runtime/ui.rs` now sets `ui.controls.edit_hold =
+true` in every scene; through 0.5.5 it was set only while the scene was ready
+and not Inactive, that is while a fight was live (the 0.5.3 rule). With the
+window open, a Left/Right value change on any Settings row or plugin row needs
+**ZR held without ZL**; a plain Left/Right is ignored and Up/Down still move
+the selection. Reason: menu D-pad presses and taunts must never change a
+setting. ZR and not ZL because ZL + D-pad Left/Right swaps the controlled
+fighter in Training. Unchanged: the window-closed native pane edits (ZL +
+D-pad on the online character select and arena pane, 0.4.1). The gate is the
+existing overlay test `edit_hold_needs_zl_for_value_changes_but_not_for_navigation`;
+the runtime change is the one assignment and has no new test, and the
+`Overlay::edit_hold` documentation was updated. Host-tested only; the fork
+edits on a plain press, so this is a deliberate difference
+([parity](FORK_PARITY.md)).
+
+**FX measurement cells dropped** (operator, same message: "I'm not going to do
+all the effects testing"). Cells A–R of the test plan (Kirby, Pyra and
+Falcon On and Reduced baselines and variants, the `drs_adaptive` and
+`drs_moves=all` resolution comparisons, the leftover LessLag and Gigaflare
+cells and the online LLUltra cell) are no longer planned and no result is owed
+for them. The move ledger stays in the evidence root as `MOVE-LEDGER.md`; the
+option and variant code is unchanged.
+
+**Host gates:** `cargo test` 237 + 1 pass, `cargo clippy --all-targets -- -D
+warnings` clean, `cargo build --no-default-features` ok, for the whole 0.5.6
+tree. Skyline package NRO SHA-256 `<NRO-SHA>`. Not released and not on the
+card: the card still holds 0.5.5 until the operator installs 0.5.6.
+
+**Eden smoke of the Vanilla+ build (emulator evidence, 21:02–21:17Z).** The
+Vanilla+ code of `ee5c6ce` (dirty-tree package `96a03725…`, before the 1080p
+and ZR commits) on LAN-Online profile a with manual Vanilla, `vanilla_plus`
+default, platform console, one Eden with an 8 GiB cap, an Astra-low driver
+on the menus. `renderer-status.txt` at the end: `present_calls=60699
+early_presents=59203 early_present_skips=59202 early_present_mismatches=0`,
+`mode=vanilla`, `engine_status=Active`, three-image index masks: every early
+present was matched by one skipped game present, and the only frames without
+one are the ones while the flag was off. The native character-select banner
+read `You: Vanilla+ | Auto`; L+R+X on the CSS saved `vanilla_plus=false`
+(`24 ConfigSaved` twice), the banner read `You: Vanilla | Auto`, and in the
+12 s with the flag off there were 908 presents but 54 early presents (those
+before the press); L+R+X again restored both. 60 fps on the main menu, the
+CSS hand sweep, 30 s of Training and a Training hot swap (Link → Yoshi,
+first Training frame about 14 s after Plus); no tearing, stale frame or
+flicker in any reviewed screenshot; no `105`, `48` or panic row. Evidence:
+`~/.local/share/ssbu-mod-backups/plugin-api-tangent-20261012/vanillaplus-1018/`
+(`SMOKE.md`, `screens/`, `profraw/al-a7/final/`, `renderer-status-final.txt`).
+The 1080p option cannot be exercised in Eden (emulator profiles ignore the
+key) and the ZR hold is host-tested; both are console checks.
+
+**Owed on the console** (none of it done): with the 0.5.6 NRO on the card,
+(1) menus, the character select and Training in Vanilla+ show no visual fault:
+no tearing, stale frame or flicker; (2) the Performance page keeps 60;
+(3) `renderer-status.txt` shows `early_presents` advancing in Vanilla with
+`early_present_mismatches=0`; (4) L+R+X flips the NetProfile row text between
+`Vanilla+` and `Vanilla` and the saved `vanilla_plus` line in `config.ini`;
+(5) a subjective menu and hot-swap latency comparison with the chord off
+against on; (6) 1080p LLUltra at 60 under Horizon OC, with a capture: Training,
+`CAPTURE_TIMING`, UltraRes set to 1080p, no one-second window below 59 outside
+the Deluxe-window-open seconds, the capture's `# clock=oc` header kept out of
+the ledger; a 720p capture under the same overclock would turn the operator's
+uncaptured 720p statement into a baseline; (7) the ZR-hold round trip in a menu:
+open the window on the title or main menu, plain Left/Right changes no value
+(the row stays put, no `config.ini` write), ZR + Left/Right changes it, Up/Down
+still move the selection, and the same in the character select, Training and a
+match.
+
 ### 0.5.3 — 2026-10-17: latency response trials repeated on candidate package `5357da2626a98fb9` (Eden) — frame reduction unchanged
 
 Operator: "redo the test to make sure that we still have the same frame
@@ -3506,7 +3656,8 @@ console-only Settings row **UltraRes** (last row, ZR + Left/Right, applies
 on the next present through `sync_resolution`); `resolution::defaults_for`
 and `active_setting` take the Ultra base level, only (Ultra, Console) uses
 it, dynamic resolution still steps down from it, and the peer announce
-carries the configured level. 1080 was dropped at the operator's request.
+carries the configured level. 1080 was dropped at the operator's request
+(it came back in 0.5.6, see that entry).
 Evidence: 301 lib tests (config parse/serialize/cycle, menu row visibility
 and edit on console vs emulator, policy defaults for 576/720/1080 bases),
 clippy `-D warnings`, fmt, Skyline release build; package
@@ -3565,6 +3716,8 @@ plugin's far hook on the bootstrap entry is the test of the chaining path,
 and `install.log` will show `nvn_bootstrap_hook_before … plan=Chain(…)`.
 
 ### 0.5.3 — 2026-10-16: ZR hold for window edits while a fight is live (host tests only)
+
+(Since 0.5.6 the hold applies in every scene; see the 0.5.6 entry.)
 
 Operator request: the native character-select edits already need ZL held
 (0.4.1); do the same in Training, so a setting is harder to change by

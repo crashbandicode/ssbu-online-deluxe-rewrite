@@ -25,7 +25,8 @@ Performance, hidden) and opening Debug with L+R+Plus.
 ![Editing settings in the window](media/settings-edit.gif)
 
 Editing in the Settings window: Up/Down selects the row, Left/Right changes
-NetProfile and NetLatency.
+NetProfile and NetLatency. The clip was recorded on an earlier build; since
+0.5.6 a value change needs **ZR** held in every scene (ZR + Left/Right).
 
 ![Editing a plugin page](media/fx-control-edit.gif)
 

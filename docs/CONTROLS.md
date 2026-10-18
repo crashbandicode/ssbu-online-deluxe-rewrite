@@ -19,12 +19,13 @@ fork's room-ID path, but still needs an NSO test. See [native display](NATIVE_DI
 | Control | Action |
 | --- | --- |
 | L+R + Down | Cycle settings → (plugins) → (own plugin pages) → performance → hidden. The Settings rows PluginsPage, OwnPages and PerfPage (or `hide_pages` in the INI, 0.5.3) take pages out of the cycle, e.g. settings → FX Control → hidden; Settings is always in it. See [Configuration](CONFIGURATION.md) |
-| Up / Down | Select Peer, NetLatency, NetProfile, Stealth, Streamer, UltraRes (console only, 0.5.3: LLUltra's internal resolution, 576p or 720p), then PluginsPage / OwnPages / PerfPage (Shown or Hidden) and PerfView (Graph or Number, 0.5.3) (or a plugin row on a plugin page) |
-| Left / Right | Change the selected value (in menus and on the character select) |
-| ZR + Left / Right | Change the selected value while a fight is live (Training, Singles, Doubles; since 0.5.3). A plain Left/Right is ignored there, so a taunt or a stray press cannot change a setting mid-game; Up/Down still move the selection. ZR rather than ZL because ZL + D-pad Left/Right in Training swaps the controlled fighter |
+| Up / Down | Select Peer, NetLatency, NetProfile, Stealth, Streamer, UltraRes (console only, 0.5.3: LLUltra's internal resolution, 576p, 720p or, since 0.5.6, 1080p; Right walks 576p → 720p → 1080p → 576p, Left walks back), then PluginsPage / OwnPages / PerfPage (Shown or Hidden) and PerfView (Graph or Number, 0.5.3) (or a plugin row on a plugin page) |
+| Left / Right (window open) | Does not change a value since 0.5.6; the window ignores a plain press in every scene (until 0.5.5 it changed values in menus and on the character select). Use ZR + Left / Right below |
+| ZR + Left / Right | Change the selected value on any Settings row or plugin row. The hold is required in **every scene since 0.5.6** (menus, character select, Training and matches); in 0.5.3–0.5.5 it applied only while a fight was live (Training, Singles, Doubles). A plain Left/Right is ignored, so a menu D-pad press, a taunt or a stray press cannot change a setting (operator rule, 2026-10-18); Up/Down still move the selection. ZR rather than ZL because ZL + D-pad Left/Right in Training swaps the controlled fighter. Window closed, the ZL-gated native pane edits below are unchanged |
 | Shoulder chord + Left / Right outside settings | Cycle the selected remote peer |
 | ZL + Left / Right or Up / Down on an online character select or arena pane, window closed | Edit the input buffer or the profile on the native status (since 0.4.1 the D-pad alone only moves the hand) |
 | L+R + either ZL or ZR + Y | Toggle Streamer |
+| L+R + X (neither ZL nor ZR held) | Toggle Vanilla+ (0.5.6): the Vanilla profile presents at the flush when on (the default). Applies live, saves `vanilla_plus` in the INI (event code 24) and flips the NetProfile row text between `Vanilla+` and `Vanilla`. See [Rendering profiles](RENDERING.md#vanilla-056) |
 | L+R + Plus or Minus | Open the debug view; again to hide it. ZL+ZR stopped being a window chord in 0.5.3, so a trigger chord during play cannot open the window |
 | L+R + Up in the Debug view | Start a 30 s timing capture (see [Captures](CAPTURES.md)) |
 | L+R + Left in the Debug view | Coverage build only: write a `manual-NNN.profraw` snapshot (see [Coverage build](DEBUGGING.md#coverage-build-052)) |
@@ -48,8 +49,13 @@ and is written to `config.ini` by the background thread within about half a
 second; the game's next relevant buffer hook applies the selected value.
 
 **NetProfile** selects the rendering profile or Auto; see
-[Rendering profiles](RENDERING.md). A manual selection that the post-match
-cleanup hold is running as Vanilla reads `Vanilla*`.
+[Rendering profiles](RENDERING.md). Since 0.5.6 the Vanilla entry reads
+`Vanilla+` while Vanilla+ is on (the default; `Auto:Van+` under Auto), and plain
+`Vanilla` (`Auto:Van`) when it is off; the in-match strip's `Profile:` field
+and the native CSS banner's `You:` field use the same text. There is no separate
+Vanilla+ entry in the NetProfile cycle: L+R+X flips the flag. A manual
+selection that the post-match cleanup hold is running as Vanilla reads
+`Vanilla+*` (`Vanilla*` with the flag off).
 
 **Stealth** defaults to **On** and suppresses this mod's recognition beacon and
 custom settings payload. Its value is latched for the connection. A change
@@ -69,5 +75,7 @@ Interface shows local Wi-Fi/Ethernet/Unknown and the selected peer's announced
 type, if available. An emulator's reported interface can be virtual; it does
 not identify the host computer's physical network connection.
 
-The fork's **FPS++** row and its L+R+ZL/ZR+X chord were removed on 2026-10-17;
-the chord now does nothing. See [Rendering profiles](RENDERING.md#fps).
+The fork's **FPS++** row was removed on 2026-10-17, and its L+R+ZL/ZR+X chord
+with it. Since 0.5.6 plain **L+R+X** (neither ZL nor ZR held) toggles Vanilla+
+instead; the trigger variants L+R+ZL+X and L+R+ZR+X still do nothing. See [Rendering profiles](RENDERING.md#fps)
+and [Vanilla+](RENDERING.md#vanilla-056).

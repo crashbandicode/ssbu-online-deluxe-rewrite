@@ -10,8 +10,19 @@ delivered as **one NRO**: rendering profiles that cut input latency, a global
 Player Info window, the native character-select status line and network
 display. No overclocking.
 
-**Current version: 0.5.5** (2026-10-18; Forgejo release v0.5.5, on the card
-since 2026-10-18 with its first boot pending). 0.5.5 hides the opponent once their station goes silent
+**Current version: 0.5.6** (2026-10-18; release pending). 0.5.6 makes
+**Vanilla+** the default mode: the Vanilla profile keeps the game's three-image
+swap chain but presents at the flush, as the other profiles do; **L+R+X**
+toggles it, and `vanilla_plus=false` in the INI turns it off (see Rendering
+profiles below). It rests on code reasoning and console traces of the previous
+build, with no console run yet, so its check is owed. 0.5.6 also lets console
+LLUltra render at the native **1080p** (`ultra_resolution=1080` or the UltraRes
+row; the default stays 576p; the operator reports that 720p LLUltra held 60
+under Horizon OC, an uncaptured observation) and requires **ZR** for every
+value change in the open window, in every scene instead of only mid-fight; both
+are host-tested only. 0.5.5 (2026-10-18;
+Forgejo release v0.5.5, on the card since 2026-10-18 with its first boot
+pending) hides the opponent once their station goes silent
 (see Network display below); its console check is owed. 0.5.4 (2026-10-17) is
 the per-file code-reduction pass (31 % fewer production lines, behaviour
 unchanged except where [validation](docs/VALIDATION.md) says otherwise) plus
@@ -24,8 +35,8 @@ guard (a crash at scene exits with render options active); 0.5.0 moved
 character FX out to the separate
 [FX Control](https://git.syntaxbyexample.com/intpa/ssbu-fx-control) plugin and
 lets plugins add their own pages to the window cycle. Every release on Forgejo
-carries the NRO and its manifest; the 0.5.4 and 0.5.5 console runs are still
-pending ([status](docs/STATUS.md)). Install notes: [docs/INSTALL.md](docs/INSTALL.md).
+carries the NRO and its manifest; the 0.5.4, 0.5.5 and 0.5.6 console runs are
+still pending ([status](docs/STATUS.md)). Install notes: [docs/INSTALL.md](docs/INSTALL.md).
 
 > **Install only this NRO.** The rewrite replaces the original Online Deluxe
 > fork (`libssbu_online_deluxe*.nro`), SsbuSync (`libssbusync.nro`) and the
@@ -131,7 +142,12 @@ calibration in [Mimicking the Switch in Eden](docs/EMULATOR_METHOD.md).
 - **Rendering profiles.** Vanilla, LessLag, LLUltra and LLDoubles trade
   buffered frames for latency; Auto picks one from the scene. Since 0.4.0
   two-image LessLag presents at the flush, which removed the character-select
-  stall on the console (49.9 → 59.85 fps on the hand sweep). [Rendering profiles](docs/RENDERING.md)
+  stall on the console (49.9 → 59.85 fps on the hand sweep). Since 0.5.6 the
+  default mode is **Vanilla+**: Vanilla's three-image chain presenting at the
+  flush, toggled live with **L+R+X** (host-tested; console check owed). Console
+  LLUltra can also render at 720p (0.5.3) or the native 1080p (0.5.6); both are
+  host-tested with no console capture.
+  [Rendering profiles](docs/RENDERING.md)
 - **Player Info window and native status.** Settings, Performance, Debug and
   Plugins views on L+R+Down; the character select keeps your profile, buffer
   and the opponent's settings and RTT at the top. [Controls](docs/CONTROLS.md),
@@ -160,9 +176,11 @@ Hold **L+R** and tap **D-pad Down** to cycle the window (ZL+ZR no longer
 opens it since 0.5.3):
 settings → plugins (when any registered) → own plugin pages, such as FX
 Control when that plugin is installed → performance → hidden. In the window
-**Up/Down** selects a row and **Left/Right** changes it; while a fight is live
-(Training or a match) hold **ZR** with Left/Right, since the D-pad alone also
-taunts (0.5.3). L+R and **Plus** opens the Debug view. Everything else,
+**Up/Down** selects a row and **ZR + Left/Right** changes it. A plain
+Left/Right is ignored, since the D-pad also taunts and moves the menus: the hold
+applied only while a fight was live (Training or a match) in 0.5.3 to 0.5.5 and
+applies in every scene since 0.5.6. L+R and **Plus** opens the Debug view; L+R
+and **X** toggles Vanilla+ (0.5.6). Everything else,
 including the ZL-gated native edits on the character select, is in
 [Controls](docs/CONTROLS.md).
 
@@ -170,9 +188,9 @@ including the ZL-gated native edits on the character select, is in
 
 | Profile | Textures | Presentation | Console | Emulator |
 | --- | --- | --- | --- | --- |
-| Vanilla | 3 | TwoBehind | 1080p, DRS off | 1080p, DRS off |
+| Vanilla | 3 | TwoBehind; with Vanilla+ (0.5.6, the default) presents at the flush | 1080p, DRS off | 1080p, DRS off |
 | LessLag | 2 | OneBehind, presents at the flush | 1080p, DRS on | 1080p, DRS off |
-| LLUltra | 2 | Immediate, earlier flush, presents at the flush (0.5.2) | 576p, DRS on (UltraRes row or `ultra_resolution=720` to test 720p) | 1080p, DRS off |
+| LLUltra | 2 | Immediate, earlier flush, presents at the flush (0.5.2) | 576p, DRS on (UltraRes row or `ultra_resolution=720` / `1080` raises it to 720p or, since 0.5.6, the native 1080p) | 1080p, DRS off |
 | LLDoubles | 3 | OneBehind, presents at the flush (0.5.2) | 1080p, DRS on | 1080p, DRS on |
 
 Auto uses Vanilla in menus, offline matches and Training; online singles get

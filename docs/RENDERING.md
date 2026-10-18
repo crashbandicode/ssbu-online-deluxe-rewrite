@@ -1,14 +1,15 @@
 # Rendering profiles
 
-**Auto is the default.** It uses Vanilla in menus, offline matches and Training;
+**Auto is the default.** It uses Vanilla (Vanilla+ since 0.5.6, below) in menus,
+offline matches and Training;
 online singles use LessLag on console or LLUltra on emulator; online matches with
 more than two fighters use LLDoubles. Local wireless counts as online here.
 
 | Profile | Active textures | Presentation policy | Console resolution / DRS | Emulator resolution / DRS |
 | --- | --- | --- | --- | --- |
-| Vanilla | 3 | TwoBehind | 1080p / off | 1080p / off |
+| Vanilla | 3 | TwoBehind; with Vanilla+ (0.5.6, the default) it presents at the flush | 1080p / off | 1080p / off |
 | LessLag | 2 | OneBehind, presents at the flush (0.4.0) | 1080p / on | 1080p / off |
-| LLUltra | 2 | Immediate, earlier flush, presents at the flush (0.5.2) | 576p / on (`ultra_resolution=720` or the UltraRes row raises it to 720p, 0.5.3) | 1080p / off |
+| LLUltra | 2 | Immediate, earlier flush, presents at the flush (0.5.2) | 576p / on (`ultra_resolution=720` or `1080`, or the UltraRes row, raises it to 720p, 0.5.3, or the native 1080p, 0.5.6; [below](#llultra-resolution-053-1080p-in-056)) | 1080p / off |
 | LLDoubles | 3 | OneBehind, presents at the flush (0.5.2) | 1080p / on | 1080p / on |
 
 For a conceptual introduction and the short Eden results table, see
@@ -77,6 +78,46 @@ the early present off in every profile for a before/after against the game's
 own order; see [Configuration](CONFIGURATION.md) and the clips under
 [Optimizations added by this rewrite](../README.md#optimizations-added-by-this-rewrite).
 
+## Vanilla+ (0.5.6)
+
+Vanilla+ is the Vanilla profile with present at the flush on: the game's own
+three-image swap chain, the acquire, the loop bookkeeping and the fighter
+simulation are unchanged, but the acquired image is presented at the flush that
+carried that frame's last submission, one CPU update earlier than the game
+presents it. It is a flag, not a fifth profile, and **it is the default**: the
+INI key `vanilla_plus` (`true` unless set otherwise; see
+[Configuration](CONFIGURATION.md)) is on, `render_mode` defaults to `vanilla`
+and `auto_profile` to `true`, so the shipped build is Vanilla+, and Auto's
+Vanilla choice in menus, offline matches and Training is Vanilla+ too. The
+NetProfile row, the in-match strip's `Profile:` field and the native CSS
+banner's `You:` field read `Vanilla+` (manual), `Vanilla+*` (cleanup hold) and
+`Auto:Van+` (Auto); with the flag off they read `Vanilla`, `Vanilla*` and
+`Auto:Van`. **L+R+X** (neither ZL nor ZR held) toggles the flag live and saves
+it ([Controls](CONTROLS.md)); `early_present=false` still disables every early
+present, Vanilla+ included. The peer exchange still announces Vanilla, because
+the ring shape is unchanged.
+
+Why it should be safe, from the console API trace of 0.5.4 in Vanilla (Training
+at 60 fps; `switch-mtp-055/logs-firstboot-1018/deluxe/api-3207722793418.csv` in
+the evidence root): per loop iteration the trace shows PRESENT(idx), then
+ACQUIRE(idx+1), then about 6 ms, then the single FLUSH span (the frame's last
+submission, 4 µs after the late-flush marker), then about 9 ms of update, then
+the next PRESENT of the index acquired at the previous loop head. So the
+acquired image is already complete at the flush in the three-image shape too,
+and presenting it there saves that update's 9 ms or so, about 9–13 ms of
+display latency in the trace. The runtime presents `PENDING_INDEX`, the index
+the loop-head acquire returned, and the game's own present of that index is
+skipped through the existing early-present accounting (a mismatch is still
+event code 105). The 0.5.2 LessLag traces (`api-2214438549910.csv`) show the
+same index relationship for the early present.
+
+This is code reasoning plus traces of the previous build. **No console run of
+0.5.6 exists**; the owed checks (no tearing, stale frame or flicker in menus,
+the character select and Training; 60 fps on the Performance page;
+`early_presents` advancing in Vanilla with `early_present_mismatches=0`; the
+L+R+X round trip; a subjective latency comparison with the chord off against
+on) are in [validation](VALIDATION.md) ("0.5.6 — 2026-10-18: Vanilla+ (default), …").
+
 ## Dynamic resolution
 
 DRS is dynamic resolution scaling during supported expensive visual events.
@@ -87,6 +128,31 @@ still a trigger, the console-policy Eden test had it lower LessLag and
 LLDoubles from 1080p to 720p and LLUltra from 576p to 480p, then restore them,
 with Vanilla keeping DRS off; those runs verified the policy and the restore
 path, not Switch performance.
+
+### LLUltra resolution (0.5.3, 1080p in 0.5.6)
+
+Console LLUltra renders at 576p by default, the fork's choice. The INI key
+`ultra_resolution` (`576`, `720` or `1080`; [Configuration](CONFIGURATION.md))
+and the console-only Settings row **UltraRes** set that base level, applied on
+the next present. Since 0.5.6 the row walks 576p → 720p → 1080p → 576p with
+Right and backwards with Left (a value change needs ZR held;
+[Controls](CONTROLS.md)), and `1080` is the game's native level. Dynamic
+resolution still steps down from the chosen base (1080p → 720p, 720p → 576p,
+576p and below → 480p), so at 1080p the cut-in, move-table and adaptive
+triggers are the only drops. Emulator profiles and the other console profiles
+ignore the setting, and the peer exchange announces the configured level.
+
+Why the option exists: the 2026-10-15 console captures put LLUltra's GPU time
+at 3.4–5.3 ms at 576p inside the single vblank it shares with the CPU work, so
+576p is what let it fit; nothing had measured 720p or 1080p. The operator
+reports that with Horizon OC (2.6.0, installed 2026-10-16) **720p LLUltra held
+a locked 60 on the console** (operator statement, 2026-10-18, no capture), so
+the native level is offered for overclocked consoles. That is an uncaptured
+observation, not a result of this build: **1080p LLUltra at 60 under the
+overclock is the next cell to try**, with `CAPTURE_TIMING` in Training.
+Captures taken under an overclock (`# clock=oc`) do not enter the move ledger.
+The validation record holds no 720p or 1080p LLUltra capture, on a stock or an
+overclocked console; the stock result stays the 576p one above.
 
 ### Per-move and adaptive triggers (0.5.2 experiment)
 
@@ -125,7 +191,7 @@ off, compared on intervals over 20 ms and on the `Resolution` row.
 Manual selection works during play and remains saved when Auto is selected.
 The renderer reports **Active** only after its guarded transition has completed.
 Match cleanup returns to Vanilla on the inactive scene (the banner and the
-settings row read `Vanilla*`); the next match or an explicit selection applies
+settings row read `Vanilla*`, or `Vanilla+*` with Vanilla+ on); the next match or an explicit selection applies
 the saved manual mode again. Auto does not rewrite that saved mode.
 
 The INI-only `lesslag_core` and `doubles_core` modes are component experiments,
