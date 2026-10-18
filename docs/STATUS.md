@@ -1,6 +1,6 @@
 # Implementation and validation status
 
-Updated 2026-10-17 for 0.5.4 (`a63bc8c`). The rewrite is one Rust/Skyline
+Updated 2026-10-18 for 0.5.4 (`a63bc8c`). The rewrite is one Rust/Skyline
 NRO for Smash 13.0.5. Auto is enabled by default; it chooses Vanilla in menus,
 offline play and Training, LessLag for console online singles, LLUltra for
 emulator online singles, and LLDoubles for online matches with more than two
@@ -37,14 +37,14 @@ the operator's Switch, recorded with its build hash in [VALIDATION.md](VALIDATIO
 | Global Player Info | Small ImGui window alongside native banners; right in Training and online lobbies, left in ordinary matches; one text builder, one style decision and one row model since 0.5.4 | Placement user-confirmed on earlier builds; the 0.5.4 consolidation is host-tested only, console pending |
 | Window pages and rows | `hide_pages` with the Settings rows PluginsPage / OwnPages / PerfPage, `perf_view` with the PerfView row (graph or number), the Performance Clock row (0.5.3); ZR + Left/Right for edits while a fight is live (0.5.3) | Host-tested; `hide_pages`, PerfView and Clock are not yet booted. The ZR hold was exercised on the console on 2026-10-16 (variant edits in Training recorded in the FX log) |
 | Plugin menu API | `ssbu_online_deluxe_plugin_api_v1`; SDK and ABI crates 5.0.0 send descriptor version 4 (header and inline rows, 64 options); the host accepts versions 2–4; plugins may add their own page (0.5.0). [Plugins](PLUGINS.md) | Console 2026-10-16: FX Control's page registered with descriptor 4 on the first good 0.5.3 boot; bootstrap hook chaining fixed the boot crash of the first v4 deploy. The 0.5.4 host consolidation is host-tested and Eden-checked (demo plugin and FX page on the candidate), console pending |
-| Native CSS / arena | Fork CSS pane path, room-ID arena hooks, saved-style Streamer restoration | CSS edits, closed-window display and match return verified in Eden; the arena and background-matchmaking hook sites never fired in the coverage trace (open finding). [Details](NATIVE_DISPLAY.md) |
+| Native CSS / arena | Fork CSS pane path, room-ID arena hooks, saved-style Streamer restoration | CSS edits, closed-window display and match return verified in Eden; two-peer arena and Background matches ran in Eden on 2026-10-18, but the `deluxe_rewrite_arena` and `deluxe_rewrite_background_matchmaking` hook sites are mis-addressed and never fire (open finding, below). [Details](NATIVE_DISPLAY.md) |
 | Embedded / standalone ImGui | Export/ABI detection, one active backend, namespaced hooks | Load-order tests and the Oct 9 frame-ownership correction passed in Eden; limits in [ImGui dependencies](IMGUI_DEPENDENCY.md) |
 | Elite Legal Stages | Separate plugin, standalone ImGui retained | Both menus and settings persist; offline stages unrestricted as intended; NSO filtering untested |
 | Character FX | Moved to the separate [ssbu-fx-control](https://git.syntaxbyexample.com/intpa/ssbu-fx-control) plugin in 0.5.0; Deluxe has no effect hooks and exports the online context the plugin reads. FX Control 0.1.0 was released 2026-10-15; 0.2.1 (per-move numbered Reduced variants for the ten ledger fighters, SDK pinned to `a63bc8c`) was released 2026-10-18 and installed on the card | The plugin's own evidence is recorded in its repository. 0.2.1 registers with descriptor 4 against 0.5.4 in Eden; the console run is pending |
 | Match and CSS capture | `CAPTURE_MATCH` / `CAPTURE_CSS` boot flags stream timing and API CSVs; one `capture.rs` pair since 0.5.4; CSV headers carry build and clock (`# clock_mhz`, `# clock`, `# hoc`) | Shipped in 0.4.0 and used for every console ledger capture; the 0.5.4 consolidation keeps the CSV output byte-identical in host tests, console parity still owed. [Captures](CAPTURES.md) |
 | Clock probe | Horizon-OC file checks at boot, a 5 s add-latency MHz estimate, event code 111, status lines, Performance Clock row (0.5.3) | Host-tested only. The 1020 / 1785 MHz figures are a calculation from the A57 add latency, not a console measurement, until the first boot's event 111 is read |
 | ZL-gated native edits | Native pane D-pad edits need ZL held (0.4.1) | Host-verified; console results in VALIDATION.md |
-| Coverage build | Cargo feature `coverage`, raw profile writer, event code 109, manual snapshots from the Debug view (0.5.2) | Eden only. Final trace: 1,192 instrumented functions, 1,047 executed, 145 never executed; [DEBUGGING.md](DEBUGGING.md) |
+| Coverage build | Cargo feature `coverage`, raw profile writer, event code 109, manual snapshots from the Debug view (0.5.2) | Eden only. 2026-10-17 trace: 1,192 instrumented functions, 1,047 executed, 145 never executed. 2026-10-18 LAN Online run (two modded peers, NSO scenes only): 893 executed, 299 never executed, 12 functions new against the 10-17 report; [DEBUGGING.md](DEBUGGING.md) |
 | Removed in 0.5.4 | The opt-in peer observer, FPS++ (emulator-only diagnostic), the Gigaflare DRS trigger, five opt-in diagnostics, 21 helpers without a production caller; `peer_observer=` and `fps_boost=` are ignored legacy keys. Per-file reduction: `src/` 22,253 → 15,332 production lines (−31.1 %) | Host gates on every step; Eden latency, quota frame-rate, capture and plugin-page passes on the candidate. Console: the 0.5.4 first boot is the acceptance test. [FPS boost history](FPS_BOOST_INVESTIGATION.md) |
 
 ## Current: 0.5.4
@@ -81,11 +81,18 @@ Console results so far, newest first:
   stall (49.9 → 59.85 fps); the follow-ups (ZL-gated native edits, declined-
   rematch banner, Quickplay hold) are recorded in VALIDATION.md.
 
-Open findings carried into the next work: the arena and background-matchmaking
-hook sites never fired in the coverage trace; the modded-opponent exchange
-never ran because no two modded peers reached a match (the candidate builds
-abort at startup on a Windows Eden, and the two Linux Eden peers could not
-connect through their firewalls). The code-reduction campaign is paused at the
+Open finding carried into the next work: the arena and background-matchmaking
+hook sites (`deluxe_rewrite_arena` at `main+0x22d9fa0`,
+`deluxe_rewrite_background_matchmaking` at `main+0x22da090`) never fire. The
+2026-10-18 two-peer Eden run reached an arena lobby and a Background match
+without either hook running, and read-only disassembly of 13.0.5 `main` puts
+the first address in the middle of a scene-factory function and the second in
+a factory whose class those flows do not create. Both addresses came from the
+fork and have no instruction-word guard; the follow-up is to remove or
+re-derive them and guard every fork-derived address. The modded-opponent
+exchange is now covered (Eden, same run): it executes only with Stealth Off on
+both peers, because Stealth On suppresses the beacon, and a new online session
+is needed after the toggle. The code-reduction campaign is paused at the
 operator's order; the effects work (per-move Reduced variants measured on the
 console, then the resolution fallback) resumes next.
 

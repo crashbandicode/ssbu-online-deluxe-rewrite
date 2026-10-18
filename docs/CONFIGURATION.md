@@ -34,7 +34,7 @@ dispatcher_backoff=true
 | `render_mode` | `vanilla`, `lesslag`, `llultra`, `lldoubles` (also the restart-only experiments `lesslag_core`, `doubles_core`) | Saved manual profile; see [Rendering profiles](RENDERING.md) |
 | `auto_profile` | `true`, `false` | Let the scene choose the profile |
 | `platform` | `console`, `emulator` | Selects the Auto table and resolution policy |
-| `stealth` | `true`, `false` | Suppress the recognition beacon and settings payload |
+| `stealth` | `true`, `false` | Suppress the recognition beacon and settings payload. The peer settings exchange (the peer's announced settings on the Settings page's Peer row) needs Stealth Off on both peers, and the value is latched per connection, so start a new online session after changing it |
 | `streamer` | `true`, `false` | Hide remote identities and restore the original native styles |
 | `drs_moves` | `none`, `all`, or comma-separated move names (below) | 0.5.2 experiment: lower the internal resolution one level while a named move's status is active; see [Rendering profiles](RENDERING.md) |
 | `drs_adaptive` | `true`, `false` | 0.5.2 experiment: lower the resolution one level after a run of presents slower than the threshold, restore after a run within budget |

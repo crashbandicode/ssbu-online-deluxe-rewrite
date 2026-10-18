@@ -2635,6 +2635,78 @@ once the Yoga advertised its wired address) but every Quickplay ended in
 2618-0513/2618-0502 with ufw active on both Linux hosts and no sudo to
 change it. Both are open findings, not fixed in 0.5.4.
 
+### 0.5.4 — 2026-10-18: LAN-Online coverage campaign (Eden, two modded peers) — Stealth gates the peer exchange; the arena and Background hook sites are wrong
+
+Second NSO coverage campaign, on the Yoga, using Eden's new automatic "LAN
+Online" mode: two Eden instances on one PC, profiles `a` and `b` under
+`/home/intpa/eden-nso-autolan`, no companion service and no fixture. That
+removes the blockers of the 2026-10-17 trace (the companion needing distinct
+source IPs, ufw between the two Linux hosts). Coverage build
+`0.5.4-1c184ff8dd2a-1792323967`, package `artifacts/9a275b4005651f6d` (NRO
+SHA-256 `9a275b40…`). `src/` and the Cargo files at `1c184ff` are identical to
+release 0.5.4 (`a63bc8c`; `git diff a63bc8c 1c184ff -- src Cargo.toml
+Cargo.lock` is empty), so this is the shipped code plus the coverage writer.
+Both peers ran it, so every match below was between two modded peers. All of
+this is emulator evidence; no console run and no source change are part of this
+entry.
+
+Reached: three Quickplay 1v1 matches, one with a Yes rematch; a public arena
+played for two rounds (create, name entered through the keyboard applet, join,
+two rounds, Streamer On and Off, guest leave, host close); a Background
+Matchmaking match (peer `b`); a Co-op 2v2 that formed with four fighters and
+ended after about a minute with the game's "disconnected due to inactivity"
+(the driver's input cadence, not the network); and a final Quickplay match
+with Stealth Off on both peers. Frame rate read 59–60 in every match, an
+emulator reading and not a console figure.
+
+Result (`coverage-1018/report-final/`): 1,192 instrumented functions, 893
+executed, 299 never executed. The run held only NSO scenes (no offline,
+Training or character-select scenarios), so the 299 is not comparable to the
+145 never-executed of 2026-10-17. Against that report
+(`report-final/compare-1017.md`), 12 functions that had never run executed
+today, and 133 ran in neither campaign.
+
+**Finding 1 (a run condition, not a defect): the peer settings exchange needs
+Stealth Off.** The modded-opponent exchange (`peer_transport::settings_label`,
+`profile_bits`, `shown`, the `note_rtt` closure, `retire_only_confirmed`,
+`runtime::connection_transport::body_addr`) executed only in the Stealth-Off
+scenario: 46,356 `settings_label` calls on `a` and 52,788 on `b`, against 0 in
+every earlier scenario. `stealth` defaults to `true`, which suppresses the
+recognition beacon, so neither peer is confirmed as modded and `payload_write`
+skips. The session latches the saved value, so after Stealth is switched Off a
+new online session is needed. With it off, the Settings page showed the peer
+as `Ethernet, Auto, LessLag` with 12–13 ms ping (the interface is the
+emulator's reported one). This corrects the reading in the 0.5.4 entry above:
+the exchange had not run on 2026-10-17 because no two modded peers reached a
+match, and it did not run in this campaign's first scenarios because both
+peers were on the default Stealth On. The condition is now stated in
+CONFIGURATION.md.
+
+**Finding 2 (correctness): the arena and Background scene hooks are
+mis-addressed.** `deluxe_rewrite_arena` (`main+0x22d9fa0`) and
+`deluxe_rewrite_background_matchmaking` (`main+0x22da090`) in
+`src/runtime/online.rs` executed 0 times again, although the arena lobby was
+entered on both peers and a Background match was played. Read-only
+disassembly of the extracted 13.0.5 `main` shows that `0x22d9fa0` is
+`ldr x19, [sp, #0x10]` in the epilogue of a scene-factory function that
+starts at `0x22d9ef0` (the next on-grid factory entry is `0x22d9fc0`), that
+is, in the middle of a function. `0x22da090` is a real factory entry (it
+allocates 0xf0 bytes, vtable `0x50b7c70`), but its class is not created in
+the arena or Background flows that were exercised. Both addresses were copied
+from the fork (`reference/quickplay/src/net/mod.rs`) and are guarded only by
+`preflight`: there is no instruction-word match, unlike `STAGE_SETUP` and the
+arena panes. Consequence: arena and Background matches get no connection kind
+from these two hooks and are classified through `stage_setup` and
+`mark_match`. `note_arena_name` at 0 is the healthy result (it only logs an
+unexpected room-id pane name). Because the LAN Online harness removes the old
+blockers, this is a plugin finding and not a harness limitation. Not fixed
+here. Recommended follow-up: remove or re-derive both sites, and add
+instruction-word guards to every fork-derived address.
+
+Evidence outside Git: the operator's evidence root `coverage-1018/`
+(`FINDINGS.md`, `report-final/`, `report-final/compare-1017.md`); Eden
+profiles under `/home/intpa/eden-nso-autolan`.
+
 ### 0.5.3 — 2026-10-17: latency response trials repeated on candidate package `5357da2626a98fb9` (Eden) — frame reduction unchanged
 
 Operator: "redo the test to make sure that we still have the same frame

@@ -1,6 +1,6 @@
 # Resume and test plan
 
-Updated 2026-10-17 for Deluxe 0.5.4 (`a63bc8c`). Read [STATUS.md](STATUS.md)
+Updated 2026-10-18 for Deluxe 0.5.4 (`a63bc8c`). Read [STATUS.md](STATUS.md)
 for what is implemented and which evidence exists, the newest entries of
 [VALIDATION.md](VALIDATION.md) for the exact packages and gates, and `git log`.
 Live operational state (card deployments and their receipts, Eden profiles,
@@ -113,11 +113,20 @@ documentation of the delivered Eden build is under
 
 ## Open threads
 
-- Coverage trace (closed 2026-10-17 with 1,047 of 1,192 instrumented functions
-  executed): the hook sites behind `deluxe_rewrite_arena` and
-  `deluxe_rewrite_background_matchmaking` never fired, and the modded-opponent
-  exchange never ran because no two modded peers reached a match. Both are
-  open findings, not fixed in 0.5.4.
+- Coverage trace (two Eden campaigns; the second, 2026-10-18, used Eden's LAN
+  Online mode with two modded peers and executed 893 of 1,192 instrumented
+  functions in NSO scenes). The modded-opponent exchange is covered: it runs
+  only with Stealth Off on both peers and a new online session after the
+  toggle ([CONFIGURATION.md](CONFIGURATION.md)). The hook sites behind
+  `deluxe_rewrite_arena` (`main+0x22d9fa0`, in the middle of a scene-factory
+  function) and `deluxe_rewrite_background_matchmaking` (`main+0x22da090`, a
+  factory whose class the arena and Background flows do not create) never fire;
+  both addresses were copied from the fork and are guarded only by `preflight`.
+  Follow-up, not done in 0.5.4: remove or re-derive both sites and add
+  instruction-word guards to every fork-derived address. Meanwhile arena and
+  Background matches are classified through `stage_setup` and `mark_match`.
+  Evidence (Eden only) is in the 2026-10-18 entry of
+  [VALIDATION.md](VALIDATION.md).
 - Skyline version: the card runs a newer skyline-dev build than the one
   upstream Online Deluxe pins; the operator wants 0.5.x verified on both.
 - Reduced effects for tournament-legal stages (Battlefield first): plan in the
