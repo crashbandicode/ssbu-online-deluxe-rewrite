@@ -9,7 +9,7 @@ outside this repository, not here.
 
 ## Where things stand
 
-- Main is 0.5.6 (commit pending, release pending, NRO `<NRO-SHA>`): Vanilla+,
+- Main is 0.5.6 (commit `fb2012a`, Forgejo release v0.5.6, NRO `df757ce2f8130fddd0c2ba69e35c0f2dd7eae5505365ce969ec88134a2fadad9`): Vanilla+,
   the default mode. With the new INI key `vanilla_plus` on (the default), the
   Vanilla profile keeps the game's three-image swap chain but presents the
   acquired image at the flush that carried that frame's last submission, one

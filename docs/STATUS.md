@@ -51,7 +51,7 @@ the operator's Switch, recorded with its build hash in [VALIDATION.md](VALIDATIO
 
 ## Current: 0.5.6
 
-0.5.6 (2026-10-18; commit pending, release pending, NRO `<NRO-SHA>`) makes
+0.5.6 (2026-10-18; commit `fb2012a`, Forgejo release v0.5.6, NRO `df757ce2f8130fddd0c2ba69e35c0f2dd7eae5505365ce969ec88134a2fadad9`) makes
 **Vanilla+** the default mode, on the operator's decision of 2026-10-18
 ("ship it with the next version as vanilla+ and make it the default mode,
 togglable by holding L+R+X instead of a separate scrolled entry"). With the new
