@@ -10,7 +10,7 @@ delivered as **one NRO**: rendering profiles that cut input latency, a global
 Player Info window, the native character-select status line and network
 display. No overclocking.
 
-**Current version: 0.5.6** (2026-10-18; release pending). 0.5.6 makes
+**Current version: 0.5.6** (2026-10-18; Forgejo release v0.5.6, on the card since 2026-10-18 with its first boot pending). 0.5.6 makes
 **Vanilla+** the default mode: the Vanilla profile keeps the game's three-image
 swap chain but presents at the flush, as the other profiles do; **L+R+X**
 toggles it, and `vanilla_plus=false` in the INI turns it off (see Rendering

@@ -1,6 +1,6 @@
 # Implementation and validation status
 
-Updated 2026-10-18 for 0.5.6 (commit pending; 0.5.5 is `6a9e61a`, docs `2bb6974`, Forgejo release v0.5.5; 0.5.4 is `a63bc8c`). The rewrite is one Rust/Skyline
+Updated 2026-10-18 for 0.5.6 (commits `fb2012a` + docs `6180325`, Forgejo release v0.5.6; 0.5.5 is `6a9e61a`, docs `2bb6974`, Forgejo release v0.5.5; 0.5.4 is `a63bc8c`). The rewrite is one Rust/Skyline
 NRO for Smash 13.0.5. Auto is enabled by default; it chooses Vanilla (Vanilla+
 since 0.5.6) in menus,
 offline play and Training, LessLag for console online singles, LLUltra for
@@ -89,7 +89,7 @@ setting. The window-closed native pane edits (ZL + D-pad) are unchanged.
 in the evidence root.
 
 Host gates: 237 + 1 tests, clippy with warnings denied, the
-no-default-features build. **No console run yet**; the card still holds 0.5.5.
+no-default-features build. **No console run yet**; installed on the card on 2026-10-18 over 0.5.5 (rollback archive kept), first boot pending.
 The checks owed are the Vanilla+, 1080p LLUltra and ZR-hold rows of the test
 plan in [NEXT_SESSION.md](NEXT_SESSION.md); the full account is the 0.5.6
 entry of [VALIDATION.md](VALIDATION.md).

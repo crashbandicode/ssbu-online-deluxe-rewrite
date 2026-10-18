@@ -1,6 +1,6 @@
 # Resume and test plan
 
-Updated 2026-10-18 for Deluxe 0.5.6 (commit pending; 0.5.5 is `6a9e61a`, Forgejo release v0.5.5; 0.5.4 is `a63bc8c`). Read [STATUS.md](STATUS.md)
+Updated 2026-10-18 for Deluxe 0.5.6 (commits `fb2012a` + docs `6180325`, Forgejo release v0.5.6; 0.5.5 is `6a9e61a`, Forgejo release v0.5.5; 0.5.4 is `a63bc8c`). Read [STATUS.md](STATUS.md)
 for what is implemented and which evidence exists, the newest entries of
 [VALIDATION.md](VALIDATION.md) for the exact packages and gates, and `git log`.
 Live operational state (card deployments and their receipts, Eden profiles,
@@ -19,8 +19,8 @@ outside this repository, not here.
   live and saves it; no separate NetProfile entry. Host gates: 237 + 1 tests,
   clippy with warnings denied, the no-default-features build. Justified by code
   reasoning and the 0.5.4 console API traces in Vanilla, with **no console run
-  yet**; step 12 below is the check. The card still holds 0.5.5 until the
-  operator installs 0.5.6.
+  yet**; step 12 below is the check. The card holds 0.5.6 since
+  2026-10-18 (installed over 0.5.5, rollback archive kept); first boot pending.
 - 0.5.6 also carries two operator changes of 2026-10-18 21:16Z. **UltraRes
   1080p:** `ultra_resolution=1080` and the UltraRes row (576p → 720p → 1080p →
   576p) let console LLUltra render at the native 1080p, dynamic resolution

@@ -2926,8 +2926,9 @@ option and variant code is unchanged.
 
 **Host gates:** `cargo test` 237 + 1 pass, `cargo clippy --all-targets -- -D
 warnings` clean, `cargo build --no-default-features` ok, for the whole 0.5.6
-tree. Skyline package NRO SHA-256 `df757ce2f8130fddd0c2ba69e35c0f2dd7eae5505365ce969ec88134a2fadad9`. Not released and not on the
-card: the card still holds 0.5.5 until the operator installs 0.5.6.
+tree. Skyline package NRO SHA-256 `df757ce2f8130fddd0c2ba69e35c0f2dd7eae5505365ce969ec88134a2fadad9`. Released as Forgejo v0.5.6 (release
+395, NRO and manifest attached, download readback matched) and installed on the card the same
+evening over 0.5.5 (ackups/pre-056-df757ce2f8130fdd.nro keeps 0.5.5); first boot pending.
 
 **Eden smoke of the Vanilla+ build (emulator evidence, 21:02–21:17Z).** The
 Vanilla+ code of `ee5c6ce` (dirty-tree package `96a03725…`, before the 1080p
