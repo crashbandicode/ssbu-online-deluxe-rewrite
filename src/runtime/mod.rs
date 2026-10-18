@@ -10,6 +10,7 @@ mod css_capture;
 mod dispatcher_backoff;
 mod fighter_main;
 mod fighter_probe;
+mod frame_delay;
 mod hang_trace;
 mod hooks;
 mod imgui;
@@ -58,6 +59,7 @@ static BACKOFF_ENABLED: AtomicBool = AtomicBool::new(true);
 /// Startup-only research experiment. No Settings row; defaults off.
 static RESEARCH_PRESENT_INTERVAL_ZERO: AtomicBool = AtomicBool::new(false);
 /// Startup-only request to collect diagnostic manager/scene markers.
+static RESEARCH_FRAME_START_DELAY: AtomicBool = AtomicBool::new(false);
 static RESEARCH_INPUT_TRACE: AtomicBool = AtomicBool::new(false);
 static DRS_MOVES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 static DRS_ADAPTIVE: AtomicBool = AtomicBool::new(false);
@@ -107,6 +109,7 @@ pub(super) fn settings() -> Config {
         dispatcher_backoff: BACKOFF_ENABLED.load(Ordering::Acquire),
         research_present_interval_zero: RESEARCH_PRESENT_INTERVAL_ZERO.load(Ordering::Acquire),
         research_input_trace: RESEARCH_INPUT_TRACE.load(Ordering::Acquire),
+        research_frame_start_delay: RESEARCH_FRAME_START_DELAY.load(Ordering::Acquire),
     }
 }
 
@@ -126,6 +129,10 @@ pub(super) fn research_present_interval_zero_enabled() -> bool {
 }
 
 /// Startup-only request to collect manager/scene trace markers.
+pub(super) fn frame_delay_enabled() -> bool {
+    RESEARCH_FRAME_START_DELAY.load(Ordering::Acquire)
+}
+
 pub(super) fn input_trace_enabled() -> bool {
     RESEARCH_INPUT_TRACE.load(Ordering::Acquire)
 }
@@ -179,6 +186,7 @@ pub(super) fn publish(config: &Config) {
     BACKOFF_ENABLED.store(config.dispatcher_backoff, Ordering::Release);
     RESEARCH_PRESENT_INTERVAL_ZERO.store(config.research_present_interval_zero, Ordering::Release);
     RESEARCH_INPUT_TRACE.store(config.research_input_trace, Ordering::Release);
+    RESEARCH_FRAME_START_DELAY.store(config.research_frame_start_delay, Ordering::Release);
     DRS_MOVES.store(config.drs_moves.0, Ordering::Release);
     DRS_ADAPTIVE.store(config.drs_adaptive.enabled, Ordering::Release);
     DRS_THRESHOLD.store(

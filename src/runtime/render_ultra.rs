@@ -26,6 +26,10 @@ type FlushFn = unsafe extern "C" fn(*mut u8, u8);
 
 #[skyline::hook(offset = ENTRY, inline)]
 unsafe fn deluxe_rewrite_pre_present(ctx: &InlineCtx) {
+    super::frame_delay::present_entry(
+        ctx.registers[1].x() as usize,
+        ctx.registers[30].x() as usize,
+    );
     let decision = crate::render_policy::load_decision();
     let immediate = crate::render_policy::run_early(
         decision,

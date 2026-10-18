@@ -462,8 +462,14 @@ unsafe extern "C" fn window_acquire(window: Ptr, sync: Ptr, index: *mut i32) {
     let f: unsafe extern "C" fn(Ptr, Ptr, *mut i32) =
         std::mem::transmute(ACQUIRE.load(Ordering::Acquire));
     TEXTURE_SYNC.store(sync as usize, Ordering::Release);
+    let delay_begin = super::frame_delay::clock();
     let begin = super::api_trace::start();
     f(window, sync, index);
+    super::frame_delay::acquired(
+        delay_begin,
+        window as usize,
+        tracked_window(window) && !index.is_null() && *index >= 0,
+    );
     super::api_trace::end(begin, 2, if index.is_null() { -1 } else { *index }, -1);
     ACQUIRE_TICK.store(skyline::nn::os::GetSystemTick() as u64, Ordering::Relaxed);
     ACQUIRES.fetch_add(1, Ordering::Relaxed);
@@ -535,6 +541,7 @@ pub(super) fn write_status() {
             INTERVAL_ZERO_READBACK.load(Ordering::Acquire),
         );
         let _ = super::interval_observer::write_status(&mut file);
+        let _ = super::frame_delay::write_status(&mut file);
         let _ = writeln!(
             file,
             "research_input_trace_requested={}\nresearch_input_trace_state={}",

@@ -17,13 +17,14 @@ const INPUT_CACHE_OWNER: usize = 0x52c50f0;
 // Skyline keeps its inline-handler pool adjacent to main text. These offsets
 // are within the A64 B range, so each hook replaces one word; neighboring
 // before/after sites do not overlap.
-const SITES: [(usize, u32); 7] = [
+const SITES: [(usize, u32); 8] = [
     (HID_BEFORE, 0x97fc6c76),   // BL 0x3667c90 is displaced by the inline hook.
     (HID_AFTER, 0x94004959),    // BL 0x375f020.
     (SCENE_BEFORE, 0x97ff6117), // BL 0x3725030.
     (SCENE_AFTER, 0xf0010f68),  // ADRP.
     (0x135f874, 0xd63f0100),    // selected cache producer BLR x8
     (0x135f878, 0x36000880),    // producer return, TBZ w0
+    (0x38704c4, 0xa9447bfd),    // original present-function epilogue
     (0x3f7280, 0x93609ea8),     // immediately after mapped input LDR x21
 ];
 
@@ -48,6 +49,10 @@ pub(super) fn state() -> &'static str {
 
 #[skyline::hook(offset = HID_BEFORE, inline)]
 unsafe fn deluxe_rewrite_input_hid_before(_: &InlineCtx) {
+    super::frame_delay::before_hid();
+    if !super::input_trace_enabled() {
+        return;
+    }
     if api_trace::active() {
         let frame = FRAME.fetch_add(1, Ordering::Relaxed).wrapping_add(1);
         api_trace::mark_thread(KIND_HID_BEFORE, frame);
@@ -56,6 +61,9 @@ unsafe fn deluxe_rewrite_input_hid_before(_: &InlineCtx) {
 
 #[skyline::hook(offset = HID_AFTER, inline)]
 unsafe fn deluxe_rewrite_input_hid_after(_: &InlineCtx) {
+    if !super::input_trace_enabled() {
+        return;
+    }
     api_trace::mark_thread(KIND_HID_AFTER, FRAME.load(Ordering::Relaxed));
 }
 
@@ -95,6 +103,9 @@ unsafe fn input_cache_state() -> Option<(i32, i32)> {
 
 #[skyline::hook(offset = SCENE_BEFORE, inline)]
 unsafe fn deluxe_rewrite_input_scene_before(_: &InlineCtx) {
+    if !super::input_trace_enabled() {
+        return;
+    }
     let begin = api_trace::start();
     if begin == 0 {
         return;
@@ -118,6 +129,9 @@ unsafe fn deluxe_rewrite_input_scene_before(_: &InlineCtx) {
 
 #[skyline::hook(offset = SCENE_AFTER, inline)]
 unsafe fn deluxe_rewrite_input_scene_after(_: &InlineCtx) {
+    if !super::input_trace_enabled() {
+        return;
+    }
     api_trace::mark_thread(KIND_SCENE_AFTER, FRAME.load(Ordering::Relaxed));
 }
 
@@ -138,12 +152,16 @@ fn word_points(low_kind: u8, high_kind: u8, player: i32, value: u64) {
 
 #[skyline::hook(offset = 0x135f874, inline)]
 unsafe fn deluxe_rewrite_input_producer_before(_: &InlineCtx) {
+    super::frame_delay::note_update();
+    if !super::input_trace_enabled() {
+        return;
+    }
     api_trace::mark_thread(85, FRAME.load(Ordering::Relaxed));
 }
 
 #[skyline::hook(offset = 0x135f878, inline)]
 unsafe fn deluxe_rewrite_input_producer_after(ctx: &InlineCtx) {
-    if !api_trace::active() {
+    if !super::input_trace_enabled() || !api_trace::active() {
         return;
     }
     api_trace::mark_thread(86, FRAME.load(Ordering::Relaxed));
@@ -165,7 +183,7 @@ unsafe fn deluxe_rewrite_input_producer_after(ctx: &InlineCtx) {
 
 #[skyline::hook(offset = 0x3f7280, inline)]
 unsafe fn deluxe_rewrite_input_consumed(ctx: &InlineCtx) {
-    if !api_trace::active() {
+    if !super::input_trace_enabled() || !api_trace::active() {
         return;
     }
     let object = ctx.registers[19].x() as usize;
@@ -183,10 +201,15 @@ unsafe fn deluxe_rewrite_input_consumed(ctx: &InlineCtx) {
     word_points(90, 91, player, ctx.registers[21].x());
 }
 
-/// Install only when the startup-only INI request is true. All seven source
+#[skyline::hook(offset = 0x38704c4, inline)]
+unsafe fn deluxe_rewrite_present_completed(ctx: &InlineCtx) {
+    super::frame_delay::present_completed(ctx);
+}
+
+/// Install only when the startup-only INI request is true. All eight source
 /// words are checked before any of this module's hooks are installed.
 pub(super) fn install() {
-    if !super::input_trace_enabled() {
+    if !super::input_trace_enabled() && !super::frame_delay_enabled() {
         STATE.store(OFF, Ordering::Release);
         return;
     }
@@ -215,7 +238,8 @@ pub(super) fn install() {
         deluxe_rewrite_input_scene_after,
         deluxe_rewrite_input_producer_before,
         deluxe_rewrite_input_producer_after,
-        deluxe_rewrite_input_consumed
+        deluxe_rewrite_input_consumed,
+        deluxe_rewrite_present_completed
     );
 
     let text = unsafe { getRegionAddress(Region::Text) as usize };

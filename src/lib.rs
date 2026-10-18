@@ -8,6 +8,8 @@ mod connection_transport;
 pub mod coverage_profile;
 pub mod diagnostics;
 pub mod dispatcher_backoff;
+#[cfg(any(target_os = "switch", test))]
+mod frame_delay;
 pub mod hook_chain;
 pub mod hud_place;
 mod imgui_host;

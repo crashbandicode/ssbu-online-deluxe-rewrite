@@ -143,6 +143,8 @@ pub struct Config {
     /// Startup-only diagnostic request for manager/scene markers. It does not
     /// alter input samples or serve as a latency lever. Default off.
     pub research_input_trace: bool,
+    /// Bounded timing-only pre-HID experiment; startup-only and default off.
+    pub research_frame_start_delay: bool,
 }
 
 /// Pages left out of the window cycle (`hide_pages=none` or a comma list of
@@ -313,6 +315,7 @@ impl Default for Config {
             dispatcher_backoff: true,
             research_present_interval_zero: false,
             research_input_trace: false,
+            research_frame_start_delay: false,
         }
     }
 }
@@ -331,7 +334,7 @@ fn parse_count<T: TryFrom<u32>>(value: &str, max: u32, message: &str) -> Result<
 
 pub fn parse(text: &str) -> Result<Config, String> {
     let mut config = Config::default();
-    let mut seen = [false; 19];
+    let mut seen = [false; 20];
     for (index, raw) in text.lines().enumerate() {
         let line = raw.split('#').next().unwrap_or_default().trim();
         if line.is_empty() {
@@ -372,6 +375,7 @@ pub fn parse(text: &str) -> Result<Config, String> {
             "dispatcher_backoff" => 16,
             "research_present_interval_zero" => 17,
             "research_input_trace" => 18,
+            "research_frame_start_delay" => 19,
             _ => return Err(error(&format!("unknown key '{key}'"))),
         };
         if seen[slot] {
@@ -492,6 +496,13 @@ pub fn parse(text: &str) -> Result<Config, String> {
                     }
                 };
             }
+            "research_frame_start_delay" => {
+                config.research_frame_start_delay = match value {
+                    "true" => true,
+                    "false" => false,
+                    _ => return Err(error("research_frame_start_delay must be true or false")),
+                };
+            }
             "research_input_trace" => {
                 config.research_input_trace = match value {
                     "true" => true,
@@ -561,13 +572,14 @@ pub fn serialize(config: &Config) -> String {
     } else {
         "false"
     };
+    let research_frame_start_delay = config.research_frame_start_delay;
     let research_input_trace = if config.research_input_trace {
         "true"
     } else {
         "false"
     };
     format!(
-        "# Online Deluxe settings\nversion=1\ninput_buffer={input_buffer}\nrender_mode={}\nauto_profile={auto_profile}\nplatform={}\nstealth={stealth}\nstreamer={streamer}\ndrs_moves={}\ndrs_adaptive={drs_adaptive}\ndrs_adaptive_threshold_ms={}\ndrs_adaptive_trigger_frames={}\ndrs_adaptive_release_frames={}\nultra_resolution={}\nhide_pages={}\nperf_view={}\nearly_present={early_present}\ndispatcher_backoff={dispatcher_backoff}\nresearch_present_interval_zero={research_present_interval_zero}\nresearch_input_trace={research_input_trace}\n",
+        "# Online Deluxe settings\nversion=1\ninput_buffer={input_buffer}\nrender_mode={}\nauto_profile={auto_profile}\nplatform={}\nstealth={stealth}\nstreamer={streamer}\ndrs_moves={}\ndrs_adaptive={drs_adaptive}\ndrs_adaptive_threshold_ms={}\ndrs_adaptive_trigger_frames={}\ndrs_adaptive_release_frames={}\nultra_resolution={}\nhide_pages={}\nperf_view={}\nearly_present={early_present}\ndispatcher_backoff={dispatcher_backoff}\nresearch_present_interval_zero={research_present_interval_zero}\nresearch_input_trace={research_input_trace}\nresearch_frame_start_delay={research_frame_start_delay}\n",
         config.render_mode.key(),
         config.platform.key(),
         config.drs_moves.serialize(),
@@ -630,6 +642,7 @@ mod tests {
                 dispatcher_backoff: true,
                 research_present_interval_zero: false,
                 research_input_trace: false,
+                research_frame_start_delay: false,
             };
             assert_eq!(parse(&config.serialize()).unwrap(), config);
         }
@@ -711,6 +724,20 @@ mod tests {
         ] {
             assert!(parse(text).is_err(), "accepted {text:?}");
         }
+    }
+
+    #[test]
+    fn frame_start_delay_gate_round_trips_and_is_strict() {
+        assert!(!Config::default().research_frame_start_delay);
+        let c = parse("version=1\nresearch_frame_start_delay=true").unwrap();
+        assert!(c.research_frame_start_delay);
+        assert!(!c.research_input_trace && !c.research_present_interval_zero);
+        assert_eq!(parse(&serialize(&c)).unwrap(), c);
+        assert!(parse("version=1\nresearch_frame_start_delay=yes").is_err());
+        assert!(parse(
+            "version=1\nresearch_frame_start_delay=true\nresearch_frame_start_delay=false"
+        )
+        .is_err());
     }
 
     #[test]

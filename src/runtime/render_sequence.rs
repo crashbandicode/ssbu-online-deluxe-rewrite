@@ -40,6 +40,10 @@ pub(super) fn note_module_unload() {
     UNLOAD_EPOCH.fetch_add(1, Ordering::AcqRel);
 }
 
+pub(super) fn frame_active() -> bool {
+    FRAME_ACTIVE.load(Ordering::Acquire)
+}
+
 unsafe fn base() -> usize {
     getRegionAddress(Region::Text) as usize
 }

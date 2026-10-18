@@ -633,3 +633,6 @@ keep the historical measured 3/4 captured-frame reduction tied to its exact
 `123d47db` binary. Compatibility tests of later artifacts do not transfer that
 measurement automatically. [VALIDATION.md](VALIDATION.md) records each build and
 the remaining Switch tests.
+
+
+Research branch2026-10-18: added independently default-off `research_frame_start_delay`. Normal pre-HID sleep is capped4ms with3ms margin and32 clean-sample warmup; existing poll, simulation calls, clocks, credit arithmetic, buffer policy and waits remain intact. Read-only producer counting resets the budget after extra updates. Guarded original-present epilogue observer records the game's missed-VSync accounting. This is a research timing change, not verified console or online parity; a missed display deadline can change the game's later catch-up scheduling. No upstream fork behavior is silently replaced when the gate is off.
