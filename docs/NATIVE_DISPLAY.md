@@ -18,7 +18,8 @@ re-fires when only the live font drifted from the saved one.
 
 The native status line on the Training character select, Eden 2026-10-14 with
 0.4.2: `You: LessLag | Auto` is the selected profile and input buffer. The
-opponent line appears only with a connected station. The window itself and
+opponent line appears only with a connected station (since 0.5.5, one that has
+produced an RTT sample within 10 s). The window itself and
 Streamer on are shown in [Screenshots](SCREENSHOTS.md).
 
 ## Reused fork code paths

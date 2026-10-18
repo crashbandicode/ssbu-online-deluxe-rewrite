@@ -1,6 +1,6 @@
 # Implementation and validation status
 
-Updated 2026-10-18 for 0.5.4 (`a63bc8c`). The rewrite is one Rust/Skyline
+Updated 2026-10-18 for 0.5.5 (commit `6a9e61a`, unreleased; 0.5.4 is `a63bc8c`). The rewrite is one Rust/Skyline
 NRO for Smash 13.0.5. Auto is enabled by default; it chooses Vanilla in menus,
 offline play and Training, LessLag for console online singles, LLUltra for
 emulator online singles, and LLDoubles for online matches with more than two
@@ -31,7 +31,7 @@ the operator's Switch, recorded with its build hash in [VALIDATION.md](VALIDATIO
 | Cut-in scaler | Original cut-in function chained, seven eligible fighter-tick cooldown | Luigi close-range Up-B cut-in passed in Eden: LLDoubles 1080→720→1080; console captures show the cut-in zoom pushes (56–59 fps seconds under LLUltra, 2026-10-16) |
 | Online input buffer | Auto or 0–25, retained null guard and Quickplay path | User menu/persistence checks; actual network buffer changes need live online coverage |
 | Stealth | Default On, connection-latched beacon/payload suppression, reconnect notice | d9 fresh-On suppression/zero custom writes, pending-Off and saved Off after restart passed; earlier pending-On passed |
-| Peer display | Remote column only for a selected connected station; name, RTT/stability colors and announced settings; sixteen keyed RTT stations behind one lock (0.5.4) | 9e9 offline/connected/disconnected and two-remote-peer cycling passed in Eden; the 0.5.4 station table is host-tested only, console pending |
+| Peer display | Remote column only for a selected connected station that is also live: a measured RTT sample within 10 s (`pia_rtt::LIVE_MS`, a new binding gets a 10 s grace), applied to the opponent column, the strip's `Peer:` line, the Ping cell, the peer-dependent rows and the native CSS remote line; event 112 `PeerStale` when a bound station goes silent (0.5.5). Name, RTT/stability colors and announced settings; sixteen keyed RTT stations behind one lock (0.5.4) | 9e9 offline/connected/disconnected and two-remote-peer cycling passed in Eden; the 0.5.4 station table and the 0.5.5 live rule are host-tested only. The declined-rematch persistence the operator reported on the console could not be reproduced in Eden (a LAN-Online decline ends the session); console verification of 0.5.5 pending |
 | Ethernet / Wi-Fi | Local nifm type and peer announcement, otherwise Unknown | Never inferred from RTT; an emulator may report a virtual interface |
 | Streamer / peer cycle | Persistent display privacy, menu chord, identity-consistent peer selection; the window chord is L+R only since 0.5.3 (ZL+ZR does nothing) | d9 saved INI/privacy passed; 9e9 cycled two remote peers in a three-station lobby. The L+R-only chord is host-tested only, console pending |
 | Global Player Info | Small ImGui window alongside native banners; right in Training and online lobbies, left in ordinary matches; one text builder, one style decision and one row model since 0.5.4 | Placement user-confirmed on earlier builds; the 0.5.4 consolidation is host-tested only, console pending |
@@ -47,7 +47,27 @@ the operator's Switch, recorded with its build hash in [VALIDATION.md](VALIDATIO
 | Coverage build | Cargo feature `coverage`, raw profile writer, event code 109, manual snapshots from the Debug view (0.5.2) | Eden only. 2026-10-17 trace: 1,192 instrumented functions, 1,047 executed, 145 never executed. 2026-10-18 LAN Online run (two modded peers, NSO scenes only): 893 executed, 299 never executed, 12 functions new against the 10-17 report; [DEBUGGING.md](DEBUGGING.md) |
 | Removed in 0.5.4 | The opt-in peer observer, FPS++ (emulator-only diagnostic), the Gigaflare DRS trigger, five opt-in diagnostics, 21 helpers without a production caller; `peer_observer=` and `fps_boost=` are ignored legacy keys. Per-file reduction: `src/` 22,253 → 15,332 production lines (−31.1 %) | Host gates on every step; Eden latency, quota frame-rate, capture and plugin-page passes on the candidate. Console: the 0.5.4 first boot is the acceptance test. [FPS boost history](FPS_BOOST_INVESTIGATION.md) |
 
-## Current: 0.5.4
+## Current: 0.5.5
+
+0.5.5 (2026-10-18; commit and release pending, NRO `cf57cf80f25f2e837deabaf859489dc00653692c269fb4a6e2069a6a1b9bf8c2`) is a patch on
+0.5.4 for the operator's console report that a declined rematch leaves the
+opponent's player info on the screen of the side that chose Yes. Eden did not
+reproduce it: in LAN Online a decline ends the Pia session, which clears the
+peer, while the console's decline is assumed to be a graceful leave that
+Deluxe handles only through the station-left hook, whose protocol gate drops
+a leave with a foreign protocol id and which has no TTL behind it. The fix is
+the live-peer requirement: the opponent column, the strip's `Peer:` line, the
+Ping cell, the peer-dependent rows and the native CSS remote line need an RTT
+sample for the selected station within 10 s, and event code 112 records each
+time a bound station goes silent. Host gates: 235 + 1 tests, clippy with
+warnings denied, the no-default-features build; the Skyline release build was
+in progress at the time of writing. **Not verified on the console**, and not
+installed: the card still carries 0.5.4. The checks owed are step 11 of the
+test plan in [NEXT_SESSION.md](NEXT_SESSION.md); the full account is the
+0.5.5 entry of [VALIDATION.md](VALIDATION.md). The station-left hook is still
+uninstrumented, so which leave variant the console sends stays unknown.
+
+### 0.5.4 and the state carried over
 
 Releases v0.4.0 to v0.5.1 and v0.5.4 are on Forgejo; 0.5.2 and 0.5.3 were
 card builds without a release. 0.5.4 is the per-file reduction pass merged

@@ -1,6 +1,6 @@
 # Resume and test plan
 
-Updated 2026-10-18 for Deluxe 0.5.4 (`a63bc8c`). Read [STATUS.md](STATUS.md)
+Updated 2026-10-18 for Deluxe 0.5.5 (commit `6a9e61a`, unreleased; 0.5.4 is `a63bc8c`). Read [STATUS.md](STATUS.md)
 for what is implemented and which evidence exists, the newest entries of
 [VALIDATION.md](VALIDATION.md) for the exact packages and gates, and `git log`.
 Live operational state (card deployments and their receipts, Eden profiles,
@@ -9,8 +9,19 @@ outside this repository, not here.
 
 ## Where things stand
 
-- Deluxe `main` is 0.5.4 (`a63bc8c`): the per-file reduction pass merged from
-  `reduction-candidate`; Forgejo release v0.5.4 carries the NRO and manifest.
+- Main is 0.5.5 (commit `6a9e61a`, not yet released or on the card, NRO `cf57cf80f25f2e837deabaf859489dc00653692c269fb4a6e2069a6a1b9bf8c2`): the live-peer
+  requirement for the operator's declined-rematch report. The opponent column,
+  the strip's `Peer:` line, the Ping cell, the peer-dependent rows and the
+  native CSS remote line need an RTT sample for the selected station within
+  10 s, and event code 112 (`PeerStale`) records a bound station going silent.
+  Host gates: 235 + 1 tests, clippy with warnings denied, the
+  no-default-features build. Eden could not reproduce the report (a LAN-Online
+  decline ends the session), so only host tests stand behind the fix. The
+  card needs the 0.5.5 NRO for step 11 below; it is not installed (the card
+  carries 0.5.4).
+- The last released Deluxe is 0.5.4 (`a63bc8c`): the per-file reduction pass
+  merged from `reduction-candidate`; Forgejo release v0.5.4 carries the NRO
+  and manifest.
   Gates on that commit: clippy with warnings denied, the no-default-features
   build, 233 + 1 host tests, Skyline release build. The 0.5.4 NRO was installed
   on the operator's card on 2026-10-17 over DBI MTP and **has not booted yet**;
@@ -47,6 +58,7 @@ outside this repository, not here.
 | 8 | Training | LLUltra at 576p on the status line; graph live; a timing CSV with a `# clock` header written on exit | — |
 | 9 | Character select | 60 fps on the fps line for about 30 s | The present-at-flush path regressed |
 | 10 | Online, LessLag only | Switch NetProfile to LessLag, one Quickplay match, switch back | Operator rule: no LLUltra online match until LLUltra is stable offline |
+| 11 | Declined rematch (needs the 0.5.5 NRO, not installed yet; run rows 1 to 10 on 0.5.4 first or install 0.5.5 before the boot). Real NSO Quickplay: choose Rematch Yes while the opponent chooses No | The opponent column, the strip's `Peer:` line and the CSS remote line are gone within about 10 s, and `events.log` has a `112` row (a = station index, b = silence in ms). In a normal match, through the stage load, results and the return to the character select, the opponent column does not flicker and no `112` row appears | Column still shown after 10 s with no `112` row: the departed station is still being sampled; pull `events.log` and the Debug view's Ping detail. `112` rows in ordinary play: the console's loading gaps exceed 10 s; measure them before changing `LIVE_MS` |
 
 ### 2. Measurement cells (Training, LLUltra, window hidden while performing)
 
@@ -127,6 +139,15 @@ documentation of the delivered Eden build is under
   Background matches are classified through `stage_setup` and `mark_match`.
   Evidence (Eden only) is in the 2026-10-18 entry of
   [VALIDATION.md](VALIDATION.md).
+- Follow-ups for the declined-rematch work (0.5.5): instrument the station-left
+  hook (`.text+0x15f240`) with an event code per leave, accepted or dropped,
+  carrying the leave's protocol id, the RTT table's protocol and the station
+  index. One console match with a declined rematch then tells H1a (the hook
+  never fires for a decline) from H1b (it fires and the protocol gate drops the
+  leave); under H1b, accept a leave whose station matches the bound selection
+  and keep the foreign-protocol guard for unbound indices. The Eden agent (the
+  LAN-Online harness owner) is separately fixing the harness's decline path to
+  behave like NSO's, so that an Eden run can exercise it.
 - Skyline version: the card runs a newer skyline-dev build than the one
   upstream Online Deluxe pins; the operator wants 0.5.x verified on both.
 - Reduced effects for tournament-legal stages (Battlefield first): plan in the

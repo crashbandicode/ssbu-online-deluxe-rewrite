@@ -2707,6 +2707,114 @@ Evidence outside Git: the operator's evidence root `coverage-1018/`
 (`FINDINGS.md`, `report-final/`, `report-final/compare-1017.md`); Eden
 profiles under `/home/intpa/eden-nso-autolan`.
 
+### 0.5.5 — 2026-10-18: declined-rematch peer persistence; live-peer requirement
+
+Operator report from the console (real NSO): "when a person chooses not to
+rematch it still shows their player info on the screen if I chose to rematch
+and they didn't." That is, after Rematch Yes on one side and No on the other,
+the Yes side keeps showing the opponent. The Eden attempt below is emulator
+evidence; the console behaviour, both of the report and of the fix, is
+untested here, and no console log of the incident is part of this entry.
+
+**Eden attempt: not reproduced.** Seven trials on the Yoga, 16:50–19:10Z, two
+Eden instances in LAN Online mode (profiles `a` and `b` under
+`/home/intpa/eden-nso-autolan`), the 0.5.4 release NRO (`3c8e4f52…`, the card
+build) on both, a card-like INI (`render_mode=lesslag`, `platform=console`,
+Stealth at its default On), Quickplay Solo. Trial 7 ran the exact sequence: A
+pressed Yes at about 19:05:18Z, B pressed No at about 19:05:40Z. On A, within
+about 20 s, the game showed "A communication error has occurred." in the
+waiting room, `events.log` recorded `68 TransportCleanup` (a = 1) at the
+decline, the Player Info window held only the "You" column and the Debug view
+had no `Ping detail` row. The other exits tried (disconnect, inactivity, kick;
+trials 1, 3 and 4) also cleared the peer, and they also end the session
+(code 68). The harness cannot reach the console's path: in LAN Online a decline
+tears the Pia session down, and the session-end hook (`.text+0x15ec90`,
+`clear_session`) is the path that already clears the peer. The console's
+decline is assumed to be a graceful leave, where the opponent leaves and the
+session continues (the working assumption; no console log of it has been
+read). Until the harness's decline behaves that way, an Eden run of a declined
+rematch is not evidence for or against the fix below. The attempt also cost
+about two hours of harness trouble (a `lan_online_tls` mismatch between the
+profiles, an OOM kill under a 6.5 GiB cap, a 20-minute online ban after
+repeated self-destructs); those lessons are in the findings file.
+
+**Code reasoning (no run).** A graceful leave reaches Deluxe only through the
+station-left hook (`.text+0x15f240`, `deluxe_rewrite_observe_station_left`).
+`Table::station_left` (`src/pia_rtt.rs`) returns false when the leave's
+protocol id is zero or differs from the RTT table's protocol, a deliberate
+guard (test `foreign_and_unknown_protocol_leaves_do_not_retire_a_current_station`),
+and the hook drops the false case silently. Every retirement path starts from
+an accepted leave (`clear_station`): the 0.4.1 declined-rematch change
+(`peer_transport::retire_only_confirmed`) only handles an accepted leave for a
+station with no bound constant id. Nothing else retires a bound station: its
+name, `index_id` binding and confirmed peer carry no TTL and persist until the
+next session end or protocol adoption, and no scene change or window view
+clears them. So a leave that never reaches the hook (H1a) or reaches it with a
+protocol id the gate rejects (H1b) leaves the opponent displayed. Neither
+hypothesis is confirmed: no event code covered the leave hook, so the card's
+`events.log` cannot tell them apart.
+
+**Fix: the live-peer requirement, chosen by the operator.** Rather than guess
+which leave the console sends, the opponent display now requires the selected
+station to be live: a measured RTT publication for it within
+`pia_rtt::LIVE_MS` = 10 000 ms. A newly bound station gets a 10 s grace (the
+poll stamps the binding), so it shows at once, and each measured publication
+renews the stamp. The rule gates the opponent column of the Player Info
+window, the in-match strip's `Peer:` line and its IF, Ping, PeerNet and
+PeerProfile facts, the Ping cell, the peer-dependent Settings rows and the
+native CSS banner's remote line. Arena roster lines are unchanged (they read
+the per-station board). The station-left protocol gate is unchanged. New event
+code 112 `PeerStale` (a = station index, b = silence in ms), one row per
+live-to-silent transition, never per frame. Code: `src/pia_rtt.rs`
+(`LIVE_MS`, `SYSTEM_TICKS_PER_MS`, the pure `station_live(last_seen_tick,
+now_tick, ticks_per_ms)` with unit tests; a zero stamp, an unknown tick rate
+or a clock that went backwards read as not live), `src/runtime/pia_rtt.rs`
+(`track_liveness` in the 500 ms diagnostics poll, `station_live(selection)`),
+`src/peer_transport.rs` (`opponent_column_visible(streamer, selection,
+live)`), `src/runtime/ui.rs`, `src/runtime/native_banner.rs`,
+`src/diagnostics.rs`. Version 0.5.4 → 0.5.5 (Cargo.toml and Cargo.lock).
+
+**Host gates** (commit `6a9e61a`): `cargo test` 235 + 1 pass, `cargo clippy
+--all-targets -- -D warnings` clean, `cargo build --no-default-features` ok.
+Skyline package `artifacts/cf57cf80f25f2e83/` in the evidence root, build id
+`0.5.5-6a9e61afdac8-1792351203`, NRO SHA-256
+`cf57cf80f25f2e837deabaf859489dc00653692c269fb4a6e2069a6a1b9bf8c2` (1,437,696 B),
+ELF `d2c3605a…`. Nothing is installed on the card: the card still carries the
+0.5.4 NRO, which has booted once (operator, 2026-10-18 afternoon: menus,
+overlay and Training fine; FX cells not run).
+
+**Eden smoke of the 0.5.5 NRO (emulator evidence, 19:21–19:40Z).** Both
+LAN-Online profiles staged with `cf57cf80…`, same card-like INI. One full
+Quickplay Solo match with the window open on Settings: the strip read
+`Peer:intpater IF:Unknown Ping:12ms` at 1:13 and at 0:32 remaining, the
+Player Info window at the results screen and on the "Rematch?" prompt still
+showed the opponent column (`intpater / Unknown / 12ms`), and no `112` row was
+written during the match, the results or the prompt. So the live-peer rule
+does not hide a live opponent and the 10 s grace covers the match flow. The
+decline itself again ended the LAN session (B's prompt timed out, A's waiting
+room showed the communication error, `68 TransportCleanup`, only the "You"
+column afterwards), so the rule's hiding branch was not exercised in Eden; it
+is covered by the unit tests only until the console run. A first smoke
+attempt in the same boot was void (B dropped for inactivity 14 s into the
+match). Logs: `rematch-1018/smoke-055/profraw/al-{a6,b6}/final/`, screenshots
+`rematch-1018/screens/smoke2-*.png`.
+
+**Owed on the console** (none of it done): with the 0.5.5 NRO on the card,
+(1) choose Rematch Yes while the opponent declines on real NSO: the
+opponent's column, the strip's `Peer:` line and the CSS remote line must
+disappear within about 10 s, and `events.log` must show a `112` row for that
+station; (2) play a normal match through the stage load, results and return
+to the character select, and with the window open, to confirm the opponent
+column does not flicker (a `112` row in ordinary play would mean the 10 s is
+too short for the console's loading gaps); (3) the leave hook still has no
+event code, so H1a against H1b stays open until it is instrumented. A
+separate Eden task, owned by the LAN-Online harness agent, makes the LAN
+runtime's decline behave like NSO's so that Eden can exercise this path.
+
+Evidence outside Git: `~/.local/share/ssbu-mod-backups/plugin-api-tangent-20261012/rematch-1018/`
+(`FINDINGS.md`, `screens/`, `profraw/al-a5/final/` and `al-b5/final/`, the
+endgame and keepalive logs).
+
 ### 0.5.3 — 2026-10-17: latency response trials repeated on candidate package `5357da2626a98fb9` (Eden) — frame reduction unchanged
 
 Operator: "redo the test to make sure that we still have the same frame

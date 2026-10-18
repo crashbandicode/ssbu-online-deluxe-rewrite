@@ -60,6 +60,11 @@ It does not promise anonymity or detection avoidance by Nintendo.
 not change network traffic. Peer RTT uses the game's existing measurement and
 the fork's stability colors. The opponent column appears only for a connected,
 identified station; a connected peer with unknown RTT still appears with `---`.
+Since 0.5.5 the station must also be live, meaning a measured RTT sample within
+the last 10 s (a new binding gets a 10 s grace); a bound station that goes
+silent, as after an opponent declines a rematch, is hidden (strip line, Ping
+cell and CSS line included) and logs event code 112. Console behaviour of this
+rule is untested.
 Interface shows local Wi-Fi/Ethernet/Unknown and the selected peer's announced
 type, if available. An emulator's reported interface can be virtual; it does
 not identify the host computer's physical network connection.

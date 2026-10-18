@@ -10,20 +10,22 @@ delivered as **one NRO**: rendering profiles that cut input latency, a global
 Player Info window, the native character-select status line and network
 display. No overclocking.
 
-**Current release: 0.5.4** (2026-10-17). It is the per-file code-reduction
-pass (31 % fewer production lines, behaviour unchanged except where
-[validation](docs/VALIDATION.md) says otherwise) plus the 0.5.2 and 0.5.3
-changes described below: present at the flush for every rendering profile,
-per-move and adaptive resolution triggers, plugin API v4 with SDK 5.0.0, the
-page toggles, UltraRes, the clock probe, the L+R-only window chord and the
-early-present and backoff switches. It removes FPS++, the opt-in peer observer
-and the Gigaflare resolution trigger. 0.5.1 added the render-opts teardown
+**Current version: 0.5.5** (2026-10-18; Forgejo release pending, the latest
+release is 0.5.4). 0.5.5 hides the opponent once their station goes silent
+(see Network display below); its console check is owed. 0.5.4 (2026-10-17) is
+the per-file code-reduction pass (31 % fewer production lines, behaviour
+unchanged except where [validation](docs/VALIDATION.md) says otherwise) plus
+the 0.5.2 and 0.5.3 changes described below: present at the flush for every
+rendering profile, per-move and adaptive resolution triggers, plugin API v4
+with SDK 5.0.0, the page toggles, UltraRes, the clock probe, the L+R-only
+window chord and the early-present and backoff switches. 0.5.4 removes FPS++,
+the opt-in peer observer and the Gigaflare resolution trigger. 0.5.1 added the render-opts teardown
 guard (a crash at scene exits with render options active); 0.5.0 moved
 character FX out to the separate
 [FX Control](https://git.syntaxbyexample.com/intpa/ssbu-fx-control) plugin and
 lets plugins add their own pages to the window cycle. Every release on Forgejo
-carries the NRO and its manifest; the 0.5.4 console run is still pending
-([status](docs/STATUS.md)). Install notes: [docs/INSTALL.md](docs/INSTALL.md).
+carries the NRO and its manifest; the 0.5.4 and 0.5.5 console runs are still
+pending ([status](docs/STATUS.md)). Install notes: [docs/INSTALL.md](docs/INSTALL.md).
 
 > **Install only this NRO.** The rewrite replaces the original Online Deluxe
 > fork (`libssbu_online_deluxe*.nro`), SsbuSync (`libssbusync.nro`) and the
@@ -135,7 +137,10 @@ calibration in [Mimicking the Switch in Eden](docs/EMULATOR_METHOD.md).
   and the opponent's settings and RTT at the top. [Controls](docs/CONTROLS.md),
   [native display](docs/NATIVE_DISPLAY.md)
 - **Network display.** Opponent name, interface, settings and colored RTT from
-  the game's own measurement; Stealth and Streamer switches. [Controls](docs/CONTROLS.md)
+  the game's own measurement; Stealth and Streamer switches. Since 0.5.5 the
+  opponent shows only while their station is live, that is, an RTT sample
+  within the last 10 s, so a peer who declined a rematch drops off the
+  screen (console check pending). [Controls](docs/CONTROLS.md)
 - **Character FX moved out.** Since 0.5.0 the On, Off and Reduced character
   effects are the separate, optional plugin
   [`intpa/ssbu-fx-control`](https://git.syntaxbyexample.com/intpa/ssbu-fx-control)
