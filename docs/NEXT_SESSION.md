@@ -15,18 +15,18 @@ outside this repository, not here.
   build, 233 + 1 host tests, Skyline release build. The 0.5.4 NRO was installed
   on the operator's card on 2026-10-17 over DBI MTP and **has not booted yet**;
   the card run is the acceptance test.
-- The card stacks other never-booted changes under it: FX Control 0.2.0
-  (`0cffbac`: page limited to the ten ledger fighters, EFF siblings removed),
-  the 0.5.3 work added since the last good boot (`48cce4f2`, 2026-10-16):
+- The card stacks other never-booted changes under it: FX Control 0.2.1
+  (`0c0d7e6`: page limited to the ten ledger fighters, EFF siblings removed,
+  SDK pinned to `a63bc8c`), the gamepad overlay 0.1.2, the 0.5.3 work added since the last good boot (`48cce4f2`, 2026-10-16):
   `hide_pages` and the page rows, `perf_view`, `ultra_resolution`, the ZR hold
   for live edits, the clock probe and the L+R-only window chord; and the CFW
   update (Atmosphère 1.12.1, Horizon OC 2.6.0, hekate 6.5.4 kept). The last
   pair known to boot and play is Deluxe `48cce4f2` + FX Control `f3d52a38`.
-- FX Control `main` (0.2.0, unreleased) still pins the plugin SDK to the
-  reduction-candidate revision. It is re-pinned to `a63bc8c`, gated, checked
-  on an Eden plugin page and released as 0.2.1 before it goes to the card. The
-  card's FX Control registers with descriptor version 4, which the 0.5.4 host
-  accepts (ABI 2 to 4), so it keeps working until then.
+- FX Control 0.2.1 (`0c0d7e6`, Forgejo release v0.2.1) pins the plugin SDK to
+  `a63bc8c`. Gated on 2026-10-18, checked in Eden next to 0.5.4 (registration
+  with descriptor version 4, `99 0x0 0x4` in its install log) and installed on
+  the card the same day over DBI MTP, together with the gamepad overlay 0.1.2
+  (`0d25b0d`, log strings only). Neither has booted on the console yet.
 - The code-reduction campaign is paused by the operator. The effects work
   (numbered per-move Reduced variants, measured on the console) resumes where
   it stopped on 2026-10-16.
@@ -80,10 +80,10 @@ Leftover gaps after the Reduced passes go to the Deluxe resolution fallback
 
 | # | Work | Pass |
 | --- | --- | --- |
-| 1 | FX Control re-pin to `a63bc8c`: cargo test, clippy with warnings denied, no-default-features, the eff-variant host tests, Skyline clippy and release build | All clean |
-| 2 | Eden plugin-page check: the SDK demo plugin and the FX page on one isolated profile | Page registers with descriptor 4, ten rows, value rows change in place |
+| 1 | FX Control re-pin to `a63bc8c`: cargo test, clippy with warnings denied, no-default-features, Skyline clippy and release build | Done 2026-10-18 on `0c0d7e6`, all clean |
+| 2 | Eden check of FX Control 0.2.1 next to Deluxe 0.5.4 on the isolated profile | Done 2026-10-18: registers with descriptor 4; the page itself was not opened in that run |
 | 3 | `tools/analyze_timing.py` and `tools/frame_windows.py` read the `# clock` header and refuse overclocked captures for the ledger | Runs on the pulled cells |
-| 4 | FX Control 0.2.1 release (NRO + manifest) and card deploy | After step 1 passes; push only with the operator's permission |
+| 4 | FX Control 0.2.1 release (NRO + manifest) and card deploy | Done 2026-10-18: Forgejo release v0.2.1; 0.2.1 and the overlay 0.1.2 installed over DBI MTP with rollback archives |
 
 ## Rules that still apply
 
