@@ -636,3 +636,12 @@ the remaining Switch tests.
 
 
 Research branch2026-10-18: added independently default-off `research_frame_start_delay`. Normal pre-HID sleep is capped4ms with3ms margin and32 clean-sample warmup; existing poll, simulation calls, clocks, credit arithmetic, buffer policy and waits remain intact. Read-only producer counting resets the budget after extra updates. Guarded original-present epilogue observer records the game's missed-VSync accounting. This is a research timing change, not verified console or online parity; a missed display deadline can change the game's later catch-up scheduling. No upstream fork behavior is silently replaced when the gate is off.
+
+Research validation finalized 2026-10-18: baseline 0.5.4 and the corrected
+pre-HID build `3fea54be82ab` were compared in three declared response trials per
+mode and phase. Eligible normal counts stayed 6/3/2 for Vanilla/LessLag/LLUltra
+(**emulator evidence**). Neither LessLag 2 nor LLUltra 1 was reached. The raw
+interval 0 request remained effective interval 1. The guarded observer had zero
+invalid outputs in the final API runs; extra-VSync events remain game accounting,
+not a physical deadline or simulation-equivalence proof. No online or console
+parity certification was added. See [measurement details](LATENCY_METHODOLOGY.md#054-research-pre-hid-delay-2026-10-18).

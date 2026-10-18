@@ -347,6 +347,82 @@ its profile was used instead of the original, and the 6 GiB cgroup cap (8 GiB
 before) reached its limit repeatedly (`memory.events max`) without an OOM kill
 or a visible frame-rate drop.
 
+## 0.5.4 research: pre-HID delay, 2026-10-18
+
+All numbers in this section are **emulator evidence**, not Switch input-to-photon
+measurements. Research branch `research/input-lag-1018` reproduced baseline
+`1c184ff8dd2a` before testing the default-off interval request and adaptive delay.
+The measured delay build is `0.5.4-3fea54be82ab-1792335022`; later documentation
+commits do not change that measured binary.
+
+The delay runs immediately before the original normal HID call at
+`main+0x374cab8`, with a requested 4ms cap, 3ms margin and 32 clean-sample
+warm-up. The word-guarded observer at `main+0x38704c4` reads the original
+present/acquire helper's final extra-VSync output. It observes game accounting,
+not physical scanout deadlines or causation.
+
+Three trials per mode and phase were predeclared; none were replaced.
+Each cell below is trial 1; 2; 3 as R/M/D. X(...) retains observed image-index
+values but rejects exact counts because the critical present identities have a
+gap. Baseline has 13/18 eligible trials; delay has 16/18.
+
+| Mode | Phase | Baseline trials 1; 2; 3 (R/M/D) | Delay-enabled trials 1; 2; 3 (R/M/D) |
+|---|---|---|---|
+| Vanilla | normal | 6/3/3; 6/3/3; 6/3/3 | 6/3/3; 6/3/3; 6/3/3 |
+| Vanilla | delayed | 7/4/3; 6/4/2; 6/4/2 | 6/4/2; 6/4/2; 7/4/3 |
+| LessLag | normal | 3/2/1; 3/2/1; 3/2/1 | 3/2/1; 3/2/1; 3/2/1 |
+| LessLag | delayed | X(3/2/1); 3/3/0; X(3/3/0) | 3/3/0; 3/3/0; 3/3/0 |
+| LLUltra | normal | X(2/2/0); X(2/2/0); 2/2/0 | X(2/2/0); 2/2/0; 2/2/0 |
+| LLUltra | delayed | X(3/3/0); 2/2/0; 3/2/1 | 2/2/0; X(2/2/0); 3/2/1 |
+
+The normal eligible results remain Vanilla 6, LessLag 3 and LLUltra 2: no new
+four/five-frame saving was demonstrated. Raw interval 0 requests left the
+effective SDK queue interval at 1. Training's mode 0 publication and first fighter
+consumption occurred in the same update; no removable whole-frame FIFO was found.
+
+| Mode | Phase | Applied n | Actual sleep min/p50/p95/p99/max ms | Game extra VSync events | Extras paired with sleep |
+|---|---|---|---|---|---|
+| Vanilla | normal | 1551 | 3.853 / 4.079 / 4.116 / 4.127 / 4.193 | 6 | 4 |
+| Vanilla | delayed | 1461 | 4.008 / 4.084 / 4.119 / 4.131 / 4.647 | 6 | 6 |
+| LessLag | normal | 1509 | 3.386 / 4.082 / 4.116 / 4.129 / 4.171 | 7 | 4 |
+| LessLag | delayed | 1684 | 4.010 / 4.083 / 4.115 / 4.123 / 4.219 | 5 | 1 |
+| LLUltra | normal | 1670 | 0.640 / 4.069 / 4.112 / 4.126 / 5.739 | 2 | 2 |
+| LLUltra | delayed | 1705 | 1.272 / 4.072 / 4.115 / 4.126 / 5.198 | 0 | 0 |
+
+Each event table row covers one complete 30-second API export (zero skipped
+events, 1800 present observations). The four trial windows without sleep were
+Vanilla normal trial 3, Vanilla delayed trials 1 and 3 and LLUltra delayed trial 1; guards and warm-up can
+suppress delay despite the setting. They remain in the declared matrix.
+Actual sleep can exceed the request due to host scheduling; the longest observed
+was 5.739ms. Baseline has no exact extra-VSync observer, so its event counts are
+not available. These events do not establish that sleep caused a missed scanout.
+
+Acquire-return spacing, p50/p95/p99/max milliseconds (emulator evidence):
+
+| Mode | Phase | Baseline | Delay-enabled |
+|---|---|---|---|
+| Vanilla | normal | 16.666 / 16.853 / 17.173 / 17.931 | 16.668 / 16.830 / 16.967 / 17.729 |
+| Vanilla | delayed | 16.666 / 16.846 / 17.050 / 20.281 | 16.668 / 16.814 / 16.892 / 17.463 |
+| LessLag | normal | 16.670 / 16.904 / 17.417 / 18.299 | 16.664 / 16.837 / 16.965 / 17.890 |
+| LessLag | delayed | 16.666 / 16.869 / 17.290 / 19.502 | 16.665 / 16.815 / 16.873 / 17.812 |
+| LLUltra | normal | 16.668 / 16.846 / 17.674 / 32.933 | 16.662 / 16.828 / 16.900 / 18.093 |
+| LLUltra | delayed | 16.666 / 16.839 / 17.111 / 17.858 | 16.663 / 16.815 / 16.882 / 17.574 |
+
+These are chronological runs, not a randomized causal performance test.
+The integer proxy can hide sub-frame improvements or change by one at a phase
+boundary. It cannot establish a uniform physical frame saved. Immediate has no
+deliberate OneBehind slot; LessLag retains that slot and its scheduling
+tolerance. No absolute console button-to-photon floor or online parity is proved.
+
+Host validation of the measured code: clippy all-targets with warnings denied,
+no-default-features build, 239 unit plus 1 integration tests, and actual Skyline
+package. Experiments remain separately default-off. The source package, optimized
+symbols, NRO hashes, full timeline, lever ledger, raw captures and explicit
+operator answer remain outside Git under the operator evidence root
+`plugin-api-tangent-20261012/input-lag-1018/`: `REPORT.md`, `NOTES.md`,
+`baseline-results.json`, `framedelay-v2-results.json`,
+`frame-delay-run-metrics.json` and `artifacts/frame-delay-v2/`.
+
 ## Confirming on Switch
 
 Repeat the controlled A/B comparison on the console using a high-speed camera
