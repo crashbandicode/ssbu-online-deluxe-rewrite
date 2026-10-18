@@ -23,7 +23,7 @@ outside this repository, not here.
   presents in menus, CSS and Training (see VALIDATION); the visual and
   latency check of step 12 is still the operator's call. The card holds 0.5.6
   since 2026-10-18 (installed over 0.5.5, rollback archive kept).
-- 0.5.7 (commit pending, NRO `<NRO-SHA>`): the Streamer chord is L+R + **ZR** +
+- 0.5.7 (commit pending, NRO `27cadcd719d549da5c0fc27cce9c7e752c6dcd17c20cebba443405ae039876c8`): the Streamer chord is L+R + **ZR** +
   Y only; the ZL variant does nothing. The evening's online session ended with
   `streamer=true` saved on the card without the operator meaning it, which is
   why the opponent's connection did not show; the card config was set back to

@@ -51,7 +51,7 @@ the operator's Switch, recorded with its build hash in [VALIDATION.md](VALIDATIO
 
 ## Current: 0.5.7
 
-0.5.7 (2026-10-18; commit pending, NRO `<NRO-SHA>`) puts the Streamer chord
+0.5.7 (2026-10-18; commit pending, NRO `27cadcd719d549da5c0fc27cce9c7e752c6dcd17c20cebba443405ae039876c8`) puts the Streamer chord
 behind ZR: L+R + **ZR** + Y toggles Streamer, the ZL variant does nothing.
 Reason: after the evening's 0.5.6 online session the card's saved config had
 `streamer=true` and the operator had never meant to hide the opponent; the
