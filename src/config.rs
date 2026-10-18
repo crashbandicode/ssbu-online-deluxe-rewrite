@@ -115,8 +115,9 @@ pub struct Config {
     /// presents within budget. Default off, 17.5 ms, 6 and 90.
     pub drs_adaptive: AdaptiveSettings,
     /// 0.5.3 experiment: the internal resolution console LLUltra renders at
-    /// (`576`, the fork's choice and the default, or `720`). Dynamic
-    /// resolution still steps down from it. Emulator profiles ignore it.
+    /// (`576`, the fork's choice and the default, `720`, or since 0.5.6 the
+    /// native `1080`). Dynamic resolution still steps down from it. Emulator
+    /// profiles ignore it.
     pub ultra_resolution: UltraResolution,
     /// 0.5.3: window pages the chord cycle skips (`hide_pages`), so a
     /// measurement session reaches a plugin's own page in one tap. Default
@@ -249,9 +250,13 @@ pub const fn page_label(hidden: bool) -> &'static str {
     }
 }
 
-/// Console LLUltra base resolution (`ultra_resolution`).
+/// Console LLUltra base resolution (`ultra_resolution`). `1080` (0.5.6) is
+/// the game's native level: LLUltra then renders full size and only the
+/// dynamic-resolution triggers step it down. The operator's console with
+/// Horizon OC held 60 at 720p (2026-10-18), hence the native option.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum UltraResolution {
+    P1080,
     P720,
     #[default]
     P576,
@@ -260,6 +265,7 @@ pub enum UltraResolution {
 impl UltraResolution {
     pub const fn key(self) -> &'static str {
         match self {
+            Self::P1080 => "1080",
             Self::P720 => "720",
             Self::P576 => "576",
         }
@@ -267,6 +273,7 @@ impl UltraResolution {
 
     pub const fn level(self) -> crate::resolution::Level {
         match self {
+            Self::P1080 => crate::resolution::Level::P1080,
             Self::P720 => crate::resolution::Level::P720,
             Self::P576 => crate::resolution::Level::P576,
         }
@@ -274,6 +281,7 @@ impl UltraResolution {
 
     fn parse(value: &str) -> Option<Self> {
         Some(match value {
+            "1080" => Self::P1080,
             "720" => Self::P720,
             "576" => Self::P576,
             _ => return None,
@@ -283,16 +291,43 @@ impl UltraResolution {
     /// Settings-row label.
     pub const fn label(self) -> &'static str {
         match self {
+            Self::P1080 => "1080p",
             Self::P720 => "720p",
             Self::P576 => "576p",
         }
     }
 
-    /// Left or Right swaps 576p and 720p.
-    pub const fn cycle(self, _direction: i8) -> Self {
+    /// Right walks 576p → 720p → 1080p → 576p; Left walks it backwards.
+    pub const fn cycle(self, direction: i8) -> Self {
+        if direction < 0 {
+            match self {
+                Self::P576 => Self::P1080,
+                Self::P720 => Self::P576,
+                Self::P1080 => Self::P720,
+            }
+        } else {
+            match self {
+                Self::P576 => Self::P720,
+                Self::P720 => Self::P1080,
+                Self::P1080 => Self::P576,
+            }
+        }
+    }
+
+    /// Stable byte for the runtime's atomic (0 = 576, 1 = 720, 2 = 1080).
+    pub const fn to_byte(self) -> u8 {
         match self {
-            Self::P576 => Self::P720,
-            Self::P720 => Self::P576,
+            Self::P576 => 0,
+            Self::P720 => 1,
+            Self::P1080 => 2,
+        }
+    }
+
+    pub const fn from_byte(value: u8) -> Self {
+        match value {
+            1 => Self::P720,
+            2 => Self::P1080,
+            _ => Self::P576,
         }
     }
 }
@@ -456,7 +491,7 @@ pub fn parse(text: &str) -> Result<Config, String> {
             }
             "ultra_resolution" => {
                 config.ultra_resolution = UltraResolution::parse(value)
-                    .ok_or_else(|| error("ultra_resolution must be 576 or 720"))?;
+                    .ok_or_else(|| error("ultra_resolution must be 576, 720 or 1080"))?;
             }
             "hide_pages" => {
                 config.hide_pages = HiddenPages::parse(value).ok_or_else(|| {
@@ -743,6 +778,7 @@ mod tests {
         );
         assert!(defaults.serialize().contains("ultra_resolution=576\n"));
         for (value, expected, level) in [
+            ("1080", UltraResolution::P1080, crate::resolution::Level::P1080),
             ("720", UltraResolution::P720, crate::resolution::Level::P720),
             ("576", UltraResolution::P576, crate::resolution::Level::P576),
         ] {
@@ -750,14 +786,19 @@ mod tests {
             assert_eq!(config.ultra_resolution, expected);
             assert_eq!(config.ultra_resolution.level(), level);
             assert_eq!(parse(&config.serialize()).unwrap(), config);
+            assert_eq!(UltraResolution::from_byte(expected.to_byte()), expected);
         }
-        // The Settings row swaps the two values in either direction.
+        // The Settings row walks 576p → 720p → 1080p and back (0.5.6).
         assert_eq!(UltraResolution::P576.cycle(1), UltraResolution::P720);
-        assert_eq!(UltraResolution::P720.cycle(1), UltraResolution::P576);
-        assert_eq!(UltraResolution::P576.cycle(-1), UltraResolution::P720);
+        assert_eq!(UltraResolution::P720.cycle(1), UltraResolution::P1080);
+        assert_eq!(UltraResolution::P1080.cycle(1), UltraResolution::P576);
+        assert_eq!(UltraResolution::P576.cycle(-1), UltraResolution::P1080);
+        assert_eq!(UltraResolution::P1080.cycle(-1), UltraResolution::P720);
+        assert_eq!(UltraResolution::P720.cycle(-1), UltraResolution::P576);
         assert_eq!(UltraResolution::P576.label(), "576p");
         assert_eq!(UltraResolution::P720.label(), "720p");
-        for bad in ["1080", "900", "480", "720p", "", "true"] {
+        assert_eq!(UltraResolution::P1080.label(), "1080p");
+        for bad in ["900", "480", "720p", "1080p", "", "true"] {
             assert!(
                 parse(&format!("version=1\nultra_resolution={bad}")).is_err(),
                 "{bad:?} accepted"

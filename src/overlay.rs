@@ -126,11 +126,12 @@ pub struct Overlay {
     /// Which own page is shown while `view == View::PluginPage`
     /// (index into `plugin_api::page_plugins`).
     pub page: usize,
-    /// While a fight is live (Training, Singles, Doubles) the runtime sets
-    /// this so a Left/Right edit in the open window needs ZR held: the D-pad
-    /// also taunts, and a plain press must not change a setting mid-game.
-    /// ZR, not ZL, because ZL + D-pad Left/Right in Training swaps which
-    /// fighter the player controls. Up/Down still move the selection.
+    /// A Left/Right edit in the open window needs ZR held: the D-pad also
+    /// taunts, moves menus and the character-select hand, and a plain press
+    /// must not change a setting. The runtime sets this in every scene since
+    /// 0.5.6 (operator rule; until 0.5.5 only while a fight was live). ZR,
+    /// not ZL, because ZL + D-pad Left/Right in Training swaps which fighter
+    /// the player controls. Up/Down still move the selection.
     pub edit_hold: bool,
     previous_buttons: u64,
     latch: CommandLatch,

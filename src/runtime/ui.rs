@@ -614,11 +614,12 @@ unsafe fn poll(ui: &mut UiState, sample: input::Sample) -> Frame {
         fresh: surface_gen != 0 && surface_gen != ui.surface_gen,
     };
     ui.surface_gen = surface_gen;
-    // Training and matches: a Left/Right edit in the window needs ZR held so
-    // a taunt or a stray press cannot change a setting mid-game (ZL + D-pad
-    // swaps the controlled fighter in Training).
-    ui.controls.edit_hold =
-        scene.ready && scene.status != crate::auto_policy::SceneStatus::Inactive;
+    // Every scene (0.5.6, operator rule): a Left/Right edit in the open window
+    // needs ZR held, in menus as much as in Training and matches, so a taunt,
+    // a menu D-pad press or a stray edge cannot change a setting (ZL + D-pad
+    // swaps the controlled fighter in Training). Up/Down still move the
+    // selection. Until 0.5.5 the hold applied only while a fight was live.
+    ui.controls.edit_hold = true;
     if ui.controls.poll_native(buttons, &mut config, native) {
         match crate::menu::profile_action(&saved, &config) {
             ProfileAction::EnableAuto => {

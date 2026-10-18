@@ -43,8 +43,9 @@ static PLATFORM: AtomicU8 = AtomicU8::new(0);
 static INPUT_BUFFER: AtomicI8 = AtomicI8::new(-1);
 static STEALTH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 static STREAMER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-/// `ultra_resolution` (0.5.3): true = 720p, false = 576p.
-static ULTRA_720: AtomicBool = AtomicBool::new(false);
+/// `ultra_resolution` (0.5.3): `UltraResolution::to_byte` (0 = 576p, 1 = 720p,
+/// 2 = 1080p since 0.5.6).
+static ULTRA_RES: AtomicU8 = AtomicU8::new(0);
 /// `hide_pages` (0.5.3) as bits: 1 plugins, 2 own pages, 4 performance.
 static HIDE_PAGES: AtomicU8 = AtomicU8::new(0);
 /// `perf_view` (0.5.3): true = number, false = graph.
@@ -82,11 +83,7 @@ pub(super) fn settings() -> Config {
         streamer: STREAMER.load(Ordering::Acquire),
         drs_moves: drs_moves(),
         drs_adaptive: adaptive_settings(),
-        ultra_resolution: if ULTRA_720.load(Ordering::Acquire) {
-            crate::config::UltraResolution::P720
-        } else {
-            crate::config::UltraResolution::P576
-        },
+        ultra_resolution: crate::config::UltraResolution::from_byte(ULTRA_RES.load(Ordering::Acquire)),
         hide_pages: {
             let bits = HIDE_PAGES.load(Ordering::Acquire);
             crate::config::HiddenPages {
@@ -153,10 +150,7 @@ pub(super) fn publish(config: &Config) {
     PLATFORM.store(config.platform as u8, Ordering::Release);
     STEALTH.store(config.stealth, Ordering::Release);
     STREAMER.store(config.streamer, Ordering::Release);
-    ULTRA_720.store(
-        config.ultra_resolution == crate::config::UltraResolution::P720,
-        Ordering::Release,
-    );
+    ULTRA_RES.store(config.ultra_resolution.to_byte(), Ordering::Release);
     HIDE_PAGES.store(
         u8::from(config.hide_pages.plugins)
             | u8::from(config.hide_pages.own_pages) << 1
