@@ -371,6 +371,7 @@ fn settings_rows(
         scene.ready,
         config.render_mode,
         scene.request,
+        config.vanilla_plus,
     );
     let status = crate::menu::net_profile_status(
         scene.request,

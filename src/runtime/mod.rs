@@ -53,6 +53,9 @@ static PERF_NUMBER: AtomicBool = AtomicBool::new(false);
 static EARLY_PRESENT: AtomicBool = AtomicBool::new(true);
 /// `dispatcher_backoff` (0.5.3): let the installed backoff hook sleep.
 static BACKOFF_ENABLED: AtomicBool = AtomicBool::new(true);
+/// `vanilla_plus` (0.5.6): present at the flush in Vanilla too. Live; the
+/// L+R+X chord toggles it.
+static VANILLA_PLUS: AtomicBool = AtomicBool::new(true);
 static DRS_MOVES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 static DRS_ADAPTIVE: AtomicBool = AtomicBool::new(false);
 static DRS_THRESHOLD: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(1750);
@@ -99,12 +102,19 @@ pub(super) fn settings() -> Config {
         },
         early_present: EARLY_PRESENT.load(Ordering::Acquire),
         dispatcher_backoff: BACKOFF_ENABLED.load(Ordering::Acquire),
+        vanilla_plus: VANILLA_PLUS.load(Ordering::Acquire),
     }
 }
 
 /// `early_present` (0.5.3). Read by the flush wrapper every frame.
 pub(super) fn early_present_enabled() -> bool {
     EARLY_PRESENT.load(Ordering::Relaxed)
+}
+
+/// `vanilla_plus` (0.5.6). Read by the flush wrapper every frame; changes
+/// live with the L+R+X chord.
+pub(super) fn vanilla_plus_enabled() -> bool {
+    VANILLA_PLUS.load(Ordering::Relaxed)
 }
 
 /// `dispatcher_backoff` (0.5.3). Read by the backoff hook on every idle pass.
@@ -159,6 +169,7 @@ pub(super) fn publish(config: &Config) {
     );
     EARLY_PRESENT.store(config.early_present, Ordering::Release);
     BACKOFF_ENABLED.store(config.dispatcher_backoff, Ordering::Release);
+    VANILLA_PLUS.store(config.vanilla_plus, Ordering::Release);
     DRS_MOVES.store(config.drs_moves.0, Ordering::Release);
     DRS_ADAPTIVE.store(config.drs_adaptive.enabled, Ordering::Release);
     DRS_THRESHOLD.store(

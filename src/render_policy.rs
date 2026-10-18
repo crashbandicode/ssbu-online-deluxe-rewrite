@@ -382,16 +382,22 @@ pub fn skip_wait(decision: Decision, armed: RenderMode) -> bool {
 /// LessLag since 0.4.0; LLUltra (the other two-image ring, which had kept the
 /// game's late present and therefore the same stall) and LLDoubles (three
 /// images, the earlier present is a latency gain) since 0.5.2. Never during a
-/// swap, a drain, a forced wait or after a refusal. Vanilla keeps the game
-/// order: its third image already absorbs a late present and it has no
-/// render-opts frame shape to present against.
-pub fn present_at_flush(decision: Decision) -> bool {
+/// swap, a drain, a forced wait or after a refusal. Plain Vanilla keeps the
+/// game order: its third image already absorbs a late present. **Vanilla+**
+/// (0.5.6, `vanilla_plus`, default on) presents there too: the console
+/// traces show the game presenting the index acquired at the loop head one
+/// whole update after the flush that carried that frame's last submission
+/// (Training, 0.5.4: acquire → flush 6 ms later → the game's present of the
+/// same index 9 ms after that), so the acquired image is complete at the
+/// flush in the original three-image shape as well, and presenting it there
+/// saves that update of display latency without touching the ring.
+pub fn present_at_flush(decision: Decision, vanilla_plus: bool) -> bool {
     decision.live
         && decision.effective == decision.committed
-        && matches!(
+        && (matches!(
             decision.committed,
             Profile::LessLag | Profile::Ultra | Profile::Doubles
-        )
+        ) || (decision.committed == Profile::Vanilla && vanilla_plus))
         && !decision.swapping
         && !decision.force_wait
         && !decision.failed
@@ -1600,30 +1606,47 @@ mod tests {
     #[test]
     fn committed_idle_render_opts_profiles_present_at_the_flush() {
         assert!(present_at_flush(
-            Machine::confirmed(Profile::LessLag).decision()
+            Machine::confirmed(Profile::LessLag).decision(),
+            false
         ));
         assert!(!present_at_flush(
-            Machine::confirmed(Profile::Vanilla).decision()
+            Machine::confirmed(Profile::Vanilla).decision(),
+            false
         ));
-        // 0.5.2: the other two-image ring and the three-image Doubles too.
+        // 0.5.6: Vanilla+ presents at the flush in the three-image shape.
         assert!(present_at_flush(
-            Machine::confirmed(Profile::Ultra).decision()
+            Machine::confirmed(Profile::Vanilla).decision(),
+            true
+        ));
+        // 0.5.2: the other two-image ring and the three-image Doubles too,
+        // with or without the Vanilla+ flag.
+        assert!(present_at_flush(
+            Machine::confirmed(Profile::Ultra).decision(),
+            false
         ));
         assert!(present_at_flush(
-            Machine::confirmed(Profile::Doubles).decision()
+            Machine::confirmed(Profile::Doubles).decision(),
+            true
         ));
-        // A swap toward LessLag is not LessLag yet.
+        // A swap toward LessLag is not LessLag yet, and Vanilla+ does not
+        // present during the swap either.
         let (toward_less, _) = step(
             Machine::confirmed(Profile::Vanilla),
             present(RenderMode::LessLag, 0, 0, 3),
         );
-        assert!(!present_at_flush(toward_less.decision()));
+        assert!(!present_at_flush(toward_less.decision(), false));
+        assert!(!present_at_flush(toward_less.decision(), true));
         // Before the window count is confirmed nothing is live.
         let armed = Decision {
             live: false,
             ..Machine::confirmed(Profile::LessLag).decision()
         };
-        assert!(!present_at_flush(armed));
+        assert!(!present_at_flush(armed, true));
+        let armed_vanilla = Decision {
+            live: false,
+            ..Machine::confirmed(Profile::Vanilla).decision()
+        };
+        assert!(!present_at_flush(armed_vanilla, true));
     }
 
     #[test]

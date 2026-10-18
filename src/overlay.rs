@@ -8,8 +8,8 @@ pub(crate) const L: u64 = 1 << 6;
 pub(crate) const R: u64 = 1 << 7;
 const ZL: u64 = 1 << 8;
 const ZR: u64 = 1 << 9;
-/// Only the retired-chord test presses X now.
-#[cfg(test)]
+/// L+R+X toggles Vanilla+ (0.5.6). The fork's retired FPS++ chord used X with
+/// a trigger held; that combination still does nothing.
 const X: u64 = 1 << 2;
 const Y: u64 = 1 << 3;
 const PLUS_MINUS: u64 = (1 << 10) | (1 << 11);
@@ -196,7 +196,14 @@ impl Overlay {
             config.streamer = !config.streamer;
             return true;
         }
-        // The fork's FPS++ chord (L+R+ZL/ZR+X) left with FPS++ on 2026-10-17.
+        // Vanilla+ (0.5.6): L+R+X with neither trigger held flips the flag
+        // live and saves it. It is a flag on Vanilla, not a NetProfile entry,
+        // so the row keeps its three choices. The fork's FPS++ chord
+        // (L+R+ZL/ZR+X) left with FPS++ on 2026-10-17 and stays inert.
+        if shoulders && buttons & (ZL | ZR) == 0 && pressed & X != 0 {
+            config.vanilla_plus = !config.vanilla_plus;
+            return true;
+        }
         if self.view != View::Settings && shoulders {
             if pressed & LEFT != 0 {
                 crate::peer_transport::cycle_peer(-1);
@@ -937,6 +944,29 @@ mod tests {
         assert!(!ui.poll(L | R | RIGHT, &mut config));
         assert_eq!(config, before);
         assert!(!ui.poll(ZL | ZR | LEFT, &mut config));
+        assert_eq!(ui.view, View::Hidden);
+    }
+
+    #[test]
+    fn shoulder_x_toggles_vanilla_plus_once_per_press_without_a_trigger() {
+        let _gate = crate::peer_transport::global_gate();
+        let mut ui = Overlay::default();
+        let mut config = Config::default();
+        assert!(config.vanilla_plus);
+        // One edge per press: holding the chord does not flip it again.
+        assert!(ui.poll(L | R | X, &mut config));
+        assert!(!config.vanilla_plus);
+        assert!(!ui.poll(L | R | X, &mut config));
+        assert!(!config.vanilla_plus);
+        ui.poll(0, &mut config);
+        assert!(ui.poll(L | R | X, &mut config));
+        assert!(config.vanilla_plus);
+        ui.poll(0, &mut config);
+        // X alone, or with one bumper, is the game's button.
+        let before = config.clone();
+        assert!(!ui.poll(X, &mut config));
+        assert!(!ui.poll(L | X, &mut config));
+        assert_eq!(config, before);
         assert_eq!(ui.view, View::Hidden);
     }
 

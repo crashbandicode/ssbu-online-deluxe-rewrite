@@ -136,6 +136,15 @@ pub struct Config {
     /// Default true. Read at start; the `DISABLE_BACKOFF` flag still skips
     /// the install entirely.
     pub dispatcher_backoff: bool,
+    /// 0.5.6: Vanilla+ (`vanilla_plus`). Vanilla keeps the game's three-image
+    /// ring but presents the acquired image at the flush that carried its last
+    /// submission, one CPU update earlier than the game does, like the
+    /// render-opts profiles have since 0.4.0. Default true, so the shipped
+    /// default mode is Vanilla+. Live: the L+R+X chord toggles it and the
+    /// NetProfile row, the strip and the native banner show `Vanilla+`. The
+    /// peer exchange still announces Vanilla; the ring shape is unchanged.
+    /// `early_present=false` still turns every early present off.
+    pub vanilla_plus: bool,
 }
 
 /// Pages left out of the window cycle (`hide_pages=none` or a comma list of
@@ -304,6 +313,7 @@ impl Default for Config {
             perf_view: PerfView::Graph,
             early_present: true,
             dispatcher_backoff: true,
+            vanilla_plus: true,
         }
     }
 }
@@ -322,7 +332,7 @@ fn parse_count<T: TryFrom<u32>>(value: &str, max: u32, message: &str) -> Result<
 
 pub fn parse(text: &str) -> Result<Config, String> {
     let mut config = Config::default();
-    let mut seen = [false; 17];
+    let mut seen = [false; 18];
     for (index, raw) in text.lines().enumerate() {
         let line = raw.split('#').next().unwrap_or_default().trim();
         if line.is_empty() {
@@ -361,6 +371,7 @@ pub fn parse(text: &str) -> Result<Config, String> {
             "perf_view" => 14,
             "early_present" => 15,
             "dispatcher_backoff" => 16,
+            "vanilla_plus" => 17,
             _ => return Err(error(&format!("unknown key '{key}'"))),
         };
         if seen[slot] {
@@ -470,6 +481,13 @@ pub fn parse(text: &str) -> Result<Config, String> {
                     _ => return Err(error("dispatcher_backoff must be true or false")),
                 };
             }
+            "vanilla_plus" => {
+                config.vanilla_plus = match value {
+                    "true" => true,
+                    "false" => false,
+                    _ => return Err(error("vanilla_plus must be true or false")),
+                };
+            }
             "input_buffer" => {
                 config.input_buffer = if value == "auto" {
                     -1
@@ -527,8 +545,9 @@ pub fn serialize(config: &Config) -> String {
     } else {
         "false"
     };
+    let vanilla_plus = if config.vanilla_plus { "true" } else { "false" };
     format!(
-        "# Online Deluxe settings\nversion=1\ninput_buffer={input_buffer}\nrender_mode={}\nauto_profile={auto_profile}\nplatform={}\nstealth={stealth}\nstreamer={streamer}\ndrs_moves={}\ndrs_adaptive={drs_adaptive}\ndrs_adaptive_threshold_ms={}\ndrs_adaptive_trigger_frames={}\ndrs_adaptive_release_frames={}\nultra_resolution={}\nhide_pages={}\nperf_view={}\nearly_present={early_present}\ndispatcher_backoff={dispatcher_backoff}\n",
+        "# Online Deluxe settings\nversion=1\ninput_buffer={input_buffer}\nrender_mode={}\nauto_profile={auto_profile}\nplatform={}\nstealth={stealth}\nstreamer={streamer}\ndrs_moves={}\ndrs_adaptive={drs_adaptive}\ndrs_adaptive_threshold_ms={}\ndrs_adaptive_trigger_frames={}\ndrs_adaptive_release_frames={}\nultra_resolution={}\nhide_pages={}\nperf_view={}\nearly_present={early_present}\ndispatcher_backoff={dispatcher_backoff}\nvanilla_plus={vanilla_plus}\n",
         config.render_mode.key(),
         config.platform.key(),
         config.drs_moves.serialize(),
@@ -573,6 +592,29 @@ mod tests {
     }
 
     #[test]
+    fn vanilla_plus_defaults_on_round_trips_and_rejects_other_values() {
+        // 0.5.6: a file from an older build has no key and gets the default.
+        assert!(Config::default().vanilla_plus);
+        assert!(parse("version=1").unwrap().vanilla_plus);
+        assert!(parse("version=1\nvanilla_plus=true").unwrap().vanilla_plus);
+        assert!(!parse("version=1\nvanilla_plus=false").unwrap().vanilla_plus);
+        let off = Config {
+            vanilla_plus: false,
+            ..Config::default()
+        };
+        assert_eq!(parse(&off.serialize()).unwrap(), off);
+        assert!(off.serialize().contains("\nvanilla_plus=false\n"));
+        assert_eq!(
+            parse("version=1\nvanilla_plus=on").unwrap_err(),
+            "line 2: vanilla_plus must be true or false"
+        );
+        assert_eq!(
+            parse("version=1\nvanilla_plus=true\nvanilla_plus=true").unwrap_err(),
+            "line 3: duplicate key 'vanilla_plus'"
+        );
+    }
+
+    #[test]
     fn saved_settings_round_trip_at_every_buffer_boundary() {
         for input_buffer in [-1, 0, 25] {
             let config = Config {
@@ -589,6 +631,7 @@ mod tests {
                 perf_view: PerfView::Graph,
                 early_present: true,
                 dispatcher_backoff: true,
+                vanilla_plus: true,
             };
             assert_eq!(parse(&config.serialize()).unwrap(), config);
         }

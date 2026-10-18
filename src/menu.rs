@@ -689,7 +689,8 @@ mod tests {
                 true,
                 true,
                 RenderMode::Vanilla,
-                RenderMode::LessLagDoubles
+                RenderMode::LessLagDoubles,
+                false
             ),
             "Auto:LLDbl"
         );

@@ -336,23 +336,32 @@ pub fn cycle_profile_choice(current: ProfileChoice, direction: i8) -> ProfileCho
     ProfileChoice::Manual(MANUAL_CYCLE[next as usize])
 }
 
+/// `vanilla_plus` (0.5.6) marks every Vanilla label with `+`: the ring is the
+/// game's, the present happens at the flush.
 pub fn profile_row_label(
     auto_profile: bool,
     ready: bool,
     selected: RenderMode,
     requested: RenderMode,
+    vanilla_plus: bool,
 ) -> String {
     if auto_profile && !ready {
         return "Auto (unavailable)".to_owned();
     }
+    let plus = if vanilla_plus { "+" } else { "" };
     if auto_profile {
-        auto_choice_label(requested).to_owned()
+        match requested {
+            RenderMode::Vanilla => format!("Auto:Van{plus}"),
+            other => auto_choice_label(other).to_owned(),
+        }
     } else if requested == RenderMode::Vanilla && selected != RenderMode::Vanilla {
         // Cleanup hold: after a match, Training or the Smash menu the renderer
         // stays on Vanilla until a newer explicit selection or the next match.
         // Show what is live, marked, instead of the saved choice (2026-10-14
         // hardware report: banner said LessLag while the renderer ran Vanilla).
-        "Vanilla*".to_owned()
+        format!("Vanilla{plus}*")
+    } else if selected == RenderMode::Vanilla {
+        format!("Vanilla{plus}")
     } else {
         selected.label().to_owned()
     }
@@ -743,7 +752,7 @@ mod tests {
         assert!(!applied.auto_applied);
         assert_eq!(scene_status_key(false, SceneStatus::Doubles), "unavailable");
         assert_eq!(
-            profile_row_label(true, false, RenderMode::LessLag, applied.request),
+            profile_row_label(true, false, RenderMode::LessLag, applied.request, false),
             "Auto (unavailable)"
         );
     }
@@ -804,46 +813,67 @@ mod tests {
             MatchKind::Menu
         );
         assert_eq!(
-            profile_row_label(true, true, RenderMode::Vanilla, css.request),
+            profile_row_label(true, true, RenderMode::Vanilla, css.request, false),
             "Auto:Van"
         );
         assert_eq!(
-            profile_row_label(true, true, RenderMode::Vanilla, RenderMode::LessLag),
+            profile_row_label(true, true, RenderMode::Vanilla, RenderMode::LessLag, false),
             "Auto:Less"
         );
         assert_eq!(
-            profile_row_label(true, true, RenderMode::Vanilla, RenderMode::LessLagUltra),
+            profile_row_label(true, true, RenderMode::Vanilla, RenderMode::LessLagUltra, true),
             "Auto:Ultra"
         );
         assert_eq!(
-            profile_row_label(true, true, RenderMode::Vanilla, RenderMode::LessLagDoubles),
+            profile_row_label(true, true, RenderMode::Vanilla, RenderMode::LessLagDoubles, false),
             "Auto:LLDbl"
         );
         // Manual mode with a Vanilla request is the cleanup hold: the label
         // follows the live renderer, marked, not the saved choice.
         assert_eq!(
-            profile_row_label(false, true, RenderMode::LessLagDoubles, RenderMode::Vanilla),
+            profile_row_label(false, true, RenderMode::LessLagDoubles, RenderMode::Vanilla, false),
             "Vanilla*"
         );
         assert_eq!(
-            profile_row_label(false, true, RenderMode::LessLag, RenderMode::Vanilla),
+            profile_row_label(false, true, RenderMode::LessLag, RenderMode::Vanilla, false),
             "Vanilla*"
         );
         assert_eq!(
-            profile_row_label(false, true, RenderMode::LessLagUltra, RenderMode::Vanilla),
+            profile_row_label(false, true, RenderMode::LessLagUltra, RenderMode::Vanilla, false),
             "Vanilla*"
         );
         assert_eq!(
-            profile_row_label(false, true, RenderMode::LessLag, RenderMode::LessLag),
+            profile_row_label(false, true, RenderMode::LessLag, RenderMode::LessLag, false),
             "LessLag"
         );
         assert_eq!(
-            profile_row_label(false, true, RenderMode::Vanilla, RenderMode::Vanilla),
+            profile_row_label(false, true, RenderMode::Vanilla, RenderMode::Vanilla, false),
             "Vanilla"
         );
         assert_eq!(
-            profile_row_label(false, true, RenderMode::Vanilla, RenderMode::LessLagDoubles),
+            profile_row_label(false, true, RenderMode::Vanilla, RenderMode::LessLagDoubles, false),
             "Vanilla"
+        );
+        // 0.5.6: Vanilla+ marks every Vanilla label, never the other profiles.
+        assert_eq!(
+            profile_row_label(false, true, RenderMode::Vanilla, RenderMode::Vanilla, true),
+            "Vanilla+"
+        );
+        assert_eq!(
+            profile_row_label(false, true, RenderMode::LessLag, RenderMode::Vanilla, true),
+            "Vanilla+*"
+        );
+        assert_eq!(
+            profile_row_label(true, true, RenderMode::Vanilla, RenderMode::Vanilla, true),
+            "Auto:Van+"
+        );
+        assert_eq!(
+            profile_row_label(false, true, RenderMode::LessLag, RenderMode::LessLag, true),
+            "LessLag"
+        );
+        assert_eq!(
+            profile_row_label(true, false, RenderMode::Vanilla, RenderMode::Vanilla, true),
+            "Auto (unavailable)"
         );
     }
 

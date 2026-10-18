@@ -201,11 +201,16 @@ unsafe fn deluxe_rewrite_flush_dispatches(object: *mut u8, flag: u32) {
     // flush 4 µs before it). The render-opts profiles present the acquired
     // image here instead of after the next frame's update: LessLag since 0.4.0
     // (fields on, one call), LLUltra and LLDoubles since 0.5.2 (Ultra: fields
-    // off, three calls); see render_policy::present_at_flush, which refuses
-    // Vanilla and every non-idle state itself. `early_present=false` (0.5.3)
-    // keeps the game's order for an A/B against upstream behaviour.
+    // off, three calls), and Vanilla+ since 0.5.6 (`vanilla_plus`, the game's
+    // own three-image shape, one call, no fields); see
+    // render_policy::present_at_flush, which refuses plain Vanilla and every
+    // non-idle state itself. `early_present=false` (0.5.3) keeps the game's
+    // order everywhere for an A/B against upstream behaviour.
     if super::early_present_enabled()
-        && crate::render_policy::present_at_flush(crate::render_policy::load_decision())
+        && crate::render_policy::present_at_flush(
+            crate::render_policy::load_decision(),
+            super::vanilla_plus_enabled(),
+        )
     {
         super::nvn::present_at_flush();
     }
