@@ -59,7 +59,7 @@ pub(super) fn acquired(begin: u64, window: usize, valid: bool) {
     }
     let end = clock();
     let auto = super::auto_driver::snapshot();
-    let mode = super::renderer::mode() as u8;
+    let mode = crate::render_policy::load_decision().effective as u8;
     if let Ok(mut s) = STATE.lock() {
         let period = us(end.saturating_sub(s.end));
         let clean = valid
@@ -110,13 +110,17 @@ pub(super) unsafe fn before_hid() {
     }
     let now = clock();
     let auto = super::auto_driver::snapshot();
-    let mode = super::renderer::mode();
+    let decision = crate::render_policy::load_decision();
+    let mode = decision.effective as u8;
     let credits = getRegionAddress(Region::Text) as usize + 0x593b440;
     let ready = auto.ready
         && !auto.cleanup_hold
         && super::renderer::status() == "Active"
         && !super::research_present_interval_zero_enabled()
-        && (!mode.render_opts() || super::render_sequence::frame_active())
+        && decision.live
+        && !decision.swapping
+        && !decision.failed
+        && (!decision.render_opts || super::render_sequence::frame_active())
         && memory::accessible(credits, 4, false)
         && (*(credits as *const std::sync::atomic::AtomicU32)).load(Ordering::Acquire) == 0;
     let request = if let Ok(mut s) = STATE.lock() {
@@ -124,7 +128,7 @@ pub(super) unsafe fn before_hid() {
             || s.end == 0
             || us(now.saturating_sub(s.end)) > 6_000
             || s.generation != auto.selection_generation
-            || s.mode != mode as u8
+            || s.mode != mode
         {
             if s.budget.count != 0 {
                 RESETS.fetch_add(1, Ordering::Relaxed);
@@ -198,6 +202,7 @@ pub(super) unsafe fn present_completed(ctx: &skyline::hooks::InlineCtx) {
     if owner == 0
         || ctx.registers[19].x() as usize != owner
         || sp % 16 != 0
+        || ctx.registers[29].x() as usize != sp + 0x40
         || !memory::accessible(sp + 0x48, 8, false)
         || !memory::accessible(sp + 0x2c0, 8, false)
         || !memory::accessible(sp + 0x2440, 4, false)
