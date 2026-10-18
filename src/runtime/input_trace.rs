@@ -6,7 +6,7 @@ use crate::capture::{
     KIND_HID_AFTER, KIND_HID_BEFORE, KIND_INPUT_CACHE_STATE, KIND_SCENE_AFTER, KIND_SCENE_BEFORE,
 };
 use skyline::hooks::{getRegionAddress, InlineCtx, Region};
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicI32, AtomicU8, Ordering};
 
 const HID_BEFORE: usize = 0x374cab8;
 const HID_AFTER: usize = 0x374cabc;
@@ -17,17 +17,21 @@ const INPUT_CACHE_OWNER: usize = 0x52c50f0;
 // Skyline keeps its inline-handler pool adjacent to main text. These offsets
 // are within the A64 B range, so each hook replaces one word; neighboring
 // before/after sites do not overlap.
-const SITES: [(usize, u32); 4] = [
+const SITES: [(usize, u32); 7] = [
     (HID_BEFORE, 0x97fc6c76),   // BL 0x3667c90 is displaced by the inline hook.
     (HID_AFTER, 0x94004959),    // BL 0x375f020.
     (SCENE_BEFORE, 0x97ff6117), // BL 0x3725030.
     (SCENE_AFTER, 0xf0010f68),  // ADRP.
+    (0x135f874, 0xd63f0100),    // selected cache producer BLR x8
+    (0x135f878, 0x36000880),    // producer return, TBZ w0
+    (0x3f7280, 0x93609ea8),     // immediately after mapped input LDR x21
 ];
 
 const OFF: u8 = 0;
 const PREFLIGHT_FAILED: u8 = 1;
 const INSTALLING: u8 = 2;
 const INSTALLED: u8 = 3;
+static FRAME: AtomicI32 = AtomicI32::new(0);
 static STATE: AtomicU8 = AtomicU8::new(OFF);
 
 /// State for the startup diagnostics file. The request value is reported by
@@ -44,12 +48,15 @@ pub(super) fn state() -> &'static str {
 
 #[skyline::hook(offset = HID_BEFORE, inline)]
 unsafe fn deluxe_rewrite_input_hid_before(_: &InlineCtx) {
-    api_trace::mark_thread(KIND_HID_BEFORE, -1);
+    if api_trace::active() {
+        let frame = FRAME.fetch_add(1, Ordering::Relaxed).wrapping_add(1);
+        api_trace::mark_thread(KIND_HID_BEFORE, frame);
+    }
 }
 
 #[skyline::hook(offset = HID_AFTER, inline)]
 unsafe fn deluxe_rewrite_input_hid_after(_: &InlineCtx) {
-    api_trace::mark_thread(KIND_HID_AFTER, -1);
+    api_trace::mark_thread(KIND_HID_AFTER, FRAME.load(Ordering::Relaxed));
 }
 
 /// A short-lived, guarded read of the current input cache metadata. Neither
@@ -92,7 +99,12 @@ unsafe fn deluxe_rewrite_input_scene_before(_: &InlineCtx) {
     if begin == 0 {
         return;
     }
-    api_trace::point(begin, KIND_SCENE_BEFORE, -1, api_trace::thread_label());
+    api_trace::point(
+        begin,
+        KIND_SCENE_BEFORE,
+        FRAME.load(Ordering::Relaxed),
+        api_trace::thread_label(),
+    );
 
     // The cache fields are sampled only during an active trace, and unknown
     // or inaccessible state simply omits kind 84 without affecting kind 82.
@@ -106,10 +118,72 @@ unsafe fn deluxe_rewrite_input_scene_before(_: &InlineCtx) {
 
 #[skyline::hook(offset = SCENE_AFTER, inline)]
 unsafe fn deluxe_rewrite_input_scene_after(_: &InlineCtx) {
-    api_trace::mark_thread(KIND_SCENE_AFTER, -1);
+    api_trace::mark_thread(KIND_SCENE_AFTER, FRAME.load(Ordering::Relaxed));
 }
 
-/// Install only when the startup-only INI request is true. All four source
+// Companion diagnostics retain the four phase markers and observe the existing
+// producer call and mapped-input load. They never write game memory/registers.
+unsafe fn sample_word(address: usize) -> Option<u64> {
+    if address < 0x10000 || address % 8 != 0 || !memory::accessible(address, 8, false) {
+        return None;
+    }
+    Some(core::ptr::read_volatile(address as *const u64))
+}
+
+fn word_points(low_kind: u8, high_kind: u8, player: i32, value: u64) {
+    let tick = api_trace::start();
+    api_trace::point(tick, low_kind, player, value as u32 as i32);
+    api_trace::point(tick, high_kind, player, (value >> 32) as u32 as i32);
+}
+
+#[skyline::hook(offset = 0x135f874, inline)]
+unsafe fn deluxe_rewrite_input_producer_before(_: &InlineCtx) {
+    api_trace::mark_thread(85, FRAME.load(Ordering::Relaxed));
+}
+
+#[skyline::hook(offset = 0x135f878, inline)]
+unsafe fn deluxe_rewrite_input_producer_after(ctx: &InlineCtx) {
+    if !api_trace::active() {
+        return;
+    }
+    api_trace::mark_thread(86, FRAME.load(Ordering::Relaxed));
+    let owner = ctx.registers[27].x() as usize;
+    if let Some(address) = owner.checked_add(0x2b8) {
+        if let Some(value) = sample_word(address) {
+            word_points(87, 88, 0, value);
+        }
+    }
+    // Mode-1 FIFO occupancy/head are observations, not configured delay.
+    for (offset, kind) in [(0x308, 93), (0x310, 94)] {
+        if let Some(address) = owner.checked_add(offset) {
+            if let Some(value) = sample_word(address) {
+                api_trace::point(api_trace::start(), kind, 0, value as i32);
+            }
+        }
+    }
+}
+
+#[skyline::hook(offset = 0x3f7280, inline)]
+unsafe fn deluxe_rewrite_input_consumed(ctx: &InlineCtx) {
+    if !api_trace::active() {
+        return;
+    }
+    let object = ctx.registers[19].x() as usize;
+    let Some(address) = object.checked_add(8) else {
+        return;
+    };
+    let Some(player_word) = sample_word(address) else {
+        return;
+    };
+    let player = player_word as u32 as i32;
+    if !(0..8).contains(&player) {
+        return;
+    }
+    api_trace::mark_thread(89, FRAME.load(Ordering::Relaxed));
+    word_points(90, 91, player, ctx.registers[21].x());
+}
+
+/// Install only when the startup-only INI request is true. All seven source
 /// words are checked before any of this module's hooks are installed.
 pub(super) fn install() {
     if !super::input_trace_enabled() {
@@ -138,7 +212,10 @@ pub(super) fn install() {
         deluxe_rewrite_input_hid_before,
         deluxe_rewrite_input_hid_after,
         deluxe_rewrite_input_scene_before,
-        deluxe_rewrite_input_scene_after
+        deluxe_rewrite_input_scene_after,
+        deluxe_rewrite_input_producer_before,
+        deluxe_rewrite_input_producer_after,
+        deluxe_rewrite_input_consumed
     );
 
     let text = unsafe { getRegionAddress(Region::Text) as usize };
