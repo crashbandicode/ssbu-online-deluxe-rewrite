@@ -26,6 +26,14 @@
 pub const RING_CAP: usize = 100;
 /// Milliseconds after which a sample is no longer a current peer.
 pub const STALE_MS: u64 = 3_000;
+/// A bound opponent station that has produced no RTT sample for this long is
+/// no longer shown (0.5.5): the opponent column, the strip's peer line and the
+/// CSS banner line need a live peer, not just a station binding. Covers the
+/// declined-rematch case where the game's leave never reaches the station
+/// hooks. Loading gaps are shorter than this.
+pub const LIVE_MS: u64 = 10_000;
+/// Horizon's system tick runs at 19.2 MHz; used until a sample reports the rate.
+pub const SYSTEM_TICKS_PER_MS: u64 = 19_200;
 /// A sample this far from the caller's clock is reported separately from a
 /// merely expired peer. The hook clock and `GetSystemTick` are expected to
 /// match; a larger gap means that assumption failed.
@@ -544,6 +552,37 @@ fn fresh(age: Option<u64>) -> bool {
     age.is_some_and(|age| age < STALE_MS)
 }
 
+/// Live-peer rule for a bound station: its last measured publication (or its
+/// binding, which starts the grace period) is younger than [`LIVE_MS`]. A zero
+/// stamp, an unknown rate or a clock that went backwards all read as not live.
+pub fn station_live(last_seen_tick: u64, now_tick: u64, ticks_per_ms: u64) -> bool {
+    last_seen_tick != 0
+        && age_ms(now_tick, last_seen_tick, ticks_per_ms).is_some_and(|age| age < LIVE_MS)
+}
+
+#[cfg(test)]
+mod live_tests {
+    use super::{station_live, LIVE_MS};
+
+    const PER_MS: u64 = 1_000;
+
+    #[test]
+    fn a_station_is_live_until_the_grace_expires() {
+        let seen = 50 * PER_MS;
+        assert!(station_live(seen, seen, PER_MS));
+        assert!(station_live(seen, seen + (LIVE_MS - 1) * PER_MS, PER_MS));
+        assert!(!station_live(seen, seen + LIVE_MS * PER_MS, PER_MS));
+        assert!(!station_live(seen, seen + (LIVE_MS + 60_000) * PER_MS, PER_MS));
+    }
+
+    #[test]
+    fn unknown_stamps_rates_and_backwards_clocks_are_not_live() {
+        assert!(!station_live(0, 10 * PER_MS, PER_MS));
+        assert!(!station_live(5 * PER_MS, 6 * PER_MS, 0));
+        assert!(!station_live(6 * PER_MS, 5 * PER_MS, PER_MS));
+    }
+}
+
 /// Mapped remotes published together. Eight matches the handshake table.
 pub const BOARD_CAP: usize = 8;
 
@@ -629,7 +668,7 @@ impl Publication {
         unpack_reading(self.bits)
     }
 
-    fn measured(self) -> bool {
+    pub fn measured(self) -> bool {
         self.bits & UNAVAILABLE == 0
     }
 

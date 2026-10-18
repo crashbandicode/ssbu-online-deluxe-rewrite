@@ -652,9 +652,13 @@ unsafe fn poll(ui: &mut UiState, sample: input::Sample) -> Frame {
         );
     }
     let frame = crate::peer_transport::peer_frame();
-    let connected = crate::peer_transport::station_connected(frame.selection);
+    // Live-peer rule (0.5.5): a bound station that has gone silent (no RTT
+    // sample for LIVE_MS, as after a declined rematch) counts as disconnected
+    // for every peer row, the strip's peer line and the ping cell.
+    let live = super::pia_rtt::station_live(frame.selection);
+    let connected = live && crate::peer_transport::station_connected(frame.selection);
     let show_remote =
-        crate::peer_transport::opponent_column_visible(config.streamer, frame.selection);
+        crate::peer_transport::opponent_column_visible(config.streamer, frame.selection, live);
     if view == View::Settings {
         let gate = crate::menu::row_gate(connected, config.platform);
         if !crate::menu::row_visible(ui.controls.menu.selected, gate) {

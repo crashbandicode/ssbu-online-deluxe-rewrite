@@ -565,9 +565,11 @@ pub fn station_connected(selection: Selection) -> bool {
 }
 
 /// Opponent column, ping cell, and remote banner line. Streamer hides the
-/// remote rows; absent and busy stay blank.
-pub fn opponent_column_visible(streamer: bool, selection: Selection) -> bool {
-    !streamer && station_connected(selection)
+/// remote rows; absent and busy stay blank. `live` is the runtime's live-peer
+/// verdict (an RTT sample within `pia_rtt::LIVE_MS`): a bound station that
+/// went silent, as after a declined rematch, is hidden like an absent one.
+pub fn opponent_column_visible(streamer: bool, selection: Selection, live: bool) -> bool {
+    !streamer && live && station_connected(selection)
 }
 
 /// Draw rule for the publication sitting next to this snapshot.
@@ -1390,8 +1392,10 @@ mod tests {
         assert_eq!(frame.selection, Station(4));
         assert_eq!(name(&frame.peer), Some("Samus"));
         assert_eq!(frame.peer.settings, "Vanilla");
-        assert!(opponent_column_visible(false, frame.selection));
-        assert!(!opponent_column_visible(true, frame.selection));
+        assert!(opponent_column_visible(false, frame.selection, true));
+        assert!(!opponent_column_visible(true, frame.selection, true));
+        // A silent station (no RTT sample for LIVE_MS) is hidden while bound.
+        assert!(!opponent_column_visible(false, frame.selection, false));
         bind_station(7, ANN);
         station(ANN, 0, &[4, 0]);
         let gone = peer_frame();
@@ -1462,7 +1466,7 @@ mod tests {
         let frame = peer_frame();
         assert_eq!(frame.selection, Selection::None);
         assert!(!frame.peer.known && !opponent_connected());
-        assert!(!opponent_column_visible(false, frame.selection));
+        assert!(!opponent_column_visible(false, frame.selection, true));
         clear_station(300);
         clear_session();
         assert!(!matches(peer_frame().selection, republished, 4));

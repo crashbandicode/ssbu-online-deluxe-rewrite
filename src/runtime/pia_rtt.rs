@@ -42,6 +42,14 @@ static SAMPLES: AtomicU64 = AtomicU64::new(0);
 static FOREIGN: AtomicU64 = AtomicU64::new(0);
 static CLEANUPS: AtomicU64 = AtomicU64::new(0);
 static DROPPED: AtomicU64 = AtomicU64::new(0);
+/// Live-peer tracking (0.5.5). `LIVE_STATION` is the selected station the poll
+/// last saw, as index + 1 (0 = none). `LIVE_TICK` is the tick of that
+/// station's last measured publication, or of its binding (the grace start).
+/// `TICKS_PER_MS` is the rate the last RTT sample reported.
+static LIVE_STATION: AtomicU64 = AtomicU64::new(0);
+static LIVE_TICK: AtomicU64 = AtomicU64::new(0);
+static TICKS_PER_MS: AtomicU64 = AtomicU64::new(0);
+static WAS_LIVE: AtomicBool = AtomicBool::new(false);
 
 struct Published {
     publication: Publication,
@@ -96,6 +104,51 @@ pub(super) fn current_board() -> Shown<StationBoard> {
     )
 }
 
+/// Poll-side bookkeeping for the live-peer rule: a newly selected station
+/// starts its grace period now; a measured publication renews it.
+fn track_liveness(selection: crate::peer_transport::Selection, publication: Publication, now: u64) {
+    let bound = match selection {
+        crate::peer_transport::Selection::Station(index) => u64::from(index) + 1,
+        _ => 0,
+    };
+    let previous = LIVE_STATION.swap(bound, Ordering::AcqRel);
+    if bound == 0 {
+        return;
+    }
+    if previous != bound || publication.measured() {
+        LIVE_TICK.store(now, Ordering::Release);
+    }
+}
+
+/// The live-peer rule (0.5.5) for the selected station: bound, and heard from
+/// (a measured RTT publication) within [`crate::pia_rtt::LIVE_MS`]. A station
+/// the poll has not seen yet counts as live so a fresh binding shows at once.
+/// Records `PeerStale` once when a bound station goes silent.
+pub(super) fn station_live(selection: crate::peer_transport::Selection) -> bool {
+    let crate::peer_transport::Selection::Station(index) = selection else {
+        WAS_LIVE.store(false, Ordering::Release);
+        return false;
+    };
+    if LIVE_STATION.load(Ordering::Acquire) != u64::from(index) + 1 {
+        WAS_LIVE.store(true, Ordering::Release);
+        return true;
+    }
+    let per_ms = match TICKS_PER_MS.load(Ordering::Relaxed) {
+        0 => crate::pia_rtt::SYSTEM_TICKS_PER_MS,
+        rate => rate,
+    };
+    let last = LIVE_TICK.load(Ordering::Acquire);
+    let now = tick();
+    let live = crate::pia_rtt::station_live(last, now, per_ms);
+    if live {
+        WAS_LIVE.store(true, Ordering::Release);
+    } else if WAS_LIVE.swap(false, Ordering::AcqRel) {
+        let silence_ms = now.saturating_sub(last) / per_ms;
+        record(Code::PeerStale, u64::from(index), silence_ms);
+    }
+    live
+}
+
 /// Step the draw generation around a station-map change.
 fn retire_publication(change: impl FnOnce()) {
     DRAW_GEN.fetch_add(1, Ordering::Release);
@@ -136,6 +189,7 @@ pub(super) fn poll() {
     store_counters(&session);
     let publication = session.publication();
     drop(session);
+    track_liveness(frame.selection, publication, now);
     let mut shown = shown();
     shown.publication = publication;
     shown.board = board;
@@ -230,6 +284,9 @@ unsafe fn deluxe_rewrite_observe_rtt_sample(ctx: &InlineCtx) {
         now_tick: ctx.registers[22].x(),
         ticks_per_ms: ctx.registers[8].x(),
     };
+    if sample.ticks_per_ms != 0 {
+        TICKS_PER_MS.store(sample.ticks_per_ms, Ordering::Relaxed);
+    }
     let station = station_pick(crate::peer_transport::selection_snapshot());
     match with_session(|session, epoch| {
         session.accept(epoch, station, Some(sample.now_tick), |table| {

@@ -348,7 +348,9 @@ fn css_remote() -> (Vec<RemoteLine>, Option<[u8; 4]>) {
     let identity = crate::peer_transport::display_identity(frame.selection);
     let ping = crate::pia_rtt::present_published(identity, &pia_rtt::current_publication());
     let color = ping.color.map(native_banner::ping_bytes);
-    if !crate::peer_transport::station_connected(frame.selection) {
+    if !crate::peer_transport::station_connected(frame.selection)
+        || !super::pia_rtt::station_live(frame.selection)
+    {
         return (Vec::new(), color);
     }
     (vec![remote_line(&frame.peer, ping.opponent)], color)

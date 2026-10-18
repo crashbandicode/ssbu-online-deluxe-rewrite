@@ -179,6 +179,12 @@ pub enum Code {
     /// profile, 8 uncapped_clocks). At boot, on every stock/OC change and
     /// once a minute. See `clock_probe`.
     ClockSample = 111,
+    /// Live-peer rule (0.5.5): the selected opponent station is still bound
+    /// but has produced no RTT sample for `pia_rtt::LIVE_MS`, so the opponent
+    /// column, strip line and CSS line were hidden. `a` = station index,
+    /// `b` = the silence in ms. One row per transition, not per frame. Seen
+    /// after a declined rematch whose leave never reached the station hooks.
+    PeerStale = 112,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
