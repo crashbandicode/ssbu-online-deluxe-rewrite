@@ -1,6 +1,6 @@
 # Resume and test plan
 
-Updated 2026-10-18 for Deluxe 0.5.5 (commit `6a9e61a`, unreleased; 0.5.4 is `a63bc8c`). Read [STATUS.md](STATUS.md)
+Updated 2026-10-18 for Deluxe 0.5.5 (commit `6a9e61a`, Forgejo release v0.5.5; 0.5.4 is `a63bc8c`). Read [STATUS.md](STATUS.md)
 for what is implemented and which evidence exists, the newest entries of
 [VALIDATION.md](VALIDATION.md) for the exact packages and gates, and `git log`.
 Live operational state (card deployments and their receipts, Eden profiles,
@@ -9,7 +9,7 @@ outside this repository, not here.
 
 ## Where things stand
 
-- Main is 0.5.5 (commit `6a9e61a`, not yet released or on the card, NRO `cf57cf80f25f2e837deabaf859489dc00653692c269fb4a6e2069a6a1b9bf8c2`): the live-peer
+- Main is 0.5.5 (commit `6a9e61a`, Forgejo release v0.5.5, on the card since 2026-10-18 with its first boot pending, NRO `cf57cf80f25f2e837deabaf859489dc00653692c269fb4a6e2069a6a1b9bf8c2`): the live-peer
   requirement for the operator's declined-rematch report. The opponent column,
   the strip's `Peer:` line, the Ping cell, the peer-dependent rows and the
   native CSS remote line need an RTT sample for the selected station within

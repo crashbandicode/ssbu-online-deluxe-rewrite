@@ -10,8 +10,8 @@ delivered as **one NRO**: rendering profiles that cut input latency, a global
 Player Info window, the native character-select status line and network
 display. No overclocking.
 
-**Current version: 0.5.5** (2026-10-18; Forgejo release pending, the latest
-release is 0.5.4). 0.5.5 hides the opponent once their station goes silent
+**Current version: 0.5.5** (2026-10-18; Forgejo release v0.5.5, on the card
+since 2026-10-18 with its first boot pending). 0.5.5 hides the opponent once their station goes silent
 (see Network display below); its console check is owed. 0.5.4 (2026-10-17) is
 the per-file code-reduction pass (31 % fewer production lines, behaviour
 unchanged except where [validation](docs/VALIDATION.md) says otherwise) plus

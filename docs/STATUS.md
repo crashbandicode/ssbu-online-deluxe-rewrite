@@ -1,6 +1,6 @@
 # Implementation and validation status
 
-Updated 2026-10-18 for 0.5.5 (commit `6a9e61a`, unreleased; 0.5.4 is `a63bc8c`). The rewrite is one Rust/Skyline
+Updated 2026-10-18 for 0.5.5 (commit `6a9e61a`, docs `2bb6974`, Forgejo release v0.5.5; 0.5.4 is `a63bc8c`). The rewrite is one Rust/Skyline
 NRO for Smash 13.0.5. Auto is enabled by default; it chooses Vanilla in menus,
 offline play and Training, LessLag for console online singles, LLUltra for
 emulator online singles, and LLDoubles for online matches with more than two
@@ -49,7 +49,7 @@ the operator's Switch, recorded with its build hash in [VALIDATION.md](VALIDATIO
 
 ## Current: 0.5.5
 
-0.5.5 (2026-10-18; commit and release pending, NRO `cf57cf80f25f2e837deabaf859489dc00653692c269fb4a6e2069a6a1b9bf8c2`) is a patch on
+0.5.5 (2026-10-18; commit `6a9e61a`, Forgejo release v0.5.5, NRO `cf57cf80f25f2e837deabaf859489dc00653692c269fb4a6e2069a6a1b9bf8c2`) is a patch on
 0.5.4 for the operator's console report that a declined rematch leaves the
 opponent's player info on the screen of the side that chose Yes. Eden did not
 reproduce it: in LAN Online a decline ends the Pia session, which clears the
@@ -60,9 +60,9 @@ the live-peer requirement: the opponent column, the strip's `Peer:` line, the
 Ping cell, the peer-dependent rows and the native CSS remote line need an RTT
 sample for the selected station within 10 s, and event code 112 records each
 time a bound station goes silent. Host gates: 235 + 1 tests, clippy with
-warnings denied, the no-default-features build; the Skyline release build was
-in progress at the time of writing. **Not verified on the console**, and not
-installed: the card still carries 0.5.4. The checks owed are step 11 of the
+warnings denied, the no-default-features build; the Skyline build is the
+release asset. **Not verified on the console**; installed on the card on
+2026-10-18 over 0.5.4 (rollback archive kept), first boot pending. The checks owed are step 11 of the
 test plan in [NEXT_SESSION.md](NEXT_SESSION.md); the full account is the
 0.5.5 entry of [VALIDATION.md](VALIDATION.md). The station-left hook is still
 uninstrumented, so which leave variant the console sends stays unknown.

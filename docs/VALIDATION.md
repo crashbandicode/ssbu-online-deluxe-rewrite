@@ -2779,9 +2779,11 @@ live)`), `src/runtime/ui.rs`, `src/runtime/native_banner.rs`,
 Skyline package `artifacts/cf57cf80f25f2e83/` in the evidence root, build id
 `0.5.5-6a9e61afdac8-1792351203`, NRO SHA-256
 `cf57cf80f25f2e837deabaf859489dc00653692c269fb4a6e2069a6a1b9bf8c2` (1,437,696 B),
-ELF `d2c3605a…`. Nothing is installed on the card: the card still carries the
-0.5.4 NRO, which has booted once (operator, 2026-10-18 afternoon: menus,
-overlay and Training fine; FX cells not run).
+ELF `d2c3605a…`. Released as Forgejo v0.5.5 (release 394, NRO and manifest
+attached, download readback matched) and installed on the card the same
+evening over the 0.5.4 NRO, which had booted once (operator, 2026-10-18
+afternoon: menus, overlay and Training fine; FX cells not run); the 0.5.4 NRO
+is kept as `backups/pre-055-cf57cf80f25f2e83.nro`. First boot of 0.5.5 pending.
 
 **Eden smoke of the 0.5.5 NRO (emulator evidence, 19:21–19:40Z).** Both
 LAN-Online profiles staged with `cf57cf80…`, same card-like INI. One full
