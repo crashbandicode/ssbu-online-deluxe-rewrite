@@ -134,14 +134,12 @@ pub(super) fn install() {
     }
 
     STATE.store(INSTALLING, Ordering::Release);
-    unsafe {
-        skyline::install_hooks!(
-            deluxe_rewrite_input_hid_before,
-            deluxe_rewrite_input_hid_after,
-            deluxe_rewrite_input_scene_before,
-            deluxe_rewrite_input_scene_after
-        );
-    }
+    skyline::install_hooks!(
+        deluxe_rewrite_input_hid_before,
+        deluxe_rewrite_input_hid_after,
+        deluxe_rewrite_input_scene_before,
+        deluxe_rewrite_input_scene_after
+    );
 
     let text = unsafe { getRegionAddress(Region::Text) as usize };
     for (offset, _) in SITES {
