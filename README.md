@@ -10,15 +10,20 @@ delivered as **one NRO**: rendering profiles that cut input latency, a global
 Player Info window, the native character-select status line and network
 display. No overclocking.
 
-**Current release: 0.5.1.** It adds the render-opts teardown guard, which
-removes a crash at scene exits with render options active (Training →
-character select on the console). 0.5.0 moved character FX out to the separate
+**Current release: 0.5.4** (2026-10-17). It is the per-file code-reduction
+pass (31 % fewer production lines, behaviour unchanged except where
+[validation](docs/VALIDATION.md) says otherwise) plus the 0.5.2 and 0.5.3
+changes described below: present at the flush for every rendering profile,
+per-move and adaptive resolution triggers, plugin API v4 with SDK 5.0.0, the
+page toggles, UltraRes, the clock probe, the L+R-only window chord and the
+early-present and backoff switches. It removes FPS++, the opt-in peer observer
+and the Gigaflare resolution trigger. 0.5.1 added the render-opts teardown
+guard (a crash at scene exits with render options active); 0.5.0 moved
+character FX out to the separate
 [FX Control](https://git.syntaxbyexample.com/intpa/ssbu-fx-control) plugin and
 lets plugins add their own pages to the window cycle. Every release on Forgejo
-carries the NRO and its manifest. Install notes: [docs/INSTALL.md](docs/INSTALL.md).
-
-This README also describes development changes marked 0.5.2 and 0.5.3,
-which are not included in the published 0.5.1 release.
+carries the NRO and its manifest; the 0.5.4 console run is still pending
+([status](docs/STATUS.md)). Install notes: [docs/INSTALL.md](docs/INSTALL.md).
 
 > **Install only this NRO.** The rewrite replaces the original Online Deluxe
 > fork (`libssbu_online_deluxe*.nro`), SsbuSync (`libssbusync.nro`) and the
