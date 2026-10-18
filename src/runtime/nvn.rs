@@ -10,7 +10,7 @@ use std::{
     fs::File,
     io::Write,
     path::Path,
-    sync::atomic::{AtomicI32, AtomicI64, AtomicU64, AtomicUsize, Ordering},
+    sync::atomic::{AtomicBool, AtomicI32, AtomicI64, AtomicU64, AtomicU8, AtomicUsize, Ordering},
 };
 type Ptr = *mut c_void;
 type Getter = unsafe extern "C" fn(Ptr, *const c_char) -> *const c_void;
@@ -27,6 +27,15 @@ static GET_TOTAL: AtomicUsize = AtomicUsize::new(0);
 static GET_INTERVAL: AtomicUsize = AtomicUsize::new(0);
 static SET_ACTIVE: AtomicUsize = AtomicUsize::new(0);
 static SET_CROP: AtomicUsize = AtomicUsize::new(0);
+static INTERVAL_ZERO_ATTEMPTED: AtomicBool = AtomicBool::new(false);
+/// 0 = not checked, 1 = raw setter resolved, 2 = raw setter unavailable.
+static INTERVAL_ZERO_AVAILABILITY: AtomicU8 = AtomicU8::new(0);
+/// -1 = not requested; zero is the only requested value in this experiment.
+static INTERVAL_ZERO_REQUESTED: AtomicI32 = AtomicI32::new(-1);
+/// True means the void NVN setter was called; it is not an acknowledgement.
+static INTERVAL_ZERO_APPLIED: AtomicBool = AtomicBool::new(false);
+/// One-time API-reported getter result after the setter call (or failed lookup).
+static INTERVAL_ZERO_READBACK: AtomicI32 = AtomicI32::new(-1);
 static WINDOW: AtomicUsize = AtomicUsize::new(0);
 static ACTIVE: AtomicI32 = AtomicI32::new(-1);
 /// The game's queue, from its first tracked present. Used by `present_at_flush`.
@@ -180,9 +189,38 @@ unsafe extern "C" fn window_initialize(window: Ptr, builder: *const c_void) -> u
         } else if TOTAL.load(Ordering::Relaxed) == 3 && ACTIVE.load(Ordering::Relaxed) == 3 {
             super::renderer::arm_mode(3);
         }
+        apply_present_interval_zero(window);
     }
     result
 }
+
+unsafe fn apply_present_interval_zero(window: Ptr) {
+    if !super::research_present_interval_zero_enabled()
+        || INTERVAL_ZERO_ATTEMPTED
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_err()
+    {
+        return;
+    }
+
+    INTERVAL_ZERO_REQUESTED.store(0, Ordering::Release);
+    let setter = resolve(b"nvnWindowSetPresentInterval\0");
+    if setter == 0 {
+        INTERVAL_ZERO_AVAILABILITY.store(2, Ordering::Release);
+        INTERVAL_ZERO_READBACK.store(INTERVAL.load(Ordering::Relaxed), Ordering::Release);
+        return;
+    }
+
+    INTERVAL_ZERO_AVAILABILITY.store(1, Ordering::Release);
+    let set: unsafe extern "C" fn(Ptr, i32) = std::mem::transmute(setter);
+    super::interval_observer::observe(window as usize, setter, false);
+    set(window, 0);
+    super::interval_observer::observe(window as usize, setter, true);
+    INTERVAL_ZERO_APPLIED.store(true, Ordering::Release);
+    readback(window);
+    INTERVAL_ZERO_READBACK.store(INTERVAL.load(Ordering::Relaxed), Ordering::Release);
+}
+
 unsafe extern "C" fn window_finalize(window: Ptr) {
     if WINDOW
         .compare_exchange(window as usize, 0, Ordering::AcqRel, Ordering::Acquire)
@@ -446,6 +484,25 @@ pub(super) fn write_status() {
     if let Ok(mut file) = File::create(Path::new(DATA_DIR).join("renderer-status.txt")) {
         let policy = crate::render_policy::labels(crate::render_policy::load_machine());
         let auto = super::auto_driver::snapshot();
+        let interval_zero_enabled = if super::research_present_interval_zero_enabled() {
+            "true"
+        } else {
+            "false"
+        };
+        let interval_zero_availability = match INTERVAL_ZERO_AVAILABILITY.load(Ordering::Acquire) {
+            1 => "available",
+            2 => "unavailable",
+            _ => "not_checked",
+        };
+        let interval_zero_requested = match INTERVAL_ZERO_REQUESTED.load(Ordering::Acquire) {
+            0 => "0".to_owned(),
+            _ => "not_requested".to_owned(),
+        };
+        let interval_zero_applied = if INTERVAL_ZERO_APPLIED.load(Ordering::Acquire) {
+            "setter_called"
+        } else {
+            "not_applied"
+        };
         let auto_profile = if auto.auto_profile { "true" } else { "false" };
         let cleanup_hold = if auto.cleanup_hold { "true" } else { "false" };
         let scene_ready = if auto.ready { "true" } else { "false" };
@@ -468,6 +525,26 @@ pub(super) fn write_status() {
             OUTSTANDING.load(Ordering::Relaxed),
             PRESENT_MASK.load(Ordering::Relaxed), ACQUIRE_MASK.load(Ordering::Relaxed),
             PRESENT_TICK.load(Ordering::Relaxed), ACQUIRE_TICK.load(Ordering::Relaxed));
+        let _ = writeln!(
+            file,
+            "research_present_interval_zero_enabled={}\nresearch_present_interval_zero_availability={}\nresearch_present_interval_zero_requested={}\nresearch_present_interval_zero_applied={}\nresearch_present_interval_zero_api_reported_readback={}\nresearch_present_interval_zero_readback_semantics=api_reported_requested_interval_only",
+            interval_zero_enabled,
+            interval_zero_availability,
+            interval_zero_requested,
+            interval_zero_applied,
+            INTERVAL_ZERO_READBACK.load(Ordering::Acquire),
+        );
+        let _ = super::interval_observer::write_status(&mut file);
+        let _ = writeln!(
+            file,
+            "research_input_trace_requested={}\nresearch_input_trace_state={}",
+            if super::input_trace_enabled() {
+                "true"
+            } else {
+                "false"
+            },
+            super::input_trace::state(),
+        );
         let _ = writeln!(
             file,
             "lesslag_fields_skip={}",

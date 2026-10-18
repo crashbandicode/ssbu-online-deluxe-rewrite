@@ -136,6 +136,13 @@ pub struct Config {
     /// Default true. Read at start; the `DISABLE_BACKOFF` flag still skips
     /// the install entirely.
     pub dispatcher_backoff: bool,
+    /// 2026-10-18 research experiment: request NVN present interval zero once
+    /// after the tracked window initializes. Startup-only, default off. The
+    /// getter reports the API's cached/requested interval, not display timing.
+    pub research_present_interval_zero: bool,
+    /// Startup-only diagnostic request for manager/scene markers. It does not
+    /// alter input samples or serve as a latency lever. Default off.
+    pub research_input_trace: bool,
 }
 
 /// Pages left out of the window cycle (`hide_pages=none` or a comma list of
@@ -304,6 +311,8 @@ impl Default for Config {
             perf_view: PerfView::Graph,
             early_present: true,
             dispatcher_backoff: true,
+            research_present_interval_zero: false,
+            research_input_trace: false,
         }
     }
 }
@@ -322,7 +331,7 @@ fn parse_count<T: TryFrom<u32>>(value: &str, max: u32, message: &str) -> Result<
 
 pub fn parse(text: &str) -> Result<Config, String> {
     let mut config = Config::default();
-    let mut seen = [false; 17];
+    let mut seen = [false; 19];
     for (index, raw) in text.lines().enumerate() {
         let line = raw.split('#').next().unwrap_or_default().trim();
         if line.is_empty() {
@@ -361,6 +370,8 @@ pub fn parse(text: &str) -> Result<Config, String> {
             "perf_view" => 14,
             "early_present" => 15,
             "dispatcher_backoff" => 16,
+            "research_present_interval_zero" => 17,
+            "research_input_trace" => 18,
             _ => return Err(error(&format!("unknown key '{key}'"))),
         };
         if seen[slot] {
@@ -470,6 +481,24 @@ pub fn parse(text: &str) -> Result<Config, String> {
                     _ => return Err(error("dispatcher_backoff must be true or false")),
                 };
             }
+            "research_present_interval_zero" => {
+                config.research_present_interval_zero = match value {
+                    "true" => true,
+                    "false" => false,
+                    _ => {
+                        return Err(error(
+                            "research_present_interval_zero must be true or false",
+                        ))
+                    }
+                };
+            }
+            "research_input_trace" => {
+                config.research_input_trace = match value {
+                    "true" => true,
+                    "false" => false,
+                    _ => return Err(error("research_input_trace must be true or false")),
+                };
+            }
             "input_buffer" => {
                 config.input_buffer = if value == "auto" {
                     -1
@@ -527,8 +556,18 @@ pub fn serialize(config: &Config) -> String {
     } else {
         "false"
     };
+    let research_present_interval_zero = if config.research_present_interval_zero {
+        "true"
+    } else {
+        "false"
+    };
+    let research_input_trace = if config.research_input_trace {
+        "true"
+    } else {
+        "false"
+    };
     format!(
-        "# Online Deluxe settings\nversion=1\ninput_buffer={input_buffer}\nrender_mode={}\nauto_profile={auto_profile}\nplatform={}\nstealth={stealth}\nstreamer={streamer}\ndrs_moves={}\ndrs_adaptive={drs_adaptive}\ndrs_adaptive_threshold_ms={}\ndrs_adaptive_trigger_frames={}\ndrs_adaptive_release_frames={}\nultra_resolution={}\nhide_pages={}\nperf_view={}\nearly_present={early_present}\ndispatcher_backoff={dispatcher_backoff}\n",
+        "# Online Deluxe settings\nversion=1\ninput_buffer={input_buffer}\nrender_mode={}\nauto_profile={auto_profile}\nplatform={}\nstealth={stealth}\nstreamer={streamer}\ndrs_moves={}\ndrs_adaptive={drs_adaptive}\ndrs_adaptive_threshold_ms={}\ndrs_adaptive_trigger_frames={}\ndrs_adaptive_release_frames={}\nultra_resolution={}\nhide_pages={}\nperf_view={}\nearly_present={early_present}\ndispatcher_backoff={dispatcher_backoff}\nresearch_present_interval_zero={research_present_interval_zero}\nresearch_input_trace={research_input_trace}\n",
         config.render_mode.key(),
         config.platform.key(),
         config.drs_moves.serialize(),
@@ -589,6 +628,8 @@ mod tests {
                 perf_view: PerfView::Graph,
                 early_present: true,
                 dispatcher_backoff: true,
+                research_present_interval_zero: false,
+                research_input_trace: false,
             };
             assert_eq!(parse(&config.serialize()).unwrap(), config);
         }
@@ -612,6 +653,63 @@ mod tests {
             "version=1\nearly_present=true\nearly_present=false",
         ] {
             assert!(parse(bad).is_err(), "{bad:?} accepted");
+        }
+    }
+
+    #[test]
+    fn research_present_interval_zero_defaults_off_round_trips_and_rejects_bad_values() {
+        let defaults = parse("version=1").unwrap();
+        assert!(!defaults.research_present_interval_zero);
+        assert!(defaults
+            .serialize()
+            .contains("research_present_interval_zero=false\n"));
+
+        let enabled = parse("version=1\nresearch_present_interval_zero=true").unwrap();
+        assert!(enabled.research_present_interval_zero);
+        assert_eq!(parse(&enabled.serialize()).unwrap(), enabled);
+
+        let disabled = parse("version=1\nresearch_present_interval_zero=false").unwrap();
+        assert!(!disabled.research_present_interval_zero);
+        assert_eq!(parse(&disabled.serialize()).unwrap(), disabled);
+
+        for text in [
+            "version=1\nresearch_present_interval_zero=",
+            "version=1\nresearch_present_interval_zero=yes",
+            "version=1\nresearch_present_interval_zero=1",
+            "version=1\nresearch_present_interval_zero=TRUE",
+            "version=1\nresearch_present_interval_zero=true\nresearch_present_interval_zero=false",
+        ] {
+            assert!(parse(text).is_err(), "accepted {text:?}");
+        }
+    }
+
+    #[test]
+    fn research_input_trace_defaults_off_is_independent_and_round_trips() {
+        let defaults = parse("version=1").unwrap();
+        assert!(!defaults.research_input_trace);
+        assert!(defaults
+            .serialize()
+            .contains("research_input_trace=false\n"));
+
+        let trace = parse("version=1\nresearch_input_trace=true").unwrap();
+        assert!(trace.research_input_trace);
+        assert!(!trace.research_present_interval_zero);
+        assert_eq!(parse(&trace.serialize()).unwrap(), trace);
+
+        let both =
+            parse("version=1\nresearch_present_interval_zero=true\nresearch_input_trace=true")
+                .unwrap();
+        assert!(both.research_present_interval_zero && both.research_input_trace);
+        assert_eq!(parse(&both.serialize()).unwrap(), both);
+
+        for text in [
+            "version=1\nresearch_input_trace=",
+            "version=1\nresearch_input_trace=yes",
+            "version=1\nresearch_input_trace=1",
+            "version=1\nresearch_input_trace=TRUE",
+            "version=1\nresearch_input_trace=true\nresearch_input_trace=false",
+        ] {
+            assert!(parse(text).is_err(), "accepted {text:?}");
         }
     }
 

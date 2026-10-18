@@ -28,6 +28,27 @@ The rewrite is one NRO. Keep Training Modpack and SGPO coexistence: no
 then), and `llultra` reads SGPO's word at
 `0x374812c` without patching it (`src/runtime/render_ultra.rs`).
 
+## Input-lag research branch (2026-10-18; based on 0.5.4)
+
+These are separately gated research additions, not fork behavior or a released
+latency claim. Both INI keys default to false and are preserved by Settings
+serialization without adding menu rows.
+
+- `research_present_interval_zero` requests raw NVN interval zero once after
+  tracked-window initialization. It preserves the existing image count, index,
+  flush, waits, pacer and simulation code. Read-only, exact-SDK-signature-checked
+  snapshots distinguish the cached request from Surface's effective queue
+  interval. A faster presentation cadence could still affect simulation timing;
+  neither getter nor snapshot proves physical no-vsync or stable game speed.
+- `research_input_trace` installs four independently preflighted HID/scene
+  point markers and records guarded cache mode/override metadata during active
+  captures. It never repolls HID or changes an input value. It adds diagnostic
+  overhead and does not identify first fighter consumption by itself.
+
+Console latency and compatibility are not measured. Research packages,
+optimized symbols, per-trial emulator evidence and the running ledger live in
+the operator's external `input-lag-1018` evidence directory.
+
 ## Rewrite changes 0.5.3 (2026-10-17): plugin API host and window pages consolidated
 
 Host-tested only; the behaviour changes a plugin or a player can see:

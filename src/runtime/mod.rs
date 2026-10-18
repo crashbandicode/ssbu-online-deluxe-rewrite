@@ -15,6 +15,8 @@ mod hooks;
 mod imgui;
 mod imgui_stats;
 mod input;
+mod input_trace;
+mod interval_observer;
 mod logging;
 mod memory;
 mod native_banner;
@@ -53,6 +55,10 @@ static PERF_NUMBER: AtomicBool = AtomicBool::new(false);
 static EARLY_PRESENT: AtomicBool = AtomicBool::new(true);
 /// `dispatcher_backoff` (0.5.3): let the installed backoff hook sleep.
 static BACKOFF_ENABLED: AtomicBool = AtomicBool::new(true);
+/// Startup-only research experiment. No Settings row; defaults off.
+static RESEARCH_PRESENT_INTERVAL_ZERO: AtomicBool = AtomicBool::new(false);
+/// Startup-only request to collect diagnostic manager/scene markers.
+static RESEARCH_INPUT_TRACE: AtomicBool = AtomicBool::new(false);
 static DRS_MOVES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 static DRS_ADAPTIVE: AtomicBool = AtomicBool::new(false);
 static DRS_THRESHOLD: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(1750);
@@ -99,6 +105,8 @@ pub(super) fn settings() -> Config {
         },
         early_present: EARLY_PRESENT.load(Ordering::Acquire),
         dispatcher_backoff: BACKOFF_ENABLED.load(Ordering::Acquire),
+        research_present_interval_zero: RESEARCH_PRESENT_INTERVAL_ZERO.load(Ordering::Acquire),
+        research_input_trace: RESEARCH_INPUT_TRACE.load(Ordering::Acquire),
     }
 }
 
@@ -110,6 +118,16 @@ pub(super) fn early_present_enabled() -> bool {
 /// `dispatcher_backoff` (0.5.3). Read by the backoff hook on every idle pass.
 pub(super) fn backoff_enabled() -> bool {
     BACKOFF_ENABLED.load(Ordering::Relaxed)
+}
+
+/// Startup-only present-interval experiment gate.
+pub(super) fn research_present_interval_zero_enabled() -> bool {
+    RESEARCH_PRESENT_INTERVAL_ZERO.load(Ordering::Acquire)
+}
+
+/// Startup-only request to collect manager/scene trace markers.
+pub(super) fn input_trace_enabled() -> bool {
+    RESEARCH_INPUT_TRACE.load(Ordering::Acquire)
 }
 
 /// Enabled per-move resolution triggers (0.5.2 experiment). Atomic read; the
@@ -159,6 +177,8 @@ pub(super) fn publish(config: &Config) {
     );
     EARLY_PRESENT.store(config.early_present, Ordering::Release);
     BACKOFF_ENABLED.store(config.dispatcher_backoff, Ordering::Release);
+    RESEARCH_PRESENT_INTERVAL_ZERO.store(config.research_present_interval_zero, Ordering::Release);
+    RESEARCH_INPUT_TRACE.store(config.research_input_trace, Ordering::Release);
     DRS_MOVES.store(config.drs_moves.0, Ordering::Release);
     DRS_ADAPTIVE.store(config.drs_adaptive.enabled, Ordering::Release);
     DRS_THRESHOLD.store(
@@ -257,6 +277,7 @@ pub fn main() {
             install();
         }
     }
+    input_trace::install();
     // After the renderer family verified the dispatcher sites it shares. The
     // capture flags are read first: `CAPTURE_MATCH` also wants the CSS hooks.
     capture::install();

@@ -48,8 +48,16 @@ pub const KIND_DEPENDENCY_WAIT: u8 = 66;
 /// The UI job `main+0x375e260` from entry to return on its worker: span,
 /// `index` -1, `result` the hashed thread label. Wall time, not CPU time.
 pub const KIND_UI_JOB: u8 = 77;
+/// Opt-in input trace: kinds 80–83 use `index=-1`, `result=thread label`.
+pub const KIND_HID_BEFORE: u8 = 80;
+pub const KIND_HID_AFTER: u8 = 81;
+pub const KIND_SCENE_BEFORE: u8 = 82;
+pub const KIND_SCENE_AFTER: u8 = 83;
+/// Input cache snapshot at scene-before: `index` signed mode, `result` bit 0–7
+/// for nonzero override bytes at owner+0x580..0x587. No row if unreadable.
+pub const KIND_INPUT_CACHE_STATE: u8 = 84;
 
-/// Hashed thread label shared by kinds 12–17, 66 and 77. Pure, so
+/// Hashed thread label shared by kinds 12–17, 66, 77 and 80–83. Pure, so
 /// `tools/analyze_render_trace.py` recomputes it with the same formula.
 pub const fn thread_label(thread: u64) -> i32 {
     let mixed = thread
@@ -157,8 +165,9 @@ impl Entry for Sample {
 /// One CPU-side span or point. Kinds: 1 present, 2 acquire, 3 texture CPU
 /// wait, 4 render poll, 5 dispatch flush, 6 HID poll marker (`index` 24-bit
 /// serial, `result` left Y), 7 the same poll's sampling counter, then 12–17,
-/// 27, 66 and 77 above. Kinds 18–26, 28–38 and 60–64 are retired; archived
-/// traces still decode them. 32 bytes.
+/// 27, 66, 77 and 80–84 above. Kinds 80–83 store a thread label in `result`;
+/// kind 84 stores its override-byte mask there. Kinds 18–26, 28–38 and 60–64
+/// are retired; archived traces still decode them. 32 bytes.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Event {
     pub begin: u64,
@@ -843,8 +852,16 @@ mod tests {
             KIND_SYNC_INFINITE_OTHER,
             KIND_DEPENDENCY_WAIT,
             KIND_UI_JOB,
+            KIND_HID_BEFORE,
+            KIND_HID_AFTER,
+            KIND_SCENE_BEFORE,
+            KIND_SCENE_AFTER,
+            KIND_INPUT_CACHE_STATE,
         ];
-        assert_eq!(kept, [12, 13, 14, 15, 16, 17, 27, 66, 77]);
+        assert_eq!(
+            kept,
+            [12, 13, 14, 15, 16, 17, 27, 66, 77, 80, 81, 82, 83, 84]
+        );
         assert_eq!(std::mem::size_of::<Sample>(), 32);
         assert_eq!(std::mem::size_of::<Event>(), 32);
     }
