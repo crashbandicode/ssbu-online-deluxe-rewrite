@@ -18,7 +18,12 @@ re-fires when only the live font drifted from the saved one.
 ![Training character select with the native status line](media/training-css.png)
 
 The native status line on the Training character select, Eden 2026-10-14 with
-0.4.2: `You: LessLag | Auto` is the selected profile and input buffer. The
+0.4.2: `You: LessLag | Auto` is the selected profile and input buffer. Since
+0.6.2 an Auto buffer carries the frames the game chose, for example
+`You: LessLag | Auto (4f)`, once an online match has set them (plain `Auto`
+before that and offline). The You line's latency field is 10 characters wide
+(the line is capped at 38 characters, was 32), and the lobby pane keeps plain
+`Auto`. The
 opponent line appears only with a connected station (since 0.5.5, one that has
 produced an RTT sample within 10 s). The window itself and
 Streamer on are shown in [Screenshots](SCREENSHOTS.md).
@@ -76,7 +81,8 @@ not change simulation, networking, rendering policy or input handling.
   actual NSO arena test on Switch.
 - One text builder (`native_banner::status_text`) formats the CSS line and the
   arena roster, so the CSS fields take the arena byte bounds (name ≤ 40 bytes,
-  profile ≤ 9, latency ≤ 4, ping ≤ 17); one style decision
+  profile ≤ 9, latency ≤ 4, ping ≤ 17; since 0.6.2 only the You line's latency
+  field takes 10 for `Auto (4f)`, remote lines keep 4); one style decision
   (`native_banner::paint`) chooses between the Streamer restore and the
   telemetry write for every pane kind (2026-10-17).
 - Original styles are captured and restored instead of assuming the fork's

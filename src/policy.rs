@@ -54,9 +54,28 @@ pub fn apply_input_buffer(current: u8, selected: i8) -> u8 {
     }
 }
 
+/// The frame count the game chose, observable only while the selection is
+/// Auto: a manual selection overwrites the byte, so later calls would echo ours.
+pub fn observed_auto_buffer(automatic: u8, selected: i8) -> Option<u8> {
+    if (0..=25).contains(&selected) {
+        None
+    } else {
+        Some(automatic)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn auto_buffer_is_observed_only_while_auto_is_selected() {
+        assert_eq!(observed_auto_buffer(4, -1), Some(4));
+        assert_eq!(observed_auto_buffer(0, -1), Some(0));
+        assert_eq!(observed_auto_buffer(4, i8::MIN), Some(4));
+        assert_eq!(observed_auto_buffer(4, 3), None);
+        assert_eq!(observed_auto_buffer(4, 25), None);
+    }
 
     #[test]
     fn manual_match_choice_survives_online_defaults_but_not_training_or_menu() {

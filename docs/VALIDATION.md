@@ -2817,6 +2817,39 @@ Evidence outside Git: `~/.local/share/ssbu-mod-backups/plugin-api-tangent-202610
 (`FINDINGS.md`, `screens/`, `profraw/al-a5/final/` and `al-b5/final/`, the
 endgame and keepalive logs).
 
+### 0.6.2 — 2026-10-19: Auto shows the frame count the game chose
+
+- Request (operator, after the 0.6.1 console boot): "can we also have Auto
+  say what frame was chosen like (Auto (4f))".
+- Change: the online-latency hook (`runtime/hooks.rs`, fork hook `0x16ccab8`,
+  event code 9) already reads the game's buffer byte before applying our
+  selection. New `policy::observed_auto_buffer(automatic, selected)` returns
+  that byte only while the selection is Auto (a manual value overwrites the
+  byte, so later calls would echo ours); the runtime keeps it in `AUTO_BUFFER`
+  (`runtime/mod.rs`: `note_auto_buffer`, `auto_buffer`, `clear_auto_buffer`)
+  and clears it when `auto_driver::set_scene` moves the connection to Offline,
+  so it survives the results screen and the rematch character select of the
+  same session. `native_banner::local_latency_label(buffer, auto_frames)`
+  renders `Auto (4f)` / `Auto` / the manual number; callers are the window
+  rows and You line (`runtime/ui.rs`), the native CSS/arena You line
+  (`runtime/native_banner.rs`) and the lobby text (always `None`: the
+  local-wireless pane is one digit wide). Native You line latency field
+  `YOU_LATENCY_MAX` 4 → 10, `YOU_LINE_MAX` 32 → 38, `TEXT_CAP` 692 → 698
+  (`PANE_SCAN_MAX` still under 1024). Peer exchange, INI, event codes, chords
+  and the plugin API unchanged.
+- Host tests: `policy::auto_buffer_is_observed_only_while_auto_is_selected`
+  (new), `native_banner::status_text_keeps_marker_room_you_and_remote_lines`
+  extended (`Auto (4f)`, `Auto (25f)`, manual stays a number, the native You
+  line keeps `Auto (25f)` whole, `YOU_LINE_MAX == 38`).
+- Gates on this commit: `cargo test` 240 + 1 passed; `cargo clippy
+  --all-targets -- -D warnings` clean; `cargo build --no-default-features` ok;
+  `cargo skyline build --release` ok (the runtime callers compile only for the
+  Switch target). Build id, NRO SHA-256 and size: the v0.6.2 release manifest.
+- Console: not booted. Owed: NetLatency Auto, one Quickplay match → the strip's
+  `Net:` field during the match, then the window and the character-select
+  `You:` line read `Auto (Nf)`; the main menu reverts to `Auto`; `events.log`
+  code 9 rows carry N as their first value.
+
 ### 0.6.1 — 2026-10-19: the last page is titled Window Options
 
 - Change: the last page of the L+R+Down cycle, which 0.6.0 titled just

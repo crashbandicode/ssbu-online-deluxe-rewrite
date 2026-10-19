@@ -62,6 +62,7 @@ unsafe fn deluxe_rewrite_set_online_latency(ctx: &InlineCtx) {
     }
     let selected = INPUT_BUFFER.load(Ordering::Acquire);
     let automatic = *pointer;
+    super::note_auto_buffer(crate::policy::observed_auto_buffer(automatic, selected));
     let applied = crate::policy::apply_input_buffer(automatic, selected);
     if applied != automatic {
         *pointer = applied;

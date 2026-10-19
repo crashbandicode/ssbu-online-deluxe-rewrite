@@ -10,11 +10,13 @@ delivered as **one NRO**: rendering profiles that cut input latency, a global
 Player Info window, the native character-select status line and network
 display. No overclocking.
 
-**Current version: 0.6.1** (2026-10-19). It only retitles the Player Info
-window's last page **Window Options**. The 0.6.0 redesign before it (a `You`
+**Current version: 0.6.2** (2026-10-19). Auto now shows the buffer the game
+chose as a frame count, `Auto (4f)`, on the window and the character-select line
+(plain `Auto` until the first online match; not booted on the console yet).
+0.6.1's **Window Options** page title and the 0.6.0 redesign before it (a `You`
 line, an `Opp` line for a live opponent, the five match-time settings, a
 one-line fps footer and a chord hint, with the window's own toggles on a new
-last page) was booted on the console on 2026-10-19 and works, per the operator.
+last page) were booted on the console on 2026-10-19 and work, per the operator.
 Every release on Forgejo carries the NRO and its manifest; what each version
 changed and which console checks are owed is in [STATUS.md](docs/STATUS.md), the
 evidence per build in [VALIDATION.md](docs/VALIDATION.md).
@@ -41,7 +43,8 @@ The window captures predate the 0.6.0 layout. More in [Screenshots](docs/SCREENS
   [Rendering profiles](docs/RENDERING.md)
 - **Player Info window.** Settings, Plugins, Performance, Window Options and
   Debug pages on L+R+Down; a compact strip in matches; the native character-select line keeps
-  your profile, buffer and the opponent's settings and RTT.
+  your profile, buffer (Auto shows the game's chosen frames, `Auto (4f)`) and
+  the opponent's settings and RTT.
   [Controls](docs/CONTROLS.md), [native display](docs/NATIVE_DISPLAY.md)
 - **Network display.** Opponent name, interface, settings and coloured RTT from
   the game's own measurement, shown only while their station is live; Stealth

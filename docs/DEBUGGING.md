@@ -89,7 +89,7 @@ data directory and flags.
 | 3 / 4 / 5 | Hook installing / installed / rejected |
 | 6 / 7 | Config loaded (a = 0, b = input buffer) / rejected |
 | 8 | Setting changed: a = 0, b = input buffer |
-| 9 / 10 | Network buffer applied / null pointer skipped |
+| 9 / 10 | Network buffer applied (a = the game's byte before ours is applied, which is what Auto chose; b = the value applied; since 0.6.2 that a is what the `Auto (Nf)` label shows) / null pointer skipped |
 | 12 / 13 | Sampled CSS entry / exit |
 | 14 / 15 / 16 | Panic / heartbeat (a = 0, b = iteration) / compatibility or diagnostic flag |
 | 17 | Shared function hook entry instruction before chaining |

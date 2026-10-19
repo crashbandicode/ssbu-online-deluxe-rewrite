@@ -386,7 +386,8 @@ fn settings_rows(
     let latched = crate::peer_transport::latched_stealth();
     let stealth = crate::menu::stealth_value(super::stealth(), latched);
     let interface = super::connection_transport::local_interface_label();
-    let buffer = crate::native_banner::local_latency_label(config.input_buffer);
+    let buffer =
+        crate::native_banner::local_latency_label(config.input_buffer, super::auto_buffer());
     let streamer = if config.streamer { "On" } else { "Off" };
     let ultra = config.ultra_resolution.label();
     let (mut rows, mut colors) = (Vec::new(), Vec::new());

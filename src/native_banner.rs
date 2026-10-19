@@ -16,7 +16,10 @@ pub const ARENA_PING_MAX: usize = 17;
 pub const ROOM_LINE_MAX: usize = 25;
 /// Longest row label plus the applied FPS++ `++` suffix.
 pub const YOU_PROFILE_MAX: usize = 20;
-pub const YOU_LINE_MAX: usize = 32;
+/// `Auto (25f)`: Auto with the frame count the game chose (0.6.2).
+pub const YOU_LATENCY_MAX: usize = 10;
+/// `You: ` + profile + ` | ` + latency.
+pub const YOU_LINE_MAX: usize = 5 + YOU_PROFILE_MAX + 3 + YOU_LATENCY_MAX;
 pub const REMOTE_LINE_MAX: usize =
     1 + ARENA_NAME_MAX + 2 + ARENA_PROFILE_MAX + 3 + ARENA_LATENCY_MAX + 2 + ARENA_PING_MAX + 1;
 
@@ -25,7 +28,7 @@ pub const TEXT_CAP: usize = MARKER_BYTES + ROOM_LINE_MAX + YOU_LINE_MAX + 8 * RE
 /// One past the text the setter is given. Longer declared buffers are corrupt.
 pub const PANE_SCAN_MAX: usize = TEXT_CAP + 1;
 
-const _: () = assert!(TEXT_CAP == 692);
+const _: () = assert!(TEXT_CAP == 698);
 const _: () = assert!(PANE_SCAN_MAX <= 1024);
 
 /// Local-wireless update site. Words are the clean 13.0.5 entry from the pane probe.
@@ -128,17 +131,21 @@ pub fn arena_pos_y(displayed_remote_count: u8) -> f32 {
     -115.0 - 22.5 * f32::from(displayed_remote_count.min(ARENA_REMOTE_CAP))
 }
 
-pub fn local_latency_label(buffer: i8) -> String {
-    match buffer {
-        -1 => "Auto".to_owned(),
+/// `Auto`, or `Auto (4f)` once the online-latency hook has seen the frame
+/// count the game chose for this session (0.6.2); a manual buffer is its number.
+pub fn local_latency_label(buffer: i8, auto_frames: Option<u8>) -> String {
+    match (buffer, auto_frames) {
+        (-1, Some(frames)) => format!("Auto ({frames}f)"),
+        (-1, None) => "Auto".to_owned(),
         _ => buffer.to_string(),
     }
 }
 
 /// Local-wireless lobby text: the input buffer behind the marker, so the
 /// game's own count (which can be the same digit) is told apart from ours.
+/// That pane is a digit wide, so Auto stays `Auto` here.
 pub fn local_lobby_text(buffer: i8) -> String {
-    format!("{MARKER}{}", local_latency_label(buffer))
+    format!("{MARKER}{}", local_latency_label(buffer, None))
 }
 
 /// One remote line. Fields already belong to the same station.
@@ -160,7 +167,7 @@ pub fn status_text(
     remotes: &[RemoteLine],
 ) -> (String, u8) {
     let profile = field(you_profile, "---", YOU_PROFILE_MAX);
-    let latency = field(you_latency, "---", ARENA_LATENCY_MAX);
+    let latency = field(you_latency, "---", YOU_LATENCY_MAX);
     let room = field(room.unwrap_or(""), "", ROOM_LINE_MAX - 10);
     let head = (!room.is_empty()).then(|| format!("ROOM ID: {room}\n"));
     let mut body = format!("{}You: {profile} | {latency}", head.unwrap_or_default());
@@ -418,9 +425,14 @@ mod tests {
         assert_eq!(arena_pos_y(shown), -160.0);
         let (boosted, _) = status_text(Some("AB12"), "Auto (unavailable)++", "0", &[]);
         assert!(boosted.contains("You: Auto (unavailable)++ | 0"));
-        assert_eq!(local_latency_label(-1), "Auto");
-        assert_eq!(local_latency_label(4), "4");
+        assert_eq!(local_latency_label(-1, None), "Auto");
+        assert_eq!(local_latency_label(-1, Some(4)), "Auto (4f)");
+        assert_eq!(local_latency_label(-1, Some(25)), "Auto (25f)");
+        assert_eq!(local_latency_label(4, Some(7)), "4");
         assert_eq!(local_lobby_text(-1), "\u{200B}Auto");
+        let (auto_css, _) = status_text(None, "Auto:Van", "Auto (25f)", &[]);
+        assert_eq!(auto_css, "\u{200B}You: Auto:Van | Auto (25f)");
+        assert_eq!(YOU_LINE_MAX, 38);
         assert!(is_our_text(&local_lobby_text(0)));
     }
 

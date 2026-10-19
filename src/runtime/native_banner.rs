@@ -330,7 +330,7 @@ fn telemetry(room: Option<&str>) -> Option<Telemetry> {
         auto.request,
         config.vanilla_plus,
     );
-    let latency = native_banner::local_latency_label(config.input_buffer);
+    let latency = native_banner::local_latency_label(config.input_buffer, super::auto_buffer());
     let (remotes, ping) = if room.is_some() {
         arena_remotes()
     } else {

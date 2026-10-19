@@ -223,6 +223,8 @@ pub(crate) fn set_scene(
     let connection = next_connection.unwrap_or(previous_connection);
     let status = next_status.unwrap_or(previous_status);
     if next_connection == Some(Connection::Offline) {
+        // The session is over; what Auto chose for it no longer applies.
+        super::clear_auto_buffer();
         let was_marked = MATCH_MARKED.swap(false, Ordering::AcqRel);
         if was_marked && !previous_connection.is_online() {
             record(Code::OnlineContext, 0, source);
