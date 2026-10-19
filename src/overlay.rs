@@ -31,18 +31,23 @@ pub enum View {
     /// One plugin's own page (`PLUGIN_FLAG_OWN_PAGE`, 0.5.0); `Overlay::page`
     /// says which. Appended after Plugins for the same reason.
     PluginPage,
+    /// The window's own configuration (0.6.0): the page toggles, PerfView and
+    /// Hints, which until 0.5.7 were rows of Settings. Last page of the cycle,
+    /// always in it. Appended for the same reason.
+    Window,
 }
 
 /// Chord + Down walks Hidden → Settings → Plugins → each own page →
-/// Performance → Hidden. The shared Plugins page is skipped while no plugin
-/// has rows on it, and the own pages are the `page_count` plugins that asked
-/// for one (`page` is the current index). `hidden` (the INI's `hide_pages`,
-/// 0.5.3) drops the shared Plugins page and/or Performance from the walk, so
-/// a plugin's own page sits right after Settings and the window hides right
-/// after it. Plus/Minus held with the chord opens Debug from Settings,
-/// Plugins or an own page and keeps Debug open while it stays held; Debug
-/// then continues to Performance (or hides) on a plain chord. Returns the
-/// next view and own-page index.
+/// Performance → Window → Hidden. The shared Plugins page is skipped while no
+/// plugin has rows on it, and the own pages are the `page_count` plugins that
+/// asked for one (`page` is the current index). `hidden` (the INI's
+/// `hide_pages`, 0.5.3) drops the shared Plugins page and/or Performance from
+/// the walk, so a plugin's own page sits right after Settings and the Window
+/// page right after it; Settings and Window are always in the walk, so the
+/// toggles stay reachable. Plus/Minus held with the chord opens Debug from
+/// Settings, Plugins, an own page or Window and keeps Debug open while it
+/// stays held; Debug then continues to Performance (or Window) on a plain
+/// chord. Returns the next view and own-page index.
 pub fn next_view(
     view: View,
     page: usize,
@@ -52,13 +57,15 @@ pub fn next_view(
     hidden: HiddenPages,
 ) -> (View, usize) {
     let after_pages = if hidden.performance {
-        (View::Hidden, 0)
+        (View::Window, 0)
     } else {
         (View::Performance, 0)
     };
     match (view, debug_modifier) {
         (View::Hidden, _) => (View::Settings, 0),
-        (View::Settings | View::Plugins | View::PluginPage, true) => (View::Debug, page),
+        (View::Settings | View::Plugins | View::PluginPage | View::Window, true) => {
+            (View::Debug, page)
+        }
         (View::Debug, true) => (View::Debug, page),
         (View::Settings, false) if shared_available && !hidden.plugins => (View::Plugins, 0),
         (View::Settings | View::Plugins, false) if page_count > 0 && !hidden.own_pages => {
@@ -66,7 +73,8 @@ pub fn next_view(
         }
         (View::PluginPage, false) if page + 1 < page_count => (View::PluginPage, page + 1),
         (View::Settings | View::Plugins | View::PluginPage | View::Debug, _) => after_pages,
-        (View::Performance, _) => (View::Hidden, 0),
+        (View::Performance, _) => (View::Window, 0),
+        (View::Window, _) => (View::Hidden, 0),
     }
 }
 
@@ -145,8 +153,9 @@ const fn native_modifier(buttons: u64) -> bool {
 }
 
 /// The hold that unlocks a value edit in the open window while `edit_hold`
-/// is on: ZR alone.
-const fn edit_modifier(buttons: u64) -> bool {
+/// is on: ZR alone. The window also reads it to mark the selected value as
+/// editable (0.6.0).
+pub(crate) const fn edit_modifier(buttons: u64) -> bool {
     buttons & ZR != 0 && buttons & ZL == 0
 }
 
@@ -209,7 +218,9 @@ impl Overlay {
             config.vanilla_plus = !config.vanilla_plus;
             return true;
         }
-        if self.view != View::Settings && shoulders {
+        // Settings and Window (0.6.0) are the two pages with a row selection.
+        let in_menu = matches!(self.view, View::Settings | View::Window);
+        if !in_menu && shoulders {
             if pressed & LEFT != 0 {
                 crate::peer_transport::cycle_peer(-1);
                 return false;
@@ -241,12 +252,9 @@ impl Overlay {
             if (self.view, self.page) != previous {
                 self.plugin_row = 0;
             }
-            self.menu.open = self.view == View::Settings;
+            self.menu.open = matches!(self.view, View::Settings | View::Window);
             if self.menu.open {
-                let gate = crate::menu::row_gate(
-                    crate::peer_transport::opponent_connected(),
-                    config.platform,
-                );
+                let gate = self.row_gate(config);
                 if !crate::menu::row_visible(self.menu.selected, gate) {
                     self.menu.selected = crate::menu::move_row(self.menu.selected, 1, gate);
                 }
@@ -281,7 +289,7 @@ impl Overlay {
             }
             return false;
         }
-        if self.view != View::Settings {
+        if !in_menu {
             // Native pane edits need ZL held: the D-pad also moves the
             // character-select hand, and plain presses rewrote the profile and
             // the buffer on the console (23 unintended saves on 2026-10-14).
@@ -339,8 +347,18 @@ impl Overlay {
         } else {
             return false;
         };
-        self.menu
-            .handle_peers(action, config, crate::peer_transport::opponent_connected())
+        let gate = self.row_gate(config);
+        self.menu.handle_rows(action, config, gate)
+    }
+
+    /// The row gate of the page with the selection: the Settings rows (the
+    /// `Opp` line while a station is mapped) or the Window page's rows.
+    fn row_gate(&self, config: &Config) -> crate::menu::RowGate {
+        crate::menu::row_gate(
+            crate::peer_transport::opponent_connected(),
+            config.platform,
+            self.view == View::Window,
+        )
     }
 }
 
@@ -413,8 +431,41 @@ mod tests {
         ui.poll(L | R | DOWN, &mut config);
         assert_eq!(ui.view, View::Performance);
         assert!(!ui.poll(RIGHT, &mut config));
+        // 0.6.0: the Window page follows Performance; its rows edit the
+        // window's own configuration, and the selection starts on PluginsPage.
+        ui.poll(L | R | DOWN, &mut config);
+        assert_eq!(
+            (ui.view, ui.menu.selected),
+            (View::Window, crate::menu::ROW_PAGE_PLUGINS)
+        );
+        ui.poll(0, &mut config);
+        assert!(ui.poll(RIGHT, &mut config));
+        assert!(config.hide_pages.plugins);
+        assert!(!ui.poll(RIGHT, &mut config));
+        ui.poll(0, &mut config);
+        assert!(ui.poll(LEFT, &mut config));
+        assert_eq!(config.hide_pages, HiddenPages::NONE);
+        ui.poll(0, &mut config);
+        for _ in 0..4 {
+            ui.poll(DOWN, &mut config);
+            ui.poll(0, &mut config);
+        }
+        assert_eq!(ui.menu.selected, crate::menu::ROW_HINTS);
+        assert!(ui.poll(RIGHT, &mut config));
+        assert!(!config.hints);
+        ui.poll(0, &mut config);
+        assert!(ui.poll(RIGHT, &mut config));
+        assert!(config.hints);
+        // Settings rows are never reached from the Window page.
+        ui.poll(0, &mut config);
+        ui.poll(DOWN, &mut config);
+        assert_eq!(ui.menu.selected, crate::menu::ROW_PAGE_PLUGINS);
+        ui.poll(0, &mut config);
         ui.poll(L | R | DOWN, &mut config);
         assert_eq!(ui.view, View::Hidden);
+        assert!(!ui.menu.open);
+        assert_eq!(config.input_buffer, 0);
+        assert!(!config.stealth);
     }
     #[test]
     fn both_shortcuts_and_debug_modifier_preserve_settings() {
@@ -525,6 +576,9 @@ mod tests {
         // Releasing a bumper re-arms it too.
         ui.poll(R | DOWN, &mut config);
         ui.poll(L | R | DOWN, &mut config);
+        assert_eq!(ui.view, View::Window);
+        ui.poll(L | DOWN, &mut config);
+        ui.poll(L | R | DOWN, &mut config);
         assert_eq!(ui.view, View::Hidden);
         ui.poll(0, &mut config);
         // Direct Debug toggle: chord + Minus, no Down, from any view.
@@ -571,9 +625,18 @@ mod tests {
                 next_view(View::Hidden, 0, debug, true, 2, none),
                 (View::Settings, 0)
             );
+            // 0.6.0: Performance → Window → Hidden, modifier or not.
             assert_eq!(
                 next_view(View::Performance, 0, debug, true, 2, none),
-                (View::Hidden, 0)
+                (View::Window, 0)
+            );
+            assert_eq!(
+                next_view(View::Window, 0, debug, true, 2, none),
+                if debug {
+                    (View::Debug, 0)
+                } else {
+                    (View::Hidden, 0)
+                }
             );
         }
         assert_eq!(
@@ -627,6 +690,7 @@ mod tests {
         );
         assert_eq!(View::Plugins as u8, 4);
         assert_eq!(View::PluginPage as u8, 5);
+        assert_eq!(View::Window as u8, 6);
         assert_eq!(View::Debug as u8, 3);
     }
 
@@ -637,7 +701,9 @@ mod tests {
             own_pages: false,
             performance: true,
         };
-        // Settings → own page → Hidden, even with shared rows registered.
+        // Settings → own page → Window → Hidden, even with shared rows
+        // registered (0.6.0: the Window page stays so the toggles are
+        // reachable).
         assert_eq!(
             next_view(View::Hidden, 0, false, true, 1, both),
             (View::Settings, 0)
@@ -648,16 +714,20 @@ mod tests {
         );
         assert_eq!(
             next_view(View::PluginPage, 0, false, true, 1, both),
+            (View::Window, 0)
+        );
+        assert_eq!(
+            next_view(View::Window, 0, false, true, 1, both),
             (View::Hidden, 0)
         );
-        // Without an own page Settings hides at once; Debug hides too.
+        // Without an own page Settings goes to Window at once; Debug too.
         assert_eq!(
             next_view(View::Settings, 0, false, true, 0, both),
-            (View::Hidden, 0)
+            (View::Window, 0)
         );
         assert_eq!(
             next_view(View::Debug, 0, false, true, 0, both),
-            (View::Hidden, 0)
+            (View::Window, 0)
         );
         // Debug stays reachable from Settings and an own page.
         assert_eq!(
@@ -700,8 +770,8 @@ mod tests {
         };
         assert_eq!(
             next_view(View::Settings, 0, false, true, 2, everything),
-            (View::Hidden, 0),
-            "Settings stays; everything else is skipped"
+            (View::Window, 0),
+            "Settings and Window stay; everything else is skipped"
         );
         let performance = HiddenPages {
             performance: true,
@@ -713,12 +783,12 @@ mod tests {
         );
         assert_eq!(
             next_view(View::Plugins, 0, false, true, 0, performance),
-            (View::Hidden, 0)
+            (View::Window, 0)
         );
-        // A stale Performance view still hides.
+        // A stale Performance view still moves on to Window.
         assert_eq!(
             next_view(View::Performance, 0, false, true, 0, both),
-            (View::Hidden, 0)
+            (View::Window, 0)
         );
 
         // Through the overlay: the INI value drives the walk.
@@ -735,7 +805,10 @@ mod tests {
         assert_eq!(ui.view, View::Settings);
         ui.poll_with(L | R, &mut config, none, &registry);
         ui.poll_with(L | R | DOWN, &mut config, none, &registry);
-        assert_eq!(ui.view, View::Hidden, "no Performance page");
+        assert_eq!(ui.view, View::Window, "no Performance page");
+        ui.poll_with(L | R, &mut config, none, &registry);
+        ui.poll_with(L | R | DOWN, &mut config, none, &registry);
+        assert_eq!(ui.view, View::Hidden);
         assert_eq!(config.hide_pages, both, "the chord never edits the key");
     }
 
@@ -831,11 +904,14 @@ mod tests {
             surface: crate::menu::NativeSurface::Css,
             fresh: true,
         };
-        // No plugin: the chord skips straight to Performance.
+        // No plugin: the chord skips straight to Performance, then Window.
         ui.poll_with(L | R | DOWN, &mut config, css, &registry);
         ui.poll_with(L | R, &mut config, css, &registry);
         ui.poll_with(L | R | DOWN, &mut config, css, &registry);
         assert_eq!(ui.view, View::Performance);
+        ui.poll_with(L | R, &mut config, css, &registry);
+        ui.poll_with(L | R | DOWN, &mut config, css, &registry);
+        assert_eq!(ui.view, View::Window);
         ui.poll_with(L | R, &mut config, css, &registry);
         ui.poll_with(L | R | DOWN, &mut config, css, &registry);
         assert_eq!(ui.view, View::Hidden);
@@ -905,6 +981,18 @@ mod tests {
         ui.poll_with(L | R, &mut config, css, &registry);
         ui.poll_with(L | R | DOWN, &mut config, css, &registry);
         assert_eq!(ui.view, View::Performance);
+        ui.poll_with(0, &mut config, css, &registry);
+        ui.poll_with(L | R | DOWN, &mut config, css, &registry);
+        assert_eq!(ui.view, View::Window);
+        ui.poll_with(0, &mut config, css, &registry);
+        // On the Window page the D-pad edits the window rows (PluginsPage
+        // first), not the allowed native pane and not a plugin row.
+        assert!(ui.poll_with(RIGHT, &mut config, css, &registry));
+        assert!(config.hide_pages.plugins);
+        assert_eq!(registry.take_last_step(), None);
+        ui.poll_with(0, &mut config, css, &registry);
+        assert!(ui.poll_with(LEFT, &mut config, css, &registry));
+        assert_eq!(config, Config::default());
         ui.poll_with(0, &mut config, css, &registry);
         ui.poll_with(L | R | DOWN, &mut config, css, &registry);
         assert_eq!(ui.view, View::Hidden);

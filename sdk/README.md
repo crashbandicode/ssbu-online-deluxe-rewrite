@@ -45,8 +45,9 @@ is in [docs/PLUGINS.md](../docs/PLUGINS.md); this file is the reference.
 
 ## What the host shows
 
-* The Plugins page joins the window chord cycle (L+R or ZL+ZR, then D-pad
-  Down) as **settings → plugins → performance → hidden**. It is skipped while
+* The Plugins page joins the window chord cycle (L+R, then D-pad Down; ZL+ZR
+  stopped being a chord in Deluxe 0.5.3) as **settings → plugins → performance
+  → window → hidden** (the Window page is Deluxe 0.6.0's). It is skipped while
   no plugin has rows on it, so users without plugins see no change.
 * A plugin registered with `PLUGIN_FLAG_OWN_PAGE` (Rust: `own_page: true`) is
   not grouped on the shared page: it gets its own page in the cycle, after

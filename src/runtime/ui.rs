@@ -1,6 +1,9 @@
 //! Fork-style global Player Info window. This window does not write panes.
 use super::{imgui::*, input, overlay_host, publish, record, settings, Code};
-use crate::menu::{strip_line, strip_segments, ProfileAction, Row};
+use crate::menu::{
+    mark_editing, net_profile_value, opp_line, perf_footer, strip_line, strip_segments,
+    you_line, ProfileAction, Row, HINT_LINE,
+};
 use crate::overlay::{FrameTimes, Overlay, View};
 use crate::pia_rtt::PresentedPing;
 use crate::plugin_api::{page_plugins, rows_for, PageRow, Registry, RowKind};
@@ -23,8 +26,6 @@ const STRIP_PAGE: usize = 4;
 /// Rows per vertical window before a plugin list is clipped around the selection.
 const TABLE_WINDOW: usize = 10;
 
-/// One opponent-column cell: text and colour.
-type Cell = (String, Option<Vec4>);
 /// The strip's first line (`rows` as coloured segments, or plain text in a
 /// colour when there are none) and its second line.
 type Strip = (Vec<Row>, String, Option<Vec4>, String);
@@ -58,17 +59,14 @@ unsafe fn paint_text(value: &str, color: Option<Vec4>) {
     }
 }
 
-/// Bordered label and value columns, plus the untitled opponent column when
-/// `columns` is 3.
-unsafe fn begin_table(id: &[u8], columns: i32, label_width: f32) -> bool {
-    if !igBeginTable(id.as_ptr().cast(), columns, BORDERS, Vec2::default(), 0.0) {
+/// Bordered label and value columns. (The opponent column left in 0.6.0: the
+/// peer's facts are the `Opp` summary line of the Settings page.)
+unsafe fn begin_table(id: &[u8], label_width: f32) -> bool {
+    if !igBeginTable(id.as_ptr().cast(), 2, BORDERS, Vec2::default(), 0.0) {
         return false;
     }
     igTableSetupColumn(c"##label".as_ptr(), WIDTH_FIXED, label_width, 0);
     igTableSetupColumn(c"##value".as_ptr(), WIDTH_STRETCH, 1.0, 0);
-    if columns > 2 {
-        igTableSetupColumn(c"##peer".as_ptr(), WIDTH_STRETCH, 1.0, 0);
-    }
     true
 }
 
@@ -206,10 +204,11 @@ fn perf_facts(width: f32, height: f32, strip: bool) -> Vec<(&'static str, String
     facts
 }
 
-/// The frame-time block of the vertical window. `graph` false (`perf_view=number`)
-/// prints the mean as text instead of the 180-sample plot, which is the one
-/// ImGui primitive here that scales with the sample count. `ping` is the
-/// opponent's ping while the opponent column shows.
+/// The frame-time block of the Performance and Debug views (until 0.5.7 the
+/// Settings view ended with it too; since 0.6.0 Settings has the one-line
+/// footer). `graph` false (`perf_view=number`) prints the mean as text instead
+/// of the 180-sample plot, which is the one ImGui primitive here that scales
+/// with the sample count. `ping` is the opponent's ping while the peer shows.
 unsafe fn performance(
     frames: &FrameTimes,
     width: f32,
@@ -219,7 +218,7 @@ unsafe fn performance(
     ping: Option<&PresentedPing>,
     graph: bool,
 ) {
-    if !begin_table(b"fps_info\0", 2, 100.0 * sx) {
+    if !begin_table(b"fps_info\0", 100.0 * sx) {
         return;
     }
     if let Some(label) = ping.and_then(|ping| ping.performance.as_ref()) {
@@ -313,23 +312,25 @@ fn drs_adaptive_label(
 /// Peer facts of one draw, shared by the Settings, Performance and Debug views.
 struct PeerFacts {
     frame: crate::peer_transport::PeerFrame,
-    /// A station is connected (the Peer row exists).
-    connected: bool,
-    /// The opponent column is visible (not Streamer, a station connected).
+    /// The peer shows (not Streamer, a live station connected): the `Opp`
+    /// line, the strip's peer facts and the Performance Ping row.
     show_remote: bool,
     ping: PresentedPing,
 }
 
-/// What one draw shows: the settings after this frame's edits, the scene, the peer facts.
+/// What one draw shows: the settings after this frame's edits, the scene, the
+/// peer facts, and whether the ZR edit hold is on (0.6.0: the selected value
+/// is marked `< value >` while it is).
 struct Frame {
     config: crate::config::Config,
     scene: super::auto_driver::Snapshot,
     peers: PeerFacts,
+    editing: bool,
 }
 
-/// The strip's short label for a Settings row; rows without one (Name,
-/// Interface, Ping, Status, and Peer, which has its own second-line entry)
-/// stay out of the strip's first line.
+/// The strip's short label for a Settings or Window row; the `You` / `Opp`
+/// summary lines have none (Opp has its own second-line entry) and stay out
+/// of the strip's first line.
 fn short_label(label: &str) -> Option<&'static str> {
     Some(match label {
         "NetLatency" => "Net",
@@ -341,24 +342,26 @@ fn short_label(label: &str) -> Option<&'static str> {
         "Stealth" => "Stealth",
         "UltraRes" => "UltraRes",
         "PerfView" => "PerfView",
+        "Hints" => "Hints",
         _ => return None,
     })
 }
 
-/// The Settings rows the table draws (Platform is omitted; the Peer row only
-/// with the opponent column, which names the peer on the Name row), their
-/// opponent cells, and the strip's second-line facts: the Peer line with the
-/// name, or `Hidden` without that column, then the `IF:` / `Ping:` /
-/// `PeerNet:` / `PeerProfile:` facts with it.
+/// The Settings page (0.6.0): the `You` summary line, the `Opp` summary line
+/// while the peer shows (selectable: Left/Right cycles the station), then
+/// the match-time rows NetLatency, NetProfile with the engine status folded
+/// in, Stealth, Streamer and, on console, UltraRes. Returns the rows, the
+/// colour of each value (the `Opp` line takes the ping's stability colour)
+/// and the strip's second-line facts (the `Opp` line).
 fn settings_rows(
     config: &crate::config::Config,
     selected: usize,
     peers: &PeerFacts,
     scene: &super::auto_driver::Snapshot,
-) -> (Vec<Row>, Vec<Cell>, Vec<String>) {
+    editing: bool,
+) -> (Vec<Row>, Vec<Option<Vec4>>, Vec<String>) {
     use crate::menu::{
-        ROW_NET_LATENCY, ROW_NET_PROFILE, ROW_PAGE_OWN, ROW_PAGE_PERF, ROW_PAGE_PLUGINS, ROW_PEER,
-        ROW_PERF_VIEW, ROW_STEALTH, ROW_STREAMER, ROW_ULTRA_RES,
+        ROW_NET_LATENCY, ROW_NET_PROFILE, ROW_PEER, ROW_STEALTH, ROW_STREAMER, ROW_ULTRA_RES,
     };
     let peer = &peers.frame.peer;
     let name = crate::peer_transport::name_label(&peer.name, peer.name_len);
@@ -386,62 +389,93 @@ fn settings_rows(
     let buffer = crate::native_banner::local_latency_label(config.input_buffer);
     let streamer = if config.streamer { "On" } else { "Off" };
     let ultra = config.ultra_resolution.label();
-    let (page, hide) = (crate::config::page_label, &config.hide_pages);
-    let (plug, own, perf) = (
-        page(hide.plugins),
-        page(hide.own_pages),
-        page(hide.performance),
-    );
-    let perf_view = config.perf_view.label();
-    let ping = ping_color(&peers.ping);
-    let (mut rows, mut cells, mut facts) = (Vec::new(), Vec::new(), Vec::new());
-    let mut push = |label: &str, row: Option<usize>, local: &str, remote: &str| {
-        cells.push((
-            remote.to_owned(),
-            (label == "Ping").then_some(ping).flatten(),
-        ));
-        rows.push(entry(label, local, row == Some(selected)));
+    let (mut rows, mut colors) = (Vec::new(), Vec::new());
+    let mut push = |label: &str, row: Option<usize>, value: &str, color: Option<Vec4>| {
+        colors.push(color);
+        rows.push(entry(label, value, row == Some(selected)));
     };
-    push("Name", None, "You", peer_name);
-    push("Interface", None, interface, peer.interface);
-    if peers.connected {
-        let shown = peers.show_remote.then_some(peer_name).unwrap_or("Hidden");
-        facts.push(strip_line(&[entry("Peer", shown, selected == ROW_PEER)]));
-    }
+    push("You", None, &you_line(&profile, &buffer, interface), None);
     if peers.show_remote {
-        push("Peer", Some(ROW_PEER), "", "");
-        push("Ping", None, "---", &peers.ping.opponent);
+        let opp = opp_line(
+            peer_name,
+            peer_settings,
+            &remote_latency,
+            &peers.ping.opponent,
+            peer.interface,
+        );
+        push("Opp", Some(ROW_PEER), &opp, ping_color(&peers.ping));
     }
+    push("NetLatency", Some(ROW_NET_LATENCY), &buffer, None);
     push(
-        "NetLatency",
-        Some(ROW_NET_LATENCY),
-        &buffer,
-        &remote_latency,
+        "NetProfile",
+        Some(ROW_NET_PROFILE),
+        &net_profile_value(&profile, status),
+        None,
     );
-    push("NetProfile", Some(ROW_NET_PROFILE), &profile, peer_settings);
-    push("Status", None, status, "");
-    push("Stealth", Some(ROW_STEALTH), stealth, "---");
-    push("Streamer", Some(ROW_STREAMER), streamer, "---");
+    push("Stealth", Some(ROW_STEALTH), stealth, None);
+    push("Streamer", Some(ROW_STREAMER), streamer, None);
     if config.platform == crate::config::Platform::Console {
-        push("UltraRes", Some(ROW_ULTRA_RES), ultra, "---");
+        push("UltraRes", Some(ROW_ULTRA_RES), ultra, None);
     }
-    push("PluginsPage", Some(ROW_PAGE_PLUGINS), plug, "---");
-    push("OwnPages", Some(ROW_PAGE_OWN), own, "---");
-    push("PerfPage", Some(ROW_PAGE_PERF), perf, "---");
-    push("PerfView", Some(ROW_PERF_VIEW), perf_view, "---");
-    if peers.show_remote {
-        if !peer.interface.is_empty() {
-            facts.push(format!("IF:{}", peer.interface));
-        }
-        facts.push(format!("Ping:{}", peers.ping.opponent));
-        if remote_latency != "---" {
-            facts.push(format!("PeerNet:{remote_latency}"));
-        }
-        if peer_settings != "---" {
-            facts.push(format!("PeerProfile:{peer_settings}"));
-        }
+    mark_editing(&mut rows, editing);
+    let facts = rows
+        .iter()
+        .filter(|row| row.label == "Opp")
+        .map(|row| strip_line(std::slice::from_ref(row)))
+        .collect();
+    (rows, colors, facts)
+}
+
+/// The Window page (0.6.0): the three page toggles, PerfView and Hints, the
+/// rows that configure the window itself and until 0.5.7 sat at the bottom
+/// of Settings.
+fn window_rows(config: &crate::config::Config, selected: usize, editing: bool) -> Vec<Row> {
+    use crate::menu::{ROW_HINTS, ROW_PAGE_OWN, ROW_PAGE_PERF, ROW_PAGE_PLUGINS, ROW_PERF_VIEW};
+    let (page, hide) = (crate::config::page_label, &config.hide_pages);
+    let mut rows = vec![
+        entry(
+            "PluginsPage",
+            page(hide.plugins),
+            selected == ROW_PAGE_PLUGINS,
+        ),
+        entry("OwnPages", page(hide.own_pages), selected == ROW_PAGE_OWN),
+        entry("PerfPage", page(hide.performance), selected == ROW_PAGE_PERF),
+        entry(
+            "PerfView",
+            config.perf_view.label(),
+            selected == ROW_PERF_VIEW,
+        ),
+        entry("Hints", page(!config.hints), selected == ROW_HINTS),
+    ];
+    mark_editing(&mut rows, editing);
+    rows
+}
+
+/// Under the Settings table (0.6.0): the one-line performance footer in the
+/// frame-time colour (grey until a frame time exists), then, under Settings
+/// and Window alike, the dim chord hint line while `hints` is on. The hint
+/// wraps to the window width.
+unsafe fn footer(frames: &FrameTimes, config: &crate::config::Config, perf: bool) {
+    if perf {
+        let mean = frames.average();
+        let resolution = crate::resolution::status();
+        let line = perf_footer(
+            mean,
+            crate::resolution::applied_label(resolution.applied),
+            resolution.dynamic,
+        );
+        let color = if mean.is_some() {
+            frame_color(mean)
+        } else {
+            GREY
+        };
+        paint_text(&line, Some(color));
     }
-    (rows, cells, facts)
+    if config.hints {
+        igPushTextWrapPos(0.0);
+        paint_text(HINT_LINE, Some(GREY));
+        igPopTextWrapPos();
+    }
 }
 
 /// The drawn part of the shared Plugins page (`page` None) or one own page.
@@ -539,18 +573,19 @@ fn debug_rows(peers: &PeerFacts) -> Vec<Row> {
         .collect()
 }
 
-/// The vertical table: `rows` in two columns, or three with the opponent
-/// `remote` cells. A label-only row shows its label alone; any other row
-/// shows `indent` + label (`> ` when selected) and its value in its tone,
-/// with ` (pending)` while a plugin request is outstanding.
+/// The vertical table: `rows` in two columns. A label-only row shows its
+/// label alone; any other row shows `indent` + label (`> ` when selected) and
+/// its value in its tone, or in `colors[index]` when that is set (the `Opp`
+/// line's ping colour), with ` (pending)` while a plugin request is
+/// outstanding.
 unsafe fn draw_table(
     id: &[u8],
     label_width: f32,
     rows: &[Row],
     indent: &str,
-    remote: Option<&[Cell]>,
+    colors: Option<&[Option<Vec4>]>,
 ) {
-    if !begin_table(id, if remote.is_some() { 3 } else { 2 }, label_width) {
+    if !begin_table(id, label_width) {
         return;
     }
     for (index, row) in rows.iter().enumerate() {
@@ -564,11 +599,14 @@ unsafe fn draw_table(
         text(&format!("{mark}{indent}{}", row.label));
         igTableNextColumn();
         let pending = if row.pending { " (pending)" } else { "" };
-        paint_text(&format!("{}{pending}", row.value), tone_color(row.tone));
-        if let Some((peer, color)) = remote.and_then(|cells| cells.get(index)) {
-            igTableNextColumn();
-            paint_text(peer, *color);
-        }
+        let color = colors
+            .and_then(|colors| colors.get(index).copied().flatten())
+            .or_else(|| tone_color(row.tone));
+        // Wrap at the column's end: a long `Opp` line (name, profile, buffer,
+        // ping, interface) takes a second line instead of being clipped.
+        igPushTextWrapPos(0.0);
+        paint_text(&format!("{}{pending}", row.value), color);
+        igPopTextWrapPos();
     }
     igEndTable();
 }
@@ -658,11 +696,12 @@ unsafe fn poll(ui: &mut UiState, sample: input::Sample) -> Frame {
     // sample for LIVE_MS, as after a declined rematch) counts as disconnected
     // for every peer row, the strip's peer line and the ping cell.
     let live = super::pia_rtt::station_live(frame.selection);
-    let connected = live && crate::peer_transport::station_connected(frame.selection);
     let show_remote =
         crate::peer_transport::opponent_column_visible(config.streamer, frame.selection, live);
-    if view == View::Settings {
-        let gate = crate::menu::row_gate(connected, config.platform);
+    if matches!(view, View::Settings | View::Window) {
+        // The `Opp` line is a stop only while it shows (0.6.0: Streamer hides
+        // it, so it is skipped then too).
+        let gate = crate::menu::row_gate(show_remote, config.platform, view == View::Window);
         if !crate::menu::row_visible(ui.controls.menu.selected, gate) {
             ui.controls.menu.selected = crate::menu::move_row(ui.controls.menu.selected, 1, gate);
         }
@@ -690,7 +729,6 @@ unsafe fn poll(ui: &mut UiState, sample: input::Sample) -> Frame {
     }
     let peers = PeerFacts {
         frame,
-        connected,
         show_remote,
         ping,
     };
@@ -698,6 +736,7 @@ unsafe fn poll(ui: &mut UiState, sample: input::Sample) -> Frame {
         config,
         scene,
         peers,
+        editing: crate::overlay::edit_modifier(buttons),
     }
 }
 
@@ -738,9 +777,10 @@ unsafe extern "C" fn draw() {
     }
 }
 
-/// The ready-match strip of `view`: Settings fields with the Peer, opponent
-/// and timing facts; the plugin page with `title p/N` and the timing line;
-/// or the timing line over the short performance facts.
+/// The ready-match strip of `view`: Settings fields with the `Opp` and timing
+/// facts; the Window fields with the timing line; the plugin page with
+/// `title p/N` and the timing line; or the timing line over the short
+/// performance facts.
 fn strip_lines(
     ui: &UiState,
     view: View,
@@ -750,19 +790,28 @@ fn strip_lines(
 ) -> Strip {
     let peers = &frame.peers;
     let (timing, color) = timing_line(&ui.frames);
+    let selected = ui.controls.menu.selected;
+    let short =
+        |row: &Row| short_label(&row.label).map(|short| entry(short, &row.value, row.selected));
     match (view, page) {
         (View::Settings, _) => {
-            let selected = ui.controls.menu.selected;
-            let (rows, _, mut facts) = settings_rows(&frame.config, selected, peers, &frame.scene);
+            let (rows, _, mut facts) =
+                settings_rows(&frame.config, selected, peers, &frame.scene, frame.editing);
             facts.push(timing);
-            let short = |row: &Row| {
-                short_label(&row.label).map(|short| entry(short, &row.value, row.selected))
-            };
             (
                 rows.iter().filter_map(short).collect(),
                 String::new(),
                 None,
                 facts.join("   "),
+            )
+        }
+        (View::Window, _) => {
+            let rows = window_rows(&frame.config, selected, frame.editing);
+            (
+                rows.iter().filter_map(short).collect(),
+                String::new(),
+                None,
+                timing,
             )
         }
         (View::Plugins | View::PluginPage, Some(page)) => {
@@ -786,8 +835,9 @@ fn strip_lines(
     }
 }
 
-/// The vertical tables of `view`; Settings, Debug and Performance end with
-/// the frame-time block.
+/// The vertical tables of `view`. Settings ends with the one-line performance
+/// footer and the hint line, Window with the hint line (0.6.0); Debug and
+/// Performance end with the frame-time block.
 unsafe fn draw_tables(
     ui: &UiState,
     view: View,
@@ -797,12 +847,24 @@ unsafe fn draw_tables(
     display: Vec2,
 ) {
     let peers = &frame.peers;
+    let selected = ui.controls.menu.selected;
     match (view, page) {
         (View::Settings, _) => {
-            let selected = ui.controls.menu.selected;
-            let (rows, cells, _) = settings_rows(&frame.config, selected, peers, &frame.scene);
-            let remote = peers.show_remote.then_some(cells.as_slice());
-            draw_table(b"conn_player_info\0", 110.0 * scale.x, &rows, "", remote);
+            let (rows, colors, _) =
+                settings_rows(&frame.config, selected, peers, &frame.scene, frame.editing);
+            draw_table(
+                b"conn_player_info\0",
+                110.0 * scale.x,
+                &rows,
+                "",
+                Some(&colors),
+            );
+            return footer(&ui.frames, &frame.config, true);
+        }
+        (View::Window, _) => {
+            let rows = window_rows(&frame.config, selected, frame.editing);
+            draw_table(b"deluxe_window\0", 110.0 * scale.x, &rows, "", None);
+            return footer(&ui.frames, &frame.config, false);
         }
         (View::Plugins | View::PluginPage, Some(page)) => {
             // Option rows sit two spaces under their group row.
@@ -851,6 +913,7 @@ unsafe fn draw_window(ui: &UiState, view: View, frame: &Frame) {
         View::Debug => crate::menu::InfoView::Debug,
         View::Performance => crate::menu::InfoView::Performance,
         View::Plugins | View::PluginPage => crate::menu::InfoView::Plugins,
+        View::Window => crate::menu::InfoView::Window,
         View::Settings | View::Hidden => crate::menu::InfoView::Settings,
     };
     let compact = crate::menu::compact_strip(shape, info_view);
@@ -918,6 +981,7 @@ unsafe fn draw_window(ui: &UiState, view: View, frame: &Frame) {
     let title: *const std::ffi::c_char = match &page_title {
         Some(title) => title.as_ptr(),
         None if compact => c"##deluxe_match_strip".as_ptr(),
+        None if view == View::Window => c"Window##deluxe_player_info".as_ptr(),
         None => c"Player Info".as_ptr(),
     };
     let flags = WINDOW_FLAGS | if compact { NO_TITLE_BAR } else { 0 };

@@ -3,9 +3,15 @@
 use crate::auto_policy::{cycle_profile_choice, Connection, ProfileChoice, SceneStatus};
 use crate::config::{Config, Platform, RenderMode};
 
-/// Editable Player Info rows, top to bottom. The FX row left in 0.5.0 with
+/// Editable Player Info rows, top to bottom. Rows 0–5 are the Settings page
+/// (0.6.0: the match-time settings only, under the `You` / `Opp` summary
+/// lines); rows 6–10 are the Window page, the last page of the chord cycle,
+/// which configures the window itself. The FX row left in 0.5.0 with
 /// character FX (now the `ssbu-fx-control` plugin); the emulator-only FPS++
-/// row left on 2026-10-17 with FPS++.
+/// row left on 2026-10-17 with FPS++; Name, Interface, Status and Ping stopped
+/// being rows in 0.6.0 (they are the summary lines now).
+///
+/// The `Opp` summary line: Left/Right cycles the selected remote station.
 pub const ROW_PEER: usize = 0;
 pub const ROW_NET_LATENCY: usize = 1;
 pub const ROW_NET_PROFILE: usize = 2;
@@ -14,45 +20,58 @@ pub const ROW_STREAMER: usize = 4;
 /// Console LLUltra base resolution (`ultra_resolution`, 0.5.3 experiment).
 pub const ROW_ULTRA_RES: usize = 5;
 /// Window pages in the chord cycle (`hide_pages`, 0.5.3): the shared Plugins
-/// page, every plugin's own page, Performance. Settings has no row: it is
-/// always in the cycle and shows these three.
+/// page, every plugin's own page, Performance. Settings and Window have no
+/// row: they are always in the cycle.
 pub const ROW_PAGE_PLUGINS: usize = 6;
 pub const ROW_PAGE_OWN: usize = 7;
 pub const ROW_PAGE_PERF: usize = 8;
-/// Frame time as the plot or a number (`perf_view`, 0.5.3).
+/// Frame time on the Performance and Debug pages as the plot or a number
+/// (`perf_view`, 0.5.3).
 pub const ROW_PERF_VIEW: usize = 9;
-pub const ROW_COUNT: usize = 10;
+/// The chord hint line under the Settings and Window tables (`hints`, 0.6.0).
+pub const ROW_HINTS: usize = 10;
+pub const ROW_COUNT: usize = 11;
 
 /// Which editable rows exist. Platform is configured, never a row.
-/// UltraRes is the console-only row.
+/// UltraRes is the console-only row. `window` selects the Window page's rows
+/// instead of the Settings rows (0.6.0).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RowGate {
     pub peers_connected: bool,
     pub ultra_res_visible: bool,
+    pub window: bool,
 }
 
-pub fn row_gate(peers_connected: bool, platform: Platform) -> RowGate {
+pub fn row_gate(peers_connected: bool, platform: Platform, window: bool) -> RowGate {
     RowGate {
         peers_connected,
         ultra_res_visible: platform == Platform::Console,
+        window,
     }
 }
 
 pub fn row_visible(row: usize, gate: RowGate) -> bool {
     match row {
-        ROW_PEER => gate.peers_connected,
-        ROW_ULTRA_RES => gate.ultra_res_visible,
-        ROW_NET_LATENCY | ROW_NET_PROFILE | ROW_STEALTH | ROW_STREAMER | ROW_PAGE_PLUGINS
-        | ROW_PAGE_OWN | ROW_PAGE_PERF | ROW_PERF_VIEW => true,
+        ROW_PEER => !gate.window && gate.peers_connected,
+        ROW_ULTRA_RES => !gate.window && gate.ultra_res_visible,
+        ROW_NET_LATENCY | ROW_NET_PROFILE | ROW_STEALTH | ROW_STREAMER => !gate.window,
+        ROW_PAGE_PLUGINS | ROW_PAGE_OWN | ROW_PAGE_PERF | ROW_PERF_VIEW | ROW_HINTS => {
+            gate.window
+        }
         _ => false,
     }
 }
 
-/// Lowest visible row. Peer is first only while a station is connected.
+/// Lowest visible row of the page. On Settings the `Opp` line is first only
+/// while a station is connected; on Window it is PluginsPage.
 pub fn first_row(gate: RowGate) -> usize {
     (0..ROW_COUNT)
         .find(|row| row_visible(*row, gate))
-        .unwrap_or(ROW_NET_LATENCY)
+        .unwrap_or(if gate.window {
+            ROW_PAGE_PLUGINS
+        } else {
+            ROW_NET_LATENCY
+        })
 }
 
 /// Ready singles or doubles. Training and inactive scenes stay vertical.
@@ -92,17 +111,20 @@ pub enum InfoView {
     Debug,
     /// Rows registered by separately built plugin NROs (`crate::plugin_api`).
     Plugins,
+    /// The window's own configuration: page toggles, PerfView, Hints (0.6.0).
+    Window,
 }
 
-/// Design width at 1920x1080. Match Settings/Performance/Plugins use this as a
-/// positioning and text-fit bound while ImGui sizes the background to content;
-/// all other views keep their existing compact or vertical pane sizes.
+/// Design width at 1920x1080. Match Settings/Performance/Plugins/Window use
+/// this as a positioning and text-fit bound while ImGui sizes the background
+/// to content; all other views keep their existing compact or vertical pane sizes.
 pub fn pane_width(shape: MenuShape, view: InfoView) -> f32 {
     match (view, shape) {
-        (InfoView::Settings | InfoView::Performance | InfoView::Plugins, MenuShape::Horizontal) => {
-            MATCH_STRIP_WIDTH
-        }
-        (InfoView::Settings | InfoView::Plugins, MenuShape::Vertical) => 380.0,
+        (
+            InfoView::Settings | InfoView::Performance | InfoView::Plugins | InfoView::Window,
+            MenuShape::Horizontal,
+        ) => MATCH_STRIP_WIDTH,
+        (InfoView::Settings | InfoView::Plugins | InfoView::Window, MenuShape::Vertical) => 380.0,
         _ => 300.0,
     }
 }
@@ -113,7 +135,7 @@ pub fn compact_strip(shape: MenuShape, view: InfoView) -> bool {
     shape == MenuShape::Horizontal
         && matches!(
             view,
-            InfoView::Settings | InfoView::Performance | InfoView::Plugins
+            InfoView::Settings | InfoView::Performance | InfoView::Plugins | InfoView::Window
         )
 }
 
@@ -254,6 +276,95 @@ pub(crate) fn compact_font_size(first: &str, second: &str, width: f32, sx: f32, 
         base * (available / widest) * 0.94
     } else {
         base
+    }
+}
+
+/// Separator between the facts of one summary line, the one the native
+/// character-select banner already uses (ASCII: the window's font is the
+/// ImGui host's and its glyph coverage is not ours to assume).
+#[cfg(any(target_os = "switch", test))]
+pub(crate) const FACT_SEPARATOR: &str = " | ";
+
+/// Facts joined with [`FACT_SEPARATOR`]; an unknown fact (`---` or empty) is
+/// left out rather than shown as a placeholder.
+#[cfg(any(target_os = "switch", test))]
+fn join_facts(facts: &[&str]) -> String {
+    facts
+        .iter()
+        .filter(|fact| !fact.is_empty() && **fact != "---")
+        .copied()
+        .collect::<Vec<_>>()
+        .join(FACT_SEPARATOR)
+}
+
+/// The `You` summary line of the Settings page (0.6.0): profile, input
+/// buffer, local interface. It mirrors the `Opp` line so the two compare at a
+/// glance; the rows below it are the controls.
+#[cfg(any(target_os = "switch", test))]
+pub(crate) fn you_line(profile: &str, buffer: &str, interface: &str) -> String {
+    join_facts(&[profile, buffer, interface])
+}
+
+/// The `Opp` summary line (0.6.0): the selected peer's name, announced
+/// profile, announced buffer, ping and interface, in that order, with what the
+/// peer has not announced left out. It replaces the Name, Interface, Peer and
+/// Ping rows and the opponent column.
+#[cfg(any(target_os = "switch", test))]
+pub(crate) fn opp_line(
+    name: &str,
+    settings: &str,
+    latency: &str,
+    ping: &str,
+    interface: &str,
+) -> String {
+    join_facts(&[name, settings, latency, ping, interface])
+}
+
+/// The NetProfile value with the engine status folded in (0.6.0; the Status
+/// row is gone): `LessLag | Swap`. An empty status, or the `Vanilla` status
+/// that only says no render-opts profile is armed, leaves the profile alone.
+#[cfg(any(target_os = "switch", test))]
+pub(crate) fn net_profile_value(profile: &str, status: &str) -> String {
+    if status.is_empty() || status == "Vanilla" {
+        profile.to_owned()
+    } else {
+        format!("{profile}{FACT_SEPARATOR}{status}")
+    }
+}
+
+/// The one-line performance footer of the Settings page (0.6.0): frame rate,
+/// mean frame time, the applied internal resolution and the DRS state. The
+/// full block and the plot live on the Performance page.
+#[cfg(any(target_os = "switch", test))]
+pub(crate) fn perf_footer(mean_ms: Option<f32>, resolution: &str, drs: bool) -> String {
+    let drs = if drs { "DRS on" } else { "DRS off" };
+    match mean_ms.filter(|value| value.is_finite() && *value > 0.0) {
+        Some(ms) => format!(
+            "{:.1} fps{FACT_SEPARATOR}{ms:.2} ms{FACT_SEPARATOR}{resolution}{FACT_SEPARATOR}{drs}",
+            1000.0 / ms
+        ),
+        None => format!("--- fps{FACT_SEPARATOR}--- ms{FACT_SEPARATOR}{resolution}{FACT_SEPARATOR}{drs}"),
+    }
+}
+
+/// The dim hint line under the Settings and Window tables (0.6.0, `hints`).
+/// It wraps to the window width; every chord it names is in CONTROLS.md.
+pub const HINT_LINE: &str =
+    "ZR+Left/Right edits   L+R+Down next page   L+R+X Vanilla+   L+R+ZR+Y Streamer";
+
+/// Shows the edit state (0.6.0): while the ZR hold is on, the selected row's
+/// value reads `< value >`; without it the value is plain, so the hold rule
+/// explains itself. Label-only rows are never marked.
+#[cfg(any(target_os = "switch", test))]
+pub(crate) fn mark_editing(rows: &mut [Row], editing: bool) {
+    if !editing {
+        return;
+    }
+    for row in rows
+        .iter_mut()
+        .filter(|row| row.selected && !row.value.is_empty())
+    {
+        row.value = format!("< {} >", row.value);
     }
 }
 
@@ -428,7 +539,8 @@ pub struct Menu {
     pub selected: usize,
 }
 
-/// Steps to the next visible row. Hidden Peer and UltraRes rows are not stops.
+/// Steps to the next visible row of the page. Hidden Peer and UltraRes rows,
+/// and the other page's rows, are not stops.
 pub fn move_row(selected: usize, direction: i8, gate: RowGate) -> usize {
     let mut next = selected;
     for _ in 0..ROW_COUNT {
@@ -450,14 +562,24 @@ impl Menu {
         self.handle_peers(action, config, true)
     }
 
-    /// `peers_connected` is mapped-station membership, not a fresh ping.
+    /// Settings page. `peers_connected` is mapped-station membership, not a
+    /// fresh ping.
     pub fn handle_peers(
         &mut self,
         action: Action,
         config: &mut Config,
         peers_connected: bool,
     ) -> bool {
-        self.handle_rows(action, config, row_gate(peers_connected, config.platform))
+        self.handle_rows(
+            action,
+            config,
+            row_gate(peers_connected, config.platform, false),
+        )
+    }
+
+    /// Window page (0.6.0): the page toggles, PerfView and Hints.
+    pub fn handle_window(&mut self, action: Action, config: &mut Config) -> bool {
+        self.handle_rows(action, config, row_gate(false, config.platform, true))
     }
 
     pub fn handle_rows(&mut self, action: Action, config: &mut Config, gate: RowGate) -> bool {
@@ -524,6 +646,10 @@ impl Menu {
                 config.perf_view = config.perf_view.cycle();
                 true
             }
+            ROW_HINTS => {
+                config.hints = !config.hints;
+                true
+            }
             _ => false,
         }
     }
@@ -580,19 +706,12 @@ mod tests {
         assert_eq!(menu.selected, ROW_STEALTH);
         menu.handle(Action::Down, &mut config);
         assert_eq!(menu.selected, ROW_STREAMER);
-        // Emulator: UltraRes is hidden, so the page rows follow Streamer.
-        menu.handle(Action::Down, &mut config);
-        assert_eq!(menu.selected, ROW_PAGE_PLUGINS);
-        menu.handle(Action::Down, &mut config);
-        assert_eq!(menu.selected, ROW_PAGE_OWN);
-        menu.handle(Action::Down, &mut config);
-        assert_eq!(menu.selected, ROW_PAGE_PERF);
-        menu.handle(Action::Down, &mut config);
-        assert_eq!(menu.selected, ROW_PERF_VIEW);
+        // Emulator: UltraRes is hidden, and the page rows live on the Window
+        // page (0.6.0), so Streamer wraps straight to the Opp line.
         menu.handle(Action::Down, &mut config);
         assert_eq!(menu.selected, ROW_PEER);
         menu.handle(Action::Up, &mut config);
-        assert_eq!(menu.selected, ROW_PERF_VIEW);
+        assert_eq!(menu.selected, ROW_STREAMER);
         menu.selected = ROW_NET_LATENCY;
         assert!(!menu.handle(Action::Left, &mut config));
         for _ in 0..26 {
@@ -708,7 +827,7 @@ mod tests {
     }
 
     #[test]
-    fn page_rows_toggle_the_hidden_pages_and_perf_view_swaps_graph_and_number() {
+    fn window_page_rows_toggle_the_hidden_pages_perf_view_and_hints() {
         use crate::config::{HiddenPages, PerfView};
         let mut menu = Menu {
             open: true,
@@ -716,20 +835,51 @@ mod tests {
         };
         let mut config = Config::default();
         for platform in [Platform::Console, Platform::Emulator] {
-            let gate = row_gate(false, platform);
-            for row in [ROW_PAGE_PLUGINS, ROW_PAGE_OWN, ROW_PAGE_PERF, ROW_PERF_VIEW] {
-                assert!(row_visible(row, gate), "{row} on {platform:?}");
+            let window = row_gate(true, platform, true);
+            let settings = row_gate(true, platform, false);
+            for row in [
+                ROW_PAGE_PLUGINS,
+                ROW_PAGE_OWN,
+                ROW_PAGE_PERF,
+                ROW_PERF_VIEW,
+                ROW_HINTS,
+            ] {
+                assert!(row_visible(row, window), "{row} on {platform:?}");
+                assert!(!row_visible(row, settings), "{row} on Settings");
             }
+            for row in [
+                ROW_PEER,
+                ROW_NET_LATENCY,
+                ROW_NET_PROFILE,
+                ROW_STEALTH,
+                ROW_STREAMER,
+            ] {
+                assert!(!row_visible(row, window), "{row} on Window");
+            }
+            assert_eq!(
+                row_visible(ROW_ULTRA_RES, settings),
+                platform == Platform::Console
+            );
+            assert!(!row_visible(ROW_ULTRA_RES, window));
+            assert_eq!(first_row(window), ROW_PAGE_PLUGINS);
         }
-        assert!(menu.handle(Action::Right, &mut config));
+        // The Settings handler never reaches a Window row: the selection is
+        // moved onto the page instead and nothing changes.
+        assert!(!menu.handle(Action::Right, &mut config));
+        assert_eq!(config, Config::default());
+        assert_eq!(menu.selected, ROW_PEER);
+        menu.selected = ROW_PAGE_PLUGINS;
+        assert!(menu.handle_window(Action::Right, &mut config));
         assert!(config.hide_pages.plugins);
-        assert!(menu.handle(Action::Left, &mut config));
+        assert!(menu.handle_window(Action::Left, &mut config));
         assert_eq!(config.hide_pages, HiddenPages::NONE);
-        menu.selected = ROW_PAGE_OWN;
-        assert!(menu.handle(Action::Right, &mut config));
+        menu.handle_window(Action::Down, &mut config);
+        assert_eq!(menu.selected, ROW_PAGE_OWN);
+        assert!(menu.handle_window(Action::Right, &mut config));
         assert!(config.hide_pages.own_pages);
-        menu.selected = ROW_PAGE_PERF;
-        assert!(menu.handle(Action::Right, &mut config));
+        menu.handle_window(Action::Down, &mut config);
+        assert_eq!(menu.selected, ROW_PAGE_PERF);
+        assert!(menu.handle_window(Action::Right, &mut config));
         assert_eq!(
             config.hide_pages,
             HiddenPages {
@@ -738,16 +888,76 @@ mod tests {
                 performance: true
             }
         );
-        menu.selected = ROW_PERF_VIEW;
+        menu.handle_window(Action::Down, &mut config);
+        assert_eq!(menu.selected, ROW_PERF_VIEW);
         assert_eq!(config.perf_view, PerfView::Graph);
-        assert!(menu.handle(Action::Right, &mut config));
+        assert!(menu.handle_window(Action::Right, &mut config));
         assert_eq!(config.perf_view, PerfView::Number);
-        assert!(menu.handle(Action::Left, &mut config));
+        assert!(menu.handle_window(Action::Left, &mut config));
         assert_eq!(config.perf_view, PerfView::Graph);
+        menu.handle_window(Action::Down, &mut config);
+        assert_eq!(menu.selected, ROW_HINTS);
+        assert!(config.hints);
+        assert!(menu.handle_window(Action::Right, &mut config));
+        assert!(!config.hints);
+        assert!(menu.handle_window(Action::Left, &mut config));
+        assert!(config.hints);
+        // The page wraps onto itself, never into the Settings rows.
+        menu.handle_window(Action::Down, &mut config);
+        assert_eq!(menu.selected, ROW_PAGE_PLUGINS);
+        menu.handle_window(Action::Up, &mut config);
+        assert_eq!(menu.selected, ROW_HINTS);
         // Closed, nothing edits.
         menu.open = false;
-        assert!(!menu.handle(Action::Right, &mut config));
-        assert_eq!(config.perf_view, PerfView::Graph);
+        assert!(!menu.handle_window(Action::Right, &mut config));
+        assert!(config.hints);
+    }
+
+    #[test]
+    fn summary_lines_footer_and_edit_marker_read_as_designed() {
+        assert_eq!(you_line("Vanilla+", "Auto", "Wi-Fi"), "Vanilla+ | Auto | Wi-Fi");
+        assert_eq!(
+            opp_line("Mario", "LessLag", "3", "23ms", "Ethernet"),
+            "Mario | LessLag | 3 | 23ms | Ethernet"
+        );
+        // Unannounced facts drop out instead of showing placeholders.
+        assert_eq!(opp_line("Mario", "---", "---", "---", ""), "Mario");
+        assert_eq!(
+            opp_line("Unavailable", "---", "---", "31ms", "Wi-Fi"),
+            "Unavailable | 31ms | Wi-Fi"
+        );
+        assert_eq!(net_profile_value("LessLag", "Swap"), "LessLag | Swap");
+        assert_eq!(net_profile_value("Auto:LLDbl", "Active"), "Auto:LLDbl | Active");
+        assert_eq!(net_profile_value("Vanilla+", ""), "Vanilla+");
+        assert_eq!(net_profile_value("Vanilla+", "Vanilla"), "Vanilla+");
+        assert_eq!(net_profile_value("Auto:Van+", "Vanilla"), "Auto:Van+");
+        assert_eq!(
+            perf_footer(Some(16.67), "1080p", true),
+            "60.0 fps | 16.67 ms | 1080p | DRS on"
+        );
+        assert_eq!(
+            perf_footer(None, "Unknown", false),
+            "--- fps | --- ms | Unknown | DRS off"
+        );
+        assert_eq!(
+            perf_footer(Some(f32::NAN), "720p", false),
+            "--- fps | --- ms | 720p | DRS off"
+        );
+        assert!(HINT_LINE.is_ascii());
+        assert!(HINT_LINE.contains("ZR+Left/Right"));
+        assert!(HINT_LINE.contains("L+R+ZR+Y"));
+        let mut rows = vec![
+            strip_row("You", "Vanilla+ | Auto | Wi-Fi", false),
+            strip_row("NetLatency", "Auto", true),
+            strip_row("Kirby", "", true),
+        ];
+        mark_editing(&mut rows, false);
+        assert_eq!(rows[1].value, "Auto");
+        mark_editing(&mut rows, true);
+        assert_eq!(rows[0].value, "Vanilla+ | Auto | Wi-Fi");
+        assert_eq!(rows[1].value, "< Auto >");
+        assert_eq!(rows[2].value, "", "label-only rows are never marked");
+        assert_eq!(strip_line(&rows[1..2]), ">NetLatency:< Auto >");
     }
 
     #[test]
@@ -826,16 +1036,8 @@ mod tests {
         let mut config = Config::default();
         assert!(!menu.handle_peers(Action::Toggle, &mut config, false));
         assert_eq!(menu.selected, ROW_NET_LATENCY);
-        // The page and PerfView rows close the list on both platforms.
-        menu.handle_peers(Action::Up, &mut config, false);
-        assert_eq!(menu.selected, ROW_PERF_VIEW);
-        menu.handle_peers(Action::Up, &mut config, false);
-        assert_eq!(menu.selected, ROW_PAGE_PERF);
-        menu.handle_peers(Action::Up, &mut config, false);
-        assert_eq!(menu.selected, ROW_PAGE_OWN);
-        menu.handle_peers(Action::Up, &mut config, false);
-        assert_eq!(menu.selected, ROW_PAGE_PLUGINS);
-        // Console: UltraRes is above them.
+        // Console: UltraRes closes the Settings list (the page rows moved to
+        // the Window page in 0.6.0).
         menu.handle_peers(Action::Up, &mut config, false);
         assert_eq!(menu.selected, ROW_ULTRA_RES);
         assert!(menu.handle_peers(Action::Right, &mut config, false));
@@ -850,20 +1052,19 @@ mod tests {
         );
         menu.handle_peers(Action::Up, &mut config, false);
         assert_eq!(menu.selected, ROW_STREAMER);
-        for _ in 0..6 {
+        for _ in 0..2 {
             menu.handle_peers(Action::Down, &mut config, false);
         }
         assert_eq!(menu.selected, ROW_NET_LATENCY);
-        // Emulator: UltraRes is hidden, so Streamer sits above the page rows.
+        // Emulator: UltraRes is hidden, so Streamer closes the list.
         config.platform = Platform::Emulator;
         assert!(!row_visible(
             ROW_ULTRA_RES,
-            row_gate(false, Platform::Emulator)
+            row_gate(false, Platform::Emulator, false)
         ));
-        menu.selected = ROW_PAGE_PLUGINS;
+        menu.selected = ROW_NET_LATENCY;
         menu.handle_peers(Action::Up, &mut config, false);
         assert_eq!(menu.selected, ROW_STREAMER);
-        menu.selected = ROW_PERF_VIEW;
         menu.handle_peers(Action::Down, &mut config, false);
         assert_eq!(menu.selected, ROW_NET_LATENCY);
         config.platform = Platform::Console;
@@ -900,10 +1101,14 @@ mod tests {
         assert_eq!(match_window_alpha(MenuShape::Vertical), None);
         assert!(row_visible(
             ROW_NET_LATENCY,
-            row_gate(false, Platform::Console)
+            row_gate(false, Platform::Console, false)
         ));
-        assert!(!row_visible(ROW_PEER, row_gate(false, Platform::Emulator)));
-        assert!(row_visible(ROW_PEER, row_gate(true, Platform::Console)));
+        assert!(!row_visible(
+            ROW_PEER,
+            row_gate(false, Platform::Emulator, false)
+        ));
+        assert!(row_visible(ROW_PEER, row_gate(true, Platform::Console, false)));
+        assert!(!row_visible(ROW_PEER, row_gate(true, Platform::Console, true)));
     }
 
     #[test]
@@ -911,15 +1116,22 @@ mod tests {
         assert!(compact_strip(MenuShape::Horizontal, InfoView::Settings));
         assert!(compact_strip(MenuShape::Horizontal, InfoView::Performance));
         assert!(compact_strip(MenuShape::Horizontal, InfoView::Plugins));
+        assert!(compact_strip(MenuShape::Horizontal, InfoView::Window));
         assert!(!compact_strip(MenuShape::Horizontal, InfoView::Debug));
         assert!(!compact_strip(MenuShape::Vertical, InfoView::Settings));
         assert!(!compact_strip(MenuShape::Vertical, InfoView::Performance));
         assert!(!compact_strip(MenuShape::Vertical, InfoView::Plugins));
+        assert!(!compact_strip(MenuShape::Vertical, InfoView::Window));
         assert_eq!(
             pane_width(MenuShape::Horizontal, InfoView::Plugins),
             MATCH_STRIP_WIDTH
         );
         assert_eq!(pane_width(MenuShape::Vertical, InfoView::Plugins), 380.0);
+        assert_eq!(pane_width(MenuShape::Vertical, InfoView::Window), 380.0);
+        assert_eq!(
+            pane_width(MenuShape::Horizontal, InfoView::Window),
+            MATCH_STRIP_WIDTH
+        );
         assert_eq!(
             pane_width(MenuShape::Horizontal, InfoView::Settings),
             MATCH_STRIP_WIDTH
@@ -955,12 +1167,16 @@ mod tests {
         (
             vec![
                 strip_row("Net", "Auto", true),
-                strip_row("Profile", "Auto:LLDbl", false),
+                strip_row("Profile", "Auto:LLDbl | Active", false),
                 strip_row("Stealth", "On (reconnect)", false),
                 strip_row("Stream", "Off", false),
                 strip_row("UltraRes", "576p", false),
             ],
-            vec![strip_row("Peer", peer, true)],
+            vec![strip_row(
+                "Opp",
+                &opp_line(peer, "LessLagDoubles", "25", "31ms", "Wi-Fi"),
+                true,
+            )],
         )
     }
 
@@ -972,9 +1188,12 @@ mod tests {
         let opponent = strip_line(&opponent);
         assert_eq!(
             settings,
-            ">Net:Auto   Profile:Auto:LLDbl   Stealth:On (reconnect)   Stream:Off   UltraRes:576p"
+            ">Net:Auto   Profile:Auto:LLDbl | Active   Stealth:On (reconnect)   Stream:Off   UltraRes:576p"
         );
-        assert_eq!(opponent, format!(">Peer:{peer}"));
+        assert_eq!(
+            opponent,
+            format!(">Opp:{peer} | LessLagDoubles | 25 | 31ms | Wi-Fi")
+        );
         assert!(!settings.contains('\n'));
         assert!(!opponent.contains('\n'));
         // Plugin rows: a group or header is its label alone, a value takes its
@@ -1048,8 +1267,10 @@ mod tests {
         let peer = "P".repeat(64);
         let (fields, opponent) = settings_strip(&peer);
         let first = strip_line(&fields);
+        // 0.6.0: the second line is the Opp summary (name, profile, buffer,
+        // ping, interface) and the timing line.
         let second = format!(
-            "{}   IF:Wi-Fi   Ping:31ms   PeerNet:25   PeerProfile:LessLagDoubles   {}",
+            "{}   {}",
             strip_line(&opponent),
             compact_timing_line(Some(16.67), Some(16.67))
         );

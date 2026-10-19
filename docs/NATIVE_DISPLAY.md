@@ -5,7 +5,8 @@ character-select display together. Change NetLatency or NetProfile in the
 window, close it, and the selected values remain at the top of character select.
 The selected opponent's available name, settings and RTT appear on the second
 line. RTT supplies the same stability color as the window; connection type
-remains available in the window's Interface row.
+remains available in the window's You and Opp lines (the Interface row before
+0.6.0).
 
 Streamer restores the original title, font, colors and background. Turning it
 off restores the status display. Font sizes are absolute, not multiplied by the

@@ -146,6 +146,9 @@ pub struct Config {
     /// peer exchange still announces Vanilla; the ring shape is unchanged.
     /// `early_present=false` still turns every early present off.
     pub vanilla_plus: bool,
+    /// 0.6.0: the dim chord hint line under the Settings and Window tables
+    /// (`hints`). Default true; the Window page's Hints row toggles it.
+    pub hints: bool,
 }
 
 /// Pages left out of the window cycle (`hide_pages=none` or a comma list of
@@ -349,6 +352,7 @@ impl Default for Config {
             early_present: true,
             dispatcher_backoff: true,
             vanilla_plus: true,
+            hints: true,
         }
     }
 }
@@ -367,7 +371,7 @@ fn parse_count<T: TryFrom<u32>>(value: &str, max: u32, message: &str) -> Result<
 
 pub fn parse(text: &str) -> Result<Config, String> {
     let mut config = Config::default();
-    let mut seen = [false; 18];
+    let mut seen = [false; 19];
     for (index, raw) in text.lines().enumerate() {
         let line = raw.split('#').next().unwrap_or_default().trim();
         if line.is_empty() {
@@ -407,6 +411,7 @@ pub fn parse(text: &str) -> Result<Config, String> {
             "early_present" => 15,
             "dispatcher_backoff" => 16,
             "vanilla_plus" => 17,
+            "hints" => 18,
             _ => return Err(error(&format!("unknown key '{key}'"))),
         };
         if seen[slot] {
@@ -523,6 +528,13 @@ pub fn parse(text: &str) -> Result<Config, String> {
                     _ => return Err(error("vanilla_plus must be true or false")),
                 };
             }
+            "hints" => {
+                config.hints = match value {
+                    "true" => true,
+                    "false" => false,
+                    _ => return Err(error("hints must be true or false")),
+                };
+            }
             "input_buffer" => {
                 config.input_buffer = if value == "auto" {
                     -1
@@ -581,8 +593,9 @@ pub fn serialize(config: &Config) -> String {
         "false"
     };
     let vanilla_plus = if config.vanilla_plus { "true" } else { "false" };
+    let hints = if config.hints { "true" } else { "false" };
     format!(
-        "# Online Deluxe settings\nversion=1\ninput_buffer={input_buffer}\nrender_mode={}\nauto_profile={auto_profile}\nplatform={}\nstealth={stealth}\nstreamer={streamer}\ndrs_moves={}\ndrs_adaptive={drs_adaptive}\ndrs_adaptive_threshold_ms={}\ndrs_adaptive_trigger_frames={}\ndrs_adaptive_release_frames={}\nultra_resolution={}\nhide_pages={}\nperf_view={}\nearly_present={early_present}\ndispatcher_backoff={dispatcher_backoff}\nvanilla_plus={vanilla_plus}\n",
+        "# Online Deluxe settings\nversion=1\ninput_buffer={input_buffer}\nrender_mode={}\nauto_profile={auto_profile}\nplatform={}\nstealth={stealth}\nstreamer={streamer}\ndrs_moves={}\ndrs_adaptive={drs_adaptive}\ndrs_adaptive_threshold_ms={}\ndrs_adaptive_trigger_frames={}\ndrs_adaptive_release_frames={}\nultra_resolution={}\nhide_pages={}\nperf_view={}\nearly_present={early_present}\ndispatcher_backoff={dispatcher_backoff}\nvanilla_plus={vanilla_plus}\nhints={hints}\n",
         config.render_mode.key(),
         config.platform.key(),
         config.drs_moves.serialize(),
@@ -667,9 +680,34 @@ mod tests {
                 early_present: true,
                 dispatcher_backoff: true,
                 vanilla_plus: true,
+                hints: true,
             };
             assert_eq!(parse(&config.serialize()).unwrap(), config);
         }
+    }
+
+    #[test]
+    fn hints_default_on_round_trip_and_reject_other_values() {
+        // 0.6.0: a file from an older build has no key and keeps the hint line.
+        assert!(Config::default().hints);
+        assert!(parse("version=1").unwrap().hints);
+        assert!(parse("version=1\nhints=true").unwrap().hints);
+        assert!(!parse("version=1\nhints=false").unwrap().hints);
+        let off = Config {
+            hints: false,
+            ..Config::default()
+        };
+        assert_eq!(parse(&off.serialize()).unwrap(), off);
+        assert!(off.serialize().contains("\nhints=false\n"));
+        assert!(Config::default().serialize().ends_with("\nhints=true\n"));
+        assert_eq!(
+            parse("version=1\nhints=yes").unwrap_err(),
+            "line 2: hints must be true or false"
+        );
+        assert_eq!(
+            parse("version=1\nhints=true\nhints=false").unwrap_err(),
+            "line 3: duplicate key 'hints'"
+        );
     }
 
     #[test]

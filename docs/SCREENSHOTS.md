@@ -8,19 +8,25 @@ runs. Views are described in [Controls](CONTROLS.md) and
 the operator's evidence root (`docs-media-050/`; the gamepad-overlay captures
 are from `docs-media-1014/`).
 
+The Settings-page, strip and cycle captures below predate the 0.6.0 layout
+(the You and Opp summary lines, five rows, the one-line performance footer, the
+hint line and the new Window page; in the match strip, the changed fields) and
+have not been re-captured; see [Controls](CONTROLS.md) for the current layout.
+
 ## The window
 
 | | |
 | --- | --- |
 | ![Settings window on the main menu](media/settings-view.png) <br> The Player Info window (Settings view) on the main menu. | ![Performance view](media/performance-view.png) <br> The Performance view. |
-| ![Settings window close-up](media/settings-window.png) <br> Settings rows: Name, Interface, NetLatency, NetProfile, Status, Stealth, Streamer, FPS++ (an emulator capture; that row was removed 2026-10-17), then the live Resolution, DRS, Backoff, Memory and FPS rows. Character FX is no longer a Deluxe row. | ![Debug window close-up](media/debug-window.png) <br> Debug rows, including `Timing`, `Capture L+R+Up (30 s)`, `CSS capture` and `Match capture`. |
+| ![Settings window close-up](media/settings-window.png) <br> Settings rows as captured on 0.5.0, before the 0.6.0 layout: Name, Interface, NetLatency, NetProfile, Status, Stealth, Streamer, FPS++ (an emulator capture; that row was removed 2026-10-17), then the live Resolution, DRS, Backoff, Memory and FPS rows. Character FX is no longer a Deluxe row. | ![Debug window close-up](media/debug-window.png) <br> Debug rows, including `Timing`, `Capture L+R+Up (30 s)`, `CSS capture` and `Match capture`. |
 | ![Debug view](media/debug-view.png) <br> The Debug view on the main menu: build, renderer and capture rows. | ![Streamer on](media/streamer-on.png) <br> Streamer on in the Settings window at the main menu (NetProfile LessLag, Status Active). |
 | ![FX Control page](media/fx-control-view.png) <br> A plugin's own page in the window cycle: the FX Control plugin's page (Scope, All, one row per covered fighter, EFF variants), one D-pad Down after Settings. | ![FX Control page close-up](media/fx-control-window.png) <br> The same page up close. |
 
 ![Cycling the overlay views](media/overlay-cycle.gif)
 
 Cycling the overlay with L+R+Down (Settings, the FX Control plugin page,
-Performance, hidden) and opening Debug with L+R+Plus.
+Performance, hidden; the Window page of 0.6.0 sits between Performance and
+hidden and is not in the clip) and opening Debug with L+R+Plus.
 
 ![Editing settings in the window](media/settings-edit.gif)
 
@@ -48,13 +54,14 @@ A few seconds of Training with the Player Info window on the right.
 
 In a running Singles or Doubles match the window becomes the compact two-row
 strip at the top left: one row of `Label:Value` fields, one row with FPS,
-frame time and the frame-time bar.
+frame time and the frame-time bar (since 0.6.0 that row starts with the
+`>Opp:` summary while the peer shows; the captures below are older).
 
 ![Compact strip close-up](media/match-strip-closeup.png)
 
 | | |
 | --- | --- |
-| ![Match with the Settings strip](media/match-settings-strip.png) <br> A Singles match vs a level 9 CPU on Final Destination with the Settings strip open: `>Net:Auto Profile:lesslag Stealth:Off Stream:Off FPS++:Off` (the FPS++ field was removed 2026-10-17) and the frame-time line. | ![Match with the Performance strip](media/match-performance.png) <br> The Performance view in the same match. |
+| ![Match with the Settings strip](media/match-settings-strip.png) <br> A Singles match vs a level 9 CPU on Final Destination with the Settings strip open: `>Net:Auto Profile:lesslag Stealth:Off Stream:Off FPS++:Off` (the FPS++ field was removed 2026-10-17; since 0.6.0 the fields are `Net`, `Profile`, `Stealth`, `Stream` and `UltraRes`) and the frame-time line. | ![Match with the Performance strip](media/match-performance.png) <br> The Performance view in the same match. |
 | ![Debug table over the pause menu](media/match-debug.png) <br> The Debug view in a match; the Plus in the chord also opens the game's pause menu. | ![Results after quitting](media/results-quit.png) <br> The results screen after quitting through the pause menu. |
 
 ![Match with the compact strip](media/match-strip.gif)

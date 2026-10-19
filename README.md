@@ -10,7 +10,15 @@ delivered as **one NRO**: rendering profiles that cut input latency, a global
 Player Info window, the native character-select status line and network
 display. No overclocking.
 
-**Current version: 0.5.7** (2026-10-18; Forgejo release v0.5.7, on the card): the Streamer toggle is
+**Current version: 0.6.0** (2026-10-19; Forgejo release v0.6.0): a redesign of
+the Player Info window's first page. Settings is now two columns, a read-only
+**You** line (profile, buffer, interface), an **Opp** line while the opponent
+shows (name, announced profile and buffer, ping in its stability colour,
+interface), five rows, a one-line performance footer and a hint line; the page
+toggles and PerfView moved to a new **Window** page at the end of the L+R+Down
+cycle, and the in-match strip follows. Nothing else changed apart from the new
+INI key `hints`; the layout is host-tested only and its console check is owed.
+0.5.7 (2026-10-18; Forgejo release v0.5.7, on the card) made the Streamer toggle
 L+R + **ZR** + Y only, since the ZL variant flipped it on unnoticed during a
 console session. 0.5.6 (Forgejo release v0.5.6, on the card and booted) makes
 **Vanilla+** the default mode: the Vanilla profile keeps the game's three-image
@@ -38,8 +46,9 @@ guard (a crash at scene exits with render options active); 0.5.0 moved
 character FX out to the separate
 [FX Control](https://git.syntaxbyexample.com/intpa/ssbu-fx-control) plugin and
 lets plugins add their own pages to the window cycle. Every release on Forgejo
-carries the NRO and its manifest; the 0.5.4, 0.5.5 and 0.5.6 console runs are
-still pending ([status](docs/STATUS.md)). Install notes: [docs/INSTALL.md](docs/INSTALL.md).
+carries the NRO and its manifest; 0.5.4 and 0.5.6 each booted once on the console
+(0.5.6 on 2026-10-18: Vanilla+ clean, one online match), while the 0.5.5, 0.5.7 and
+0.6.0 console checks are still pending ([status](docs/STATUS.md)). Install notes: [docs/INSTALL.md](docs/INSTALL.md).
 
 > **Install only this NRO.** The rewrite replaces the original Online Deluxe
 > fork (`libssbu_online_deluxe*.nro`), SsbuSync (`libssbusync.nro`) and the
@@ -59,7 +68,8 @@ still pending ([status](docs/STATUS.md)). Install notes: [docs/INSTALL.md](docs/
 | ![Settings window](docs/media/settings-window.png) <br> The Settings view in menus. | ![Training character select](docs/media/training-css.png) <br> The native status line on the character select. |
 | ![Match with the compact strip](docs/media/match-settings-strip.png) <br> In a match the window becomes a compact two-row strip at the top left. | ![Character select after a match](docs/media/smash-css-after-match.png) <br> After a match the manual profile is held at Vanilla and the line reads `Vanilla*`. |
 
-More in [Screenshots](docs/SCREENSHOTS.md).
+The window captures above predate the 0.6.0 layout and have not been
+re-captured. More in [Screenshots](docs/SCREENSHOTS.md).
 
 ## Optimizations added by this rewrite
 
@@ -151,12 +161,14 @@ calibration in [Mimicking the Switch in Eden](docs/EMULATOR_METHOD.md).
   LLUltra can also render at 720p (0.5.3) or the native 1080p (0.5.6); both are
   host-tested with no console capture.
   [Rendering profiles](docs/RENDERING.md)
-- **Player Info window and native status.** Settings, Performance, Debug and
-  Plugins views on L+R+Down; the character select keeps your profile, buffer
-  and the opponent's settings and RTT at the top. [Controls](docs/CONTROLS.md),
+- **Player Info window and native status.** Settings, Performance, Debug,
+  Plugins and (since 0.6.0) Window views on L+R+Down; the character select keeps
+  your profile, buffer and the opponent's settings and RTT at the top.
+  [Controls](docs/CONTROLS.md),
   [native display](docs/NATIVE_DISPLAY.md)
 - **Network display.** Opponent name, interface, settings and colored RTT from
-  the game's own measurement; Stealth and Streamer switches. Since 0.5.5 the
+  the game's own measurement, on one Opp line in the window since 0.6.0;
+  Stealth and Streamer switches. Since 0.5.5 the
   opponent shows only while their station is live, that is, an RTT sample
   within the last 10 s, so a peer who declined a rematch drops off the
   screen (console check pending). [Controls](docs/CONTROLS.md)
@@ -178,8 +190,11 @@ calibration in [Mimicking the Switch in Eden](docs/EMULATOR_METHOD.md).
 Hold **L+R** and tap **D-pad Down** to cycle the window (ZL+ZR no longer
 opens it since 0.5.3):
 settings → plugins (when any registered) → own plugin pages, such as FX
-Control when that plugin is installed → performance → hidden. In the window
-**Up/Down** selects a row and **ZR + Left/Right** changes it. A plain
+Control when that plugin is installed → performance → window → hidden. The
+**Window** page (0.6.0) holds the page toggles, PerfView and the hint line
+switch. In the window
+**Up/Down** selects a row and **ZR + Left/Right** changes it (the selected
+value reads `< value >` while ZR is held, since 0.6.0). A plain
 Left/Right is ignored, since the D-pad also taunts and moves the menus: the hold
 applied only while a fight was live (Training or a match) in 0.5.3 to 0.5.5 and
 applies in every scene since 0.5.6. L+R and **Plus** opens the Debug view; L+R

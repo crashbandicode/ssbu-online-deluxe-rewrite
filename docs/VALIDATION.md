@@ -2817,6 +2817,68 @@ Evidence outside Git: `~/.local/share/ssbu-mod-backups/plugin-api-tangent-202610
 (`FINDINGS.md`, `screens/`, `profraw/al-a5/final/` and `al-b5/final/`, the
 endgame and keepalive logs).
 
+### 0.6.0 — 2026-10-19: Main page redesign (You/Opp lines, five rows, Window page)
+
+The operator's reading of the 0.5.7 window: "the main screen is pretty
+bloated, lots of info". An inventory of the Settings view confirmed it: 14
+settings rows in three columns (Name, Interface, Peer, Ping, NetLatency,
+NetProfile, Status, Stealth, Streamer, UltraRes, PluginsPage, OwnPages,
+PerfPage, PerfView), four of them configuration of the window itself with a
+meaningless `---` in the opponent column, Ping shown twice (Settings row and
+Performance block), the 11-row Performance block and the 180-sample plot on
+the same page, and no on-screen hint for any chord, which is how Streamer
+flipped unnoticed before 0.5.7. The operator approved the whole proposal
+("do all of it as 0.6.0").
+
+Change (`src/menu.rs`, `src/overlay.rs`, `src/runtime/ui.rs`, `src/config.rs`,
+`src/runtime/mod.rs`):
+
+- Settings page: a `You` summary line (`Vanilla+ | Auto | Wi-Fi`), an `Opp`
+  summary line while the peer shows (`Mario | LessLag | 3 | 23ms | Ethernet`,
+  unannounced facts left out, painted in the ping's stability colour, Left/Right
+  with ZR cycles the station as the Peer row did), then NetLatency, NetProfile
+  with the engine status folded in (`LessLag | Swap`; an empty or `Vanilla`
+  status shows the profile alone), Stealth, Streamer and, on console, UltraRes.
+  Two columns; the opponent column, and the Name, Interface, Status and Ping
+  rows, are gone. Under the table a one-line footer in the frame-time colour
+  (`60.0 fps | 16.67 ms | 1080p | DRS on`) and a dim hint line
+  (`ZR+Left/Right edits   L+R+Down next page   L+R+X Vanilla+   L+R+ZR+Y Streamer`).
+  While ZR is held the selected value reads `< value >`.
+- Window page (new `View::Window`, value 6, appended so recorded view numbers
+  hold): PluginsPage, OwnPages, PerfPage, PerfView and the new Hints row. Last
+  in the chord cycle and always in it, so the toggles stay reachable:
+  Settings → (Plugins) → (own pages) → Performance → Window → hidden;
+  `hide_pages=plugins,performance` gives Settings → FX Control → Window → hidden.
+  The row model is one list (`ROW_PEER` … `ROW_HINTS`, 11 rows) gated by page
+  (`RowGate::window`), so Up/Down wrap within a page and the Settings handler
+  can never reach a Window row.
+- The full Performance block and the plot are drawn on the Performance and
+  Debug pages only; `perf_view` affects those.
+- In-match strip: Settings line 1 is `Net`, `Profile`, `Stealth`, `Stream`,
+  `UltraRes`; line 2 is `>Opp:<name> | <profile> | <buffer> | <ping> | <if>`
+  and the timing line. The Window page has its own strip (the page fields and
+  `Hints`, then the timing line). The `Peer:Hidden` line under Streamer is gone.
+- INI: `hints=true|false` (default true; a file without the key keeps the
+  line). Every other key, every chord, the event codes, the peer exchange and
+  the native banner are unchanged. The separator ` | ` is the native banner's;
+  the hint and marker text are ASCII because the window's font is the ImGui
+  host's.
+
+Host gates: 239 + 1 tests (new: `window_page_rows_toggle_the_hidden_pages_perf_view_and_hints`,
+`summary_lines_footer_and_edit_marker_read_as_designed`,
+`hints_default_on_round_trip_and_reject_other_values`; the view-cycle, page-skip
+and plugin-page tests walk through Window), `cargo clippy --all-targets -- -D warnings`,
+`cargo build --no-default-features`, `cargo skyline build --release`. Not
+exercised: the drawn layout (Eden is under the operator's yield order). Released
+as Forgejo v0.6.0 with the NRO and manifest; the NRO SHA-256 is in that
+release's manifest and in the evidence root (`switch-mtp-060/`).
+
+Owed on the console: the Settings page in menus, the character select,
+Training and a match (You line, Opp line with a live opponent in the ping
+colour, five rows, footer, hint line); the Window page after Performance and
+its five rows editing live; `< value >` while ZR is held and plain without;
+the strip's two lines in a match; a Streamer round trip hiding the Opp line.
+
 ### 0.5.7 — 2026-10-18: Streamer chord behind ZR
 
 After the evening's first 0.5.6 online session the operator reported that
