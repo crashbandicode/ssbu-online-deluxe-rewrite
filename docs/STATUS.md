@@ -1,6 +1,6 @@
 # Implementation and validation status
 
-Updated 2026-10-18 for 0.5.7 (commit pending; 0.5.6 is `fb2012a` + docs `6180325`, Forgejo release v0.5.6; 0.5.5 is `6a9e61a`, Forgejo release v0.5.5; 0.5.4 is `a63bc8c`). The rewrite is one Rust/Skyline
+Updated 2026-10-18 for 0.5.7 (`282a2df` + docs `a7e8427`, Forgejo release v0.5.7, on the card 2026-10-19 00:11Z; 0.5.6 is `fb2012a` + docs `6180325`, Forgejo release v0.5.6; 0.5.5 is `6a9e61a`, Forgejo release v0.5.5; 0.5.4 is `a63bc8c`). The rewrite is one Rust/Skyline
 NRO for Smash 13.0.5. Auto is enabled by default; it chooses Vanilla (Vanilla+
 since 0.5.6) in menus,
 offline play and Training, LessLag for console online singles, LLUltra for
@@ -51,7 +51,7 @@ the operator's Switch, recorded with its build hash in [VALIDATION.md](VALIDATIO
 
 ## Current: 0.5.7
 
-0.5.7 (2026-10-18; commit pending, NRO `27cadcd719d549da5c0fc27cce9c7e752c6dcd17c20cebba443405ae039876c8`) puts the Streamer chord
+0.5.7 (2026-10-18; `282a2df`, Forgejo release v0.5.7, installed on the card 2026-10-19 00:11Z over 0.5.6, NRO `27cadcd719d549da5c0fc27cce9c7e752c6dcd17c20cebba443405ae039876c8`) puts the Streamer chord
 behind ZR: L+R + **ZR** + Y toggles Streamer, the ZL variant does nothing.
 Reason: after the evening's 0.5.6 online session the card's saved config had
 `streamer=true` and the operator had never meant to hide the opponent; the

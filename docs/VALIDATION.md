@@ -2839,7 +2839,11 @@ card config was set back to `streamer=false` and `input_buffer=auto` by hand
 over MTP the same evening (receipt `switch-mtp-056/CONFIG-EDIT-2245.json`).
 Host gates: 237 + 1 tests (the Streamer chord test now asserts the ZL variant
 is inert), `cargo clippy --all-targets -- -D warnings`, `cargo build
---no-default-features`, Skyline package NRO SHA-256 `27cadcd719d549da5c0fc27cce9c7e752c6dcd17c20cebba443405ae039876c8`. Owed on the
+--no-default-features`, Skyline package NRO SHA-256 `27cadcd719d549da5c0fc27cce9c7e752c6dcd17c20cebba443405ae039876c8`.
+Released as Forgejo v0.5.7 (`282a2df`, docs `a7e8427`; NRO + manifest attached, download
+read back) and installed on the card 2026-10-19 00:11Z over 0.5.6 with the rollback archive
+`ultimate/ssbu_online_deluxe_rewrite/backups/pre-057-27cadcd719d549da.nro` (= 0.5.6, read back
+before the write) and a verified after-readback; the saved config was not touched. Owed on the
 console: L+R+ZL+Y changes nothing, L+R+ZR+Y toggles the Streamer row.
 
 ### 0.5.6 — 2026-10-18: Vanilla+ (default), UltraRes 1080p, ZR-hold for every window edit

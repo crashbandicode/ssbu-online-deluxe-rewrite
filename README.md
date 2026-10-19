@@ -10,7 +10,7 @@ delivered as **one NRO**: rendering profiles that cut input latency, a global
 Player Info window, the native character-select status line and network
 display. No overclocking.
 
-**Current version: 0.5.7** (2026-10-18; release pending): the Streamer toggle is
+**Current version: 0.5.7** (2026-10-18; Forgejo release v0.5.7, on the card): the Streamer toggle is
 L+R + **ZR** + Y only, since the ZL variant flipped it on unnoticed during a
 console session. 0.5.6 (Forgejo release v0.5.6, on the card and booted) makes
 **Vanilla+** the default mode: the Vanilla profile keeps the game's three-image

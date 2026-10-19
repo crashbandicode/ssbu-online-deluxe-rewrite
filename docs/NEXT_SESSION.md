@@ -1,6 +1,6 @@
 # Resume and test plan
 
-Updated 2026-10-18 for Deluxe 0.5.7 (commit pending; 0.5.6 is `fb2012a`, Forgejo release v0.5.6 and booted on the console; 0.5.5 is `6a9e61a`; 0.5.4 is `a63bc8c`). Read [STATUS.md](STATUS.md)
+Updated 2026-10-18 for Deluxe 0.5.7 (`282a2df`, Forgejo release v0.5.7, on the card since 2026-10-19 00:11Z, console boot pending; 0.5.6 is `fb2012a`, Forgejo release v0.5.6 and booted on the console; 0.5.5 is `6a9e61a`; 0.5.4 is `a63bc8c`). Read [STATUS.md](STATUS.md)
 for what is implemented and which evidence exists, the newest entries of
 [VALIDATION.md](VALIDATION.md) for the exact packages and gates, and `git log`.
 Live operational state (card deployments and their receipts, Eden profiles,
@@ -23,7 +23,7 @@ outside this repository, not here.
   presents in menus, CSS and Training (see VALIDATION); the visual and
   latency check of step 12 is still the operator's call. The card holds 0.5.6
   since 2026-10-18 (installed over 0.5.5, rollback archive kept).
-- 0.5.7 (commit pending, NRO `27cadcd719d549da5c0fc27cce9c7e752c6dcd17c20cebba443405ae039876c8`): the Streamer chord is L+R + **ZR** +
+- 0.5.7 (`282a2df`, Forgejo release v0.5.7, on the card, NRO `27cadcd719d549da5c0fc27cce9c7e752c6dcd17c20cebba443405ae039876c8`): the Streamer chord is L+R + **ZR** +
   Y only; the ZL variant does nothing. The evening's online session ended with
   `streamer=true` saved on the card without the operator meaning it, which is
   why the opponent's connection did not show; the card config was set back to
