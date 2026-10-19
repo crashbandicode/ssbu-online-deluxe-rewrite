@@ -10,7 +10,7 @@ are from `docs-media-1014/`).
 
 The Settings-page, strip and cycle captures below predate the 0.6.0 layout
 (the You and Opp summary lines, five rows, the one-line performance footer, the
-hint line and the new Window page; in the match strip, the changed fields) and
+hint line and the new Window Options page; in the match strip, the changed fields) and
 have not been re-captured; see [Controls](CONTROLS.md) for the current layout.
 
 ## The window
@@ -25,8 +25,8 @@ have not been re-captured; see [Controls](CONTROLS.md) for the current layout.
 ![Cycling the overlay views](media/overlay-cycle.gif)
 
 Cycling the overlay with L+R+Down (Settings, the FX Control plugin page,
-Performance, hidden; the Window page of 0.6.0 sits between Performance and
-hidden and is not in the clip) and opening Debug with L+R+Plus.
+Performance, hidden; the Window Options page of 0.6.0 sits between Performance
+and hidden and is not in the clip) and opening Debug with L+R+Plus.
 
 ![Editing settings in the window](media/settings-edit.gif)
 

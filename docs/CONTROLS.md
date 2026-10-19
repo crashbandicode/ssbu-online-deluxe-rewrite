@@ -1,12 +1,12 @@
 # Controls and settings
 
 Hold **L+R**, then tap **D-pad Down** to cycle
-**settings → performance → window → hidden**. When a separately installed plugin NRO has
+**settings → performance → window options → hidden**. When a separately installed plugin NRO has
 registered options, a **plugins** page sits between settings and performance,
 and a plugin with its own page (since 0.5.0) follows it (see [Plugins](PLUGINS.md)).
 With the separate [FX Control](https://git.syntaxbyexample.com/intpa/ssbu-fx-control)
 plugin installed, its **FX Control** page appears in that cycle; character FX
-is no longer a Deluxe row. The **Window** page (0.6.0) is the last page of the
+is no longer a Deluxe row. The **Window Options** page (0.6.0) is the last page of the
 cycle and is always in it; it holds the page toggles and the other settings of
 the window itself. The small Player Info window works in menus,
 character select and matches. It moves to the right in Training and connected
@@ -20,11 +20,11 @@ fork's room-ID path, but still needs an NSO test. See [native display](NATIVE_DI
 
 | Control | Action |
 | --- | --- |
-| L+R + Down | Cycle settings → (plugins) → (own plugin pages) → performance → window → hidden. The Window page rows PluginsPage, OwnPages and PerfPage (or `hide_pages` in the INI, 0.5.3; the rows moved from Settings to the Window page in 0.6.0) take pages out of the cycle, e.g. settings → FX Control → window → hidden; Settings and Window are always in it. See [Configuration](CONFIGURATION.md) |
-| Up / Down | Move the selection; it wraps within the page. **Settings** (0.6.0): the Opp line (only while the peer shows), NetLatency, NetProfile, Stealth, Streamer, UltraRes (console only, 0.5.3: LLUltra's internal resolution, 576p, 720p or, since 0.5.6, 1080p; Right walks 576p → 720p → 1080p → 576p, Left walks back); the You line is read-only. **Window** (0.6.0): PluginsPage / OwnPages / PerfPage (Shown or Hidden), PerfView (Graph or Number, 0.5.3) and Hints (Shown or Hidden). On a plugin page, the plugin's rows |
+| L+R + Down | Cycle settings → (plugins) → (own plugin pages) → performance → window options → hidden. The Window Options page rows PluginsPage, OwnPages and PerfPage (or `hide_pages` in the INI, 0.5.3; the rows moved from Settings to the Window Options page in 0.6.0) take pages out of the cycle, e.g. settings → FX Control → window options → hidden; Settings and Window Options are always in it. See [Configuration](CONFIGURATION.md) |
+| Up / Down | Move the selection; it wraps within the page. **Settings** (0.6.0): the Opp line (only while the peer shows), NetLatency, NetProfile, Stealth, Streamer, UltraRes (console only, 0.5.3: LLUltra's internal resolution, 576p, 720p or, since 0.5.6, 1080p; Right walks 576p → 720p → 1080p → 576p, Left walks back); the You line is read-only. **Window Options** (0.6.0): PluginsPage / OwnPages / PerfPage (Shown or Hidden), PerfView (Graph or Number, 0.5.3) and Hints (Shown or Hidden). On a plugin page, the plugin's rows |
 | Left / Right (window open) | Does not change a value since 0.5.6; the window ignores a plain press in every scene (until 0.5.5 it changed values in menus and on the character select). Use ZR + Left / Right below |
-| ZR + Left / Right | Change the selected value on any Settings row, Window row or plugin row; on the Opp line (Settings) it cycles the selected remote station, what the Peer row did before 0.6.0. The hold is required in **every scene since 0.5.6** (menus, character select, Training and matches); in 0.5.3–0.5.5 it applied only while a fight was live (Training, Singles, Doubles). A plain Left/Right is ignored, so a menu D-pad press, a taunt or a stray press cannot change a setting (operator rule, 2026-10-18); Up/Down still move the selection. Since 0.6.0 the selected row's value reads `< value >` (for example `< Auto >`) while ZR is held and is plain text without it, on Settings, Window and in the match strip. ZR rather than ZL because ZL + D-pad Left/Right in Training swaps the controlled fighter. Window closed, the ZL-gated native pane edits below are unchanged |
-| Shoulder chord + Left / Right outside Settings and Window | Cycle the selected remote peer |
+| ZR + Left / Right | Change the selected value on any Settings row, Window Options row or plugin row; on the Opp line (Settings) it cycles the selected remote station, what the Peer row did before 0.6.0. The hold is required in **every scene since 0.5.6** (menus, character select, Training and matches); in 0.5.3–0.5.5 it applied only while a fight was live (Training, Singles, Doubles). A plain Left/Right is ignored, so a menu D-pad press, a taunt or a stray press cannot change a setting (operator rule, 2026-10-18); Up/Down still move the selection. Since 0.6.0 the selected row's value reads `< value >` (for example `< Auto >`) while ZR is held and is plain text without it, on Settings, Window Options and in the match strip. ZR rather than ZL because ZL + D-pad Left/Right in Training swaps the controlled fighter. Window closed, the ZL-gated native pane edits below are unchanged |
+| Shoulder chord + Left / Right outside Settings and Window Options | Cycle the selected remote peer |
 | ZL + Left / Right or Up / Down on an online character select or arena pane, window closed | Edit the input buffer or the profile on the native status (since 0.4.1 the D-pad alone only moves the hand) |
 | L+R + ZR + Y | Toggle Streamer. ZR is the same hold every window edit needs; since 0.5.7 the ZL variant does nothing (it flipped Streamer on unnoticed during a console session, and ZL is Training's controlled-fighter swap modifier) |
 | L+R + X (neither ZL nor ZR held) | Toggle Vanilla+ (0.5.6): the Vanilla profile presents at the flush when on (the default). Applies live, saves `vanilla_plus` in the INI (event code 24) and flips the NetProfile row text between `Vanilla+` and `Vanilla`. See [Rendering profiles](RENDERING.md#vanilla-056) |
@@ -35,10 +35,10 @@ fork's room-ID path, but still needs an NSO test. See [native display](NATIVE_DI
 The window commands fire when the whole combination is held, in any press
 order, and once per press: L+R+Down works whether the bumpers or the D-pad
 land first. Holding Plus or Minus while tapping Down with the chord opens Debug
-from Settings, Plugins, an own plugin page or Window and keeps Debug open; a
-plain chord then continues from Debug to Performance (to Window when
-Performance is hidden). From hidden the chord still opens Settings, and from
-Window (the last page, since 0.6.0) it hides the window.
+from Settings, Plugins, an own plugin page or Window Options and keeps Debug
+open; a plain chord then continues from Debug to Performance (to Window Options
+when Performance is hidden). From hidden the chord still opens Settings, and from
+Window Options (the last page, since 0.6.0) it hides the window.
 
 The first controller operates the window. Input also reaches the game. If
 Elite's menu is open too, D-pad edits can affect both menus; close one before
@@ -72,7 +72,7 @@ Name, Interface, Peer and Ping rows and the opponent column.
 Under them the table has up to five rows: **NetLatency**, **NetProfile**,
 **Stealth**, **Streamer** and **UltraRes** (console only). The old Status row is
 folded into NetProfile's value, and the PluginsPage, OwnPages, PerfPage and
-PerfView rows moved to the Window page.
+PerfView rows moved to the Window Options page.
 
 A one-line performance footer sits under the table in the frame-time colour:
 `60.0 fps | 16.67 ms | 1080p | DRS on` (fps, mean frame time, the applied
@@ -82,12 +82,13 @@ The full Performance block and the frame-time plot are on the Performance page
 
 A dim grey hint line under the footer, wrapping to the window width, lists the
 chords: `ZR+Left/Right edits   L+R+Down next page   L+R+X Vanilla+   L+R+ZR+Y
-Streamer`. It is on by default; `hints=false` in the INI or the Window page's
+Streamer`. It is on by default; `hints=false` in the INI or the Window Options page's
 **Hints** row (Shown / Hidden) turns it off ([Configuration](CONFIGURATION.md)).
 
-## Window page (0.6.0)
+## Window Options page (0.6.0; retitled 0.6.1)
 
-The last page of the L+R+Down cycle, titled **Window** and always in the cycle.
+The last page of the L+R+Down cycle, titled **Window Options** since 0.6.1 (0.6.0
+titled it just **Window**) and always in the cycle.
 Its rows are **PluginsPage**, **OwnPages** and **PerfPage** (Shown / Hidden;
 they toggle `hide_pages` live, as the same rows did on Settings before 0.6.0),
 **PerfView** (Graph / Number; since 0.6.0 it affects the Performance and Debug
@@ -101,7 +102,7 @@ the page.
 In a ready Singles or Doubles match the window is the compact two-line strip.
 Line 1 of the Settings strip is `Net`, `Profile`, `Stealth`, `Stream` and
 `UltraRes`; the `PlugPg`, `OwnPg`, `PerfPg` and `PerfView` fields moved to the
-Window page's strip, which shows them plus `Hints`. Line 2 is
+Window Options page's strip, which shows them plus `Hints`. Line 2 is
 `>Opp:<name> | <profile> | <buffer> | <ping> | <interface>` (when the peer
 shows) followed by the timing line `FPS:.. FT:.. AVG:.. [####------]`. The old
 `Peer:`, `IF:`, `Ping:`, `PeerNet:` and `PeerProfile:` fields are gone. The

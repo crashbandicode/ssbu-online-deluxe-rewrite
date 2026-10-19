@@ -2817,6 +2817,25 @@ Evidence outside Git: `~/.local/share/ssbu-mod-backups/plugin-api-tangent-202610
 (`FINDINGS.md`, `screens/`, `profraw/al-a5/final/` and `al-b5/final/`, the
 endgame and keepalive logs).
 
+### 0.6.1 — 2026-10-19: the last page is titled Window Options
+
+- Change: the last page of the L+R+Down cycle, which 0.6.0 titled just
+  `Window`, is titled **Window Options** (`src/runtime/ui.rs`, the ImGui
+  title string passed to `igBegin`). No other code change; the rows
+  (PluginsPage, OwnPages, PerfPage, PerfView, Hints), the cycle, the INI keys,
+  the event codes and the plugin API (descriptor 4, SDK/ABI crates 5.0.0) are
+  as in 0.6.0.
+- Why: the operator's console boot of 0.6.0 the same day: "seems to work great.
+  menu is much cleaner. Only thing I'd change is the third window just says
+  "window" as its title. I would add an actual name to what it is".
+- Gates on this commit: `cargo test` 239 + 1 passed; `cargo clippy
+  --all-targets -- -D warnings` clean; `cargo build --no-default-features` ok;
+  `cargo skyline build --release` through `tools/Build.ps1 -Package` ok. Build
+  id, NRO SHA-256 and size: the v0.6.1 release manifest on Forgejo.
+- Console: not booted as 0.6.1. The layout it draws is the 0.6.0 one the
+  operator checked (next entry); only the title text differs. Docs renamed in
+  the same commit.
+
 ### 0.6.0 — 2026-10-19: Main page redesign (You/Opp lines, five rows, Window page)
 
 The operator's reading of the 0.5.7 window: "the main screen is pretty
@@ -2878,6 +2897,11 @@ Training and a match (You line, Opp line with a live opponent in the ping
 colour, five rows, footer, hint line); the Window page after Performance and
 its five rows editing live; `< value >` while ZR is held and plain without;
 the strip's two lines in a match; a Streamer round trip hiding the Opp line.
+
+Console 2026-10-19 (operator's boot of the 0.6.0 NRO `4741645e…`): "seems to
+work great. menu is much cleaner ... other than that things are working". The
+one change requested was a real title for the last page, done in 0.6.1 (Window
+Options). Checklist rows 12–16 were not individually reported.
 
 ### 0.5.7 — 2026-10-18: Streamer chord behind ZR
 

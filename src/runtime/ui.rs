@@ -981,7 +981,7 @@ unsafe fn draw_window(ui: &UiState, view: View, frame: &Frame) {
     let title: *const std::ffi::c_char = match &page_title {
         Some(title) => title.as_ptr(),
         None if compact => c"##deluxe_match_strip".as_ptr(),
-        None if view == View::Window => c"Window##deluxe_player_info".as_ptr(),
+        None if view == View::Window => c"Window Options##deluxe_player_info".as_ptr(),
         None => c"Player Info".as_ptr(),
     };
     let flags = WINDOW_FLAGS | if compact { NO_TITLE_BAR } else { 0 };

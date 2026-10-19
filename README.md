@@ -10,13 +10,14 @@ delivered as **one NRO**: rendering profiles that cut input latency, a global
 Player Info window, the native character-select status line and network
 display. No overclocking.
 
-**Current version: 0.6.0** (2026-10-19). The Player Info window's first page is
-redesigned: a `You` line, an `Opp` line for a live opponent, the five match-time
-settings, a one-line fps footer and a chord hint, with the window's own toggles
-on a new Window page. Not yet checked on the console. Every release on Forgejo
-carries the NRO and its manifest; what each version changed and which console
-checks are owed is in [STATUS.md](docs/STATUS.md), the evidence per build in
-[VALIDATION.md](docs/VALIDATION.md).
+**Current version: 0.6.1** (2026-10-19). It only retitles the Player Info
+window's last page **Window Options**. The 0.6.0 redesign before it (a `You`
+line, an `Opp` line for a live opponent, the five match-time settings, a
+one-line fps footer and a chord hint, with the window's own toggles on a new
+last page) was booted on the console on 2026-10-19 and works, per the operator.
+Every release on Forgejo carries the NRO and its manifest; what each version
+changed and which console checks are owed is in [STATUS.md](docs/STATUS.md), the
+evidence per build in [VALIDATION.md](docs/VALIDATION.md).
 
 > **Install only this NRO.** It replaces the original Online Deluxe fork, SsbuSync
 > and the PIA manager; remove those three. With SsbuSync still loaded, Deluxe
@@ -38,8 +39,8 @@ The window captures predate the 0.6.0 layout. More in [Screenshots](docs/SCREENS
   frames for latency; Auto picks one from the scene. The default is **Vanilla+**:
   Vanilla's three-image chain presenting at the flush (L+R+X toggles it).
   [Rendering profiles](docs/RENDERING.md)
-- **Player Info window.** Settings, Plugins, Performance, Window and Debug pages
-  on L+R+Down; a compact strip in matches; the native character-select line keeps
+- **Player Info window.** Settings, Plugins, Performance, Window Options and
+  Debug pages on L+R+Down; a compact strip in matches; the native character-select line keeps
   your profile, buffer and the opponent's settings and RTT.
   [Controls](docs/CONTROLS.md), [native display](docs/NATIVE_DISPLAY.md)
 - **Network display.** Opponent name, interface, settings and coloured RTT from
@@ -95,7 +96,7 @@ in [Rendering profiles](docs/RENDERING.md#measured-results).
 ## Controls
 
 Hold **L+R** and tap **D-pad Down** to cycle the window: settings → plugins
-(when any registered) → own plugin pages → performance → window → hidden.
+(when any registered) → own plugin pages → performance → window options → hidden.
 **Up/Down** selects a row; **ZR + Left/Right** changes it, and the selected value
 reads `< value >` while ZR is held. A plain Left/Right is ignored, because the
 D-pad also taunts and moves menus. L+R and **Plus** opens Debug; L+R and **X**
