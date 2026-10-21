@@ -71,6 +71,43 @@ extern "C" {
     pub(super) fn igGetContentRegionAvail() -> Vec2;
     pub(super) fn igGetWindowDrawList() -> *mut c_void;
     pub(super) fn igGetWindowPos() -> Vec2;
+    pub(super) fn igGetCursorScreenPos() -> Vec2;
+    pub(super) fn igGetFontSize() -> f32;
+    pub(super) fn igGetColorU32_Col(index: i32, alpha: f32) -> u32;
+    pub(super) fn igGetColorU32_Vec4(color: Vec4) -> u32;
+    pub(super) fn igDummy(size: Vec2);
+    pub(super) fn ImDrawList_AddLine(
+        list: *mut c_void,
+        from: Vec2,
+        to: Vec2,
+        color: u32,
+        thickness: f32,
+    );
+    pub(super) fn ImDrawList_AddRect(
+        list: *mut c_void,
+        min: Vec2,
+        max: Vec2,
+        color: u32,
+        rounding: f32,
+        flags: i32,
+        thickness: f32,
+    );
+    pub(super) fn ImDrawList_AddCircleFilled(
+        list: *mut c_void,
+        center: Vec2,
+        radius: f32,
+        color: u32,
+        segments: i32,
+    );
+    pub(super) fn ImDrawList_AddBezierQuadratic(
+        list: *mut c_void,
+        from: Vec2,
+        control: Vec2,
+        to: Vec2,
+        color: u32,
+        thickness: f32,
+        segments: i32,
+    );
     pub(super) fn ImDrawList_AddRectFilled(
         list: *mut c_void,
         min: Vec2,

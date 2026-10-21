@@ -323,13 +323,7 @@ fn telemetry(room: Option<&str>) -> Option<Telemetry> {
         return None;
     }
     let auto = auto_driver::snapshot();
-    let profile = crate::auto_policy::profile_row_label(
-        config.auto_profile,
-        auto.ready,
-        config.render_mode,
-        auto.request,
-        config.vanilla_plus,
-    );
+    let profile = crate::menu::profile_label(&config, auto.ready, auto.request);
     let latency = native_banner::local_latency_label(config.input_buffer, super::auto_buffer());
     let (remotes, ping) = if room.is_some() {
         arena_remotes()

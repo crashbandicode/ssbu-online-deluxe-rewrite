@@ -1,51 +1,41 @@
 //! Portable menu state. Runtime owns controller edges and rendering.
 
 use crate::auto_policy::{cycle_profile_choice, Connection, ProfileChoice, SceneStatus};
-use crate::config::{Config, Platform, RenderMode};
+use crate::config::{Config, Platform, RenderMode, UltraResolution};
 
-/// Editable Player Info rows, top to bottom. Rows 0–5 are the Settings page
-/// (0.6.0: the match-time settings only, under the `You` / `Opp` summary
-/// lines); rows 6–10 are the Window page, the last page of the chord cycle,
-/// which configures the window itself. The FX row left in 0.5.0 with
-/// character FX (now the `ssbu-fx-control` plugin); the emulator-only FPS++
-/// row left on 2026-10-17 with FPS++; Name, Interface, Status and Ping stopped
-/// being rows in 0.6.0 (they are the summary lines now).
+/// Selectable Player Info rows, top to bottom. Settings has You, the optional Opp
+/// selector and two controls. Privacy edits require You; LLUltra resolution lives
+/// in NetProfile. The remaining rows configure the Window Options page.
 ///
+/// The `You` summary line: ZR+X/Y edit privacy; Left/Right do nothing.
+pub const ROW_YOU: usize = 0;
 /// The `Opp` summary line: Left/Right cycles the selected remote station.
-pub const ROW_PEER: usize = 0;
-pub const ROW_NET_LATENCY: usize = 1;
-pub const ROW_NET_PROFILE: usize = 2;
-pub const ROW_STEALTH: usize = 3;
-pub const ROW_STREAMER: usize = 4;
-/// Console LLUltra base resolution (`ultra_resolution`, 0.5.3 experiment).
-pub const ROW_ULTRA_RES: usize = 5;
+pub const ROW_PEER: usize = 1;
+pub const ROW_NET_LATENCY: usize = 2;
+pub const ROW_NET_PROFILE: usize = 3;
 /// Window pages in the chord cycle (`hide_pages`, 0.5.3): the shared Plugins
 /// page, every plugin's own page, Performance. Settings and Window have no
 /// row: they are always in the cycle.
-pub const ROW_PAGE_PLUGINS: usize = 6;
-pub const ROW_PAGE_OWN: usize = 7;
-pub const ROW_PAGE_PERF: usize = 8;
+pub const ROW_PAGE_PLUGINS: usize = 4;
+pub const ROW_PAGE_OWN: usize = 5;
+pub const ROW_PAGE_PERF: usize = 6;
 /// Frame time on the Performance and Debug pages as the plot or a number
 /// (`perf_view`, 0.5.3).
-pub const ROW_PERF_VIEW: usize = 9;
+pub const ROW_PERF_VIEW: usize = 7;
 /// The chord hint line under the Settings and Window tables (`hints`, 0.6.0).
-pub const ROW_HINTS: usize = 10;
-pub const ROW_COUNT: usize = 11;
+pub const ROW_HINTS: usize = 8;
+pub const ROW_COUNT: usize = 9;
 
-/// Which editable rows exist. Platform is configured, never a row.
-/// UltraRes is the console-only row. `window` selects the Window page's rows
-/// instead of the Settings rows (0.6.0).
+/// Which editable rows exist. `window` selects the Window Options page.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RowGate {
     pub peers_connected: bool,
-    pub ultra_res_visible: bool,
     pub window: bool,
 }
 
-pub fn row_gate(peers_connected: bool, platform: Platform, window: bool) -> RowGate {
+pub fn row_gate(peers_connected: bool, window: bool) -> RowGate {
     RowGate {
         peers_connected,
-        ultra_res_visible: platform == Platform::Console,
         window,
     }
 }
@@ -53,24 +43,20 @@ pub fn row_gate(peers_connected: bool, platform: Platform, window: bool) -> RowG
 pub fn row_visible(row: usize, gate: RowGate) -> bool {
     match row {
         ROW_PEER => !gate.window && gate.peers_connected,
-        ROW_ULTRA_RES => !gate.window && gate.ultra_res_visible,
-        ROW_NET_LATENCY | ROW_NET_PROFILE | ROW_STEALTH | ROW_STREAMER => !gate.window,
-        ROW_PAGE_PLUGINS | ROW_PAGE_OWN | ROW_PAGE_PERF | ROW_PERF_VIEW | ROW_HINTS => {
-            gate.window
-        }
+        ROW_YOU | ROW_NET_LATENCY | ROW_NET_PROFILE => !gate.window,
+        ROW_PAGE_PLUGINS | ROW_PAGE_OWN | ROW_PAGE_PERF | ROW_PERF_VIEW | ROW_HINTS => gate.window,
         _ => false,
     }
 }
 
-/// Lowest visible row of the page. On Settings the `Opp` line is first only
-/// while a station is connected; on Window it is PluginsPage.
+/// Lowest visible row of the page: You on Settings, PluginsPage on Window.
 pub fn first_row(gate: RowGate) -> usize {
     (0..ROW_COUNT)
         .find(|row| row_visible(*row, gate))
         .unwrap_or(if gate.window {
             ROW_PAGE_PLUGINS
         } else {
-            ROW_NET_LATENCY
+            ROW_YOU
         })
 }
 
@@ -298,8 +284,8 @@ fn join_facts(facts: &[&str]) -> String {
 }
 
 /// The `You` summary line of the Settings page (0.6.0): profile, input
-/// buffer, local interface. It mirrors the `Opp` line so the two compare at a
-/// glance; the rows below it are the controls.
+/// buffer, local interface. Its selection enables the privacy icon shortcuts;
+/// the rows below it control peer selection, latency and profile.
 #[cfg(any(target_os = "switch", test))]
 pub(crate) fn you_line(profile: &str, buffer: &str, interface: &str) -> String {
     join_facts(&[profile, buffer, interface])
@@ -343,14 +329,16 @@ pub(crate) fn perf_footer(mean_ms: Option<f32>, resolution: &str, drs: bool) -> 
             "{:.1} fps{FACT_SEPARATOR}{ms:.2} ms{FACT_SEPARATOR}{resolution}{FACT_SEPARATOR}{drs}",
             1000.0 / ms
         ),
-        None => format!("--- fps{FACT_SEPARATOR}--- ms{FACT_SEPARATOR}{resolution}{FACT_SEPARATOR}{drs}"),
+        None => format!(
+            "--- fps{FACT_SEPARATOR}--- ms{FACT_SEPARATOR}{resolution}{FACT_SEPARATOR}{drs}"
+        ),
     }
 }
 
 /// The dim hint line under the Settings and Window tables (0.6.0, `hints`).
 /// It wraps to the window width; every chord it names is in CONTROLS.md.
 pub const HINT_LINE: &str =
-    "ZR+Left/Right edits   L+R+Down next page   L+R+X Vanilla+   L+R+ZR+Y Streamer";
+    "ZR+Left/Right edits   ZR+X Stealth   ZR+Y Streamer   L+R+Down next page   L+R+X Vanilla+";
 
 /// Shows the edit state (0.6.0): while the ZR hold is on, the selected row's
 /// value reads `< value >`; without it the value is plain, so the hold rule
@@ -385,6 +373,27 @@ pub fn profile_choice(config: &Config) -> ProfileChoice {
         ProfileChoice::Auto
     } else {
         ProfileChoice::Manual(config.render_mode)
+    }
+}
+
+/// Local profile text shared by the window and native banner. Console Ultra
+/// suffixes name the saved base resolution, not a new renderer or the current
+/// DRS level. Auto and the post-match Vanilla cleanup label retain their meaning.
+pub fn profile_label(config: &Config, ready: bool, requested: RenderMode) -> String {
+    if !config.auto_profile
+        && config.platform == Platform::Console
+        && config.render_mode == RenderMode::LessLagUltra
+        && requested != RenderMode::Vanilla
+    {
+        config.ultra_resolution.profile_label().to_owned()
+    } else {
+        crate::auto_policy::profile_row_label(
+            config.auto_profile,
+            ready,
+            config.render_mode,
+            requested,
+            config.vanilla_plus,
+        )
     }
 }
 
@@ -478,10 +487,21 @@ pub fn edit_latency(config: &mut Config, direction: i8) -> bool {
     true
 }
 
-/// Up/down on CSS and arena. Entering Auto keeps the saved manual mode.
+/// NetProfile and native CSS/arena edits. Console Ultra includes its three
+/// resolution variants before leaving for the adjacent mode. Entering a mode
+/// recalls its saved resolution; entering Auto keeps the saved manual mode.
 pub fn edit_profile(config: &mut Config, direction: i8) -> bool {
     if direction == 0 {
         return false;
+    }
+    if !config.auto_profile
+        && config.render_mode == RenderMode::LessLagUltra
+        && config.platform == Platform::Console
+        && ((direction > 0 && config.ultra_resolution != UltraResolution::P1080)
+            || (direction < 0 && config.ultra_resolution != UltraResolution::P576))
+    {
+        config.ultra_resolution = config.ultra_resolution.cycle(direction);
+        return true;
     }
     let next = cycle_profile_choice(profile_choice(config), direction);
     match next {
@@ -539,8 +559,8 @@ pub struct Menu {
     pub selected: usize,
 }
 
-/// Steps to the next visible row of the page. Hidden Peer and UltraRes rows,
-/// and the other page's rows, are not stops.
+/// Steps to the next visible row. Hidden Opp and the other page's rows are
+/// not stops.
 pub fn move_row(selected: usize, direction: i8, gate: RowGate) -> usize {
     let mut next = selected;
     for _ in 0..ROW_COUNT {
@@ -570,16 +590,12 @@ impl Menu {
         config: &mut Config,
         peers_connected: bool,
     ) -> bool {
-        self.handle_rows(
-            action,
-            config,
-            row_gate(peers_connected, config.platform, false),
-        )
+        self.handle_rows(action, config, row_gate(peers_connected, false))
     }
 
     /// Window page (0.6.0): the page toggles, PerfView and Hints.
     pub fn handle_window(&mut self, action: Action, config: &mut Config) -> bool {
-        self.handle_rows(action, config, row_gate(false, config.platform, true))
+        self.handle_rows(action, config, row_gate(false, true))
     }
 
     pub fn handle_rows(&mut self, action: Action, config: &mut Config, gate: RowGate) -> bool {
@@ -618,18 +634,6 @@ impl Menu {
             }
             ROW_NET_LATENCY => edit_latency(config, direction),
             ROW_NET_PROFILE => edit_profile(config, direction),
-            ROW_STEALTH => {
-                config.stealth = !config.stealth;
-                true
-            }
-            ROW_STREAMER => {
-                config.streamer = !config.streamer;
-                true
-            }
-            ROW_ULTRA_RES => {
-                config.ultra_resolution = config.ultra_resolution.cycle(direction);
-                true
-            }
             ROW_PAGE_PLUGINS => {
                 config.hide_pages.plugins = !config.hide_pages.plugins;
                 true
@@ -664,15 +668,19 @@ mod tests {
         let _gate = crate::peer_transport::global_gate();
         let mut menu = Menu {
             open: false,
-            selected: 1,
+            selected: ROW_NET_PROFILE,
         };
         let mut config = Config::default();
         assert!(!menu.handle(Action::Right, &mut config));
         assert_eq!(config, Config::default());
         assert!(!menu.handle(Action::Toggle, &mut config));
-        assert_eq!(menu.selected, ROW_PEER);
+        assert_eq!(menu.selected, ROW_YOU);
         assert!(!menu.handle(Action::Right, &mut config));
         assert_eq!(config.input_buffer, -1);
+        menu.handle(Action::Down, &mut config);
+        assert_eq!(menu.selected, ROW_PEER);
+        assert!(!menu.handle(Action::Right, &mut config));
+        assert_eq!(config, Config::default());
         menu.handle(Action::Down, &mut config);
         assert_eq!(menu.selected, ROW_NET_LATENCY);
         assert!(menu.handle(Action::Right, &mut config));
@@ -692,26 +700,23 @@ mod tests {
     fn navigation_wraps_and_buffer_saturates_without_false_change_reports() {
         let mut menu = Menu {
             open: true,
-            selected: 0,
+            selected: ROW_YOU,
         };
         let mut config = Config {
             platform: Platform::Emulator,
             ..Config::default()
         };
         menu.handle(Action::Down, &mut config);
+        assert_eq!(menu.selected, ROW_PEER);
+        menu.handle(Action::Down, &mut config);
         assert_eq!(menu.selected, ROW_NET_LATENCY);
         menu.handle(Action::Down, &mut config);
         assert_eq!(menu.selected, ROW_NET_PROFILE);
+        // NetProfile is the last Settings control on both platforms.
         menu.handle(Action::Down, &mut config);
-        assert_eq!(menu.selected, ROW_STEALTH);
-        menu.handle(Action::Down, &mut config);
-        assert_eq!(menu.selected, ROW_STREAMER);
-        // Emulator: UltraRes is hidden, and the page rows live on the Window
-        // page (0.6.0), so Streamer wraps straight to the Opp line.
-        menu.handle(Action::Down, &mut config);
-        assert_eq!(menu.selected, ROW_PEER);
+        assert_eq!(menu.selected, ROW_YOU);
         menu.handle(Action::Up, &mut config);
-        assert_eq!(menu.selected, ROW_STREAMER);
+        assert_eq!(menu.selected, ROW_NET_PROFILE);
         menu.selected = ROW_NET_LATENCY;
         assert!(!menu.handle(Action::Left, &mut config));
         for _ in 0..26 {
@@ -725,20 +730,6 @@ mod tests {
         assert_eq!(config.input_buffer, -1);
         menu.handle(Action::Up, &mut config);
         assert_eq!(menu.selected, ROW_PEER);
-    }
-
-    #[test]
-    fn streamer_toggles_and_starts_off() {
-        let mut menu = Menu {
-            open: true,
-            selected: ROW_STREAMER,
-        };
-        let mut config = Config::default();
-        assert!(!config.streamer);
-        assert!(menu.handle(Action::Right, &mut config));
-        assert!(config.streamer);
-        assert!(menu.handle(Action::Left, &mut config));
-        assert!(!config.streamer);
     }
 
     #[test]
@@ -762,6 +753,10 @@ mod tests {
         assert_eq!(config.render_mode, RenderMode::LessLag);
         assert!(menu.handle(Action::Right, &mut config));
         assert_eq!(config.render_mode, RenderMode::LessLagUltra);
+        assert!(menu.handle(Action::Right, &mut config));
+        assert_eq!(config.ultra_resolution, UltraResolution::P720);
+        assert!(menu.handle(Action::Right, &mut config));
+        assert_eq!(config.ultra_resolution, UltraResolution::P1080);
         assert!(menu.handle(Action::Right, &mut config));
         assert_eq!(config.render_mode, RenderMode::LessLagDoubles);
         let saved = config.clone();
@@ -813,17 +808,155 @@ mod tests {
             ),
             "Auto:LLDbl"
         );
-        menu.selected = ROW_STEALTH;
         assert!(config.stealth);
         assert_eq!(stealth_value(config.stealth, None), "On");
-        assert!(menu.handle(Action::Right, &mut config));
+        config.stealth = false;
         assert!(!config.stealth);
         assert_eq!(stealth_value(config.stealth, Some(true)), "Off (reconnect)");
         assert_eq!(stealth_value(config.stealth, None), "Off");
-        assert!(menu.handle(Action::Left, &mut config));
+        config.stealth = true;
         assert!(config.stealth);
         assert_eq!(stealth_value(config.stealth, Some(false)), "On (reconnect)");
         assert_eq!(stealth_value(config.stealth, None), "On");
+    }
+
+    #[test]
+    fn console_ultra_variants_cycle_in_profile_without_reselecting_the_renderer() {
+        let mut config = Config {
+            auto_profile: false,
+            render_mode: RenderMode::LessLag,
+            input_buffer: 3,
+            ..Config::default()
+        };
+        for (direction, mode, resolution) in [
+            (1, RenderMode::LessLagUltra, UltraResolution::P576),
+            (1, RenderMode::LessLagUltra, UltraResolution::P720),
+            (1, RenderMode::LessLagUltra, UltraResolution::P1080),
+            (1, RenderMode::LessLagDoubles, UltraResolution::P1080),
+            (-1, RenderMode::LessLagUltra, UltraResolution::P1080),
+            (-1, RenderMode::LessLagUltra, UltraResolution::P720),
+            (-1, RenderMode::LessLagUltra, UltraResolution::P576),
+            (-1, RenderMode::LessLag, UltraResolution::P576),
+        ] {
+            let before = config.clone();
+            assert!(apply_native_edges(
+                &mut config,
+                NativeSurface::Css,
+                0,
+                direction
+            ));
+            assert_eq!(config.render_mode, mode);
+            assert_eq!(config.ultra_resolution, resolution);
+            assert_eq!(
+                profile_action(&before, &config),
+                if before.render_mode == mode {
+                    ProfileAction::Unchanged
+                } else {
+                    ProfileAction::SelectManual(mode)
+                }
+            );
+            assert_eq!(
+                config,
+                Config {
+                    render_mode: mode,
+                    ultra_resolution: resolution,
+                    ..before
+                }
+            );
+            assert_eq!(crate::config::parse(&config.serialize()).unwrap(), config);
+        }
+        let before = config.clone();
+        assert!(!edit_profile(&mut config, 0));
+        assert_eq!(config, before);
+    }
+
+    #[test]
+    fn profile_edits_recall_saved_ultra_resolution_and_emulator_has_no_extra_stops() {
+        for resolution in [
+            UltraResolution::P576,
+            UltraResolution::P720,
+            UltraResolution::P1080,
+        ] {
+            for (start, direction) in [(RenderMode::LessLag, 1), (RenderMode::LessLagDoubles, -1)] {
+                let mut config = Config {
+                    auto_profile: false,
+                    render_mode: start,
+                    ultra_resolution: resolution,
+                    ..Config::default()
+                };
+                assert!(edit_profile(&mut config, direction));
+                assert_eq!(config.render_mode, RenderMode::LessLagUltra);
+                assert_eq!(config.ultra_resolution, resolution);
+            }
+            let mut config = Config {
+                platform: Platform::Emulator,
+                auto_profile: false,
+                render_mode: RenderMode::LessLag,
+                ultra_resolution: resolution,
+                ..Config::default()
+            };
+            assert!(edit_profile(&mut config, 1));
+            assert_eq!(config.render_mode, RenderMode::LessLagUltra);
+            assert_eq!(profile_label(&config, true, config.render_mode), "LLUltra");
+            assert!(edit_profile(&mut config, 1));
+            assert_eq!(config.render_mode, RenderMode::LessLagDoubles);
+            assert_eq!(config.ultra_resolution, resolution);
+            assert!(edit_profile(&mut config, 1));
+            assert!(config.auto_profile);
+            assert_eq!(config.ultra_resolution, resolution);
+        }
+    }
+
+    #[test]
+    fn local_ultra_labels_preserve_ini_auto_and_cleanup_semantics() {
+        for (key, label) in [
+            ("576", "LLUltra"),
+            ("720", "LLUltra+"),
+            ("1080", "LLUltra++"),
+        ] {
+            let mut config = crate::config::parse(&format!(
+                "version=1\nrender_mode=llultra\nultra_resolution={key}\n"
+            ))
+            .unwrap();
+            assert!(!config.auto_profile);
+            assert_eq!(
+                profile_label(&config, true, RenderMode::LessLagUltra),
+                label
+            );
+            assert_eq!(
+                profile_label(&config, true, RenderMode::Vanilla),
+                "Vanilla+*"
+            );
+            config.vanilla_plus = false;
+            assert_eq!(
+                profile_label(&config, true, RenderMode::LessLagUltra),
+                label
+            );
+            assert_eq!(
+                profile_label(&config, true, RenderMode::Vanilla),
+                "Vanilla*"
+            );
+            config.render_mode = RenderMode::LessLag;
+            assert_eq!(profile_label(&config, true, RenderMode::LessLag), "LessLag");
+            config.auto_profile = true;
+            assert_eq!(
+                profile_label(&config, true, RenderMode::LessLagUltra),
+                "Auto:Ultra"
+            );
+            assert_eq!(
+                profile_label(&config, false, RenderMode::LessLagUltra),
+                "Auto (unavailable)"
+            );
+        }
+        let old = crate::config::parse("version=1\nrender_mode=llultra\n").unwrap();
+        assert_eq!(old.ultra_resolution, UltraResolution::P576);
+        assert_eq!(
+            profile_label(&old, true, RenderMode::LessLagUltra),
+            "LLUltra"
+        );
+        for alias in ["llultra+", "llultra++"] {
+            assert!(crate::config::parse(&format!("version=1\nrender_mode={alias}\n")).is_err());
+        }
     }
 
     #[test]
@@ -835,8 +968,8 @@ mod tests {
         };
         let mut config = Config::default();
         for platform in [Platform::Console, Platform::Emulator] {
-            let window = row_gate(true, platform, true);
-            let settings = row_gate(true, platform, false);
+            let window = row_gate(true, true);
+            let settings = row_gate(true, false);
             for row in [
                 ROW_PAGE_PLUGINS,
                 ROW_PAGE_OWN,
@@ -847,27 +980,22 @@ mod tests {
                 assert!(row_visible(row, window), "{row} on {platform:?}");
                 assert!(!row_visible(row, settings), "{row} on Settings");
             }
-            for row in [
-                ROW_PEER,
-                ROW_NET_LATENCY,
-                ROW_NET_PROFILE,
-                ROW_STEALTH,
-                ROW_STREAMER,
-            ] {
+            for row in [ROW_YOU, ROW_PEER, ROW_NET_LATENCY, ROW_NET_PROFILE] {
                 assert!(!row_visible(row, window), "{row} on Window");
             }
             assert_eq!(
-                row_visible(ROW_ULTRA_RES, settings),
-                platform == Platform::Console
+                (0..ROW_COUNT)
+                    .filter(|row| row_visible(*row, settings))
+                    .count(),
+                4
             );
-            assert!(!row_visible(ROW_ULTRA_RES, window));
             assert_eq!(first_row(window), ROW_PAGE_PLUGINS);
         }
         // The Settings handler never reaches a Window row: the selection is
         // moved onto the page instead and nothing changes.
         assert!(!menu.handle(Action::Right, &mut config));
         assert_eq!(config, Config::default());
-        assert_eq!(menu.selected, ROW_PEER);
+        assert_eq!(menu.selected, ROW_YOU);
         menu.selected = ROW_PAGE_PLUGINS;
         assert!(menu.handle_window(Action::Right, &mut config));
         assert!(config.hide_pages.plugins);
@@ -915,7 +1043,10 @@ mod tests {
 
     #[test]
     fn summary_lines_footer_and_edit_marker_read_as_designed() {
-        assert_eq!(you_line("Vanilla+", "Auto", "Wi-Fi"), "Vanilla+ | Auto | Wi-Fi");
+        assert_eq!(
+            you_line("Vanilla+", "Auto", "Wi-Fi"),
+            "Vanilla+ | Auto | Wi-Fi"
+        );
         assert_eq!(
             opp_line("Mario", "LessLag", "3", "23ms", "Ethernet"),
             "Mario | LessLag | 3 | 23ms | Ethernet"
@@ -927,7 +1058,10 @@ mod tests {
             "Unavailable | 31ms | Wi-Fi"
         );
         assert_eq!(net_profile_value("LessLag", "Swap"), "LessLag | Swap");
-        assert_eq!(net_profile_value("Auto:LLDbl", "Active"), "Auto:LLDbl | Active");
+        assert_eq!(
+            net_profile_value("Auto:LLDbl", "Active"),
+            "Auto:LLDbl | Active"
+        );
         assert_eq!(net_profile_value("Vanilla+", ""), "Vanilla+");
         assert_eq!(net_profile_value("Vanilla+", "Vanilla"), "Vanilla+");
         assert_eq!(net_profile_value("Auto:Van+", "Vanilla"), "Auto:Van+");
@@ -945,7 +1079,8 @@ mod tests {
         );
         assert!(HINT_LINE.is_ascii());
         assert!(HINT_LINE.contains("ZR+Left/Right"));
-        assert!(HINT_LINE.contains("L+R+ZR+Y"));
+        assert!(HINT_LINE.contains("ZR+X Stealth"));
+        assert!(HINT_LINE.contains("ZR+Y Streamer"));
         let mut rows = vec![
             strip_row("You", "Vanilla+ | Auto | Wi-Fi", false),
             strip_row("NetLatency", "Auto", true),
@@ -1035,36 +1170,26 @@ mod tests {
         let mut menu = Menu::default();
         let mut config = Config::default();
         assert!(!menu.handle_peers(Action::Toggle, &mut config, false));
-        assert_eq!(menu.selected, ROW_NET_LATENCY);
-        // Console: UltraRes closes the Settings list (the page rows moved to
-        // the Window page in 0.6.0).
+        assert_eq!(menu.selected, ROW_YOU);
+        // You is always reachable, including without a peer. Privacy has no
+        // separate rows; the optional Opp selector returns on a join.
+        let before = config.clone();
+        assert!(!menu.handle_peers(Action::Left, &mut config, false));
+        assert!(!menu.handle_peers(Action::Right, &mut config, false));
+        assert_eq!(config, before, "You has no Left/Right value edit");
         menu.handle_peers(Action::Up, &mut config, false);
-        assert_eq!(menu.selected, ROW_ULTRA_RES);
-        assert!(menu.handle_peers(Action::Right, &mut config, false));
-        assert_eq!(
-            config.ultra_resolution,
-            crate::config::UltraResolution::P720
-        );
-        assert!(menu.handle_peers(Action::Left, &mut config, false));
-        assert_eq!(
-            config.ultra_resolution,
-            crate::config::UltraResolution::P576
-        );
-        menu.handle_peers(Action::Up, &mut config, false);
-        assert_eq!(menu.selected, ROW_STREAMER);
-        for _ in 0..2 {
-            menu.handle_peers(Action::Down, &mut config, false);
-        }
+        assert_eq!(menu.selected, ROW_NET_PROFILE);
+        menu.handle_peers(Action::Down, &mut config, false);
+        assert_eq!(menu.selected, ROW_YOU);
+        menu.handle_peers(Action::Down, &mut config, false);
         assert_eq!(menu.selected, ROW_NET_LATENCY);
-        // Emulator: UltraRes is hidden, so Streamer closes the list.
+        // Emulator has the same compact navigation.
         config.platform = Platform::Emulator;
-        assert!(!row_visible(
-            ROW_ULTRA_RES,
-            row_gate(false, Platform::Emulator, false)
-        ));
-        menu.selected = ROW_NET_LATENCY;
+        menu.selected = ROW_YOU;
         menu.handle_peers(Action::Up, &mut config, false);
-        assert_eq!(menu.selected, ROW_STREAMER);
+        assert_eq!(menu.selected, ROW_NET_PROFILE);
+        menu.handle_peers(Action::Down, &mut config, false);
+        assert_eq!(menu.selected, ROW_YOU);
         menu.handle_peers(Action::Down, &mut config, false);
         assert_eq!(menu.selected, ROW_NET_LATENCY);
         config.platform = Platform::Console;
@@ -1082,7 +1207,7 @@ mod tests {
     }
 
     #[test]
-    fn match_shape_requires_a_ready_match_and_visibility_uses_platform() {
+    fn match_shape_requires_a_ready_match_and_peer_visibility_is_gated() {
         assert_eq!(
             menu_shape(true, SceneStatus::Singles),
             MenuShape::Horizontal
@@ -1099,16 +1224,13 @@ mod tests {
             Some(MATCH_BG_ALPHA)
         );
         assert_eq!(match_window_alpha(MenuShape::Vertical), None);
-        assert!(row_visible(
-            ROW_NET_LATENCY,
-            row_gate(false, Platform::Console, false)
-        ));
-        assert!(!row_visible(
-            ROW_PEER,
-            row_gate(false, Platform::Emulator, false)
-        ));
-        assert!(row_visible(ROW_PEER, row_gate(true, Platform::Console, false)));
-        assert!(!row_visible(ROW_PEER, row_gate(true, Platform::Console, true)));
+        assert!(row_visible(ROW_YOU, row_gate(false, false)));
+        assert!(row_visible(ROW_YOU, row_gate(true, false)));
+        assert!(!row_visible(ROW_YOU, row_gate(true, true)));
+        assert!(row_visible(ROW_NET_LATENCY, row_gate(false, false)));
+        assert!(!row_visible(ROW_PEER, row_gate(false, false)));
+        assert!(row_visible(ROW_PEER, row_gate(true, false)));
+        assert!(!row_visible(ROW_PEER, row_gate(true, true)));
     }
 
     #[test]
@@ -1168,9 +1290,6 @@ mod tests {
             vec![
                 strip_row("Net", "Auto", true),
                 strip_row("Profile", "Auto:LLDbl | Active", false),
-                strip_row("Stealth", "On (reconnect)", false),
-                strip_row("Stream", "Off", false),
-                strip_row("UltraRes", "576p", false),
             ],
             vec![strip_row(
                 "Opp",
@@ -1186,10 +1305,7 @@ mod tests {
         let (fields, opponent) = settings_strip(&peer);
         let settings = strip_line(&fields);
         let opponent = strip_line(&opponent);
-        assert_eq!(
-            settings,
-            ">Net:Auto   Profile:Auto:LLDbl | Active   Stealth:On (reconnect)   Stream:Off   UltraRes:576p"
-        );
+        assert_eq!(settings, ">Net:Auto   Profile:Auto:LLDbl | Active");
         assert_eq!(
             opponent,
             format!(">Opp:{peer} | LessLagDoubles | 25 | 31ms | Wi-Fi")

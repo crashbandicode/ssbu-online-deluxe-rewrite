@@ -9,7 +9,7 @@ more than two fighters use LLDoubles. Local wireless counts as online here.
 | --- | --- | --- | --- | --- |
 | Vanilla | 3 | TwoBehind; with Vanilla+ (0.5.6, the default) it presents at the flush | 1080p / off | 1080p / off |
 | LessLag | 2 | OneBehind, presents at the flush (0.4.0) | 1080p / on | 1080p / off |
-| LLUltra | 2 | Immediate, earlier flush, presents at the flush (0.5.2) | 576p / on (`ultra_resolution=720` or `1080`, or the UltraRes row, raises it to 720p, 0.5.3, or the native 1080p, 0.5.6; [below](#llultra-resolution-053-1080p-in-056)) | 1080p / off |
+| LLUltra | 2 | Immediate, earlier flush, presents at the flush (0.5.2) | 576p / on; `ultra_resolution=720` or `1080` raises the base. Unreleased menu labels: LLUltra+ / LLUltra++ ([below](#llultra-resolution-053-1080p-in-056)) | 1080p / off |
 | LLDoubles | 3 | OneBehind, presents at the flush (0.5.2) | 1080p / on | 1080p / on |
 
 For a conceptual introduction and the short Eden results table, see
@@ -133,10 +133,13 @@ path, not Switch performance.
 
 Console LLUltra renders at 576p by default, the fork's choice. The INI key
 `ultra_resolution` (`576`, `720` or `1080`; [Configuration](CONFIGURATION.md))
-and the console-only Settings row **UltraRes** set that base level, applied on
-the next present. Since 0.5.6 the row walks 576p → 720p → 1080p → 576p with
-Right and backwards with Left (a value change needs ZR held;
-[Controls](CONTROLS.md)), and `1080` is the game's native level. Dynamic
+sets that base level, applied on the next present. In the unreleased compact
+menu, the former UltraRes row is folded into **NetProfile** as LLUltra (576p),
+LLUltra+ (720p) and LLUltra++ (1080p). ZR+Right raises the variant, then leaves
+for LLDoubles after LLUltra++; ZR+Left lowers it, then leaves for LessLag after
+LLUltra. Entering LLUltra recalls the saved level. Existing INI values and
+renderer modes are unchanged ([Controls](CONTROLS.md)). `1080` is the game's
+native level. Dynamic
 resolution still steps down from the chosen base (1080p → 720p, 720p → 576p,
 576p and below → 480p), so at 1080p the cut-in, move-table and adaptive
 triggers are the only drops. Emulator profiles and the other console profiles

@@ -1221,9 +1221,15 @@ mod tests {
         let doubles = bits(Profile::Doubles);
         assert_eq!(doubles, 3 | (1 << 2) | (1 << 11) | (1 << 13));
         assert_eq!(settings_label(doubles), "LLDoubles");
-        let console_ultra = profile_bits(Profile::Ultra, 3, true);
-        assert_eq!((console_ultra >> 4) & 0x7f, 3);
-        assert_eq!(settings_label(console_ultra), "LLUltra");
+        // Local LLUltra+/++ labels are resolution variants, never FPS boost.
+        // Existing peer names and bit 14 retain their wire meaning.
+        for level in [3, 2, 0] {
+            let console_ultra = profile_bits(Profile::Ultra, level, true);
+            assert_eq!((console_ultra >> 4) & 0x7f, u16::from(level));
+            assert_eq!(console_ultra & (1 << 14), 0);
+            assert_eq!(settings_label(console_ultra), "LLUltra");
+            assert_eq!(settings_label(console_ultra | (1 << 14)), "LLUltra++");
+        }
         let less = bits(Profile::LessLag);
         assert_eq!(settings_label(less | (1 << 11)), "LessLag");
         assert_eq!(settings_label(doubles | (5 << 4)), "Other");

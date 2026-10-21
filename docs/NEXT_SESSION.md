@@ -1,5 +1,41 @@
 # Resume and test plan
 
+## Unreleased compact menu — 2026-10-21
+
+The working tree folds Stealth/Streamer into eye/TV icons beside You and
+UltraRes into console NetProfile's LLUltra / LLUltra+ / LLUltra++ variants.
+The older version-specific rows below remain historical. The operator approved
+candidate `5a2a5f05` after an Ally Eden boot showed the You row icons, and it
+was installed on the Switch 2026-10-21 21:45Z (receipts and rollback in
+[VALIDATION.md](VALIDATION.md)). That binary still shows the older
+`You selected:` hint wording; current source shows
+`ZR+Left/Right edits   ZR+X Stealth   ZR+Y Streamer   L+R+Down next page   L+R+X Vanilla+`
+and is not on the card. On the console, check:
+
+- Settings opens with You selected; Up/Down walks You, the optional Opp line,
+  NetLatency, NetProfile and wraps. There are no Stealth/Streamer rows. Both
+  icons fit beside You at 720p and 1080p; the table marks it `> You` and the
+  match strip `>You:`, followed by the same icons, then Net/Profile.
+- With You selected, hold ZR and tap X/Y: Stealth/Streamer toggle once per tap.
+  Closed eye=Stealth on, green filled TV=Streamer on. No toggle on Opp,
+  NetLatency, NetProfile, another page, the hidden window, ZL instead of ZR, or
+  both triggers together; an X/Y already held while moving onto You does not
+  fire. Vanilla+'s L+R+X shortcut remains independent. The icon states are drawn
+  in [privacy-indicators.svg](privacy-indicators.svg) (source geometry, not a
+  screenshot).
+- Changing Stealth during a connection shows an amber eye/asterisk and reconnect
+  notice, even with Hints hidden. The session latch still changes on reconnect.
+- Console NetProfile edits step LLUltra576 → LLUltra+720 → LLUltra++1080 →
+  LLDoubles and back. Entering Ultra recalls an existing saved level. Save/reload
+  retains `render_mode=llultra` and `ultra_resolution`; Auto, cleanup labels and
+  DRS keep their existing behavior. Emulator has no additional Ultra stops.
+
+Build/host evidence: [VALIDATION.md](VALIDATION.md). Live worktree/package state
+and handoff are outside the repository in the evidence root's
+`ship-compact-menu-1021/PLAN.md`. No runtime pass is implied by these pending checks.
+
+## Released 0.6.2 baseline and historical checks
+
 Updated 2026-10-19 for Deluxe 0.6.2 (Forgejo release v0.6.2; the NRO SHA-256 is in that release's manifest; 0.6.1 is Forgejo release v0.6.1 and booted on the console 2026-10-19, the operator confirming the title; 0.6.0 is Forgejo release v0.6.0 and booted on the console 2026-10-19, the operator reporting that it works; 0.5.7 is `282a2df`, Forgejo release v0.5.7, on the card since 2026-10-19 00:11Z, console boot pending; 0.5.6 is `fb2012a`, Forgejo release v0.5.6 and booted on the console; 0.5.5 is `6a9e61a`; 0.5.4 is `a63bc8c`). Read [STATUS.md](STATUS.md)
 for what is implemented and which evidence exists, the newest entries of
 [VALIDATION.md](VALIDATION.md) for the exact packages and gates, and `git log`.

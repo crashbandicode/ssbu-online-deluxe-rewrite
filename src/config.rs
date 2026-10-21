@@ -291,12 +291,21 @@ impl UltraResolution {
         })
     }
 
-    /// Settings-row label.
+    /// Explicit resolution label for diagnostics.
     pub const fn label(self) -> &'static str {
         match self {
             Self::P1080 => "1080p",
             Self::P720 => "720p",
             Self::P576 => "576p",
+        }
+    }
+
+    /// Local console NetProfile label; the stored mode and wire bits stay Ultra.
+    pub const fn profile_label(self) -> &'static str {
+        match self {
+            Self::P576 => "LLUltra",
+            Self::P720 => "LLUltra+",
+            Self::P1080 => "LLUltra++",
         }
     }
 
@@ -816,7 +825,11 @@ mod tests {
         );
         assert!(defaults.serialize().contains("ultra_resolution=576\n"));
         for (value, expected, level) in [
-            ("1080", UltraResolution::P1080, crate::resolution::Level::P1080),
+            (
+                "1080",
+                UltraResolution::P1080,
+                crate::resolution::Level::P1080,
+            ),
             ("720", UltraResolution::P720, crate::resolution::Level::P720),
             ("576", UltraResolution::P576, crate::resolution::Level::P576),
         ] {

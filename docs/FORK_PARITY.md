@@ -28,6 +28,25 @@ The rewrite is one NRO. Keep Training Modpack and SGPO coexistence: no
 then), and `llultra` reads SGPO's word at
 `0x374812c` without patching it (`src/runtime/render_ultra.rs`).
 
+## Unreleased compact menu (2026-10-21)
+
+This working-tree change supersedes the privacy/UltraRes controls in the older
+inventories below. Settings has You/Opp summaries and only NetLatency/NetProfile
+controls. You is the first selectable row and carries drawn Stealth-eye and
+Streamer-TV icons; with You selected, ZR+X/Y toggle the same saved booleans,
+once per new press. Other rows, other pages and the hidden window have no privacy
+shortcut; the hidden-window Streamer chord is retired.
+Stealth's session latch and reconnect requirement remain, with an amber eye,
+asterisk and notice. Vanilla+'s L+R+X chord is unchanged.
+
+Console NetProfile folds the existing `ultra_resolution` into local LLUltra
+(576p), LLUltra+ (720p), LLUltra++ (1080p) variants. Mode bytes, INI keys, Auto,
+cleanup holds, DRS/application hooks, peer wire bits/names and plugin ABI remain
+unchanged. A resolution-only edit publishes settings without selecting the
+renderer again. Emulator has no extra resolution stops. Entering LLUltra recalls
+the saved level. No additional render hook or effect change is introduced.
+Verification and runtime limits are recorded in [VALIDATION.md](VALIDATION.md).
+
 ## Rewrite changes 0.5.3 (2026-10-17): plugin API host and window pages consolidated
 
 Host-tested only; the behaviour changes a plugin or a player can see:

@@ -280,3 +280,26 @@ See [validation](VALIDATION.md) for exact tested artifacts,
 [frame methodology](LATENCY_METHODOLOGY.md) for timing boundaries,
 [the emulator method](EMULATOR_METHOD.md) for the CPU-quota bias, and
 [parity](FORK_PARITY.md) for deliberate differences from the fork.
+
+## Unreleased compact-menu checkpoint — 2026-10-21
+
+Working tree on main after released 0.6.2: You-line Stealth eye/Streamer TV,
+ZR+X/Y on the selected You row, two Settings controls, and console LLUltra/+/++
+resolution variants within NetProfile. See [Controls](CONTROLS.md) for the new
+interaction. Candidate `d9e1edd1eca0dbe0` (242+1 host tests, warning-free
+host/Skyline Clippy, no-default-features build, Skyline release build/package,
+independent source review) predates the You-row gate: its ZR+X/Y work on any
+open page. It is **not deployed or runtime visually tested**.
+[Validation](VALIDATION.md) records its exact identity. The corrected You-row
+source passes 243 unit tests plus one SDK integration test, host/Skyline Clippy
+with warnings denied, the no-default-features build, changed-source formatting
+and the Skyline release build. Its icon preview is source geometry, not a game
+screenshot; full control and in-match visual acceptance is pending. Version-specific
+feature and runtime observations above describe the earlier released builds.
+
+Its build `5a2a5f05a996775a` booted in Eden on the Ally with the You-row icons
+visible, was approved by the operator, and was installed on the Switch
+2026-10-21 (replacing 0.6.2 `59dab7a8`; rollback on the card). No console
+boot, control or FPS result is claimed. A later source-only change drops the
+hint's "You selected" prefix; the installed binary keeps the old wording.
+Version remains 0.6.2 with no new release. Details: [Validation](VALIDATION.md).

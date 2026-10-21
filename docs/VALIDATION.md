@@ -1,5 +1,84 @@
 # Validation record
 
+## Unreleased compact menu — 2026-10-21
+
+Candidate based on 0.6.2/main `302c095`, uncommitted. Settings now has You/Opp
+summaries and two editable controls. You carries font-independent eye/TV
+geometry; open-window ZR+X/Y toggle Stealth/Streamer. The eye retains an amber
+asterisk and reconnect notice when the connection latch differs. The match strip
+uses the same icons. Console NetProfile folds existing resolution settings into
+LLUltra / LLUltra+ / LLUltra++; entry recalls the saved resolution, Auto and
+cleanup behavior remain, emulator has one Ultra stop. Native banner text shares
+the label helper. Config keys/mode bytes, peer protocol and plugin ABI are unchanged.
+
+Primary verification on the final source: **242 unit tests + 1 SDK integration
+test passed**, host Clippy `--all-targets -- -D warnings`,
+`build --no-default-features`, Skyline Clippy `-- -- -D warnings`, changed Rust
+files' rustfmt check, and actual Skyline release build/package passed.
+Tests cover privacy press/hold and hidden-window behavior, compact navigation,
+resolution cycling/recall, config round trips, Auto/cleanup/emulator labels, and
+unchanged peer resolution/boost bits. Independent Cursor Grok4.7 source review
+accepted the diff; it did not independently run these tests.
+
+Build `0.6.2-302c09574b3e-dirty-1792606778`, NRO 1,441,792 bytes, SHA-256
+`d9e1edd1eca0dbe04e6f024405046d98cf92698c759819501ae21947fb3a670d`.
+NRO/ELF executable text matching verified by the packager. Optimized symbols,
+source archive, native-dependency provenance and manifest are outside the repo
+under the evidence root's `compact-menu-1021/d9e1edd1eca0dbe0/`.
+
+**Not deployed or runtime visually tested.** No new console compatibility or
+stock-clock FPS claim.
+
+Follow-up source change, same day: the privacy shortcuts now require the
+Settings **You** row, which becomes the first selectable row (`> You` in the
+table, `>You:` in the strip). ZR held with ZL released, each new X/Y press
+toggles Stealth/Streamer once; a held button does not repeat or fire on entering
+You, and other rows, pages and the hidden window have none. Candidate
+`d9e1edd1eca0dbe0` above still has the any-open-page shortcuts. The corrected
+source passes **243 unit tests + 1 SDK integration test**, host Clippy with
+warnings denied, the no-default-features build, Skyline Clippy with warnings
+denied, the Skyline release build, changed-source rustfmt and diff checks.
+The new test explicitly covers entering/leaving You while X/Y remain held;
+privacy gating is checked across every view and row. These are source/build
+checks, not runtime visual acceptance.
+Corrected build `0.6.2-302c09574b3e-dirty-1792617097`, NRO 1,441,792 bytes,
+SHA-256 `5a2a5f05a996775aae4dcbd4d5804883c4d48c4b1358020443107b93df2f999f`,
+is packaged under external `compact-player-row-1021/5a2a5f05a996775a/` with
+matching NRO/ELF executable text. Its archived source differs from the previous
+compact candidate only in menu selection, overlay gating and runtime UI.
+[privacy-indicators.svg](privacy-indicators.svg) redraws the icon geometry from
+source; it is not a screenshot. The pending visual/control checks are in
+[NEXT_SESSION.md](NEXT_SESSION.md); the external `compact-player-row-1021/PLAN.md`
+records the corrected candidate's exact operational state and Ally review launch.
+
+**Ally Eden review and approval, 2026-10-21.** The `5a2a5f05` NRO booted in Eden
+on the Ally (Smash 13.0.5, loading complete, title and Settings/Player Info
+rendered); the review screenshot shows the You row with the eye and TV icons.
+This is a bounded boot and visible-UI observation only: no control, FPS or
+gameplay acceptance. The operator then approved it ("ship it").
+
+**Installed on Switch, 2026-10-21 21:45:07Z.** At the operator's request ("copy
+to switch first so I can start using it right away"), the same `5a2a5f05` NRO
+(1,441,792 bytes, build `0.6.2-302c09574b3e-dirty-1792617097`) was installed
+over DBI USB MTP. It replaced 0.6.2 SHA-256
+`59dab7a8cd60d8d770d7a7c4f30bb668b174854d666e72086ed06e5c238768c4`; the
+installed readback matches `5a2a5f05`. The other eleven plugins, the Deluxe and
+FX `config.ini` files and `bootloader/hekate_ipl.ini` are byte-identical before
+and after. Rollback on the card:
+`/ultimate/ssbu_online_deluxe_rewrite/backups/pre-compact-5a2a5f05a996775a.nro`
+(readback matches `59dab7a8`); the staged copy
+`compact-5a2a5f05a996775a.stage` stays outside the plugin loader. Receipts are
+in the evidence root's `ship-compact-menu-1021/usb-install-1021/`
+(`deployment.json` state `installed_verified`). No console boot, control or FPS
+result is claimed for this install. Version stays 0.6.2; no tag or release.
+
+**Hint-text follow-up (source only).** After the install, the operator asked to
+drop the redundant "You selected" prefix. `HINT_LINE` now reads
+`ZR+Left/Right edits   ZR+X Stealth   ZR+Y Streamer   L+R+Down next page   L+R+X Vanilla+`.
+The You-row gate is unchanged. The installed `5a2a5f05` binary still shows the
+previous wording. The follow-up package and source/build receipts stay in external
+`ship-compact-menu-1021/`; it is not copied to the Switch automatically.
+
 ## Approved content-fit HUD installed on Switch, 2026-10-10
 
 - Operator approved the8328 screenshots, requested FTP installation, then freshly

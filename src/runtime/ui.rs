@@ -1,8 +1,8 @@
 //! Fork-style global Player Info window. This window does not write panes.
 use super::{imgui::*, input, overlay_host, publish, record, settings, Code};
 use crate::menu::{
-    mark_editing, net_profile_value, opp_line, perf_footer, strip_line, strip_segments,
-    you_line, ProfileAction, Row, HINT_LINE,
+    mark_editing, net_profile_value, opp_line, perf_footer, strip_line, strip_segments, you_line,
+    ProfileAction, Row, HINT_LINE,
 };
 use crate::overlay::{FrameTimes, Overlay, View};
 use crate::pia_rtt::PresentedPing;
@@ -112,6 +112,95 @@ const YELLOW: Vec4 = rgb(0.95, 0.85, 0.25);
 const RED: Vec4 = rgb(0.95, 0.35, 0.35);
 /// Timing line without samples.
 const GREY: Vec4 = rgb(0.70, 0.70, 0.70);
+
+#[derive(Clone, Copy)]
+struct Privacy {
+    stealth: bool,
+    streamer: bool,
+    reconnect: bool,
+}
+
+/// Font-independent You-line icons. Reserve one text line so the table and
+/// strip fit the geometry just like text, in either embedded or borrowed ImGui.
+unsafe fn privacy_icons(privacy: Privacy) {
+    let size = igGetFontSize();
+    let origin = igGetCursorScreenPos();
+    let list = igGetWindowDrawList();
+    igDummy(Vec2 {
+        x: size * 2.5,
+        y: size,
+    });
+    if list.is_null() {
+        return;
+    }
+    let point = |x: f32, y: f32| Vec2 {
+        x: origin.x + x * size,
+        y: origin.y + y * size,
+    };
+    let stroke = size * 0.085;
+    let eye = if privacy.reconnect {
+        igGetColorU32_Vec4(YELLOW)
+    } else {
+        igGetColorU32_Col(TEXT, 1.0)
+    };
+    if privacy.stealth {
+        // Closed lid with lashes: Stealth enabled.
+        ImDrawList_AddBezierQuadratic(
+            list,
+            point(0.05, 0.35),
+            point(0.5, 0.95),
+            point(0.95, 0.35),
+            eye,
+            stroke,
+            12,
+        );
+        for (x, y, end_x) in [(0.24, 0.55, 0.16), (0.5, 0.65, 0.5), (0.76, 0.55, 0.84)] {
+            ImDrawList_AddLine(list, point(x, y), point(end_x, y + 0.2), eye, stroke);
+        }
+    } else {
+        // Open eye: ordinary announcements are allowed by the saved choice.
+        for y in [0.02, 0.98] {
+            ImDrawList_AddBezierQuadratic(
+                list,
+                point(0.05, 0.5),
+                point(0.5, y),
+                point(0.95, 0.5),
+                eye,
+                stroke,
+                12,
+            );
+        }
+        ImDrawList_AddCircleFilled(list, point(0.5, 0.5), size * 0.13, eye, 12);
+    }
+    let tv = igGetColorU32_Vec4(if privacy.streamer { GREEN } else { GREY });
+    ImDrawList_AddRect(
+        list,
+        point(1.45, 0.24),
+        point(2.45, 0.82),
+        tv,
+        size * 0.08,
+        0,
+        stroke,
+    );
+    ImDrawList_AddLine(list, point(1.7, 0.02), point(1.95, 0.24), tv, stroke);
+    ImDrawList_AddLine(list, point(2.2, 0.02), point(1.95, 0.24), tv, stroke);
+    ImDrawList_AddLine(list, point(1.95, 0.82), point(1.95, 0.96), tv, stroke);
+    ImDrawList_AddLine(list, point(1.72, 0.96), point(2.18, 0.96), tv, stroke);
+    if privacy.streamer {
+        ImDrawList_AddRectFilled(
+            list,
+            point(1.58, 0.37),
+            point(2.32, 0.69),
+            tv,
+            size * 0.03,
+            0,
+        );
+    }
+    if privacy.reconnect {
+        igSameLine(0.0, 0.0);
+        paint_text("*", Some(YELLOW));
+    }
+}
 
 fn frame_color(mean: Option<f32>) -> Vec4 {
     match mean {
@@ -326,6 +415,7 @@ struct Frame {
     scene: super::auto_driver::Snapshot,
     peers: PeerFacts,
     editing: bool,
+    privacy: Privacy,
 }
 
 /// The strip's short label for a Settings or Window row; the `You` / `Opp`
@@ -335,22 +425,20 @@ fn short_label(label: &str) -> Option<&'static str> {
     Some(match label {
         "NetLatency" => "Net",
         "NetProfile" => "Profile",
-        "Streamer" => "Stream",
         "PluginsPage" => "PlugPg",
         "OwnPages" => "OwnPg",
         "PerfPage" => "PerfPg",
-        "Stealth" => "Stealth",
-        "UltraRes" => "UltraRes",
         "PerfView" => "PerfView",
         "Hints" => "Hints",
         _ => return None,
     })
 }
 
-/// The Settings page (0.6.0): the `You` summary line, the `Opp` summary line
+/// The Settings page (0.6.0): the selectable `You` summary line, the `Opp` summary line
 /// while the peer shows (selectable: Left/Right cycles the station), then
 /// the match-time rows NetLatency, NetProfile with the engine status folded
-/// in, Stealth, Streamer and, on console, UltraRes. Returns the rows, the
+/// in. Privacy is drawn as You-line icons; UltraRes is part of NetProfile.
+/// Returns the rows, the
 /// colour of each value (the `Opp` line takes the ping's stability colour)
 /// and the strip's second-line facts (the `Opp` line).
 fn settings_rows(
@@ -360,22 +448,14 @@ fn settings_rows(
     scene: &super::auto_driver::Snapshot,
     editing: bool,
 ) -> (Vec<Row>, Vec<Option<Vec4>>, Vec<String>) {
-    use crate::menu::{
-        ROW_NET_LATENCY, ROW_NET_PROFILE, ROW_PEER, ROW_STEALTH, ROW_STREAMER, ROW_ULTRA_RES,
-    };
+    use crate::menu::{ROW_NET_LATENCY, ROW_NET_PROFILE, ROW_PEER, ROW_YOU};
     let peer = &peers.frame.peer;
     let name = crate::peer_transport::name_label(&peer.name, peer.name_len);
     let peer_name = name.filter(|_| peer.known).unwrap_or("Unavailable");
     let remote_latency = crate::peer_transport::remote_latency_label(peer.latency);
     let announced = peer.known && !peer.settings.is_empty();
     let peer_settings = if announced { peer.settings } else { "---" };
-    let profile = crate::auto_policy::profile_row_label(
-        config.auto_profile,
-        scene.ready,
-        config.render_mode,
-        scene.request,
-        config.vanilla_plus,
-    );
+    let profile = crate::menu::profile_label(config, scene.ready, scene.request);
     let status = crate::menu::net_profile_status(
         scene.request,
         super::renderer::mode(),
@@ -383,19 +463,20 @@ fn settings_rows(
         crate::render_policy::load_machine(),
         super::renderer::status() != "Awaiting window",
     );
-    let latched = crate::peer_transport::latched_stealth();
-    let stealth = crate::menu::stealth_value(super::stealth(), latched);
     let interface = super::connection_transport::local_interface_label();
     let buffer =
         crate::native_banner::local_latency_label(config.input_buffer, super::auto_buffer());
-    let streamer = if config.streamer { "On" } else { "Off" };
-    let ultra = config.ultra_resolution.label();
     let (mut rows, mut colors) = (Vec::new(), Vec::new());
     let mut push = |label: &str, row: Option<usize>, value: &str, color: Option<Vec4>| {
         colors.push(color);
         rows.push(entry(label, value, row == Some(selected)));
     };
-    push("You", None, &you_line(&profile, &buffer, interface), None);
+    push(
+        "You",
+        Some(ROW_YOU),
+        &you_line(&profile, &buffer, interface),
+        None,
+    );
     if peers.show_remote {
         let opp = opp_line(
             peer_name,
@@ -413,12 +494,8 @@ fn settings_rows(
         &net_profile_value(&profile, status),
         None,
     );
-    push("Stealth", Some(ROW_STEALTH), stealth, None);
-    push("Streamer", Some(ROW_STREAMER), streamer, None);
-    if config.platform == crate::config::Platform::Console {
-        push("UltraRes", Some(ROW_ULTRA_RES), ultra, None);
-    }
-    mark_editing(&mut rows, editing);
+    // You uses face-button shortcuts, not Left/Right edits of its summary text.
+    mark_editing(&mut rows[1..], editing);
     let facts = rows
         .iter()
         .filter(|row| row.label == "Opp")
@@ -440,7 +517,11 @@ fn window_rows(config: &crate::config::Config, selected: usize, editing: bool) -
             selected == ROW_PAGE_PLUGINS,
         ),
         entry("OwnPages", page(hide.own_pages), selected == ROW_PAGE_OWN),
-        entry("PerfPage", page(hide.performance), selected == ROW_PAGE_PERF),
+        entry(
+            "PerfPage",
+            page(hide.performance),
+            selected == ROW_PAGE_PERF,
+        ),
         entry(
             "PerfView",
             config.perf_view.label(),
@@ -456,7 +537,7 @@ fn window_rows(config: &crate::config::Config, selected: usize, editing: bool) -
 /// frame-time colour (grey until a frame time exists), then, under Settings
 /// and Window alike, the dim chord hint line while `hints` is on. The hint
 /// wraps to the window width.
-unsafe fn footer(frames: &FrameTimes, config: &crate::config::Config, perf: bool) {
+unsafe fn footer(frames: &FrameTimes, config: &crate::config::Config, perf: bool, reconnect: bool) {
     if perf {
         let mean = frames.average();
         let resolution = crate::resolution::status();
@@ -471,6 +552,9 @@ unsafe fn footer(frames: &FrameTimes, config: &crate::config::Config, perf: bool
             GREY
         };
         paint_text(&line, Some(color));
+    }
+    if reconnect {
+        paint_text("* Stealth changes after reconnect", Some(YELLOW));
     }
     if config.hints {
         igPushTextWrapPos(0.0);
@@ -585,6 +669,7 @@ unsafe fn draw_table(
     rows: &[Row],
     indent: &str,
     colors: Option<&[Option<Vec4>]>,
+    privacy: Option<Privacy>,
 ) {
     if !begin_table(id, label_width) {
         return;
@@ -598,6 +683,12 @@ unsafe fn draw_table(
             continue;
         }
         text(&format!("{mark}{indent}{}", row.label));
+        if row.label == "You" {
+            if let Some(privacy) = privacy {
+                igSameLine(0.0, igGetFontSize() * 0.25);
+                privacy_icons(privacy);
+            }
+        }
         igTableNextColumn();
         let pending = if row.pending { " (pending)" } else { "" };
         let color = colors
@@ -616,8 +707,14 @@ unsafe fn draw_table(
 /// (each continues the previous with no extra spacing, so the row measures
 /// the same as `strip_line`), or `plain` in `color` when there are no rows;
 /// then `second`.
-unsafe fn draw_strip((rows, plain, color, second): &Strip) {
+unsafe fn draw_strip((rows, plain, color, second): &Strip, privacy: Option<(Privacy, bool)>) {
     igPushTextWrapPos(-1.0);
+    if let Some((privacy, selected)) = privacy {
+        text(if selected { ">You:" } else { "You:" });
+        igSameLine(0.0, igGetFontSize() * 0.25);
+        privacy_icons(privacy);
+        igSameLine(0.0, igGetFontSize() * 0.75);
+    }
     if rows.is_empty() {
         paint_text(plain, *color);
     }
@@ -702,7 +799,7 @@ unsafe fn poll(ui: &mut UiState, sample: input::Sample) -> Frame {
     if matches!(view, View::Settings | View::Window) {
         // The `Opp` line is a stop only while it shows (0.6.0: Streamer hides
         // it, so it is skipped then too).
-        let gate = crate::menu::row_gate(show_remote, config.platform, view == View::Window);
+        let gate = crate::menu::row_gate(show_remote, view == View::Window);
         if !crate::menu::row_visible(ui.controls.menu.selected, gate) {
             ui.controls.menu.selected = crate::menu::move_row(ui.controls.menu.selected, 1, gate);
         }
@@ -733,11 +830,18 @@ unsafe fn poll(ui: &mut UiState, sample: input::Sample) -> Frame {
         show_remote,
         ping,
     };
+    let privacy = Privacy {
+        stealth: config.stealth,
+        streamer: config.streamer,
+        reconnect: crate::peer_transport::latched_stealth()
+            .is_some_and(|latched| latched != config.stealth),
+    };
     Frame {
         config,
         scene,
         peers,
         editing: crate::overlay::edit_modifier(buttons),
+        privacy,
     }
 }
 
@@ -798,6 +902,9 @@ fn strip_lines(
         (View::Settings, _) => {
             let (rows, _, mut facts) =
                 settings_rows(&frame.config, selected, peers, &frame.scene, frame.editing);
+            if frame.privacy.reconnect {
+                facts.push("* Stealth: reconnect".to_owned());
+            }
             facts.push(timing);
             (
                 rows.iter().filter_map(short).collect(),
@@ -859,13 +966,14 @@ unsafe fn draw_tables(
                 &rows,
                 "",
                 Some(&colors),
+                Some(frame.privacy),
             );
-            return footer(&ui.frames, &frame.config, true);
+            return footer(&ui.frames, &frame.config, true, frame.privacy.reconnect);
         }
         (View::Window, _) => {
             let rows = window_rows(&frame.config, selected, frame.editing);
-            draw_table(b"deluxe_window\0", 110.0 * scale.x, &rows, "", None);
-            return footer(&ui.frames, &frame.config, false);
+            draw_table(b"deluxe_window\0", 110.0 * scale.x, &rows, "", None, None);
+            return footer(&ui.frames, &frame.config, false, false);
         }
         (View::Plugins | View::PluginPage, Some(page)) => {
             // Option rows sit two spaces under their group row.
@@ -876,6 +984,7 @@ unsafe fn draw_tables(
                 &page.rows,
                 indent,
                 None,
+                None,
             );
         }
         (View::Debug, _) => draw_table(
@@ -883,6 +992,7 @@ unsafe fn draw_tables(
             100.0 * scale.x,
             &debug_rows(peers),
             "",
+            None,
             None,
         ),
         _ => {}
@@ -963,11 +1073,16 @@ unsafe fn draw_window(ui: &UiState, view: View, frame: &Frame) {
     let font_size = strip
         .as_ref()
         .map_or(16.0 * scale.y, |(rows, plain, _, second)| {
-            let first = if rows.is_empty() {
+            let mut first = if rows.is_empty() {
                 plain.clone()
             } else {
                 strip_line(rows)
             };
+            if view == View::Settings {
+                // Conservative text-width allowance for the You label and
+                // two one-em icons, including the optional reconnect marker.
+                first = format!(">You: [ ] [ ] *   {first}");
+            }
             crate::menu::compact_font_size(&first, second, configured, scale.x, scale.y)
         });
     igPushFont(std::ptr::null_mut(), font_size);
@@ -988,7 +1103,13 @@ unsafe fn draw_window(ui: &UiState, view: View, frame: &Frame) {
     let flags = WINDOW_FLAGS | if compact { NO_TITLE_BAR } else { 0 };
     if igBegin(title, std::ptr::null_mut(), flags) {
         match &strip {
-            Some(strip) => draw_strip(strip),
+            Some(strip) => draw_strip(
+                strip,
+                (view == View::Settings).then_some((
+                    frame.privacy,
+                    ui.controls.menu.selected == crate::menu::ROW_YOU,
+                )),
+            ),
             None => draw_tables(ui, view, frame, page.as_ref(), scale, display),
         }
     }

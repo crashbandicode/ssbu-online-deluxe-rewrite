@@ -103,8 +103,11 @@ Hold **L+R** and tap **D-pad Down** to cycle the window: settings → plugins
 **Up/Down** selects a row; **ZR + Left/Right** changes it, and the selected value
 reads `< value >` while ZR is held. A plain Left/Right is ignored, because the
 D-pad also taunts and moves menus. L+R and **Plus** opens Debug; L+R and **X**
-toggles Vanilla+; L+R, **ZR** and **Y** toggles Streamer. Everything else is in
-[Controls](docs/CONTROLS.md).
+toggles Vanilla+. In the unreleased compact menu, Stealth and Streamer are
+toggled from the Settings **You** row: select it, hold **ZR** and tap **X**
+(Stealth) or **Y** (Streamer); released 0.6.2 uses L+R, **ZR** and **Y** for
+Streamer. Everything else is in [Controls](docs/CONTROLS.md); the You-line icons
+are drawn in [privacy-indicators.svg](docs/privacy-indicators.svg).
 
 ## Rendering profiles
 
@@ -112,7 +115,7 @@ toggles Vanilla+; L+R, **ZR** and **Y** toggles Streamer. Everything else is in
 | --- | --- | --- | --- | --- |
 | Vanilla | 3 | TwoBehind; Vanilla+ (the default) presents at the flush | 1080p, DRS off | 1080p, DRS off |
 | LessLag | 2 | OneBehind, presents at the flush | 1080p, DRS on | 1080p, DRS off |
-| LLUltra | 2 | Immediate, earlier flush, presents at the flush | 576p, DRS on; UltraRes raises it to 720p or 1080p | 1080p, DRS off |
+| LLUltra | 2 | Immediate, earlier flush, presents at the flush | 576p, DRS on; `ultra_resolution` raises it to 720p or 1080p (unreleased compact-menu labels: LLUltra+ / LLUltra++) | 1080p, DRS off |
 | LLDoubles | 3 | OneBehind, presents at the flush | 1080p, DRS on | 1080p, DRS on |
 
 Auto uses Vanilla in menus, offline matches and Training; online singles get

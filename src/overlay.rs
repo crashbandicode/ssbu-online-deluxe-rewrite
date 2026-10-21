@@ -8,8 +8,7 @@ pub(crate) const L: u64 = 1 << 6;
 pub(crate) const R: u64 = 1 << 7;
 const ZL: u64 = 1 << 8;
 const ZR: u64 = 1 << 9;
-/// L+R+X toggles Vanilla+ (0.5.6). The fork's retired FPS++ chord used X with
-/// a trigger held; that combination still does nothing.
+/// L+R+X toggles Vanilla+; You-selected ZR+X toggles Stealth.
 const X: u64 = 1 << 2;
 const Y: u64 = 1 << 3;
 const PLUS_MINUS: u64 = (1 << 10) | (1 << 11);
@@ -202,18 +201,25 @@ impl Overlay {
         let pressed = buttons & !self.previous_buttons;
         self.previous_buttons = buttons;
         let shoulders = buttons & (L | R) == L | R;
-        // Streamer (0.5.7): L+R with ZR held, then Y. ZR is the same hold every
-        // window edit needs; the ZL variant was retired after it flipped
-        // Streamer on unnoticed during the 2026-10-18 console session (ZL is
-        // also Training's controlled-fighter swap modifier).
-        if shoulders && edit_modifier(buttons) && pressed & Y != 0 {
-            config.streamer = !config.streamer;
-            return true;
+        // Privacy belongs to the highlighted You row on Settings. Consume each
+        // face-button edge even elsewhere, so entering the row cannot replay a
+        // held press. ZL+ZR remains neither edit hold.
+        if self.view == View::Settings
+            && self.menu.selected == crate::menu::ROW_YOU
+            && edit_modifier(buttons)
+        {
+            let stealth = pressed & X != 0;
+            let streamer = pressed & Y != 0;
+            config.stealth ^= stealth;
+            config.streamer ^= streamer;
+            if stealth || streamer {
+                return true;
+            }
         }
         // Vanilla+ (0.5.6): L+R+X with neither trigger held flips the flag
         // live and saves it. It is a flag on Vanilla, not a NetProfile entry,
-        // so the row keeps its three choices. The fork's FPS++ chord
-        // (L+R+ZL/ZR+X) left with FPS++ on 2026-10-17 and stays inert.
+        // so it is not a separate profile. The ZR+X privacy edit above is
+        // independent of this flag.
         if shoulders && buttons & (ZL | ZR) == 0 && pressed & X != 0 {
             config.vanilla_plus = !config.vanilla_plus;
             return true;
@@ -254,7 +260,7 @@ impl Overlay {
             }
             self.menu.open = matches!(self.view, View::Settings | View::Window);
             if self.menu.open {
-                let gate = self.row_gate(config);
+                let gate = self.row_gate();
                 if !crate::menu::row_visible(self.menu.selected, gate) {
                     self.menu.selected = crate::menu::move_row(self.menu.selected, 1, gate);
                 }
@@ -279,7 +285,7 @@ impl Overlay {
             if direction == 0
                 && !chord
                 && pressed & (LEFT | RIGHT) != 0
-                && !(self.edit_hold && !edit_modifier(buttons))
+                && (!self.edit_hold || edit_modifier(buttons))
             {
                 if let Some(crate::plugin_api::PageRow::Option { plugin, option }) =
                     rows.get(self.plugin_row)
@@ -347,16 +353,15 @@ impl Overlay {
         } else {
             return false;
         };
-        let gate = self.row_gate(config);
+        let gate = self.row_gate();
         self.menu.handle_rows(action, config, gate)
     }
 
     /// The row gate of the page with the selection: the Settings rows (the
     /// `Opp` line while a station is mapped) or the Window page's rows.
-    fn row_gate(&self, config: &Config) -> crate::menu::RowGate {
+    fn row_gate(&self) -> crate::menu::RowGate {
         crate::menu::row_gate(
             crate::peer_transport::opponent_connected(),
-            config.platform,
             self.view == View::Window,
         )
     }
@@ -413,8 +418,12 @@ mod tests {
         ui.poll(L | R | DOWN, &mut config);
         assert_eq!(
             (ui.view, ui.menu.selected),
-            (View::Settings, crate::menu::ROW_NET_LATENCY)
+            (View::Settings, crate::menu::ROW_YOU)
         );
+        ui.poll(0, &mut config);
+        assert!(!ui.poll(RIGHT, &mut config), "You has no Left/Right edit");
+        ui.poll(DOWN, &mut config);
+        assert_eq!(ui.menu.selected, crate::menu::ROW_NET_LATENCY);
         ui.poll(0, &mut config);
         assert!(ui.poll(RIGHT, &mut config));
         assert_eq!(config.input_buffer, 0);
@@ -424,10 +433,10 @@ mod tests {
         ui.poll(0, &mut config);
         ui.poll(DOWN, &mut config);
         ui.poll(0, &mut config);
-        assert_eq!(ui.menu.selected, crate::menu::ROW_STEALTH);
-        assert!(ui.poll(RIGHT, &mut config));
+        assert_eq!(ui.menu.selected, crate::menu::ROW_YOU);
+        assert!(ui.poll(ZR | X, &mut config));
         assert!(!config.stealth);
-        assert!(!ui.poll(RIGHT, &mut config));
+        assert!(!ui.poll(ZR | X, &mut config));
         ui.poll(L | R | DOWN, &mut config);
         assert_eq!(ui.view, View::Performance);
         assert!(!ui.poll(RIGHT, &mut config));
@@ -819,7 +828,7 @@ mod tests {
         );
 
     #[test]
-    fn edit_hold_needs_zl_for_value_changes_but_not_for_navigation() {
+    fn edit_hold_needs_zr_for_value_changes_but_not_for_navigation() {
         let _gate = crate::peer_transport::global_gate();
         crate::peer_transport::clear_session();
         let registry = crate::plugin_api::Registry::new();
@@ -831,6 +840,10 @@ mod tests {
         ui.poll_with(L | R | DOWN, &mut config, none, &registry);
         ui.poll_with(0, &mut config, none, &registry);
         assert_eq!(ui.view, View::Settings);
+        assert_eq!(ui.menu.selected, crate::menu::ROW_YOU);
+        ui.poll_with(DOWN, &mut config, none, &registry);
+        ui.poll_with(0, &mut config, none, &registry);
+        assert_eq!(ui.menu.selected, crate::menu::ROW_NET_LATENCY);
         assert!(!ui.poll_with(RIGHT, &mut config, none, &registry));
         assert_eq!(config, Config::default());
         ui.poll_with(0, &mut config, none, &registry);
@@ -1022,31 +1035,82 @@ mod tests {
     }
 
     #[test]
-    fn streamer_chord_persists_and_peer_cycle_does_not() {
+    fn privacy_shortcuts_require_settings_you_selection_and_fire_once_per_face_press() {
         let _gate = crate::peer_transport::global_gate();
-        let mut ui = Overlay::default();
+        for view in [
+            View::Hidden,
+            View::Settings,
+            View::Window,
+            View::Performance,
+            View::Debug,
+            View::Plugins,
+            View::PluginPage,
+        ] {
+            for selected in 0..crate::menu::ROW_COUNT {
+                let mut ui = Overlay {
+                    view,
+                    menu: Menu {
+                        open: matches!(view, View::Settings | View::Window),
+                        selected,
+                    },
+                    ..Overlay::default()
+                };
+                let mut config = Config::default();
+                let enabled = view == View::Settings && selected == crate::menu::ROW_YOU;
+                for buttons in [X, Y, ZL | X, ZL | Y, ZL | ZR | X, ZL | ZR | Y] {
+                    assert!(!ui.poll(buttons, &mut config));
+                    ui.poll(0, &mut config);
+                    assert_eq!(config, Config::default());
+                }
+                assert_eq!(ui.poll(ZR | X, &mut config), enabled);
+                assert_eq!(config.stealth, !enabled);
+                assert!(!ui.poll(ZR | X, &mut config));
+                assert_eq!(config.stealth, !enabled);
+                assert_eq!(ui.poll(ZR | X | Y, &mut config), enabled);
+                assert_eq!(config.streamer, enabled);
+                assert!(!ui.poll(ZR | X | Y, &mut config));
+                ui.poll(ZR, &mut config);
+                assert_eq!(ui.poll(ZR | X | Y, &mut config), enabled);
+                assert_eq!(config, Config::default());
+                // Pressing a trigger after an already-held face button is not
+                // a fresh action; opening a window must not replay a held press.
+                ui.poll(0, &mut config);
+                assert!(!ui.poll(X | Y, &mut config));
+                assert!(!ui.poll(ZR | X | Y, &mut config));
+                assert_eq!(config, Config::default());
+            }
+        }
+    }
+
+    #[test]
+    fn navigating_to_you_does_not_replay_held_privacy_buttons() {
+        let _gate = crate::peer_transport::global_gate();
+        crate::peer_transport::clear_session();
+        let mut ui = Overlay {
+            view: View::Settings,
+            menu: Menu {
+                open: true,
+                selected: crate::menu::ROW_NET_LATENCY,
+            },
+            ..Overlay::default()
+        };
         let mut config = Config::default();
-        assert!(!config.streamer);
-        // 0.5.7: ZR held is the only Streamer chord; the ZL variant is inert.
-        assert!(!ui.poll(L | R | ZL | Y, &mut config));
-        assert!(!config.streamer);
-        ui.poll(0, &mut config);
-        assert!(ui.poll(L | R | ZR | Y, &mut config));
+        assert!(!ui.poll(ZR | X | Y, &mut config));
+        assert!(!ui.poll(ZR | X | Y | UP, &mut config));
+        assert_eq!(ui.menu.selected, crate::menu::ROW_YOU);
+        assert!(!ui.poll(ZR | X | Y, &mut config));
+        assert_eq!(config, Config::default());
+        ui.poll(ZR, &mut config);
+        assert!(ui.poll(ZR | X | Y, &mut config));
+        assert!(!config.stealth);
         assert!(config.streamer);
-        ui.poll(0, &mut config);
-        // Both triggers together are neither hold.
-        assert!(!ui.poll(L | R | ZL | ZR | Y, &mut config));
-        assert!(config.streamer);
-        ui.poll(0, &mut config);
-        assert!(ui.poll(L | R | ZR | Y, &mut config));
-        assert!(!config.streamer);
-        ui.poll(0, &mut config);
-        let before = config.clone();
-        assert!(!ui.poll(L | R | RIGHT, &mut config));
-        assert!(!ui.poll(L | R | Y, &mut config));
-        assert_eq!(config, before);
-        assert!(!ui.poll(ZL | ZR | LEFT, &mut config));
-        assert_eq!(ui.view, View::Hidden);
+        let toggled = config.clone();
+        assert!(!ui.poll(ZR | X | Y | DOWN, &mut config));
+        assert_eq!(ui.menu.selected, crate::menu::ROW_NET_LATENCY);
+        assert!(!ui.poll(ZR | X | Y | UP, &mut config));
+        assert_eq!(ui.menu.selected, crate::menu::ROW_YOU);
+        assert!(!ui.poll(ZR | X | Y, &mut config));
+        assert_eq!(config, toggled);
     }
 
     #[test]
