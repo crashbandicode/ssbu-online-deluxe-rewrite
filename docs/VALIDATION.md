@@ -5,9 +5,24 @@
 **Scope.** Minor release of the accepted compact You icons, one console
 NetProfile LLUltra stop, in-place **L+R+X** resolution cycle and You-row privacy
 gate. Root product version **0.6.2 → 0.7.0**; SDK/ABI crates remain **5.0.0**.
-The version bump preserves the candidate's Rust implementation. The clean
-release artifact is built from the `v0.7.0` version commit and recorded below
-after packaging; no fresh 0.7.0 console run is claimed.
+The version bump preserves the candidate's Rust implementation. No fresh 0.7.0
+console run is claimed.
+
+**Clean release package.** Tag `v0.7.0` points to version commit
+`9a7f81ce19374b1f783d35845c02b3fe3a5745ab`. Skyline release build
+`0.7.0-9a7f81ce1937-1792670948`, NRO 1,441,792 bytes, SHA-256
+`2ff456161c52522c6881956d0ad3a5a037a1a3fc74c8757a1e3a7afe49012cae`.
+All 71 archived build inputs match the tagged commit; 1,124,304 executable
+bytes independently match the optimized ELF. The native dependency hash,
+module ID, source archive and manifest also verified. All 69 non-version
+inputs match the operator-tested candidate; only root Cargo version entries
+changed. Symbols and receipts are outside the repository in
+`release-070-1022/out/2ff456161c52522c/` and `PACKAGE-VERIFIED.json`.
+
+**Publication state:** version commit and tag pushed to Forgejo. NRO/manifest
+upload is pending: the API publication client was rejected by Cloudflare with
+HTTP 403 / error 1010 on 2026-10-22, before release creation. No release asset
+or new console install is claimed. The local package remains preserved.
 
 **Operator-tested `2f5` archive (separate from future clean 0.7.0 rebuild).**
 Installed/readback-verified 2026-10-22 (`usb-install-1022/VERIFICATION.json`):

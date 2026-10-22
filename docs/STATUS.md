@@ -54,6 +54,10 @@ the operator's Switch, recorded with its build hash in [VALIDATION.md](VALIDATIO
 
 ## Current: 0.7.0
 
+Tag `v0.7.0` and version commit `9a7f81c` are on Forgejo. The clean release
+package is verified; API publication of the NRO/manifest is pending a
+Cloudflare access block. Exact artifact and status: [validation](VALIDATION.md).
+
 0.7.0 (2026-10-22) is the minor version for the compact Player Info menu and
 in-place LLUltra resolution chord accepted after 0.6.2.
 Settings keeps You/Opp summaries and two editable controls: **You** carries
