@@ -1,16 +1,22 @@
 # Resume and test plan
 
-## Unreleased compact menu — 2026-10-21
+## 0.7.0 acceptance — 2026-10-22
 
-The working tree folds Stealth/Streamer into eye/TV icons beside You and
-UltraRes into console NetProfile's LLUltra / LLUltra+ / LLUltra++ variants.
-The older version-specific rows below remain historical. The operator approved
-candidate `5a2a5f05` after an Ally Eden boot showed the You row icons, and it
-was installed on the Switch 2026-10-21 21:45Z (receipts and rollback in
-[VALIDATION.md](VALIDATION.md)). That binary still shows the older
-`You selected:` hint wording; current source shows
-`ZR+Left/Right edits   ZR+X Stealth   ZR+Y Streamer   L+R+Down next page   L+R+X Vanilla+`
-and is not on the card. On the console, check:
+The operator tested installed candidate `2f5a…` on the Switch 2026-10-22 and
+confirmed the LLUltra chord. Its build id is `0.6.2-d86fac2…`; the versioned
+release is a separate artifact. Exact release and install identities are in
+[VALIDATION.md](VALIDATION.md). Remaining console checks follow.
+
+## Compact menu acceptance (carries into 0.7.0)
+
+0.7.0 folds Stealth/Streamer into eye/TV icons beside You and
+UltraRes into one console NetProfile LLUltra stop, labeled LLUltra / LLUltra+ /
+LLUltra++.
+The older version-specific rows below remain historical. Intermediate installs
+(`5a2a5f05`, then `2f5a…`) are in [VALIDATION.md](VALIDATION.md). Current source
+shows
+`ZR+Left/Right edits   ZR+X Stealth   ZR+Y Streamer   L+R+Down next page   L+R+X Vanilla+/LLUltra`.
+On the console, check:
 
 - Settings opens with You selected; Up/Down walks You, the optional Opp line,
   NetLatency, NetProfile and wraps. There are no Stealth/Streamer rows. Both
@@ -25,10 +31,14 @@ and is not on the card. On the console, check:
   screenshot).
 - Changing Stealth during a connection shows an amber eye/asterisk and reconnect
   notice, even with Hints hidden. The session latch still changes on reconnect.
-- Console NetProfile edits step LLUltra576 → LLUltra+720 → LLUltra++1080 →
-  LLDoubles and back. Entering Ultra recalls an existing saved level. Save/reload
-  retains `render_mode=llultra` and `ultra_resolution`; Auto, cleanup labels and
-  DRS keep their existing behavior. Emulator has no additional Ultra stops.
+- Console NetProfile has one LLUltra stop at every saved resolution. Left or
+  Right leaves it for the adjacent profile and remembers that resolution;
+  entering it again shows the saved level. While manual console LLUltra is
+  selected, L+R+X cycles 576 → 720 → 1080 → 576 in place and leaves the mode,
+  Auto and Vanilla+ unchanged. The same chord still toggles Vanilla+ for Auto,
+  the emulator and every other profile. Save/reload retains `render_mode=llultra`
+  and `ultra_resolution`; Auto, cleanup labels and DRS keep their existing
+  behavior.
 
 Build/host evidence: [VALIDATION.md](VALIDATION.md). Live worktree/package state
 and handoff are outside the repository in the evidence root's

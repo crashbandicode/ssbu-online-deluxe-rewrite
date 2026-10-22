@@ -1,5 +1,56 @@
 # Validation record
 
+## 0.7.0 — release validation — 2026-10-22
+
+**Scope.** Minor release of the accepted compact You icons, one console
+NetProfile LLUltra stop, in-place **L+R+X** resolution cycle and You-row privacy
+gate. Root product version **0.6.2 → 0.7.0**; SDK/ABI crates remain **5.0.0**.
+The version bump preserves the candidate's Rust implementation. The clean
+release artifact is built from the `v0.7.0` version commit and recorded below
+after packaging; no fresh 0.7.0 console run is claimed.
+
+**Operator-tested `2f5` archive (separate from future clean 0.7.0 rebuild).**
+Installed/readback-verified 2026-10-22 (`usb-install-1022/VERIFICATION.json`):
+NRO SHA-256 `2f5a1d4e4d99c58e0b351fd3af72e4f7e1cf121e017357d130a18fb2b151fc01`,
+build id `0.6.2-d86fac2a7ade-dirty-1792624156` (binary still reports 0.6.2).
+The operator confirmed on the Switch manual console **LLUltra** with **L+R+X**
+advancing **LLUltra → LLUltra+ → LLUltra++ → LLUltra** (2026-10-22). That is
+runtime evidence for the installed dirty candidate only, not for an unpublished
+**0.7.0** release artifact.
+
+**Host gates on the 0.7.0-versioned tree:** **246 unit + 1 SDK integration
+tests passed**, warning-free host and Skyline Clippy, and the
+no-default-features build. Logs recorded
+under the evidence root `release-070-1022/` (`cargo-test.log`,
+`cargo-clippy.log`, `cargo-build-no-default-features.log`,
+`cargo-skyline-clippy.log`). `git diff --check` also passed.
+
+## LLUltra in-place chord — 2026-10-21
+
+Uncommitted source on main `d86fac2a7ade`. Manual console LLUltra is one profile
+stop: Left or Right leaves it either direction and the saved resolution is
+recalled on reentry, on console and emulator. While that manual console
+selection is current, L+R+X cycles 576 → 720 → 1080 → 576 in place and leaves
+the mode, Auto, and Vanilla+ unchanged. Auto, emulator LLUltra, and every other
+profile keep the Vanilla+ toggle. Privacy ZR+X/Y, hold, and a face button
+pressed before the shoulders stay gated as before. Labels, the config schema,
+wire ABI, and rendering code are unchanged.
+
+Host gates on this source: **246 unit tests + 1 SDK integration test passed**,
+host Clippy `--all-targets -- -D warnings`, `build --no-default-features`,
+Skyline Clippy `-- -- -D warnings`, edition-2021 rustfmt of the changed Rust
+files, and the Skyline release build. Build
+`0.6.2-d86fac2a7ade-dirty-1792624156`, NRO 1,441,792 bytes, SHA-256
+`2f5a1d4e4d99c58e0b351fd3af72e4f7e1cf121e017357d130a18fb2b151fc01`.
+`text_verified` true, `runtime_tested` false. Symbols, manifest, source
+archive, and diff are outside the repository under
+`llultra-cycle-1021/out/2f5a1d4e4d99c58e/`.
+
+At packaging on 2026-10-21 this candidate was not deployed. It was subsequently
+installed/readback-verified on 2026-10-22 at 10:22Z and the operator confirmed
+the chord; see the 0.7.0 acceptance record above. The compact-menu candidate
+below is the earlier package.
+
 ## Unreleased compact menu — 2026-10-21
 
 Candidate based on 0.6.2/main `302c095`, uncommitted. Settings now has You/Opp

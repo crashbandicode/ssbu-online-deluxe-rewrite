@@ -1,6 +1,9 @@
 # Implementation and validation status
 
-Updated 2026-10-19 for 0.6.2 (Forgejo release v0.6.2; the NRO SHA-256 is in that release's manifest; 0.6.1 is `9d0cec2`, tag v0.6.1, Forgejo release v0.6.1, booted on the console 2026-10-19; 0.6.0 is `a0dc5d6`, tag v0.6.0 at `fac09de`, Forgejo release v0.6.0, booted on the console 2026-10-19; 0.5.7 is `282a2df` + docs `a7e8427`, Forgejo release v0.5.7, on the card 2026-10-19 00:11Z; 0.5.6 is `fb2012a` + docs `6180325`, Forgejo release v0.5.6; 0.5.5 is `6a9e61a`, Forgejo release v0.5.5; 0.5.4 is `a63bc8c`). The rewrite is one Rust/Skyline
+Updated 2026-10-22 for **0.7.0**. Exact release/build and console evidence is in
+[VALIDATION.md](VALIDATION.md). Earlier releases: 0.6.2 (NRO SHA-256 in its
+release manifest), 0.6.1 `9d0cec2`, 0.6.0 `a0dc5d6`, 0.5.7 `282a2df`,
+0.5.6 `fb2012a`, 0.5.5 `6a9e61a`, 0.5.4 `a63bc8c`. The rewrite is one Rust/Skyline
 NRO for Smash 13.0.5. Auto is enabled by default; it chooses Vanilla (Vanilla+
 since 0.5.6) in menus,
 offline play and Training, LessLag for console online singles, LLUltra for
@@ -22,7 +25,7 @@ the operator's Switch, recorded with its build hash in [VALIDATION.md](VALIDATIO
 
 | Feature | Implementation | Runtime evidence / remaining check |
 | --- | --- | --- |
-| Vanilla / LessLag / LLUltra | Live guarded transitions, persistent manual choice; LLUltra's console internal resolution is `ultra_resolution` (576, 720 or, since 0.5.6, the native 1080; default 576) with the UltraRes row, which walks 576p → 720p → 1080p → 576p; dynamic resolution still steps down from it. [Rendering profiles](RENDERING.md#llultra-resolution-053-1080p-in-056) | Console 2026-10-15 (0.5.2 build): seventeen Training capture sessions, Vanilla and LessLag hold 60 on every ledger move, LLUltra alone drops (11 of 17 sessions fail "no second below 59"). LessLag online singles held 60. **Horizon OC: LLUltra at 720p held 60 (operator-reported, 2026-10-18, no capture); 1080p is the next cell to try.** The 576p row is not yet booted; the 1080p value is host-tested only (config parse, serialize, cycle and byte round trip) |
+| Vanilla / LessLag / LLUltra | Live guarded transitions, persistent manual choice; LLUltra's console internal resolution is `ultra_resolution` (576, 720 or, since 0.5.6, the native 1080; default 576) with one LLUltra / LLUltra+ / LLUltra++ stop; L+R+X cycles 576p → 720p → 1080p → 576p while manual console LLUltra is selected. Dynamic resolution still steps down from it. [Rendering profiles](RENDERING.md#llultra-resolution-053-1080p-in-056) | Console 2026-10-15 (0.5.2 build): seventeen Training capture sessions, Vanilla and LessLag hold 60 on every ledger move, LLUltra alone drops (11 of 17 sessions fail "no second below 59"). LessLag online singles held 60. **Horizon OC: LLUltra at 720p held 60 (operator-reported, 2026-10-18, no capture); 1080p is the next cell to try.** The 576p row is not yet booted; the 1080p value is host-tested only (config parse, serialize, cycle and byte round trip) |
 | LLDoubles | Three textures, OneBehind, render sequencing, resolution scaling | b19 linked Auto/LLDoubles team match completed through results/CSS; Eden response trials keep the two-image saving after present-at-flush (0.5.2) |
 | Auto | Scene, connection and fighter-count policy; preserves saved manual choice; Quickplay hold and stale demotion (0.4.2) | Training/menu Vanilla, b19 linked doubles LLDoubles, d9 linked singles LLUltra and cleanup Vanilla passed in Eden; 0.4.2 console results in VALIDATION.md |
 | Present at the flush | Two-image LessLag presents the acquired image at the flush that submits it (0.4.0); extended to every committed render-opts profile in 0.5.2; `early_present=false` switches it off (0.5.3) | Console-verified for LessLag on the character select (49.9 → 59.85 fps, 0.4.0). LLUltra/LLDoubles extension: Eden response trials (savings of 3, 4 and 2 images against Vanilla, unchanged through the 0.5.4 candidate); console LLUltra captures above. Before/after clips at the console-calibrated 175 % CPU quota in [EMULATOR_METHOD.md](EMULATOR_METHOD.md) |
@@ -49,7 +52,35 @@ the operator's Switch, recorded with its build hash in [VALIDATION.md](VALIDATIO
 | Coverage build | Cargo feature `coverage`, raw profile writer, event code 109, manual snapshots from the Debug view (0.5.2) | Eden only. 2026-10-17 trace: 1,192 instrumented functions, 1,047 executed, 145 never executed. 2026-10-18 LAN Online run (two modded peers, NSO scenes only): 893 executed, 299 never executed, 12 functions new against the 10-17 report; [DEBUGGING.md](DEBUGGING.md) |
 | Removed in 0.5.4 | The opt-in peer observer, FPS++ (emulator-only diagnostic), the Gigaflare DRS trigger, five opt-in diagnostics, 21 helpers without a production caller; `peer_observer=` and `fps_boost=` are ignored legacy keys. Per-file reduction: `src/` 22,253 → 15,332 production lines (−31.1 %) | Host gates on every step; Eden latency, quota frame-rate, capture and plugin-page passes on the candidate. Console: the 0.5.4 first boot is the acceptance test. [FPS boost history](FPS_BOOST_INVESTIGATION.md) |
 
-## Current: 0.6.2
+## Current: 0.7.0
+
+0.7.0 (2026-10-22) is the minor version for the compact Player Info menu and
+in-place LLUltra resolution chord accepted after 0.6.2.
+Settings keeps You/Opp summaries and two editable controls: **You** carries
+font-independent Stealth eye and Streamer TV geometry
+([privacy-indicators.svg](privacy-indicators.svg)); **ZR+X** / **ZR+Y** toggle
+privacy only while the **You** row is selected (no Stealth/Streamer rows; the
+match strip reuses the icons). Console **NetProfile** has one manual **LLUltra**
+stop labeled **LLUltra** / **LLUltra+** / **LLUltra++** from the saved
+`ultra_resolution`; Left/Right still leave for adjacent profiles and recall the
+saved level on re-entry. While manual console LLUltra is selected, **L+R+X**
+cycles 576p → 720p → 1080p → 576p in place and leaves Auto and Vanilla+
+unchanged; every other profile keeps the Vanilla+ toggle on that chord. Config
+keys, wire ABI, rendering code and the plugin API are unchanged from the
+operator-tested candidate.
+
+**Operator-tested install (recorded separately from the future clean release):**
+on 2026-10-22 the operator installed candidate NRO SHA-256
+`2f5a1d4e4d99c58e0b351fd3af72e4f7e1cf121e017357d130a18fb2b151fc01` (build id
+`0.6.2-d86fac2a7ade-dirty-1792624156`, still stamped 0.6.2 in the binary) and
+confirmed on the Switch the **LLUltra → LLUltra+ → LLUltra++ → LLUltra** cycle
+with **L+R+X**. That package is not the authoritative **0.7.0** release asset;
+the clean release is built separately from the `v0.7.0` version commit.
+Host gates for the version-bumped tree are in
+[VALIDATION.md](VALIDATION.md); compact-menu visual checks remain in
+[NEXT_SESSION.md](NEXT_SESSION.md).
+
+### 0.6.2
 
 0.6.2 (2026-10-19; released as Forgejo v0.6.2 — see the v0.6.2 release manifest
 for the NRO hash) makes Auto say which buffer the game chose: with NetLatency on
@@ -281,25 +312,11 @@ See [validation](VALIDATION.md) for exact tested artifacts,
 [the emulator method](EMULATOR_METHOD.md) for the CPU-quota bias, and
 [parity](FORK_PARITY.md) for deliberate differences from the fork.
 
-## Unreleased compact-menu checkpoint — 2026-10-21
+## Compact-menu lineage
 
-Working tree on main after released 0.6.2: You-line Stealth eye/Streamer TV,
-ZR+X/Y on the selected You row, two Settings controls, and console LLUltra/+/++
-resolution variants within NetProfile. See [Controls](CONTROLS.md) for the new
-interaction. Candidate `d9e1edd1eca0dbe0` (242+1 host tests, warning-free
-host/Skyline Clippy, no-default-features build, Skyline release build/package,
-independent source review) predates the You-row gate: its ZR+X/Y work on any
-open page. It is **not deployed or runtime visually tested**.
-[Validation](VALIDATION.md) records its exact identity. The corrected You-row
-source passes 243 unit tests plus one SDK integration test, host/Skyline Clippy
-with warnings denied, the no-default-features build, changed-source formatting
-and the Skyline release build. Its icon preview is source geometry, not a game
-screenshot; full control and in-match visual acceptance is pending. Version-specific
-feature and runtime observations above describe the earlier released builds.
-
-Its build `5a2a5f05a996775a` booted in Eden on the Ally with the You-row icons
-visible, was approved by the operator, and was installed on the Switch
-2026-10-21 (replacing 0.6.2 `59dab7a8`; rollback on the card). No console
-boot, control or FPS result is claimed. A later source-only change drops the
-hint's "You selected" prefix; the installed binary keeps the old wording.
-Version remains 0.6.2 with no new release. Details: [Validation](VALIDATION.md).
+Earlier card-only candidates (`d9e1edd…`, `5a2a5f05…`) led to the accepted
+`d86fac2` tree and the operator-tested `2f5a…` install documented in
+[VALIDATION.md](VALIDATION.md). Cargo and the acceptance sections above now read
+**0.7.0**. Historical package identities and
+gates for the intermediate builds stay in VALIDATION without rewriting their
+version stamps.

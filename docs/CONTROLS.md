@@ -1,7 +1,7 @@
 # Controls and settings
 
-The compact You-line icons and LLUltra variants below are the unreleased
-2026-10-21 update; released 0.6.2 still has the separate privacy and UltraRes rows.
+The compact You-line icons and LLUltra controls below are new in 0.7.0;
+older 0.6.2 has separate privacy and UltraRes rows.
 
 Hold **L+R**, then tap **D-pad Down** to cycle
 **settings → performance → window options → hidden**. When a separately installed plugin NRO has
@@ -31,7 +31,7 @@ fork's room-ID path, but still needs an NSO test. See [native display](NATIVE_DI
 | ZL + Left / Right or Up / Down on an online character select or arena pane, window closed | Edit the input buffer or the profile on the native status (since 0.4.1 the D-pad alone only moves the hand) |
 | ZR + X (Settings, You selected) | Toggle Stealth; the You-line eye closes when enabled and opens when disabled. A session-latched change is amber with `*` and a reconnect notice |
 | ZR + Y (Settings, You selected) | Toggle Streamer; the You-line TV has a green filled screen when enabled and a grey outline when disabled. These privacy shortcuts work only while the Settings page has **You** selected (`> You` in the table, `>You:` in the match strip), with ZR held and ZL released: each new X or Y press toggles once. A held button does not repeat, and one already held when the selection reaches You does not fire. They do nothing on other rows, on other pages or with the window hidden |
-| L+R + X (neither ZL nor ZR held) | Toggle Vanilla+ (0.5.6): the Vanilla profile presents at the flush when on (the default). Applies live, saves `vanilla_plus` in the INI (event code 24) and flips the NetProfile row text between `Vanilla+` and `Vanilla`. See [Rendering profiles](RENDERING.md#vanilla-056) |
+| L+R + X (neither ZL nor ZR held) | With manual console LLUltra selected, cycle 576p → 720p → 1080p → 576p in place (LLUltra → LLUltra+ → LLUltra++ → LLUltra), saving `ultra_resolution`. For Auto, the emulator and every other profile, toggle and save Vanilla+ instead (0.5.6). A new X press is required; holding X does not repeat. See [Rendering profiles](RENDERING.md#vanilla-056) |
 | L+R + Plus or Minus | Open the debug view; again to hide it. ZL+ZR stopped being a window chord in 0.5.3, so a trigger chord during play cannot open the window |
 | L+R + Up in the Debug view | Start a 30 s timing capture (see [Captures](CAPTURES.md)) |
 | L+R + Left in the Debug view | Coverage build only: write a `manual-NNN.profraw` snapshot (see [Coverage build](DEBUGGING.md#coverage-build-052)) |
@@ -88,9 +88,10 @@ the selected remote station, which is what the Peer row did. It replaces the
 Name, Interface, Peer and Ping rows and the opponent column.
 
 Under them the table has two controls: **NetLatency** and **NetProfile**.
-The old Status row is folded into NetProfile's value. Console LLUltra's base
-resolution is selected within NetProfile as LLUltra / LLUltra+ / LLUltra++;
-there is no separate UltraRes row. The window's settings stay on Window Options.
+The old Status row is folded into NetProfile's value. Console LLUltra is one
+NetProfile stop, labeled LLUltra / LLUltra+ / LLUltra++ for the saved
+resolution, and L+R+X cycles that label in place. There is no separate UltraRes
+row. The window's settings stay on Window Options.
 
 A one-line performance footer sits under the table in the frame-time colour:
 `60.0 fps | 16.67 ms | 1080p | DRS on` (fps, mean frame time, the applied
@@ -99,11 +100,11 @@ The full Performance block and the frame-time plot are on the Performance page
 (and in Debug) only.
 
 A dim grey hint line under the footer, wrapping to the window width, lists the
-chords: `ZR+Left/Right edits   ZR+X Stealth   ZR+Y Streamer   L+R+Down next page   L+R+X Vanilla+`.
+chords: `ZR+Left/Right edits   ZR+X Stealth   ZR+Y Streamer   L+R+Down next page   L+R+X Vanilla+/LLUltra`.
 The ZR+X/Y entries carry no "You selected" prefix because the row marker and
 icons already show the selection; they still act only with Settings' **You**
-row highlighted, ZR held and ZL released (see the table above). The installed
-`5a2a5f05` candidate still shows the earlier `You selected: ZR+X Stealth / ZR+Y
+row highlighted, ZR held and ZL released (see the table above). The earlier
+`5a2a5f05` candidate showed the `You selected: ZR+X Stealth / ZR+Y
 Streamer` wording. The hint line is on by default; `hints=false` in the INI or the Window Options page's
 **Hints** row (Shown / Hidden) turns it off ([Configuration](CONFIGURATION.md)).
 
@@ -160,20 +161,26 @@ status, or the uninformative `Vanilla` status, shows the profile alone. Since
 0.5.6 the Vanilla entry reads `Vanilla+` while Vanilla+ is on (the default; `Auto:Van+` under Auto), and plain
 `Vanilla` (`Auto:Van`) when it is off; the in-match strip's `Profile:` field
 and the native CSS banner's `You:` field use the same text. There is no separate
-Vanilla+ entry in the NetProfile cycle: L+R+X flips the flag. A manual
+Vanilla+ entry in the NetProfile cycle: L+R+X flips the flag, except while
+manual console LLUltra is selected, where that same chord cycles the resolution
+instead. A manual
 selection that the post-match cleanup hold is running as Vanilla reads
 `Vanilla+*` (`Vanilla*` with the flag off).
 
-On a console, the manual LLUltra choice includes **LLUltra (576p)**,
-**LLUltra+ (720p)** and **LLUltra++ (1080p)**. ZR+Right raises its base resolution
-until LLUltra++, then moves to LLDoubles; ZR+Left lowers it until LLUltra, then
-moves to LessLag. Entering LLUltra from another profile recalls the saved
-resolution, including an existing 720p/1080p INI. The closed-window native profile
-edits follow the same sequence. Emulator LLUltra has one stop because its
-resolution policy ignores this setting. The suffix names the base resolution;
-DRS can still lower the applied resolution shown in the performance footer.
-Auto's selection and labels are unchanged. Peer announcements keep their existing
-wire format and names; these suffixes are local presentation only.
+On a console, manual LLUltra is one NetProfile stop. Its label is **LLUltra**
+(576p), **LLUltra+** (720p) or **LLUltra++** (1080p), naming the saved
+`ultra_resolution`. Left or Right leaves that stop for the adjacent profile
+and keeps the resolution; entering LLUltra again shows the saved level,
+including an existing 720p or 1080p INI. While that manual console selection
+is current, the same **L+R+X** chord cycles it in place: 576 → 720 → 1080 →
+576, without changing the mode, Auto or Vanilla+. Auto, an emulator and every
+other profile keep the Vanilla+ toggle and leave `ultra_resolution` unchanged.
+The closed-window native profile edits use the same one-stop sequence.
+Emulator LLUltra has one stop because its resolution policy ignores this
+setting. The suffix names the base resolution; DRS can still lower the applied
+resolution shown in the performance footer. Auto's selection and labels are
+unchanged. Peer announcements keep their existing wire format and names; these
+suffixes are local presentation only.
 
 **Stealth** defaults to **On** and suppresses this mod's recognition beacon and
 custom settings payload. Its value is latched for the connection. A change
@@ -194,7 +201,9 @@ in both the vertical window and match strip.
 
 The fork's **FPS++** row was removed on 2026-10-17, and its L+R+ZL/ZR+X chord
 with it. Since 0.5.6 plain **L+R+X** (neither ZL nor ZR held) toggles Vanilla+
-instead; ZL+X still does nothing, and ZR+X with You selected on Settings is now
+instead, except while manual console LLUltra is selected: that same chord then
+cycles LLUltra → LLUltra+ → LLUltra++ → LLUltra and leaves Vanilla+ unchanged.
+ZL+X still does nothing, and ZR+X with You selected on Settings is now
 the Stealth shortcut.
 See [Rendering profiles](RENDERING.md#fps)
 and [Vanilla+](RENDERING.md#vanilla-056).

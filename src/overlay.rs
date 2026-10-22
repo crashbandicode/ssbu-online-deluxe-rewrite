@@ -8,7 +8,8 @@ pub(crate) const L: u64 = 1 << 6;
 pub(crate) const R: u64 = 1 << 7;
 const ZL: u64 = 1 << 8;
 const ZR: u64 = 1 << 9;
-/// L+R+X toggles Vanilla+; You-selected ZR+X toggles Stealth.
+/// L+R+X toggles Vanilla+, or cycles manual console LLUltra in place.
+/// You-selected ZR+X toggles Stealth.
 const X: u64 = 1 << 2;
 const Y: u64 = 1 << 3;
 const PLUS_MINUS: u64 = (1 << 10) | (1 << 11);
@@ -216,12 +217,22 @@ impl Overlay {
                 return true;
             }
         }
-        // Vanilla+ (0.5.6): L+R+X with neither trigger held flips the flag
-        // live and saves it. It is a flag on Vanilla, not a NetProfile entry,
-        // so it is not a separate profile. The ZR+X privacy edit above is
-        // independent of this flag.
+        // L+R+X with neither trigger held. A manual console LLUltra selection
+        // cycles its saved resolution forward in place (576 → 720 → 1080 →
+        // 576) and leaves the mode, Auto and Vanilla+ unchanged. Every other
+        // selection, including Auto and emulator LLUltra, flips Vanilla+.
+        // Either result is saved. The ZR+X privacy edit above is independent
+        // and still requires the You row. A held chord, or X pressed before
+        // the shoulders, is not a new edge.
         if shoulders && buttons & (ZL | ZR) == 0 && pressed & X != 0 {
-            config.vanilla_plus = !config.vanilla_plus;
+            let cycle_ultra = !config.auto_profile
+                && config.render_mode == crate::config::RenderMode::LessLagUltra
+                && config.platform == crate::config::Platform::Console;
+            if cycle_ultra {
+                config.ultra_resolution = config.ultra_resolution.cycle(1);
+            } else {
+                config.vanilla_plus = !config.vanilla_plus;
+            }
             return true;
         }
         // Settings and Window (0.6.0) are the two pages with a row selection.
@@ -1134,6 +1145,229 @@ mod tests {
         assert!(!ui.poll(L | X, &mut config));
         assert_eq!(config, before);
         assert_eq!(ui.view, View::Hidden);
+    }
+
+    #[test]
+    fn manual_console_llultra_chord_cycles_forward_and_wraps() {
+        let _gate = crate::peer_transport::global_gate();
+        let order = [
+            crate::config::UltraResolution::P576,
+            crate::config::UltraResolution::P720,
+            crate::config::UltraResolution::P1080,
+        ];
+        let labels = ["LLUltra", "LLUltra+", "LLUltra++"];
+        for start in 0..3 {
+            let mut ui = Overlay::default();
+            let mut config = Config {
+                platform: crate::config::Platform::Console,
+                auto_profile: false,
+                render_mode: crate::config::RenderMode::LessLagUltra,
+                ultra_resolution: order[start],
+                vanilla_plus: start != 1,
+                input_buffer: 7,
+                ..Config::default()
+            };
+            for step in 1..=3 {
+                let before = config.clone();
+                assert!(ui.poll(L | R | X, &mut config));
+                let next = order[(start + step) % 3];
+                assert_eq!(config.ultra_resolution, next);
+                assert_eq!(
+                    crate::menu::profile_label(&config, true, config.render_mode),
+                    labels[(start + step) % 3]
+                );
+                assert_eq!(config.render_mode, before.render_mode);
+                assert_eq!(config.auto_profile, before.auto_profile);
+                assert_eq!(config.vanilla_plus, before.vanilla_plus);
+                assert_eq!(config.input_buffer, before.input_buffer);
+                assert_eq!(config.platform, before.platform);
+                assert_eq!(
+                    crate::menu::profile_action(&before, &config),
+                    crate::menu::ProfileAction::Unchanged
+                );
+                let advanced = config.clone();
+                assert!(!ui.poll(L | R | X, &mut config));
+                assert_eq!(config, advanced);
+                assert!(!ui.poll(L | R, &mut config));
+                assert_eq!(config, advanced);
+            }
+            assert_eq!(config.ultra_resolution, order[start]);
+            assert_eq!(crate::config::parse(&config.serialize()).unwrap(), config);
+        }
+    }
+
+    #[test]
+    fn shared_chord_toggles_vanilla_plus_outside_manual_console_ultra() {
+        let _gate = crate::peer_transport::global_gate();
+        let cases = [
+            (
+                true,
+                crate::config::Platform::Console,
+                crate::config::RenderMode::LessLagUltra,
+            ),
+            (
+                false,
+                crate::config::Platform::Emulator,
+                crate::config::RenderMode::LessLagUltra,
+            ),
+            (
+                false,
+                crate::config::Platform::Console,
+                crate::config::RenderMode::LessLag,
+            ),
+            (
+                false,
+                crate::config::Platform::Console,
+                crate::config::RenderMode::Vanilla,
+            ),
+            (
+                true,
+                crate::config::Platform::Emulator,
+                crate::config::RenderMode::Vanilla,
+            ),
+        ];
+        for (auto, platform, mode) in cases {
+            for resolution in [
+                crate::config::UltraResolution::P576,
+                crate::config::UltraResolution::P720,
+                crate::config::UltraResolution::P1080,
+            ] {
+                let mut ui = Overlay::default();
+                let mut config = Config {
+                    platform,
+                    auto_profile: auto,
+                    render_mode: mode,
+                    ultra_resolution: resolution,
+                    vanilla_plus: true,
+                    ..Config::default()
+                };
+                assert!(ui.poll(L | R | X, &mut config));
+                assert!(!config.vanilla_plus);
+                assert_eq!(config.ultra_resolution, resolution);
+                assert_eq!(config.render_mode, mode);
+                assert_eq!(config.auto_profile, auto);
+                let toggled = config.clone();
+                assert!(!ui.poll(L | R | X, &mut config));
+                assert_eq!(config, toggled);
+                ui.poll(0, &mut config);
+                assert!(ui.poll(L | R | X, &mut config));
+                assert!(config.vanilla_plus);
+                assert_eq!(config.ultra_resolution, resolution);
+                assert_eq!(crate::config::parse(&config.serialize()).unwrap(), config);
+            }
+        }
+    }
+
+    #[test]
+    fn ultra_chord_keeps_trigger_privacy_and_prior_face_edges() {
+        let _gate = crate::peer_transport::global_gate();
+        let base = Config {
+            platform: crate::config::Platform::Console,
+            auto_profile: false,
+            render_mode: crate::config::RenderMode::LessLagUltra,
+            ultra_resolution: crate::config::UltraResolution::P720,
+            vanilla_plus: true,
+            stealth: true,
+            streamer: false,
+            ..Config::default()
+        };
+        let mut ui = Overlay::default();
+        let mut config = base.clone();
+        assert!(!ui.poll(L | R | ZL | X, &mut config));
+        ui.poll(0, &mut config);
+        assert!(!ui.poll(L | R | ZR | X, &mut config));
+        assert_eq!(config, base);
+        ui.poll(0, &mut config);
+        assert!(!ui.poll(X, &mut config));
+        assert!(!ui.poll(L | R | X, &mut config));
+        assert_eq!(config, base);
+        ui.poll(0, &mut config);
+        assert!(ui.poll(L | R | X, &mut config));
+        assert_eq!(
+            config.ultra_resolution,
+            crate::config::UltraResolution::P1080
+        );
+        assert!(config.vanilla_plus);
+        assert!(config.stealth);
+
+        let mut ui = Overlay::default();
+        let mut emulator = Config {
+            platform: crate::config::Platform::Emulator,
+            auto_profile: false,
+            render_mode: crate::config::RenderMode::LessLagUltra,
+            ultra_resolution: crate::config::UltraResolution::P1080,
+            ..Config::default()
+        };
+        assert!(!ui.poll(X, &mut emulator));
+        assert!(!ui.poll(L | R | X, &mut emulator));
+        assert!(emulator.vanilla_plus);
+        assert_eq!(
+            emulator.ultra_resolution,
+            crate::config::UltraResolution::P1080
+        );
+        ui.poll(0, &mut emulator);
+        assert!(ui.poll(L | R | X, &mut emulator));
+        assert!(!emulator.vanilla_plus);
+        assert_eq!(
+            emulator.ultra_resolution,
+            crate::config::UltraResolution::P1080
+        );
+
+        let mut ui = Overlay {
+            view: View::Settings,
+            menu: Menu {
+                open: true,
+                selected: crate::menu::ROW_YOU,
+            },
+            ..Overlay::default()
+        };
+        let mut config = base.clone();
+        assert!(!ui.poll(X | Y, &mut config));
+        assert!(!ui.poll(ZR | X | Y, &mut config));
+        assert_eq!(config, base);
+        ui.poll(0, &mut config);
+        assert!(ui.poll(ZR | X, &mut config));
+        assert!(!config.stealth);
+        assert!(!config.streamer);
+        assert_eq!(
+            config.ultra_resolution,
+            crate::config::UltraResolution::P720
+        );
+        assert!(config.vanilla_plus);
+        ui.poll(0, &mut config);
+        assert!(ui.poll(ZR | Y, &mut config));
+        assert!(config.streamer);
+        assert!(!config.stealth);
+        assert_eq!(
+            config.ultra_resolution,
+            crate::config::UltraResolution::P720
+        );
+        ui.poll(0, &mut config);
+        assert!(ui.poll(L | R | ZR | X, &mut config));
+        assert!(config.stealth);
+        assert!(config.streamer);
+        assert!(config.vanilla_plus);
+        assert_eq!(
+            config.ultra_resolution,
+            crate::config::UltraResolution::P720
+        );
+        ui.poll(0, &mut config);
+        assert!(ui.poll(L | R | X, &mut config));
+        assert_eq!(
+            config.ultra_resolution,
+            crate::config::UltraResolution::P1080
+        );
+        assert!(config.stealth);
+        assert!(config.streamer);
+        assert!(config.vanilla_plus);
+        assert!(!config.auto_profile);
+        ui.menu.selected = crate::menu::ROW_NET_PROFILE;
+        ui.poll(0, &mut config);
+        let frozen = config.clone();
+        assert!(!ui.poll(ZR | X, &mut config));
+        ui.poll(0, &mut config);
+        assert!(!ui.poll(L | R | ZR | Y, &mut config));
+        assert_eq!(config, frozen);
     }
 
     #[test]

@@ -117,7 +117,8 @@ pub struct Config {
     /// 0.5.3 experiment: the internal resolution console LLUltra renders at
     /// (`576`, the fork's choice and the default, `720`, or since 0.5.6 the
     /// native `1080`). Dynamic resolution still steps down from it. Emulator
-    /// profiles ignore it.
+    /// profiles ignore it. Manual console LLUltra cycles it forward with the
+    /// same L+R+X chord Vanilla+ uses elsewhere; profile navigation does not.
     pub ultra_resolution: UltraResolution,
     /// 0.5.3: window pages the chord cycle skips (`hide_pages`), so a
     /// measurement session reaches a plugin's own page in one tap. Default
@@ -141,9 +142,11 @@ pub struct Config {
     /// ring but presents the acquired image at the flush that carried its last
     /// submission, one CPU update earlier than the game does, like the
     /// render-opts profiles have since 0.4.0. Default true, so the shipped
-    /// default mode is Vanilla+. Live: the L+R+X chord toggles it and the
-    /// NetProfile row, the strip and the native banner show `Vanilla+`. The
-    /// peer exchange still announces Vanilla; the ring shape is unchanged.
+    /// default mode is Vanilla+. Live: the L+R+X chord toggles it, except while
+    /// manual console LLUltra is selected, where that chord cycles
+    /// `ultra_resolution` instead. The NetProfile row, the strip and the native
+    /// banner show `Vanilla+`. The peer exchange still announces Vanilla; the
+    /// ring shape is unchanged.
     /// `early_present=false` still turns every early present off.
     pub vanilla_plus: bool,
     /// 0.6.0: the dim chord hint line under the Settings and Window tables

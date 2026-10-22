@@ -1,11 +1,12 @@
 //! Portable menu state. Runtime owns controller edges and rendering.
 
 use crate::auto_policy::{cycle_profile_choice, Connection, ProfileChoice, SceneStatus};
-use crate::config::{Config, Platform, RenderMode, UltraResolution};
+use crate::config::{Config, Platform, RenderMode};
 
 /// Selectable Player Info rows, top to bottom. Settings has You, the optional Opp
-/// selector and two controls. Privacy edits require You; LLUltra resolution lives
-/// in NetProfile. The remaining rows configure the Window Options page.
+/// selector and two controls. Privacy edits require You. Console LLUltra is one
+/// NetProfile stop; L+R+X cycles its saved resolution in place. The remaining
+/// rows configure the Window Options page.
 ///
 /// The `You` summary line: ZR+X/Y edit privacy; Left/Right do nothing.
 pub const ROW_YOU: usize = 0;
@@ -338,7 +339,7 @@ pub(crate) fn perf_footer(mean_ms: Option<f32>, resolution: &str, drs: bool) -> 
 /// The dim hint line under the Settings and Window tables (0.6.0, `hints`).
 /// It wraps to the window width; every chord it names is in CONTROLS.md.
 pub const HINT_LINE: &str =
-    "ZR+Left/Right edits   ZR+X Stealth   ZR+Y Streamer   L+R+Down next page   L+R+X Vanilla+";
+    "ZR+Left/Right edits   ZR+X Stealth   ZR+Y Streamer   L+R+Down next page   L+R+X Vanilla+/LLUltra";
 
 /// Shows the edit state (0.6.0): while the ZR hold is on, the selected row's
 /// value reads `< value >`; without it the value is plain, so the hold rule
@@ -487,21 +488,13 @@ pub fn edit_latency(config: &mut Config, direction: i8) -> bool {
     true
 }
 
-/// NetProfile and native CSS/arena edits. Console Ultra includes its three
-/// resolution variants before leaving for the adjacent mode. Entering a mode
-/// recalls its saved resolution; entering Auto keeps the saved manual mode.
+/// NetProfile and native CSS/arena edits. Ultra is one stop on console and
+/// emulator. Either direction leaves it for the adjacent profile and keeps the
+/// saved resolution, which is shown again on reentry. Entering Auto keeps the
+/// saved manual mode.
 pub fn edit_profile(config: &mut Config, direction: i8) -> bool {
     if direction == 0 {
         return false;
-    }
-    if !config.auto_profile
-        && config.render_mode == RenderMode::LessLagUltra
-        && config.platform == Platform::Console
-        && ((direction > 0 && config.ultra_resolution != UltraResolution::P1080)
-            || (direction < 0 && config.ultra_resolution != UltraResolution::P576))
-    {
-        config.ultra_resolution = config.ultra_resolution.cycle(direction);
-        return true;
     }
     let next = cycle_profile_choice(profile_choice(config), direction);
     match next {
@@ -662,6 +655,7 @@ impl Menu {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::UltraResolution;
 
     #[test]
     fn opening_focuses_the_first_row_and_closed_input_cannot_edit_settings() {
@@ -753,12 +747,10 @@ mod tests {
         assert_eq!(config.render_mode, RenderMode::LessLag);
         assert!(menu.handle(Action::Right, &mut config));
         assert_eq!(config.render_mode, RenderMode::LessLagUltra);
-        assert!(menu.handle(Action::Right, &mut config));
-        assert_eq!(config.ultra_resolution, UltraResolution::P720);
-        assert!(menu.handle(Action::Right, &mut config));
-        assert_eq!(config.ultra_resolution, UltraResolution::P1080);
+        assert_eq!(config.ultra_resolution, UltraResolution::P576);
         assert!(menu.handle(Action::Right, &mut config));
         assert_eq!(config.render_mode, RenderMode::LessLagDoubles);
+        assert_eq!(config.ultra_resolution, UltraResolution::P576);
         let saved = config.clone();
         assert!(menu.handle(Action::Right, &mut config));
         assert!(config.auto_profile);
@@ -821,50 +813,79 @@ mod tests {
     }
 
     #[test]
-    fn console_ultra_variants_cycle_in_profile_without_reselecting_the_renderer() {
+    fn every_saved_ultra_resolution_is_one_stop_either_direction_and_is_recalled() {
+        for platform in [Platform::Console, Platform::Emulator] {
+            for resolution in [
+                UltraResolution::P576,
+                UltraResolution::P720,
+                UltraResolution::P1080,
+            ] {
+                for direction in [1_i8, -1] {
+                    let mut config = Config {
+                        platform,
+                        auto_profile: false,
+                        render_mode: RenderMode::LessLagUltra,
+                        ultra_resolution: resolution,
+                        vanilla_plus: false,
+                        input_buffer: 4,
+                        ..Config::default()
+                    };
+                    let before = config.clone();
+                    assert!(apply_native_edges(
+                        &mut config,
+                        NativeSurface::Css,
+                        0,
+                        direction
+                    ));
+                    let mode = if direction > 0 {
+                        RenderMode::LessLagDoubles
+                    } else {
+                        RenderMode::LessLag
+                    };
+                    assert_eq!(
+                        profile_action(&before, &config),
+                        ProfileAction::SelectManual(mode)
+                    );
+                    assert_eq!(
+                        config,
+                        Config {
+                            render_mode: mode,
+                            ..before
+                        }
+                    );
+                    let away = config.clone();
+                    assert!(edit_profile(&mut config, -direction));
+                    assert_eq!(
+                        profile_action(&away, &config),
+                        ProfileAction::SelectManual(RenderMode::LessLagUltra)
+                    );
+                    assert_eq!(config.render_mode, RenderMode::LessLagUltra);
+                    assert_eq!(config.ultra_resolution, resolution);
+                    assert!(!config.auto_profile);
+                    assert_eq!(crate::config::parse(&config.serialize()).unwrap(), config);
+                }
+                for direction in [1_i8, -1] {
+                    let mut auto = Config {
+                        platform,
+                        auto_profile: true,
+                        render_mode: RenderMode::LessLagUltra,
+                        ultra_resolution: resolution,
+                        ..Config::default()
+                    };
+                    assert!(edit_profile(&mut auto, direction));
+                    assert!(!auto.auto_profile);
+                    assert_eq!(auto.render_mode, RenderMode::Vanilla);
+                    assert_eq!(auto.ultra_resolution, resolution);
+                    assert_eq!(crate::config::parse(&auto.serialize()).unwrap(), auto);
+                }
+            }
+        }
         let mut config = Config {
             auto_profile: false,
-            render_mode: RenderMode::LessLag,
-            input_buffer: 3,
+            render_mode: RenderMode::LessLagUltra,
+            ultra_resolution: UltraResolution::P1080,
             ..Config::default()
         };
-        for (direction, mode, resolution) in [
-            (1, RenderMode::LessLagUltra, UltraResolution::P576),
-            (1, RenderMode::LessLagUltra, UltraResolution::P720),
-            (1, RenderMode::LessLagUltra, UltraResolution::P1080),
-            (1, RenderMode::LessLagDoubles, UltraResolution::P1080),
-            (-1, RenderMode::LessLagUltra, UltraResolution::P1080),
-            (-1, RenderMode::LessLagUltra, UltraResolution::P720),
-            (-1, RenderMode::LessLagUltra, UltraResolution::P576),
-            (-1, RenderMode::LessLag, UltraResolution::P576),
-        ] {
-            let before = config.clone();
-            assert!(apply_native_edges(
-                &mut config,
-                NativeSurface::Css,
-                0,
-                direction
-            ));
-            assert_eq!(config.render_mode, mode);
-            assert_eq!(config.ultra_resolution, resolution);
-            assert_eq!(
-                profile_action(&before, &config),
-                if before.render_mode == mode {
-                    ProfileAction::Unchanged
-                } else {
-                    ProfileAction::SelectManual(mode)
-                }
-            );
-            assert_eq!(
-                config,
-                Config {
-                    render_mode: mode,
-                    ultra_resolution: resolution,
-                    ..before
-                }
-            );
-            assert_eq!(crate::config::parse(&config.serialize()).unwrap(), config);
-        }
         let before = config.clone();
         assert!(!edit_profile(&mut config, 0));
         assert_eq!(config, before);
@@ -1081,6 +1102,7 @@ mod tests {
         assert!(HINT_LINE.contains("ZR+Left/Right"));
         assert!(HINT_LINE.contains("ZR+X Stealth"));
         assert!(HINT_LINE.contains("ZR+Y Streamer"));
+        assert!(HINT_LINE.contains("L+R+X Vanilla+/LLUltra"));
         let mut rows = vec![
             strip_row("You", "Vanilla+ | Auto | Wi-Fi", false),
             strip_row("NetLatency", "Auto", true),

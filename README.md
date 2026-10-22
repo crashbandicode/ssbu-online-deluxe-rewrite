@@ -10,13 +10,19 @@ delivered as **one NRO**: rendering profiles that cut input latency, a global
 Player Info window, the native character-select status line and network
 display. No overclocking.
 
-**Current version: 0.6.2** (2026-10-19). Auto now shows the buffer the game
-chose as a frame count, `Auto (4f)`, on the window and the character-select line
-(plain `Auto` until the first online match; not booted on the console yet).
-0.6.1's **Window Options** page title and the 0.6.0 redesign before it (a `You`
-line, an `Opp` line for a live opponent, the five match-time settings, a
-one-line fps footer and a chord hint, with the window's own toggles on a new
-last page) were booted on the console on 2026-10-19 and work, per the operator.
+**Current version: 0.7.0** (2026-10-22). This minor release includes the
+accepted compact menu on top of 0.6.2: Stealth and Streamer move to eye/TV icons
+on the Settings **You** row ([privacy-indicators.svg](docs/privacy-indicators.svg)),
+toggled with **ZR+X** / **ZR+Y** only while You is selected; console **NetProfile**
+folds **UltraRes** into one **LLUltra** stop whose label reads **LLUltra** /
+**LLUltra+** / **LLUltra++** from the saved resolution; **L+R+X** cycles that
+resolution in place while manual console LLUltra is selected and still toggles
+**Vanilla+** for Auto, the emulator and every other profile. 0.6.2's Auto
+`(Nf)` label and the 0.6.0/0.6.1 window layout remain. The operator confirmed
+the LLUltra chord on a
+Switch install of the pre-release `2f5a…` candidate (see
+[VALIDATION.md](docs/VALIDATION.md)). Release artifacts and their validation
+are recorded separately from that pre-release install.
 Every release on Forgejo carries the NRO and its manifest; what each version
 changed and which console checks are owed is in [STATUS.md](docs/STATUS.md), the
 evidence per build in [VALIDATION.md](docs/VALIDATION.md).
@@ -103,9 +109,11 @@ Hold **L+R** and tap **D-pad Down** to cycle the window: settings → plugins
 **Up/Down** selects a row; **ZR + Left/Right** changes it, and the selected value
 reads `< value >` while ZR is held. A plain Left/Right is ignored, because the
 D-pad also taunts and moves menus. L+R and **Plus** opens Debug; L+R and **X**
-toggles Vanilla+. In the unreleased compact menu, Stealth and Streamer are
-toggled from the Settings **You** row: select it, hold **ZR** and tap **X**
-(Stealth) or **Y** (Streamer); released 0.6.2 uses L+R, **ZR** and **Y** for
+toggles Vanilla+. While manual console LLUltra is selected, that same chord
+cycles its resolution (LLUltra → LLUltra+ → LLUltra++ → LLUltra). In the
+0.7.0 compact menu, Stealth and Streamer are toggled from the Settings
+**You** row: select it, hold **ZR** and tap **X**
+(Stealth) or **Y** (Streamer); older 0.6.2 uses L+R, **ZR** and **Y** for
 Streamer. Everything else is in [Controls](docs/CONTROLS.md); the You-line icons
 are drawn in [privacy-indicators.svg](docs/privacy-indicators.svg).
 

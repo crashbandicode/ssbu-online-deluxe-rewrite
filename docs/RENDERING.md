@@ -133,11 +133,12 @@ path, not Switch performance.
 
 Console LLUltra renders at 576p by default, the fork's choice. The INI key
 `ultra_resolution` (`576`, `720` or `1080`; [Configuration](CONFIGURATION.md))
-sets that base level, applied on the next present. In the unreleased compact
-menu, the former UltraRes row is folded into **NetProfile** as LLUltra (576p),
-LLUltra+ (720p) and LLUltra++ (1080p). ZR+Right raises the variant, then leaves
-for LLDoubles after LLUltra++; ZR+Left lowers it, then leaves for LessLag after
-LLUltra. Entering LLUltra recalls the saved level. Existing INI values and
+sets that base level, applied on the next present. In the 0.7.0 compact
+menu, the former UltraRes row is folded into **NetProfile** as one LLUltra
+stop labeled LLUltra (576p), LLUltra+ (720p) or LLUltra++ (1080p). Left or
+Right leaves that stop immediately and remembers the resolution; entering
+LLUltra again shows the saved level. While manual console LLUltra is selected,
+L+R+X cycles 576 → 720 → 1080 → 576 in place. Existing INI values and
 renderer modes are unchanged ([Controls](CONTROLS.md)). `1080` is the game's
 native level. Dynamic
 resolution still steps down from the chosen base (1080p → 720p, 720p → 576p,
