@@ -72,6 +72,18 @@ extern "C" {
     pub(super) fn igGetWindowDrawList() -> *mut c_void;
     pub(super) fn igGetWindowPos() -> Vec2;
     pub(super) fn igGetCursorScreenPos() -> Vec2;
+    /// cimgui `igGetCursorPosX(void)`, `igSetCursorPosX(float local_x)` and
+    /// `igCalcTextSize(text, text_end, hide_text_after_double_hash, wrap_width)`
+    /// (wrap -1.0 = no wrap), returning `ImVec2_c` by value like
+    /// `igGetCursorScreenPos`. All are exported by the pinned archive.
+    pub(super) fn igGetCursorPosX() -> f32;
+    pub(super) fn igSetCursorPosX(local_x: f32);
+    pub(super) fn igCalcTextSize(
+        text: *const c_char,
+        text_end: *const c_char,
+        hide_text_after_double_hash: bool,
+        wrap_width: f32,
+    ) -> Vec2;
     pub(super) fn igGetFontSize() -> f32;
     pub(super) fn igGetColorU32_Col(index: i32, alpha: f32) -> u32;
     pub(super) fn igGetColorU32_Vec4(color: Vec4) -> u32;

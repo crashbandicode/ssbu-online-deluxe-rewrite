@@ -139,6 +139,59 @@ pub(crate) struct Row {
     pub tone: u8,
     pub pending: bool,
     pub selected: bool,
+    /// A run of plugin status cells drawn as one table (headings separated
+    /// by bars, a check or cross centered beneath each). Empty for every
+    /// other row; when set, `label` and `value` are empty.
+    pub cells: Vec<Cell>,
+}
+
+/// One column of a status-cell table. `tone` is the plugin's ready/not-ready
+/// contract: `TONE_OK` draws a check mark, any other tone a cross in that
+/// tone's color. No value text is shown.
+#[cfg(any(target_os = "switch", test))]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub(crate) struct Cell {
+    pub label: String,
+    pub tone: u8,
+}
+
+/// Placeholder segment the strip renderer replaces with a drawn mark. It is a
+/// control character, which a plugin label can never contain.
+#[cfg(any(target_os = "switch", test))]
+pub(crate) const MARK_SLOT: &str = "\u{1}";
+
+/// The display window of a plugin page of `rows`. Starts from [`window`] and
+/// then keeps a status-cell table whole: a window edge that would cut one is
+/// moved to the table's edge. On the strip (`paged`) the final page also takes
+/// the passive rows (status, cell, header) after the last selectable row, since
+/// the cursor can never reach a page that holds only those.
+#[cfg(any(target_os = "switch", test))]
+pub(crate) fn plugin_window(
+    plugins: &[std::sync::Arc<crate::plugin_api::Plugin>],
+    rows: &[crate::plugin_api::PageRow],
+    selected: usize,
+    size: usize,
+    paged: bool,
+) -> (usize, usize, usize, usize) {
+    use crate::plugin_api::{cell_group, selectable};
+    let (mut start, mut end, page, mut pages) = window(selected, rows.len(), size, paged);
+    if paged
+        && end < rows.len()
+        && rows[..end].iter().any(|row| selectable(plugins, *row))
+        && rows[end..].iter().all(|row| !selectable(plugins, *row))
+    {
+        end = rows.len();
+        pages = page;
+    }
+    if start < end {
+        if let Some((first, _)) = cell_group(plugins, rows, start) {
+            start = first;
+        }
+        if let Some((_, last)) = cell_group(plugins, rows, end - 1) {
+            end = last;
+        }
+    }
+    (start, end, page, pages)
 }
 
 /// `(text, tone)` segments of one strip line so the renderer can colour each
@@ -152,6 +205,16 @@ pub(crate) fn strip_segments(rows: &[Row]) -> Vec<(String, u8)> {
     for (index, row) in rows.iter().enumerate() {
         if index > 0 {
             segments.push(("   ".to_owned(), deluxe_plugin_abi::TONE_NEUTRAL));
+        }
+        if !row.cells.is_empty() {
+            for (cell, entry) in row.cells.iter().enumerate() {
+                if cell > 0 {
+                    segments.push((FACT_SEPARATOR.to_owned(), deluxe_plugin_abi::TONE_NEUTRAL));
+                }
+                segments.push((format!("{}:", entry.label), deluxe_plugin_abi::TONE_NEUTRAL));
+                segments.push((MARK_SLOT.to_owned(), entry.tone));
+            }
+            continue;
         }
         if row.value.is_empty() {
             segments.push((row.label.clone(), deluxe_plugin_abi::TONE_NEUTRAL));
@@ -1424,5 +1487,225 @@ mod tests {
             assert!(compact_text_width(&first, font) <= available);
             assert!(compact_text_width(&second, font) <= available);
         }
+    }
+    /// A page shaped like the Elite one: two headers, 12 value rows, one passive
+    /// status row and three status cells (19 rows), registered on its own page.
+    fn status_page() -> (
+        crate::plugin_api::Registry,
+        Vec<std::sync::Arc<crate::plugin_api::Plugin>>,
+        Vec<crate::plugin_api::PageRow>,
+    ) {
+        use crate::plugin_api::testing::{
+            descriptor_with, fake_current, fake_request, FakePlugin, Persist,
+        };
+        static PAGE: FakePlugin = FakePlugin::new([0, 0, 0, 0], deluxe_plugin_abi::REQUEST_APPLIED);
+        const TONES: &[u8] = &[
+            deluxe_plugin_abi::TONE_OK,
+            deluxe_plugin_abi::TONE_WARN,
+            deluxe_plugin_abi::TONE_ERROR,
+        ];
+        let mut rows: Vec<(String, String, &[&str])> = Vec::new();
+        let mut persist = Vec::new();
+        let mut add =
+            |id: String, label: &str, choices: &'static [&'static str], flags: Persist| {
+                rows.push((id, label.to_owned(), choices));
+                persist.push(flags);
+            };
+        let header = Persist {
+            header: true,
+            no_persist: true,
+            ..Persist::default()
+        };
+        let value = Persist {
+            no_persist: true,
+            ..Persist::default()
+        };
+        add("h0".into(), "Stage pool", &[], header);
+        add("pool".into(), "Legal stages", &["Off", "On"], value);
+        for index in 0..11 {
+            add(format!("stage{index}"), "Stage", &["Off", "On"], value);
+        }
+        add("h1".into(), "Counterpick", &[], header);
+        add("enabled".into(), "Counterpick", &["Off", "On"], value);
+        add(
+            "needs".into(),
+            "Needs pool",
+            &["No", "Yes"],
+            Persist {
+                no_persist: true,
+                read_only: true,
+                ..Persist::default()
+            },
+        );
+        for (id, label) in [
+            ("pool_hook", "Pool"),
+            ("result_hook", "Results"),
+            ("save_state", "Save"),
+        ] {
+            add(
+                id.into(),
+                label,
+                &["Ready", "Saving", "Not saved"],
+                Persist {
+                    no_persist: true,
+                    read_only: true,
+                    cell: true,
+                    tones: Some(TONES),
+                    ..Persist::default()
+                },
+            );
+        }
+        let borrowed: Vec<(&str, &str, &[&str])> = rows
+            .iter()
+            .map(|(id, label, choices)| (id.as_str(), label.as_str(), *choices))
+            .collect();
+        let mut holder = descriptor_with(
+            "elite",
+            "Elite",
+            &borrowed,
+            None,
+            &persist,
+            &PAGE as *const FakePlugin as *mut core::ffi::c_void,
+            Some(fake_current),
+            Some(fake_request),
+        );
+        holder.desc.abi_version = deluxe_plugin_abi::CELL_ABI_VERSION;
+        holder.desc.flags = deluxe_plugin_abi::PLUGIN_FLAG_OWN_PAGE;
+        let registry = crate::plugin_api::Registry::new();
+        assert_eq!(unsafe { registry.register_raw(&holder.desc) }, 0);
+        let plugins = registry.snapshot();
+        let rows = crate::plugin_api::rows_for(&plugins, Some(0));
+        (registry, plugins, rows)
+    }
+
+    #[test]
+    fn the_status_table_stays_whole_and_reachable_on_the_table_and_the_strip() {
+        let (_registry, plugins, rows) = status_page();
+        assert_eq!(rows.len(), 19);
+        let selectable: Vec<usize> = (0..rows.len())
+            .filter(|index| crate::plugin_api::selectable(&plugins, rows[*index]))
+            .collect();
+        // Value rows only: the pool, the eleven stages and Counterpick.
+        assert_eq!(selectable, (1..13).chain([14]).collect::<Vec<_>>());
+        // The vertical table: a centered window of ten. Near the top it shows no
+        // table; once its end reaches one cell it takes all three.
+        assert_eq!(plugin_window(&plugins, &rows, 1, 10, false), (0, 10, 1, 1));
+        assert_eq!(plugin_window(&plugins, &rows, 12, 10, false), (7, 19, 1, 1));
+        assert_eq!(plugin_window(&plugins, &rows, 14, 10, false), (9, 19, 1, 1));
+        // The strip pages four rows. The last page also holds the passive rows
+        // after the final selectable row, so the table is reachable in a match.
+        assert_eq!(plugin_window(&plugins, &rows, 1, 4, true), (0, 4, 1, 5));
+        assert_eq!(plugin_window(&plugins, &rows, 9, 4, true), (8, 12, 3, 5));
+        assert_eq!(plugin_window(&plugins, &rows, 12, 4, true), (12, 19, 4, 4));
+        assert_eq!(plugin_window(&plugins, &rows, 14, 4, true), (12, 19, 4, 4));
+        // No window ever cuts the table.
+        for selected in 0..rows.len() {
+            for (size, paged) in [(10, false), (4, true), (3, true), (6, false)] {
+                let (start, end, _, _) = plugin_window(&plugins, &rows, selected, size, paged);
+                assert!(start < end && end <= rows.len(), "{selected}/{size}");
+                let cuts = |edge: usize| edge > 16 && edge < 19;
+                assert!(
+                    !cuts(start) && !cuts(end),
+                    "{selected}/{size}/{paged}: {start}..{end}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_window_edge_inside_the_table_moves_to_the_table_edge() {
+        // A passive status row followed by a three-cell table.
+        use crate::plugin_api::testing::{
+            descriptor_with, fake_current, fake_request, FakePlugin, Persist,
+        };
+        static ONLY: FakePlugin = FakePlugin::new([0, 0, 0, 0], deluxe_plugin_abi::REQUEST_APPLIED);
+        const TONES: &[u8] = &[deluxe_plugin_abi::TONE_OK, deluxe_plugin_abi::TONE_ERROR];
+        let choices: &[&str] = &["Ready", "Unavailable"];
+        let cell = Persist {
+            cell: true,
+            tones: Some(TONES),
+            ..Persist::default()
+        };
+        let mut holder = descriptor_with(
+            "only",
+            "Only",
+            &[
+                ("a", "A", choices),
+                ("b", "B", choices),
+                ("c", "C", choices),
+                ("d", "D", choices),
+            ],
+            None,
+            &[
+                Persist {
+                    read_only: true,
+                    ..Persist::default()
+                },
+                cell,
+                cell,
+                cell,
+            ],
+            &ONLY as *const FakePlugin as *mut core::ffi::c_void,
+            Some(fake_current),
+            Some(fake_request),
+        );
+        holder.desc.abi_version = deluxe_plugin_abi::CELL_ABI_VERSION;
+        holder.desc.flags = deluxe_plugin_abi::PLUGIN_FLAG_OWN_PAGE;
+        let registry = crate::plugin_api::Registry::new();
+        assert_eq!(unsafe { registry.register_raw(&holder.desc) }, 0);
+        let plugins = registry.snapshot();
+        let rows = crate::plugin_api::rows_for(&plugins, Some(0));
+        assert!(rows
+            .iter()
+            .all(|row| !crate::plugin_api::selectable(&plugins, *row)));
+        // The end edge inside the table grows to its end; the start edge inside
+        // it grows back to its start. Nothing is selectable, so no tail rule.
+        assert_eq!(plugin_window(&plugins, &rows, 0, 2, false), (0, 4, 1, 1));
+        assert_eq!(plugin_window(&plugins, &rows, 3, 2, false), (1, 4, 1, 1));
+        assert_eq!(plugin_window(&plugins, &rows, 0, 2, true), (0, 4, 1, 2));
+        assert_eq!(plugin_window(&plugins, &rows, 3, 2, true), (1, 4, 2, 2));
+    }
+
+    #[test]
+    fn a_cell_run_is_one_strip_entry_with_a_drawn_mark_per_column() {
+        let cells = |tones: [u8; 3]| Row {
+            cells: ["Pool", "Results", "Save"]
+                .iter()
+                .zip(tones)
+                .map(|(label, tone)| Cell {
+                    label: (*label).to_owned(),
+                    tone,
+                })
+                .collect(),
+            ..Row::default()
+        };
+        let ok = deluxe_plugin_abi::TONE_OK;
+        let warn = deluxe_plugin_abi::TONE_WARN;
+        let rows = [strip_row("Counterpick", "On", true), cells([ok, ok, warn])];
+        let segments = strip_segments(&rows);
+        let neutral = deluxe_plugin_abi::TONE_NEUTRAL;
+        assert_eq!(
+            segments,
+            vec![
+                (">Counterpick:".to_owned(), neutral),
+                ("On".to_owned(), neutral),
+                ("   ".to_owned(), neutral),
+                ("Pool:".to_owned(), neutral),
+                (MARK_SLOT.to_owned(), ok),
+                (" | ".to_owned(), neutral),
+                ("Results:".to_owned(), neutral),
+                (MARK_SLOT.to_owned(), ok),
+                (" | ".to_owned(), neutral),
+                ("Save:".to_owned(), neutral),
+                (MARK_SLOT.to_owned(), warn),
+            ]
+        );
+        // The line the font fit measures is exactly those texts, and the slot
+        // can never be typed into a plugin label.
+        assert_eq!(
+            strip_line(&rows),
+            ">Counterpick:On   Pool:\u{1} | Results:\u{1} | Save:\u{1}"
+        );
+        assert!(!deluxe_plugin_abi::valid_label(MARK_SLOT.as_bytes()));
     }
 }

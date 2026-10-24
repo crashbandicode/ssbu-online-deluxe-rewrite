@@ -1,12 +1,14 @@
 //! Fork-style global Player Info window. This window does not write panes.
-use super::{imgui::*, input, overlay_host, publish, record, settings, Code};
+use super::{cells, imgui::*, input, overlay_host, publish, record, settings, Code};
 use crate::menu::{
     mark_editing, net_profile_value, opp_line, perf_footer, strip_line, strip_segments, you_line,
-    ProfileAction, Row, HINT_LINE,
+    Cell, ProfileAction, Row, HINT_LINE, MARK_SLOT,
 };
 use crate::overlay::{FrameTimes, Overlay, View};
 use crate::pia_rtt::PresentedPing;
-use crate::plugin_api::{page_plugins, rows_for, PageRow, Registry, RowKind};
+use crate::plugin_api::{
+    cell_group, page_plugins, rows_for, selectable, PageRow, Registry, RowKind,
+};
 use std::{sync::Mutex, time::Instant};
 
 struct UiState {
@@ -591,7 +593,8 @@ fn plugin_rows(
     let own = page.and_then(|page| page_plugins(&plugins).get(page).copied());
     let title = own.map_or("Plugins".to_owned(), |index| plugins[index].label.clone());
     let all = rows_for(&plugins, page);
-    let (start, end, page_index, pages) = crate::menu::window(selected, all.len(), size, paged);
+    let (start, end, page_index, pages) =
+        crate::menu::plugin_window(&plugins, &all, selected, size, paged);
     let mut rows = Vec::with_capacity(end - start + 2);
     if !paged && all.is_empty() {
         rows.push(entry("Plugins", "none registered", false));
@@ -599,28 +602,51 @@ fn plugin_rows(
     if !paged && start > 0 {
         rows.push(entry("...", "", false));
     }
-    rows.extend(
-        all[start..end]
-            .iter()
-            .enumerate()
-            .map(|(offset, row)| match *row {
-                PageRow::Group(plugin) => entry(&plugins[plugin].label, "", false),
-                PageRow::Option { plugin, option } => {
-                    let spec = &plugins[plugin].options[option];
-                    if spec.kind == RowKind::Header {
-                        return entry(&spec.label, "", false);
-                    }
+    let mut index = start;
+    while index < end {
+        let row = all[index];
+        // A run of status cells is one entry (one table); the window never
+        // cuts it, so the index jumps to the end of the run.
+        if let Some((first, last)) = cell_group(&plugins, &all, index) {
+            let cells = (first..last)
+                .filter_map(|at| match all[at] {
+                    PageRow::Option { plugin, option } => Some(Cell {
+                        label: plugins[plugin].options[option].label.clone(),
+                        tone: registry.value(plugin, &plugins[plugin], option).tone,
+                    }),
+                    PageRow::Group(_) => None,
+                })
+                .collect();
+            rows.push(Row {
+                cells,
+                ..Row::default()
+            });
+            index = last;
+            continue;
+        }
+        rows.push(match row {
+            PageRow::Group(plugin) => entry(&plugins[plugin].label, "", false),
+            PageRow::Option { plugin, option } => {
+                let spec = &plugins[plugin].options[option];
+                if spec.kind == RowKind::Header {
+                    entry(&spec.label, "", false)
+                } else {
                     let value = registry.value(plugin, &plugins[plugin], option);
                     Row {
                         label: spec.label.clone(),
                         value: value.label,
                         tone: value.tone,
                         pending: value.pending,
-                        selected: start + offset == selected,
+                        // Only an editable row can hold the cursor, so a
+                        // passive status row is never highlighted.
+                        selected: index == selected && selectable(&plugins, row),
+                        cells: Vec::new(),
                     }
                 }
-            }),
-    );
+            }
+        });
+        index += 1;
+    }
     if !paged && end < all.len() {
         rows.push(entry("...", "", false));
     }
@@ -671,10 +697,42 @@ unsafe fn draw_table(
     colors: Option<&[Option<Vec4>]>,
     privacy: Option<Privacy>,
 ) {
-    if !begin_table(id, label_width) {
-        return;
-    }
+    // A status-cell row ends the two-column table, draws its own table, and the
+    // rows after it continue in a new two-column table with a distinct ImGui id.
+    let mut parts = 0usize;
+    let mut open = false;
     for (index, row) in rows.iter().enumerate() {
+        if !row.cells.is_empty() {
+            if open {
+                igEndTable();
+                open = false;
+            }
+            let mut cell_id = id[..id.len() - 1].to_vec();
+            cell_id.extend_from_slice(format!("#cells{index}\0").as_bytes());
+            let draws: Vec<cells::CellDraw> = row
+                .cells
+                .iter()
+                .map(|cell| cells::CellDraw {
+                    label: &cell.label,
+                    ok: cell.tone == deluxe_plugin_abi::TONE_OK,
+                    color: tone_color(cell.tone),
+                })
+                .collect();
+            cells::table(&cell_id, &draws);
+            continue;
+        }
+        if !open {
+            let mut part_id = id[..id.len() - 1].to_vec();
+            if parts > 0 {
+                part_id.extend_from_slice(format!("#part{parts}").as_bytes());
+            }
+            part_id.push(0);
+            if !begin_table(&part_id, label_width) {
+                return;
+            }
+            parts += 1;
+            open = true;
+        }
         igTableNextRow(0, 0.0);
         igTableNextColumn();
         let mark = if row.selected { "> " } else { "" };
@@ -700,7 +758,9 @@ unsafe fn draw_table(
         paint_text(&format!("{}{pending}", row.value), color);
         igPopTextWrapPos();
     }
-    igEndTable();
+    if open {
+        igEndTable();
+    }
 }
 
 /// The in-match strip: `rows` as one unwrapped line of coloured segments
@@ -722,7 +782,16 @@ unsafe fn draw_strip((rows, plain, color, second): &Strip, privacy: Option<(Priv
         if index > 0 {
             igSameLine(0.0, 0.0);
         }
-        paint_text(segment, tone_color(*tone));
+        if segment == MARK_SLOT {
+            // A status cell's mark: a check for the ready tone, else a cross.
+            cells::mark(
+                *tone == deluxe_plugin_abi::TONE_OK,
+                tone_color(*tone),
+                false,
+            );
+        } else {
+            paint_text(segment, tone_color(*tone));
+        }
     }
     if !second.is_empty() {
         text(second);

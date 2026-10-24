@@ -26,6 +26,11 @@ pub enum RowKind {
     /// `OPTION_FLAG_HEADER`: label only, no choices, skipped by Up/Down,
     /// never persisted, callbacks never called.
     Header,
+    /// `OPTION_FLAG_CELL` (descriptor revision 5): a passive status cell.
+    /// `current` picks a value whose tone says ready (a check) or not (a
+    /// cross). Never requested, never persisted, never selected. A run of
+    /// them is drawn as one table.
+    Cell,
 }
 
 /// One registered option, strings owned by the host.
@@ -211,6 +216,15 @@ pub unsafe fn parse_descriptor(desc: *const abi::PluginDesc) -> Result<Plugin, i
         | abi::OPTION_FLAG_READ_ONLY
         | abi::OPTION_FLAG_HEADER
         | abi::OPTION_FLAG_INLINE;
+    // Only a revision 5 descriptor may carry the cell bit; older revisions
+    // refuse it exactly as they refused any unknown bit before it existed.
+    let allowed_flags = |version: u32| {
+        if version >= abi::CELL_ABI_VERSION {
+            ALLOWED_OPTION_FLAGS | abi::OPTION_FLAG_CELL
+        } else {
+            ALLOWED_OPTION_FLAGS
+        }
+    };
     if desc.is_null() {
         return Err(abi::REGISTER_ERR_NULL);
     }
@@ -248,8 +262,10 @@ pub unsafe fn parse_descriptor(desc: *const abi::PluginDesc) -> Result<Plugin, i
     let mut options = Vec::with_capacity(option_count);
     for raw in std::slice::from_raw_parts(desc.options, option_count) {
         let header = raw.flags & abi::OPTION_FLAG_HEADER != 0;
-        if raw.flags & !ALLOWED_OPTION_FLAGS != 0
+        let cell = raw.flags & abi::OPTION_FLAG_CELL != 0;
+        if raw.flags & !allowed_flags(desc.abi_version) != 0
             || (header && raw.flags & abi::OPTION_FLAG_INLINE != 0)
+            || (cell && raw.flags & (abi::OPTION_FLAG_HEADER | abi::OPTION_FLAG_INLINE) != 0)
         {
             return Err(abi::REGISTER_ERR_INVALID);
         }
@@ -313,10 +329,16 @@ pub unsafe fn parse_descriptor(desc: *const abi::PluginDesc) -> Result<Plugin, i
             }
             Some(bytes.to_vec())
         };
-        let locked = raw.flags & abi::OPTION_FLAG_READ_ONLY != 0;
+        // The tone is a cell's ready/not-ready contract, so it is required.
+        if cell && tones.is_none() {
+            return Err(abi::REGISTER_ERR_INVALID);
+        }
+        let locked = cell || raw.flags & abi::OPTION_FLAG_READ_ONLY != 0;
         options.push(PluginOption {
             label,
-            kind: if locked || choice_count == 1 {
+            kind: if cell {
+                RowKind::Cell
+            } else if locked || choice_count == 1 {
                 RowKind::Status
             } else {
                 RowKind::Value
@@ -329,6 +351,18 @@ pub unsafe fn parse_descriptor(desc: *const abi::PluginDesc) -> Result<Plugin, i
             tones,
         });
         ids.push(option_id);
+    }
+    // One table holds at most `MAX_CELL_RUN` consecutive cells.
+    let mut run = 0usize;
+    for option in &options {
+        run = if option.kind == RowKind::Cell {
+            run + 1
+        } else {
+            0
+        };
+        if run > abi::MAX_CELL_RUN {
+            return Err(abi::REGISTER_ERR_INVALID);
+        }
     }
     // Two persisted options sharing one key would overwrite each other.
     let mut keys: Vec<&str> = Vec::new();
@@ -618,15 +652,52 @@ pub fn rows_for(plugins: &[Arc<Plugin>], page: Option<usize>) -> Vec<PageRow> {
     }
 }
 
-/// Whether Up/Down may land on `row`: an option that is not a header.
+/// Whether Up/Down may land on `row`: only an editable option. Group,
+/// header, status and cell rows never hold the cursor, so a page with no
+/// editable option highlights nothing.
 pub fn selectable(plugins: &[Arc<Plugin>], row: PageRow) -> bool {
     match row {
         PageRow::Group(_) => false,
         PageRow::Option { plugin, option } => plugins
             .get(plugin)
             .and_then(|entry| entry.options.get(option))
-            .is_none_or(|spec| spec.kind != RowKind::Header),
+            .is_none_or(PluginOption::editable),
     }
+}
+
+/// The half-open range of `rows` forming the cell table that contains
+/// `index`: its consecutive cell options of one plugin. `None` when the row
+/// is not a cell.
+pub fn cell_group(
+    plugins: &[Arc<Plugin>],
+    rows: &[PageRow],
+    index: usize,
+) -> Option<(usize, usize)> {
+    let is_cell = |row: &PageRow| match *row {
+        PageRow::Option { plugin, option } => plugins
+            .get(plugin)
+            .and_then(|entry| entry.options.get(option))
+            .is_some_and(|spec| spec.kind == RowKind::Cell),
+        PageRow::Group(_) => false,
+    };
+    let owner = |row: &PageRow| match *row {
+        PageRow::Option { plugin, .. } => Some(plugin),
+        PageRow::Group(_) => None,
+    };
+    let row = rows.get(index)?;
+    if !is_cell(row) {
+        return None;
+    }
+    let plugin = owner(row);
+    let mut start = index;
+    while start > 0 && is_cell(&rows[start - 1]) && owner(&rows[start - 1]) == plugin {
+        start -= 1;
+    }
+    let mut end = index + 1;
+    while end < rows.len() && is_cell(&rows[end]) && owner(&rows[end]) == plugin {
+        end += 1;
+    }
+    Some((start, end))
 }
 
 /// `selected` clamped into `rows` and moved forward onto a selectable row,
@@ -688,6 +759,8 @@ pub(crate) mod testing {
         pub header: bool,
         /// `OPTION_FLAG_INLINE`: still a valid wire bit, drawn as a value row.
         pub inline: bool,
+        /// `OPTION_FLAG_CELL`: a passive status cell (revision 5 only).
+        pub cell: bool,
     }
 
     pub fn descriptor(
@@ -736,6 +809,7 @@ pub(crate) mod testing {
                 (settings.read_only, abi::OPTION_FLAG_READ_ONLY),
                 (settings.header, abi::OPTION_FLAG_HEADER),
                 (settings.inline, abi::OPTION_FLAG_INLINE),
+                (settings.cell, abi::OPTION_FLAG_CELL),
             ] {
                 if set {
                     flags |= bit;
@@ -956,8 +1030,9 @@ mod tests {
             Some(fake_current),
             Some(fake_request),
         );
-        // Versions 2, 3 and 4 are read under one rule set; 0, 1 and 5 are not ours.
-        for version in [0, 1, abi::ABI_VERSION + 1] {
+        // Versions 2 to 5 are read under one rule set (5 alone adds the cell bit);
+        // 0, 1 and 6 are not ours.
+        for version in [0, 1, abi::CELL_ABI_VERSION + 1] {
             holder.desc.abi_version = version;
             assert_eq!(
                 unsafe { registry.register_raw(&holder.desc) },
@@ -1753,7 +1828,7 @@ mod tests {
             [true, true, false, false, false]
         );
         assert_eq!(plugin.options[1].config_key, "record_playback");
-        // The shared page: one group row, five options, all five selectable.
+        // The shared page: one group row, five options; the cursor skips the two status rows.
         let rows = rows_for(&plugins, None);
         assert_eq!(rows.len(), 6);
         assert_eq!(move_selection(&plugins, &rows, 0, 0), 1);
@@ -1864,15 +1939,15 @@ mod tests {
             rows.iter()
                 .map(|row| selectable(&plugins, *row))
                 .collect::<Vec<_>>(),
-            [false, true, false, true, true]
+            [false, true, false, true, false]
         );
         assert_eq!(move_selection(&plugins, &rows, 0, 0), 1);
         assert_eq!(move_selection(&plugins, &rows, 2, 0), 3);
-        assert_eq!(move_selection(&plugins, &rows, 9, 0), 4);
+        assert_eq!(move_selection(&plugins, &rows, 9, 0), 1);
         assert_eq!(move_selection(&plugins, &rows, 1, 1), 3);
         assert_eq!(move_selection(&plugins, &rows, 3, -1), 1);
-        assert_eq!(move_selection(&plugins, &rows, 4, 1), 1);
-        assert_eq!(move_selection(&plugins, &rows, 1, -1), 4);
+        assert_eq!(move_selection(&plugins, &rows, 4, 1), 3);
+        assert_eq!(move_selection(&plugins, &rows, 1, -1), 3);
     }
 
     static GROUPED: FakePlugin = FakePlugin::new([1, 0, 2, 0], abi::REQUEST_APPLIED);
@@ -1993,5 +2068,240 @@ mod tests {
             abi::REGISTER_ERR_NULL
         );
         assert!(registry.snapshot().is_empty());
+    }
+
+    static CELLS: FakePlugin = FakePlugin::new([0, 0, 0, 1], abi::REQUEST_APPLIED);
+
+    const READY: &[&str] = &["Ready", "Unavailable"];
+    const SAVE: &[&str] = &["Ready", "Saving", "Not saved"];
+    const READY_TONES: &[u8] = &[abi::TONE_OK, abi::TONE_ERROR];
+    const SAVE_TONES: &[u8] = &[abi::TONE_OK, abi::TONE_WARN, abi::TONE_ERROR];
+
+    /// Value row, passive status row, then three cells: the status page shape.
+    fn cell_descriptor(version: u32, cells: usize) -> DescHolder {
+        let user = &CELLS as *const FakePlugin as *mut c_void;
+        let mut rows: Vec<(&str, &str, &[&str])> = vec![
+            ("toggle", "Toggle", &["Off", "On"]),
+            ("needs", "Needs pool", &["No", "Yes"]),
+        ];
+        let mut persist = vec![
+            Persist::default(),
+            Persist {
+                no_persist: true,
+                read_only: true,
+                ..Persist::default()
+            },
+        ];
+        let names = ["c0", "c1", "c2", "c3", "c4"];
+        for (index, name) in names.iter().enumerate().take(cells) {
+            rows.push((
+                *name,
+                ["Pool", "Results", "Save", "Net", "Extra"][index],
+                SAVE,
+            ));
+            persist.push(Persist {
+                no_persist: true,
+                read_only: true,
+                cell: true,
+                tones: Some(SAVE_TONES),
+                ..Persist::default()
+            });
+        }
+        let mut holder = descriptor_with(
+            "status",
+            "Status",
+            &rows,
+            None,
+            &persist,
+            user,
+            Some(fake_current),
+            Some(fake_request),
+        );
+        holder.desc.abi_version = version;
+        holder.desc.flags = abi::PLUGIN_FLAG_OWN_PAGE;
+        holder
+    }
+
+    #[test]
+    fn cell_rows_parse_only_in_revision_five_and_are_passive() {
+        let registry = Registry::new();
+        // Older revisions refuse the new bit exactly as they refused any
+        // unknown bit before revision 5 existed.
+        for version in [2, 3, abi::ABI_VERSION] {
+            let holder = cell_descriptor(version, 3);
+            assert_eq!(
+                unsafe { registry.register_raw(&holder.desc) },
+                abi::REGISTER_ERR_INVALID,
+                "version {version}"
+            );
+        }
+        assert!(registry.snapshot().is_empty());
+        let holder = cell_descriptor(abi::CELL_ABI_VERSION, 3);
+        assert_eq!(unsafe { registry.register_raw(&holder.desc) }, 0);
+        // Revision 6 is still unknown.
+        let mut future = cell_descriptor(abi::CELL_ABI_VERSION + 1, 3);
+        future.desc.flags = 0;
+        assert_eq!(
+            unsafe { Registry::new().register_raw(&future.desc) },
+            abi::REGISTER_ERR_ABI
+        );
+        let plugins = registry.snapshot();
+        let plugin = plugins[0].clone();
+        assert_eq!(
+            plugin.options.iter().map(|o| o.kind).collect::<Vec<_>>(),
+            [
+                RowKind::Value,
+                RowKind::Status,
+                RowKind::Cell,
+                RowKind::Cell,
+                RowKind::Cell
+            ]
+        );
+        for cell in &plugin.options[2..] {
+            assert!(!cell.editable() && !cell.persist);
+            assert_eq!(cell.tones.as_deref(), Some(SAVE_TONES));
+        }
+        // A cell is never requested, even when the plugin could answer.
+        for option in 1..5 {
+            assert_eq!(registry.step(0, option, 1), None, "option {option}");
+            assert_eq!(registry.step(0, option, -1), None, "option {option}");
+        }
+        assert!(CELLS.requests.lock().unwrap().is_empty());
+        // The value follows the plugin and the tone says ready or not.
+        let ready = registry.value(0, &plugin, 2);
+        assert_eq!((ready.label.as_str(), ready.tone), ("Ready", abi::TONE_OK));
+        let saving = registry.value(0, &plugin, 3);
+        assert_eq!(
+            (saving.label.as_str(), saving.tone),
+            ("Saving", abi::TONE_WARN)
+        );
+        let last = registry.value(0, &plugin, 4);
+        assert_eq!((last.label.as_str(), last.tone), ("Ready", abi::TONE_OK));
+        assert!(!ready.pending && !saving.pending && !last.pending);
+    }
+
+    #[test]
+    fn cell_rows_are_validated() {
+        let bad = |holder: &DescHolder| unsafe { Registry::new().register_raw(&holder.desc) };
+        // More than four consecutive cells are refused.
+        assert_eq!(
+            bad(&cell_descriptor(abi::CELL_ABI_VERSION, 5)),
+            abi::REGISTER_ERR_INVALID
+        );
+        assert_eq!(bad(&cell_descriptor(abi::CELL_ABI_VERSION, 4)), 0);
+        // A cell needs its tone table, which is the ready/not-ready contract.
+        let mut holder = cell_descriptor(abi::CELL_ABI_VERSION, 3);
+        holder._options[3].choice_tones = std::ptr::null();
+        assert_eq!(bad(&holder), abi::REGISTER_ERR_INVALID);
+        // A cell cannot also be a header or an inline row.
+        for extra in [abi::OPTION_FLAG_HEADER, abi::OPTION_FLAG_INLINE] {
+            let mut holder = cell_descriptor(abi::CELL_ABI_VERSION, 3);
+            holder._options[3].flags |= extra;
+            assert_eq!(bad(&holder), abi::REGISTER_ERR_INVALID, "extra {extra}");
+        }
+        // Tone bytes are still validated.
+        let mut holder = cell_descriptor(abi::CELL_ABI_VERSION, 3);
+        let tones = [abi::TONE_MAX + 1; 3];
+        holder._options[3].choice_tones = tones.as_ptr();
+        assert_eq!(bad(&holder), abi::REGISTER_ERR_INVALID);
+        // Two runs separated by another row may each use the full run.
+        let user = &CELLS as *const FakePlugin as *mut c_void;
+        let mut rows: Vec<(&str, &str, &[&str])> = Vec::new();
+        let mut persist = Vec::new();
+        let names = ["a0", "a1", "a2", "a3", "sep", "b0", "b1", "b2", "b3"];
+        for name in names {
+            rows.push((name, "Cell", SAVE));
+            persist.push(Persist {
+                cell: name != "sep",
+                tones: Some(SAVE_TONES),
+                ..Persist::default()
+            });
+        }
+        let holder = descriptor_with(
+            "runs",
+            "Runs",
+            &rows,
+            None,
+            &persist,
+            user,
+            Some(fake_current),
+            Some(fake_request),
+        );
+        let mut holder = holder;
+        holder.desc.abi_version = abi::CELL_ABI_VERSION;
+        assert_eq!(bad(&holder), 0);
+    }
+
+    #[test]
+    fn passive_rows_never_hold_the_cursor_and_cells_group_by_run() {
+        let registry = Registry::new();
+        let holder = cell_descriptor(abi::CELL_ABI_VERSION, 3);
+        assert_eq!(unsafe { registry.register_raw(&holder.desc) }, 0);
+        let plugins = registry.snapshot();
+        let rows = rows_for(&plugins, Some(0));
+        assert_eq!(rows.len(), 5);
+        assert_eq!(
+            rows.iter()
+                .map(|row| selectable(&plugins, *row))
+                .collect::<Vec<_>>(),
+            [true, false, false, false, false]
+        );
+        // Only the toggle can hold the cursor, from any index and direction.
+        for selected in 0..8 {
+            for direction in [-1, 0, 1] {
+                assert_eq!(
+                    move_selection(&plugins, &rows, selected, direction),
+                    0,
+                    "{selected}/{direction}"
+                );
+            }
+        }
+        assert_eq!(cell_group(&plugins, &rows, 0), None);
+        assert_eq!(cell_group(&plugins, &rows, 1), None);
+        for index in 2..5 {
+            assert_eq!(cell_group(&plugins, &rows, index), Some((2, 5)), "{index}");
+        }
+        assert_eq!(cell_group(&plugins, &rows, 9), None);
+    }
+
+    #[test]
+    fn a_page_without_an_editable_row_has_no_selectable_row() {
+        let registry = Registry::new();
+        let holder = descriptor_with(
+            "diag",
+            "Diag",
+            &[("a", "A", READY), ("b", "B", &["Ready"]), ("c", "C", READY)],
+            None,
+            &[
+                Persist {
+                    read_only: true,
+                    ..Persist::default()
+                },
+                Persist::default(),
+                Persist {
+                    cell: true,
+                    tones: Some(READY_TONES),
+                    ..Persist::default()
+                },
+            ],
+            &CELLS as *const FakePlugin as *mut c_void,
+            Some(fake_current),
+            Some(fake_request),
+        );
+        let mut holder = holder;
+        holder.desc.abi_version = abi::CELL_ABI_VERSION;
+        holder.desc.flags = abi::PLUGIN_FLAG_OWN_PAGE;
+        assert_eq!(unsafe { registry.register_raw(&holder.desc) }, 0);
+        let plugins = registry.snapshot();
+        let rows = rows_for(&plugins, Some(0));
+        assert!(rows.iter().all(|row| !selectable(&plugins, *row)));
+        // The cursor index still scrolls (the host highlights nothing), one
+        // row per press, and Left/Right request nothing.
+        assert_eq!(move_selection(&plugins, &rows, 0, 1), 1);
+        assert_eq!(move_selection(&plugins, &rows, 2, 1), 0);
+        assert_eq!(move_selection(&plugins, &rows, 0, -1), 2);
+        for option in 0..3 {
+            assert_eq!(registry.step(0, option, 1), None);
+        }
     }
 }

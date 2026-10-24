@@ -986,18 +986,16 @@ mod tests {
         assert_eq!((step.option, step.requested), (1, 0));
         ui.poll_with(0, &mut config, css, &registry);
         ui.poll_with(DOWN, &mut config, css, &registry);
-        assert_eq!(ui.plugin_row, 3);
-        ui.poll_with(0, &mut config, css, &registry);
-        // The single-choice status row is read-only.
-        ui.poll_with(RIGHT, &mut config, css, &registry);
-        assert_eq!(registry.take_last_step(), None);
-        ui.poll_with(0, &mut config, css, &registry);
-        // Wrapping skips the group row in both directions.
-        ui.poll_with(DOWN, &mut config, css, &registry);
+        // The single-choice status row never holds the cursor: Down wraps past
+        // it and the group row to the first option.
         assert_eq!(ui.plugin_row, 1);
         ui.poll_with(0, &mut config, css, &registry);
+        // It stays unrequestable even when asked for directly.
+        assert_eq!(registry.step(0, 2, 1), None);
+        assert_eq!(registry.take_last_step(), None);
+        // Wrapping skips the group row and the status row in both directions.
         ui.poll_with(UP, &mut config, css, &registry);
-        assert_eq!(ui.plugin_row, 3);
+        assert_eq!(ui.plugin_row, 2);
         ui.poll_with(0, &mut config, css, &registry);
         // Chord + Left/Right still cycles the peer rather than a plugin.
         ui.poll_with(L | R | RIGHT, &mut config, css, &registry);

@@ -2,6 +2,7 @@ mod adaptive_drs;
 mod api_trace;
 mod auto_driver;
 mod capture;
+mod cells;
 mod clock_probe;
 mod connection_transport;
 #[cfg(feature = "coverage")]

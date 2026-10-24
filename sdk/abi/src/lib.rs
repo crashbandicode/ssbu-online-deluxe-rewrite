@@ -48,12 +48,18 @@
 
 use core::ffi::{c_char, c_void};
 
-/// Descriptor revision carried in [`PluginDesc::abi_version`]. Versions 2, 3
+/// Descriptor revision the SDK sends, carried in [`PluginDesc::abi_version`]. Versions 2, 3
 /// and 4 share one layout ([`OptionDesc`], 56 bytes); each added flag bits
 /// and widened the option limit. Hosts since Deluxe 0.5.3 read every
 /// accepted version under the version 4 rules, so a version 2 or 3
 /// descriptor is validated exactly like a version 4 one.
 pub const ABI_VERSION: u32 = 4;
+/// Descriptor revision 5: the version 4 layout plus [`OPTION_FLAG_CELL`].
+/// Only a plugin that sends a cell option should send it. A host that
+/// predates cells answers [`REGISTER_ERR_ABI`], so the plugin can register a
+/// flat version 4 layout instead. Revisions 2 to 4 refuse the cell bit exactly
+/// as they refused any unknown bit before revision 5 existed.
+pub const CELL_ABI_VERSION: u32 = 5;
 /// Oldest descriptor revision the host accepts. Versions 2 and 3 share the
 /// version 4 layout and are read under the version 4 rules. Version 1 (a
 /// 48-byte row without tones) is refused with [`REGISTER_ERR_ABI`]; no
@@ -127,6 +133,23 @@ pub const OPTION_FLAG_HEADER: u32 = 1 << 2;
 /// (`Label: current choice`). Hosts 0.5.3 before the consolidation drew every
 /// choice on the line; no released plugin sends this bit.
 pub const OPTION_FLAG_INLINE: u32 = 1 << 3;
+/// `OptionDesc::flags` (descriptor revision 5 only): a passive status cell.
+/// Like [`OPTION_FLAG_READ_ONLY`] the row is never selected, never requested
+/// and never persisted, and `current` picks the value. The host draws a run
+/// of 1 to [`MAX_CELL_RUN`] consecutive cell options of one plugin as one
+/// table: each cell's `label` is a column heading (separated by vertical
+/// bars) and, centered beneath it, a check mark when the chosen value's tone
+/// is [`TONE_OK`] and a cross otherwise, in that tone's color. The host
+/// draws both marks as lines, so no font glyph is needed. `choice_tones` must
+/// be non-null (the tone is the ready/not-ready contract) and the choice
+/// labels are still validated, but the table shows no value text. A plugin
+/// that has only status rows needs no highlight, and nothing here is
+/// selectable. Cannot be combined with [`OPTION_FLAG_HEADER`] or
+/// [`OPTION_FLAG_INLINE`]; `OPTION_FLAG_NO_PERSIST` and
+/// [`OPTION_FLAG_READ_ONLY`] are accepted and implied.
+pub const OPTION_FLAG_CELL: u32 = 1 << 4;
+/// Most consecutive cell options one plugin may declare (one table).
+pub const MAX_CELL_RUN: usize = 4;
 
 /// `choice_tones` entry: default text colour.
 pub const TONE_NEUTRAL: u8 = 0;
@@ -210,8 +233,8 @@ pub struct OptionDesc {
 pub struct PluginDesc {
     /// `size_of::<PluginDesc>()` (72).
     pub struct_size: u32,
-    /// Descriptor revision, [`MIN_ABI_VERSION`] to [`ABI_VERSION`]; the SDK
-    /// always sends [`ABI_VERSION`]. Any other value answers
+    /// Descriptor revision, [`MIN_ABI_VERSION`] to [`CELL_ABI_VERSION`]; the
+    /// SDK always sends [`ABI_VERSION`]. Any other value answers
     /// [`REGISTER_ERR_ABI`].
     pub abi_version: u32,
     /// Stable identifier, unique across plugins. Not displayed.
@@ -259,7 +282,7 @@ pub const fn table_matches(struct_size: u32, abi_version: u32) -> bool {
 
 /// True when a host should parse a descriptor of this revision.
 pub const fn descriptor_version_supported(abi_version: u32) -> bool {
-    abi_version >= MIN_ABI_VERSION && abi_version <= ABI_VERSION
+    abi_version >= MIN_ABI_VERSION && abi_version <= CELL_ABI_VERSION
 }
 
 /// True when every tone byte is a known `TONE_*` value.
@@ -309,12 +332,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn layout_is_fixed_and_versions_two_to_four_are_accepted() {
+    fn layout_is_fixed_and_versions_two_to_five_are_accepted() {
         assert_eq!(core::mem::size_of::<OptionDesc>(), 56);
         assert_eq!(core::mem::size_of::<PluginDesc>(), 72);
         assert_eq!(core::mem::size_of::<PluginApiV1>(), 32);
         assert_eq!(TABLE_VERSION, 1);
-        assert_eq!((MIN_ABI_VERSION, ABI_VERSION), (2, 4));
+        assert_eq!((MIN_ABI_VERSION, ABI_VERSION, CELL_ABI_VERSION), (2, 4, 5));
+        assert_eq!(OPTION_FLAG_CELL, 1 << 4);
+        assert_eq!(
+            OPTION_FLAG_CELL
+                & (OPTION_FLAG_NO_PERSIST
+                    | OPTION_FLAG_READ_ONLY
+                    | OPTION_FLAG_HEADER
+                    | OPTION_FLAG_INLINE),
+            0
+        );
+        assert_eq!(MAX_CELL_RUN, 4);
         assert_eq!(MAX_OPTIONS, 64);
         assert_eq!(OPTION_FLAG_HEADER & OPTION_FLAG_INLINE, 0);
         assert_eq!(
@@ -331,7 +364,8 @@ mod tests {
         assert!(descriptor_version_supported(2));
         assert!(descriptor_version_supported(3));
         assert!(descriptor_version_supported(4));
-        assert!(!descriptor_version_supported(5));
+        assert!(descriptor_version_supported(5));
+        assert!(!descriptor_version_supported(6));
         assert_eq!(ONLINE_SYMBOL_C.len(), ONLINE_SYMBOL.len() + 1);
         assert_eq!(ONLINE_SYMBOL_C[ONLINE_SYMBOL.len()], 0);
         assert_eq!(

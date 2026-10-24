@@ -100,6 +100,26 @@ reports it), `Rejected` or `Unavailable` to refuse. A read-only option (or one
 with a single choice) is a status row; give its choices tones to show
 `Ready` / `Degraded` / `Failed` in green, yellow and red.
 
+A status row is passive: Up/Down skip it (only an editable value row holds the
+cursor, so a page with no editable row highlights nothing), Left/Right do
+nothing and `request` is never called.
+
+**Status cells (descriptor revision 5, `OPTION_FLAG_CELL`).** A run of 1 to 4
+consecutive cell options is drawn as one table: each cell's label is a column
+heading, separated by vertical bars, with a mark centered beneath it. The mark
+comes from the tone of the choice `current` reports: `TONE_OK` draws a check
+mark, any other tone a cross in that tone's color. Both are drawn as lines, so
+no font glyph is needed, and the table shows no value text. `choice_tones` is
+required (it is the ready/not-ready contract), and a cell cannot also be a
+header or an inline row. Only a revision 5 descriptor may carry the bit; a
+revision 2 to 4 descriptor that sets it is `REGISTER_ERR_INVALID`, and a host
+built before revision 5 answers `REGISTER_ERR_ABI` before it registers
+anything, so a plugin can then register the same rows as plain status rows
+with a revision 4 descriptor. The SDK still sends revision 4 and has no cell
+layout; a native plugin sets the flag in its own descriptor. On the compact
+in-match strip a cell run is one entry (`Pool:✓ | Results:✓ | Save:✗`, drawn
+with the same marks), and the final strip page takes the passive rows that follow
+the last editable row so they stay reachable.
 The complete example is [`sdk/examples/demo`](../sdk/examples/demo/src/lib.rs)
 (three options, persisted INI, a time-driven status row). Limits, ABI layout,
 error codes, threading rules and host persistence are in
