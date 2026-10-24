@@ -1,5 +1,57 @@
 # Validation record
 
+## 0.7.0 — offline UI capture review — 2026-10-24
+
+The released NRO `2ff456161c52522c6881956d0ad3a5a037a1a3fc74c8757a1e3a7afe49012cae`
+(`0.7.0-9a7f81ce1937-1792670948`) booted in an isolated, muted Eden profile
+on Ubuntu with Smash 13.0.5 and the separate FX Control `8bf2bdb451266feb…`
+companion. This is the clean release artifact, distinct from the Switch's
+operator-tested `2f5a…` candidate below. No new console run is claimed.
+
+Observed from actual screenshots and recordings:
+
+- Compact Settings renders You with eye/TV icons, NetLatency and NetProfile,
+  the performance footer and hints. The offline fixture has no Opp row.
+- Down selects NetLatency; held ZR+Right changes Auto to 0, with `< 0 >`
+  visible while held; ZR+Left restores Auto. You-row ZR+X/Y show the closed
+  Stealth eye and green Streamer TV, then restore both off.
+- L+R+Down visits Settings, FX Control, Stages, Performance, Window Options,
+  hidden and Settings again. The two FX pages come from the companion.
+  Captain Falcon's companion row cycles On → Off → Reduced → On; the All
+  row is `Unavailable` during mixed settings.
+- Training keeps the vertical window on the right; an ordinary offline match
+  uses the compact Settings/Performance strips at the top left. Debug shows
+  build `9a7f81ce1937`, Timing Idle and CSS/match capture flags off. Both
+  L+R+Minus and L+R+Plus were used; Plus also opens the game pause menu.
+- Training and the next ordinary character-select banner read
+  `You: LessLag | Auto`. Quitting the Pyra/CPU Mario match on Hollow Bastion
+  produces No Contest; the following character select reads
+  `You: Vanilla* | Auto`, with manual LessLag saved and the cleanup hold active.
+
+The fixture explicitly uses manual LessLag, `platform=emulator`,
+`vanilla_plus=false` and privacy initially off; these are not shipped defaults.
+The source display is 1920×1080. [Media provenance](MEDIA_PROVENANCE.md) records the
+binary identities, transforms and media provenance. External evidence is in
+`deluxe-media-refresh-1024/`: `capture-setup/`, `jobs/`, `raw/`,
+`MEDIA-DRIVE.jsonl`, `decoded/`, `encoded/MANIFEST.json` and `encode-review/`.
+
+This is bounded visual/control evidence, not the full negative-control suite
+in [Next session](NEXT_SESSION.md), an online-peer test, a console LLUltra
+resolution test or a performance/latency comparison. The post-v0.7.0 revision-5
+status cells are not in this binary and were not exercised. Historical latency
+and switch-mechanism media retain their original build/measurement scope.
+
+**Ally recording follow-up:** the same two NROs also booted with Smash 13.0.5
+in an isolated Windows portable profile. The native GIF recorder captured the
+Deluxe Settings window; its three-second sample has 29 frames, one dropped,
+and preserves three seconds of playback. No input macro was replay-tested.
+These samples are evidence only; the published media retain the sharper
+Ubuntu captures. The owned process exited normally with code 0, its task was
+removed, 1,022 protected shared files remained byte-identical, and the private
+settings/plugins were restored. Receipts are in `ally-runtime/` under the same
+external evidence directory; executable identity is in
+[Media provenance](MEDIA_PROVENANCE.md#ally-recording-check).
+
 ## 0.7.0 — release validation — 2026-10-22
 
 **Scope.** Minor release of the accepted compact You icons, one console

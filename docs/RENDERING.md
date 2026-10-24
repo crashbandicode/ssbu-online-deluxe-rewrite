@@ -9,7 +9,7 @@ more than two fighters use LLDoubles. Local wireless counts as online here.
 | --- | --- | --- | --- | --- |
 | Vanilla | 3 | TwoBehind; with Vanilla+ (0.5.6, the default) it presents at the flush | 1080p / off | 1080p / off |
 | LessLag | 2 | OneBehind, presents at the flush (0.4.0) | 1080p / on | 1080p / off |
-| LLUltra | 2 | Immediate, earlier flush, presents at the flush (0.5.2) | 576p / on; `ultra_resolution=720` or `1080` raises the base. Unreleased menu labels: LLUltra+ / LLUltra++ ([below](#llultra-resolution-053-1080p-in-056)) | 1080p / off |
+| LLUltra | 2 | Immediate, earlier flush, presents at the flush (0.5.2) | 576p / on; `ultra_resolution=720` or `1080` raises the base. 0.7.0 menu labels: LLUltra+ / LLUltra++ ([below](#llultra-resolution-053-1080p-in-056)) | 1080p / off |
 | LLDoubles | 3 | OneBehind, presents at the flush (0.5.2) | 1080p / on | 1080p / on |
 
 For a conceptual introduction and the short Eden results table, see
@@ -111,12 +111,14 @@ skipped through the existing early-present accounting (a mismatch is still
 event code 105). The 0.5.2 LessLag traces (`api-2214438549910.csv`) show the
 same index relationship for the early present.
 
-This is code reasoning plus traces of the previous build. **No console run of
-0.5.6 exists**; the owed checks (no tearing, stale frame or flicker in menus,
-the character select and Training; 60 fps on the Performance page;
-`early_presents` advancing in Vanilla with `early_present_mismatches=0`; the
-L+R+X round trip; a subjective latency comparison with the chord off against
-on) are in [validation](VALIDATION.md) ("0.5.6 — 2026-10-18: Vanilla+ (default), …").
+This is code reasoning plus traces of the previous build. No console run of
+0.5.6 existed at release. Its first console boot (2026-10-18 evening) counted
+89,483 early presents and `early_present_mismatches=0` over 89,500 presents in
+menus, CSS and Training ([Status](STATUS.md)). The other owed checks (no
+tearing, stale frame or flicker in menus, the character select and Training;
+60 fps on the Performance page; the L+R+X round trip; a subjective latency
+comparison with the chord off against on) are in [validation](VALIDATION.md)
+("0.5.6 — 2026-10-18: Vanilla+ (default), …").
 
 ## Dynamic resolution
 

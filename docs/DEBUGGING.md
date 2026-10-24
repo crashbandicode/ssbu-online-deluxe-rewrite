@@ -2,11 +2,12 @@
 
 ![The Debug view of the Player Info window](media/debug-window.png)
 
-The Debug view (L+R+Plus): build id, renderer, online tracker,
+The Debug view (L+R+Plus or Minus): build id, renderer, online tracker,
 `Timing`, `Capture L+R+Up (30 s)`, `CSS capture` and `Match capture`, then the
 live resolution, DRS, backoff, memory and frame-time rows. Captured in Eden on
-2026-10-14 with 0.4.2, so it still shows the FX rows that 0.5.0 removed; the
-whole-screen version and the view during Training are in [Screenshots](SCREENSHOTS.md).
+2026-10-24 with released 0.7.0, build `9a7f81ce1937`: Timing is Idle and the
+CSS/match capture flags are off. See [Media provenance](MEDIA_PROVENANCE.md)
+for the build and [Screenshots](SCREENSHOTS.md) for the whole-screen and Training views.
 
 Keep the exact dist/<NRO-hash-prefix>/ bundle for every installed build.
 Packaging checks matching NRO/ELF executable bytes, saves both SHA-256 hashes,
@@ -96,7 +97,7 @@ data directory and flags.
 | 18 / 19 | Accepted title pane / unsupported CSS pane or mapping |
 | 20 | Sampled pane field: 1/2 chain pointers, 3–5 name bytes, 6 text buffer, 7 capacity/length, 8 font sizes |
 | 21 / 22 | Global overlay entry / exit, sampled every 300 frames |
-| 23 | View change: 0 hidden, 1 settings, 2 performance, 3 debug, 4 plugins |
+| 23 | View change (a = previous view, b = new view): 0 hidden, 1 settings, 2 performance, 3 debug, 4 plugins, 5 a plugin's own page (0.5.0), 6 Window Options (0.6.0) |
 | 24 | Config saved: generation / 0 |
 | 25 | Overlay health: backend ready / bootstrap-call count |
 | 26 | Embedded backend initialization complete |

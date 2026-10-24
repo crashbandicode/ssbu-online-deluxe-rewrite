@@ -6,8 +6,9 @@ Close Smash before replacing files. Copy the rewrite NRO to:
 sd:/atmosphere/contents/01006A800016E000/romfs/skyline/plugins/libssbu_online_deluxe_rewrite.nro
 ```
 
-Every Forgejo release carries the NRO and its `manifest.json` (SHA-256, build
-id, module id). Skyline is required.
+Forgejo releases carry the NRO and its `manifest.json` (SHA-256, build id,
+module id); the 0.7.0 tag is pushed but its NRO/manifest upload is still
+pending ([validation](VALIDATION.md)). Skyline is required.
 
 ## What to remove, what to keep
 

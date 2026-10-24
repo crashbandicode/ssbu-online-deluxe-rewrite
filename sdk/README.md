@@ -18,11 +18,18 @@ that table version, not against the descriptor version. A second export,
 host's scene context as `ONLINE_CONTEXT_READY | ONLINE | MATCH | TRAINING`
 bits; the SDK wraps it as `host_online_context()`, `None` on older hosts.
 
+**Unreleased:** main after v0.7.0 (commit `0d28adc`) adds descriptor revision 5
+(`CELL_ABI_VERSION`) with `OPTION_FLAG_CELL` passive status cells; that host
+accepts revisions 2 to 5. The released v0.7.0 host accepts 2 to 4 and refuses
+revision 5 with `REGISTER_ERR_ABI`. This SDK still sends revision 4 and has no
+cell layout. See [Status cells](../docs/PLUGINS.md#status-cells-unreleased).
+
 Pinned releases: git tag `v0.2.0` on the Forgejo repository
 (`intpa/ssbu-online-deluxe-rewrite`) carries `deluxe-plugin-abi` 2.0.0 and
 `deluxe-plugin-sdk` 2.0.0 (descriptor version 2); the 0.5.0 tag carries 3.0.0
 (descriptor version 3); 0.5.3 carries 5.0.0 (descriptor version 4 only; the
-4.0.0 crates of the earlier 0.5.3 builds still carried the retry chain). Each
+4.0.0 crates of the earlier 0.5.3 builds still carried the retry chain; the
+crates are unchanged at 5.0.0 through 0.7.0). Each
 tag is the tree the matching host NRO was built from; the NRO's SHA-256 and
 size are recorded in `docs/VALIDATION.md`. Consumers depend on the crates by
 git tag (cargo finds the package by name anywhere in the repository) or clone
@@ -40,7 +47,9 @@ Status of verification: the SDK is covered by host-side unit tests against a
 fake host table, and the demo builds for `aarch64-skyline-switch`. The Plugins
 page, pending requests and tones were verified in Eden on 2026-10-12 with the
 demo NRO (`docs/VALIDATION.md`, "Plugin value tones and read-only rows").
-Hardware behaviour is not yet observed. A two-step guide with a minimal plugin
+On the console only FX Control's own-page registration and row edits are
+recorded (2026-10-16, `docs/STATUS.md`); tones, pending requests and read-only
+rows are not observed on hardware. A two-step guide with a minimal plugin
 is in [docs/PLUGINS.md](../docs/PLUGINS.md); this file is the reference.
 
 ## What the host shows
@@ -60,8 +69,9 @@ is in [docs/PLUGINS.md](../docs/PLUGINS.md); this file is the reference.
   Both views draw the same row list: group rows and header rows are label
   only and never selected, every other row is `Label` and the current value.
 * Outside a match: a vertical table of those rows. Up/Down selects a row (the
-  selection wraps and skips group and header rows), Left/Right asks the plugin
-  for the previous or next choice. Lists longer than ten rows are clipped to
+  selection wraps and skips group and header rows), ZR + Left/Right asks the
+  plugin for the previous or next choice (a plain Left/Right is ignored in the
+  open window since Deluxe 0.5.6). Lists longer than ten rows are clipped to
   a window around the selection with `...` markers.
 * In a ready Singles/Doubles match: the same compact two-row strip Deluxe uses
   for Settings. Row one holds a page of up to four fields that contains the
@@ -323,7 +333,7 @@ pub fn main() {
 To let the host persist edits, fill the optional fields with literals:
 
 ```rust
-use deluxe_plugin_sdk::Tone;
+use deluxe_plugin_sdk::{RowLayout, Tone};
 
 static ENABLED_TONES: [Tone; 2] = [Tone::Neutral, Tone::Ok];
 static STATUS_TONES: [Tone; 3] = [Tone::Ok, Tone::Warn, Tone::Error];
@@ -341,6 +351,7 @@ static SPEC: PluginSpec = PluginSpec {
             no_persist: false,
             tones: Some(&ENABLED_TONES),       // None = neutral; one per choice
             read_only: false,
+            layout: RowLayout::Value,          // RowLayout::Header via OptionSpec::header
         },
         OptionSpec {
             id: "status",
@@ -351,12 +362,15 @@ static SPEC: PluginSpec = PluginSpec {
             no_persist: true,                  // never written
             tones: Some(&STATUS_TONES),
             read_only: true,                   // host does not call request
+            layout: RowLayout::Value,
         },
     ],
     config_path: Some("sd:/ultimate/deluxe_plugin_demo/config.ini"),
+    own_page: false,                           // true = its own page in the window cycle
 };
 // Read that file yourself at startup and seed OPTIONS before `register`.
-// `OptionSpec::new` defaults `tones` to None and `read_only` to false.
+// `OptionSpec::new` defaults `tones` to None, `read_only` to false and
+// `layout` to `RowLayout::Value`.
 ```
 
 The SDK checks these locally too: a `config_key` that is not a valid id, a
@@ -440,6 +454,9 @@ Emulator and hardware behaviour of tones is not yet observed (Eden-verified
 #define DELUXE_OPTION_FLAG_READ_ONLY (1u << 1)
 #define DELUXE_OPTION_FLAG_HEADER (1u << 2)    /* label only, choice_count 0 */
 #define DELUXE_OPTION_FLAG_INLINE (1u << 3)    /* accepted; drawn as a value row */
+/* Unreleased (main after v0.7.0): only with PluginDesc.abi_version = 5. */
+#define DELUXE_CELL_DESCRIPTOR_VERSION 5u
+#define DELUXE_OPTION_FLAG_CELL (1u << 4)      /* passive status cell; tones required */
 #define DELUXE_TONE_NEUTRAL 0u
 #define DELUXE_TONE_OK 1u
 #define DELUXE_TONE_WARN 2u

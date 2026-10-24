@@ -17,16 +17,21 @@ re-fires when only the live font drifted from the saved one.
 
 ![Training character select with the native status line](media/training-css.png)
 
-The native status line on the Training character select, Eden 2026-10-14 with
-0.4.2: `You: LessLag | Auto` is the selected profile and input buffer. Since
-0.6.2 an Auto buffer carries the frames the game chose, for example
-`You: LessLag | Auto (4f)`, once an online match has set them (plain `Auto`
-before that and offline). The You line's latency field is 10 characters wide
-(the line is capped at 38 characters, was 32), and the lobby pane keeps plain
-`Auto`. The
-opponent line appears only with a connected station (since 0.5.5, one that has
-produced an RTT sample within 10 s). The window itself and
-Streamer on are shown in [Screenshots](SCREENSHOTS.md).
+The native status line on the Training character select in the 2026-10-24
+Eden capture of released 0.7.0 (see [Media provenance](MEDIA_PROVENANCE.md)). It
+shows the profile and input buffer, here `You: LessLag | Auto`, after leaving
+Training. The separate post-match capture shows the cleanup hold as
+`You: Vanilla* | Auto` because that fixture disables Vanilla+. The profile
+field uses the window's labels:
+`Vanilla+` / `Vanilla+*` / `Auto:Van+` with the default Vanilla+, and since
+0.7.0 console LLUltra reads `LLUltra`, `LLUltra+` or `LLUltra++` for 576p,
+720p or 1080p. Since 0.6.2 an Auto buffer carries the frames the game chose,
+for example `You: LessLag | Auto (4f)`, once an online match has set them
+(plain `Auto` before that and offline). The You line's latency field is 10
+characters wide (the line is capped at 38 characters, was 32), and the lobby
+pane keeps plain `Auto`. The opponent line appears only with a connected
+station (since 0.5.5, one that has produced an RTT sample within 10 s). The
+window itself and Streamer on are shown in [Screenshots](SCREENSHOTS.md).
 
 ## Reused fork code paths
 

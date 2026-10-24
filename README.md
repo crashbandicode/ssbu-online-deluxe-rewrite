@@ -23,9 +23,11 @@ the LLUltra chord on a
 Switch install of the pre-release `2f5a…` candidate (see
 [VALIDATION.md](docs/VALIDATION.md)). Release artifacts and their validation
 are recorded separately from that pre-release install.
-Every release on Forgejo carries the NRO and its manifest; what each version
-changed and which console checks are owed is in [STATUS.md](docs/STATUS.md), the
-evidence per build in [VALIDATION.md](docs/VALIDATION.md).
+Forgejo releases carry the NRO and its manifest; for 0.7.0 the tag is pushed
+but the NRO/manifest upload is still pending (see
+[VALIDATION.md](docs/VALIDATION.md)). What each version changed and which
+console checks are owed is in [STATUS.md](docs/STATUS.md), the evidence per
+build in [VALIDATION.md](docs/VALIDATION.md).
 
 > **Install only this NRO.** It replaces the original Online Deluxe fork, SsbuSync
 > and the PIA manager; remove those three. With SsbuSync still loaded, Deluxe
@@ -37,9 +39,13 @@ evidence per build in [VALIDATION.md](docs/VALIDATION.md).
 | | |
 | --- | --- |
 | ![Settings window](docs/media/settings-window.png) <br> The Settings view in menus. | ![Training character select](docs/media/training-css.png) <br> The native status line on the character select. |
-| ![Match with the compact strip](docs/media/match-settings-strip.png) <br> In a match the window becomes a compact two-row strip at the top left. | ![Character select after a match](docs/media/smash-css-after-match.png) <br> After a match the manual profile is held at Vanilla and the line reads `Vanilla*`. |
+| ![Match with the compact strip](docs/media/match-settings-strip.png) <br> In a match the window becomes a compact two-row strip at the top left. | ![Character select after a match](docs/media/smash-css-after-match.png) <br> After a match the manual profile is held at Vanilla; this capture reads `Vanilla*`, which is `Vanilla+*` with the default Vanilla+. |
 
-The window captures predate the 0.6.0 layout. More in [Screenshots](docs/SCREENSHOTS.md).
+These are **0.7.0 emulator UI captures**, refreshed on 2026-10-24 with the
+separate FX Control companion installed. The fixture uses manual LessLag and
+disables Vanilla+, so the return-to-character-select label is `Vanilla*`.
+Short walkthroughs are in [Screenshots](docs/SCREENSHOTS.md); builds, encoding
+and scope are in [Media provenance](docs/MEDIA_PROVENANCE.md).
 
 ## What it does
 
@@ -47,8 +53,8 @@ The window captures predate the 0.6.0 layout. More in [Screenshots](docs/SCREENS
   frames for latency; Auto picks one from the scene. The default is **Vanilla+**:
   Vanilla's three-image chain presenting at the flush (L+R+X toggles it).
   [Rendering profiles](docs/RENDERING.md)
-- **Player Info window.** Settings, Plugins, Performance, Window Options and
-  Debug pages on L+R+Down; a compact strip in matches; the native character-select line keeps
+- **Player Info window.** Settings, Plugins, plugin pages, Performance and
+  Window Options on L+R+Down, Debug on L+R+Plus or Minus; a compact strip in matches; the native character-select line keeps
   your profile, buffer (Auto shows the game's chosen frames, `Auto (4f)`) and
   the opponent's settings and RTT.
   [Controls](docs/CONTROLS.md), [native display](docs/NATIVE_DISPLAY.md)
@@ -108,7 +114,7 @@ Hold **L+R** and tap **D-pad Down** to cycle the window: settings → plugins
 (when any registered) → own plugin pages → performance → window options → hidden.
 **Up/Down** selects a row; **ZR + Left/Right** changes it, and the selected value
 reads `< value >` while ZR is held. A plain Left/Right is ignored, because the
-D-pad also taunts and moves menus. L+R and **Plus** opens Debug; L+R and **X**
+D-pad also taunts and moves menus. L+R and **Plus or Minus** opens Debug; L+R and **X**
 toggles Vanilla+. While manual console LLUltra is selected, that same chord
 cycles its resolution (LLUltra → LLUltra+ → LLUltra++ → LLUltra). In the
 0.7.0 compact menu, Stealth and Streamer are toggled from the Settings
@@ -123,7 +129,7 @@ are drawn in [privacy-indicators.svg](docs/privacy-indicators.svg).
 | --- | --- | --- | --- | --- |
 | Vanilla | 3 | TwoBehind; Vanilla+ (the default) presents at the flush | 1080p, DRS off | 1080p, DRS off |
 | LessLag | 2 | OneBehind, presents at the flush | 1080p, DRS on | 1080p, DRS off |
-| LLUltra | 2 | Immediate, earlier flush, presents at the flush | 576p, DRS on; `ultra_resolution` raises it to 720p or 1080p (unreleased compact-menu labels: LLUltra+ / LLUltra++) | 1080p, DRS off |
+| LLUltra | 2 | Immediate, earlier flush, presents at the flush | 576p, DRS on; `ultra_resolution` raises it to 720p or 1080p (0.7.0 menu labels: LLUltra+ / LLUltra++) | 1080p, DRS off |
 | LLDoubles | 3 | OneBehind, presents at the flush | 1080p, DRS on | 1080p, DRS on |
 
 Auto uses Vanilla in menus, offline matches and Training; online singles get
@@ -135,7 +141,7 @@ fighters get LLDoubles. How Auto recognises an online match, the cleanup hold
 
 Captured frames from a synthetic input to the first visible response in Eden,
 three trials per cell, on the 0.5.2 build (the earlier builds gave the same
-counts):
+normal-phase counts):
 
 | Profile | Normal phase | Later phase | Frames saved vs Vanilla |
 | --- | --- | --- | --- |
@@ -186,6 +192,7 @@ Toolchain, native dependency and release steps: [Build](docs/BUILD.md).
 | Install, coexistence with other plugins, rollback | [INSTALL.md](docs/INSTALL.md) |
 | Controls and the settings rows | [CONTROLS.md](docs/CONTROLS.md) |
 | Screenshots and GIFs | [SCREENSHOTS.md](docs/SCREENSHOTS.md) |
+| Media builds, encoding and scope | [MEDIA_PROVENANCE.md](docs/MEDIA_PROVENANCE.md) |
 | Rendering profiles, Auto, present-at-flush, measured results | [RENDERING.md](docs/RENDERING.md) |
 | Mimicking the Switch in Eden (CPU quota bias for clips and A/B runs) | [EMULATOR_METHOD.md](docs/EMULATOR_METHOD.md) |
 | Native character-select and arena display | [NATIVE_DISPLAY.md](docs/NATIVE_DISPLAY.md) |

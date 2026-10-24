@@ -1,75 +1,114 @@
 # Screenshots
 
-Captured on 2026-10-14 in Eden (GIF-recording build, isolated test profile)
-with the 0.5.0 NRO and the [FX Control](https://git.syntaxbyexample.com/intpa/ssbu-fx-control)
-0.1.0 plugin installed next to it; the game renders at 1280×720 in these
-runs. Views are described in [Controls](CONTROLS.md) and
-[Debugging](DEBUGGING.md). Raw captures and the preparation script live in
-the operator's evidence root (`docs-media-050/`; the gamepad-overlay captures
-are from `docs-media-1014/`).
+A short visual tour of the Deluxe 0.7.0 window. Every image is a real capture
+from an offline Eden session on 2026-10-24, with the separate
+[FX Control](https://git.syntaxbyexample.com/intpa/ssbu-fx-control) companion
+installed. The session used demonstration settings (manual LessLag,
+`platform=emulator`, `vanilla_plus=false`), not the shipped defaults. Builds,
+encoding and scope are in [Media provenance](MEDIA_PROVENANCE.md); every
+control is in [Controls](CONTROLS.md).
 
-The Settings-page, strip and cycle captures below predate the 0.6.0 layout
-(the You and Opp summary lines, five rows, the one-line performance footer, the
-hint line and the new Window Options page; in the match strip, the changed fields) and
-have not been re-captured; see [Controls](CONTROLS.md) for the current layout.
+## Open and cycle the window
 
-## The window
+The window has a few pages, and one chord steps through them.
+
+1. Hold **L+R** and tap **D-pad Down** to open Settings.
+2. Keep L+R held and tap Down again for each next page: Settings → FX Control →
+   Stages → Performance → Window Options → hidden.
+3. Debug is separate: **L+R+Plus** (or Minus) opens and hides it.
+
+![Cycling the window pages with L+R+Down](media/overlay-cycle.gif)
+
+FX Control and Stages are pages of the companion plugin, not Deluxe; without a
+plugin the cycle is Settings → Performance → Window Options → hidden.
+
+## Change a setting
+
+Values change only while **ZR** is held, so a stray D-pad press, a taunt or menu
+navigation cannot change a setting.
+
+1. On Settings, press **Down** to select NetLatency.
+2. Hold **ZR** and press **Right**: Auto becomes `< 0 >`.
+3. Hold **ZR** and press **Left** to restore Auto; **Up** returns to You.
+
+![Editing NetLatency with the ZR guard](media/settings-edit.gif)
+
+Inputs also reach the game: here ZR opens the game's sidebar behind the window.
+
+## Stealth and Streamer
+
+The two privacy switches are icons on the You row.
+
+1. Select **You**, the first Settings row.
+2. **ZR+X** toggles Stealth: the eye closes.
+3. **ZR+Y** toggles Streamer: the TV screen turns green. Press each again to
+   turn it off.
+
+![Toggling the You-row privacy icons](media/privacy-shortcuts.gif)
+
+This offline clip shows the saved icon states only; it does not test network
+suppression or reconnect behavior.
+
+## Edit a plugin page
+
+A plugin NRO can add its own page, edited with the same ZR guard.
+
+1. With FX Control installed, press **L+R+Down** from Settings to reach its page.
+2. Select a fighter row (here Captain Falcon).
+3. Hold **ZR** and tap **Right** for each step: On → Off → Reduced → On. The All row
+   reads `Unavailable` while fighter settings differ.
+
+![Editing a companion fighter setting](media/fx-control-edit.gif)
+
+This shows the menu edits, not their gameplay effects. See [Plugins](PLUGINS.md).
+
+## Training and matches
+
+Training keeps the vertical window at the upper right. In an ordinary match,
+Settings becomes a two-row strip at the top left: You with the privacy icons,
+Net and Profile, then the live timing values and bar.
+
+![Compact strip at source-pixel size](media/match-strip-closeup.png)
 
 | | |
 | --- | --- |
-| ![Settings window on the main menu](media/settings-view.png) <br> The Player Info window (Settings view) on the main menu. | ![Performance view](media/performance-view.png) <br> The Performance view. |
-| ![Settings window close-up](media/settings-window.png) <br> Settings rows as captured on 0.5.0, before the 0.6.0 layout: Name, Interface, NetLatency, NetProfile, Status, Stealth, Streamer, FPS++ (an emulator capture; that row was removed 2026-10-17), then the live Resolution, DRS, Backoff, Memory and FPS rows. Character FX is no longer a Deluxe row. | ![Debug window close-up](media/debug-window.png) <br> Debug rows, including `Timing`, `Capture L+R+Up (30 s)`, `CSS capture` and `Match capture`. |
-| ![Debug view](media/debug-view.png) <br> The Debug view on the main menu: build, renderer and capture rows. | ![Streamer on](media/streamer-on.png) <br> Streamer on in the Settings window at the main menu (NetProfile LessLag, Status Active). |
-| ![FX Control page](media/fx-control-view.png) <br> A plugin's own page in the window cycle: the FX Control plugin's page (Scope, All, one row per covered fighter, EFF variants), one D-pad Down after Settings. | ![FX Control page close-up](media/fx-control-window.png) <br> The same page up close. |
+| ![Training character select with the native status line](media/training-css.png) <br> After Training the native status line reads `You: LessLag \| Auto`. | ![Character select after quitting a match](media/smash-css-after-match.png) <br> After quitting a match it reads `You: Vanilla* \| Auto`: the cleanup hold runs Vanilla for the saved manual LessLag. With the shipped `vanilla_plus=true` the label is `Vanilla+*`. |
 
-![Cycling the overlay views](media/overlay-cycle.gif)
+With a live peer the strip's second line also carries the Opp summary; this
+offline match has none.
 
-Cycling the overlay with L+R+Down (Settings, the FX Control plugin page,
-Performance, hidden; the Window Options page of 0.6.0 sits between Performance
-and hidden and is not in the clip) and opening Debug with L+R+Plus.
+## More screenshots
 
-![Editing settings in the window](media/settings-edit.gif)
-
-Editing in the Settings window: Up/Down selects the row, Left/Right changes
-NetProfile and NetLatency. The clip was recorded on an earlier build; since
-0.5.6 a value change needs **ZR** held in every scene (ZR + Left/Right).
-
-![Editing a plugin page](media/fx-control-edit.gif)
-
-Editing on a plugin page: a fighter row goes On → Off → Reduced and back; the
-All row reads `Unavailable` while the fighter rows differ.
-
-## Character select and Training
+### Window pages
 
 | | |
 | --- | --- |
-| ![Training character select with the native status line](media/training-css.png) <br> The native status line at the top of the Training character select (profile and input buffer). In this capture, taken after a Training session, it reads `You: Vanilla* \| Auto`: the cleanup hold was running Vanilla for the saved LessLag selection at that moment. The same screen read `LessLag \| Auto` after another session, so the hold is not a fixed Training behaviour. | ![Regular character select after Training](media/smash-css-after-training.png) <br> The regular character select entered after that Training session: the status line reads `LessLag \| Auto`. |
-| ![Debug view during Training](media/debug-training.png) <br> Training with the Debug view open: `Match capture: Armed; 1 capture(s)` and `Timing: Capturing` while the match capture streams. | ![Main menu](media/main-menu.png) <br> The main menu with the window hidden. |
+| ![Settings page on the main menu](media/settings-view.png) <br> Settings: You, NetLatency, NetProfile, the performance footer and hints. No peer, so no Opp row. | ![Settings window close-up](media/settings-window.png) <br> The selected You row with the eye and TV icons; Status is folded into NetProfile. |
+| ![Performance page](media/performance-view.png) <br> Performance: resolution, DRS, backoff, memory, clock and the frame-time plot. | ![Window Options close-up](media/window-options-window.png) <br> Window Options: page visibility, PerfView and Hints. |
+| ![Debug view on the main menu](media/debug-view.png) <br> Debug on the main menu: build `9a7f81ce1937`, Timing Idle, capture flags off. | ![Debug window close-up](media/debug-window.png) <br> The same Debug table at source-pixel size. |
+| ![Streamer enabled](media/streamer-on.png) <br> Streamer on (green TV); Stealth is also on in this intermediate frame. | ![Main menu with the window hidden](media/main-menu.png) <br> The main menu with the window hidden. |
 
-![Training with the Player Info window](media/training-strip.gif)
-
-A few seconds of Training with the Player Info window on the right.
-
-## In a match
-
-In a running Singles or Doubles match the window becomes the compact two-row
-strip at the top left: one row of `Label:Value` fields, one row with FPS,
-frame time and the frame-time bar (since 0.6.0 that row starts with the
-`>Opp:` summary while the peer shows; the captures below are older).
-
-![Compact strip close-up](media/match-strip-closeup.png)
+### Companion pages
 
 | | |
 | --- | --- |
-| ![Match with the Settings strip](media/match-settings-strip.png) <br> A Singles match vs a level 9 CPU on Final Destination with the Settings strip open: `>Net:Auto Profile:lesslag Stealth:Off Stream:Off FPS++:Off` (the FPS++ field was removed 2026-10-17; since 0.6.0 the fields are `Net`, `Profile`, `Stealth`, `Stream` and `UltraRes`) and the frame-time line. | ![Match with the Performance strip](media/match-performance.png) <br> The Performance view in the same match. |
-| ![Debug table over the pause menu](media/match-debug.png) <br> The Debug view in a match; the Plus in the chord also opens the game's pause menu. | ![Results after quitting](media/results-quit.png) <br> The results screen after quitting through the pause menu. |
+| ![FX Control page](media/fx-control-view.png) <br> The companion's FX Control page follows Settings. | ![FX Control close-up](media/fx-control-window.png) <br> Scope, All and fighter rows; longer lists use `...` markers. |
+| ![Stages page close-up](media/fx-stages-window.png) <br> The companion's Stages page (background visuals). | |
 
-![Match with the compact strip](media/match-strip.gif)
+### Training
 
-Six seconds of the match with the strip open.
+| | |
+| --- | --- |
+| ![Training with the Settings window](media/training-strip.gif) <br> Six seconds of Training; the window stays vertical. | ![Regular character select after Training](media/smash-css-after-training.png) <br> The next ordinary character select also reads `You: LessLag \| Auto`. |
+| ![Debug view during Training](media/debug-training.png) <br> Debug in Training (Steve against CPU Kazuya) moves to the right. | ![Training Debug close-up](media/debug-window-training.png) <br> Source-pixel crop of that Debug window. |
 
-![Character select after the match](media/smash-css-after-match.png)
+### Match
 
-The regular character select right after the match: the status line reads
-`You: Vanilla* | Auto`. The manual LessLag selection is held at Vanilla until
-the next match or a new selection, and the banner says so.
+| | |
+| --- | --- |
+| ![Match with the Settings strip](media/match-settings-strip.png) <br> Pyra against a level-1 CPU Mario on Hollow Bastion: `>You:`, `Net:Auto`, `Profile:LessLag \| Active`. | ![Match with the Settings strip, animated](media/match-strip.gif) <br> Six seconds with the Settings strip open. |
+| ![Match with the Performance strip](media/match-performance.png) <br> Performance uses the compact strip too. | ![Debug table over the pause menu](media/match-debug.png) <br> Debug stays a vertical table; L+R+Plus also opens the game's pause menu. |
+| ![No Contest after quitting](media/results-quit.png) <br> Results after Quit and Yes: No Contest, not a completed match. | |
+
+Older measurement clips and diagrams keep their original scope; see
+[Media provenance](MEDIA_PROVENANCE.md#historical-media-and-diagrams).

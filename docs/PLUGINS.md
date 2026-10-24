@@ -11,7 +11,8 @@ There are two ways another Skyline plugin can plug in. They are independent.
 
 Your NRO describes its options once; Deluxe draws them on the Plugins page
 (a vertical table outside matches, the compact two-row strip in a match),
-asks you for the current value every frame and sends Left/Right as a request.
+asks you for the current value every frame and sends ZR + Left/Right as a
+request (a plain Left/Right is ignored in the open window since Deluxe 0.5.6).
 You own the behaviour and the saved state. The host is resolved at runtime, so
 your NRO still loads when Deluxe is not installed.
 
@@ -27,7 +28,7 @@ your NRO still loads when Deluxe is not installed.
 
    ```rust
    use deluxe_plugin_sdk::{register, AtomicOptions, OptionSpec, PluginHandler,
-                           PluginSpec, RequestStatus, Tone};
+                           PluginSpec, RequestStatus, RowLayout, Tone};
 
    static OPTIONS: AtomicOptions<1> = AtomicOptions::new([0]);
    static TONES: [Tone; 2] = [Tone::Neutral, Tone::Ok];
@@ -77,10 +78,11 @@ option labels). A plugin with many rows (one per fighter, say) sets
 `own_page: true` and gets its own page in the window cycle, titled with its
 label and visited after the shared Plugins page; up to 64 options fit.
 `OptionSpec::header(id, label)` is a title row that Up/Down skip, for
-grouping a long page. The SDK sends descriptor version 4 only; a Deluxe 0.5.3
-host accepts versions 2, 3 and 4 under the same rules (they share one
-layout), so plugins built against the 2.0.0 or 3.0.0 SDK keep registering,
-and an older host answers `RegisterError::Abi` with no retry. A plugin that
+grouping a long page. The SDK sends descriptor version 4 only; hosts from
+Deluxe 0.5.3 through the released 0.7.0 accept versions 2, 3 and 4 under the
+same rules (they share one layout), so plugins built against the 2.0.0 or
+3.0.0 SDK keep registering, and an older host answers `RegisterError::Abi`
+with no retry. Revision 5 is unreleased ([below](#status-cells-unreleased)). A plugin that
 scopes its behaviour to online play reads
 `deluxe_plugin_sdk::host_online_context()` instead of hooking the game's
 scene sites itself: it returns the host's ready / online / match / training
@@ -100,9 +102,20 @@ reports it), `Rejected` or `Unavailable` to refuse. A read-only option (or one
 with a single choice) is a status row; give its choices tones to show
 `Ready` / `Degraded` / `Failed` in green, yellow and red.
 
-A status row is passive: Up/Down skip it (only an editable value row holds the
-cursor, so a page with no editable row highlights nothing), Left/Right do
-nothing and `request` is never called.
+A status row is passive: Left/Right do nothing and `request` is never called.
+On unreleased main (below) Up/Down also skip it (only an editable value row
+holds the cursor, so a page with no editable row highlights nothing).
+
+The complete example is [`sdk/examples/demo`](../sdk/examples/demo/src/lib.rs)
+(three options, persisted INI, a time-driven status row). Limits, ABI layout,
+error codes, threading rules and host persistence are in
+[sdk/README.md](../sdk/README.md).
+
+### Status cells (unreleased)
+
+**Not in any release.** Status cells, revision 5 and the passive-row
+navigation above exist only on main after v0.7.0 (commit `0d28adc`). The
+released 0.7.0 host refuses a revision 5 descriptor with `REGISTER_ERR_ABI`.
 
 **Status cells (descriptor revision 5, `OPTION_FLAG_CELL`).** A run of 1 to 4
 consecutive cell options is drawn as one table: each cell's label is a column
@@ -120,10 +133,6 @@ layout; a native plugin sets the flag in its own descriptor. On the compact
 in-match strip a cell run is one entry (`Pool:✓ | Results:✓ | Save:✗`, drawn
 with the same marks), and the final strip page takes the passive rows that follow
 the last editable row so they stay reachable.
-The complete example is [`sdk/examples/demo`](../sdk/examples/demo/src/lib.rs)
-(three options, persisted INI, a time-driven status row). Limits, ABI layout,
-error codes, threading rules and host persistence are in
-[sdk/README.md](../sdk/README.md).
 
 ## Your own windows through the imgui-smash host
 
@@ -140,4 +149,7 @@ share one renderer and one controller.
 
 The Plugins page, pending requests and tones were verified in Eden on
 2026-10-12 with the demo NRO ([validation](VALIDATION.md), "Plugin value tones
-and read-only rows"). Hardware behaviour is not yet observed.
+and read-only rows"). On the console, FX Control's own page registered with
+descriptor 4 and its rows were edited in Training on 2026-10-16
+([Status](STATUS.md)); tones, pending requests and read-only rows have not
+been observed on hardware. Status cells have no validation record.
