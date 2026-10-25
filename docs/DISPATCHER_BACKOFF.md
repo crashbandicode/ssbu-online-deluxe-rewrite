@@ -19,8 +19,10 @@ Vanilla too.
 
 Eden A/B/A with a 175% CPU quota on the CSS: LessLag 52 → 59 fps and 18% less
 CPU per frame; Vanilla and LLDoubles kept 60 with the same CPU saving; a live
-match lost no frames. Those are emulator results; the hardware benefit is
-measured separately (see [validation](VALIDATION.md)). The Performance
+match lost no frames. **The operator confirms that dispatcher backoff also
+helped on Switch** (2026-10-25). The figures above remain Eden measurements;
+the Switch report did not supply an isolated numeric A/B delta
+(see [validation](VALIDATION.md)). The Performance
 view shows a **Backoff** row: sleeps per second and the last sleep length,
 `Idle` when nothing is waiting, `External` when another plugin already owns
 the hook site, `Unavailable` when the game image does not match 13.0.5, and

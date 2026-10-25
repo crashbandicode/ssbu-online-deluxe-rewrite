@@ -1,5 +1,12 @@
 # Online Deluxe rewrite
 
+> AI-assisted, human-directed and reviewed.
+
+Tested in **Eden** and on an **Erista Switch** without issues observed.
+Works with [Switch firmware 23.0.1][firmware], [Atmosphère 1.12.1][atmosphere]
+and [Skyline beta `2eb226f`][skyline] (latest checked 2026-10-25).
+[Validation](docs/VALIDATION.md).
+
 A Rust/Skyline rebuild of Online Deluxe for **Super Smash Bros. Ultimate
 13.0.5**, shipped as **one NRO**: lower-latency rendering, a small in-game
 Player Info window and the fork's character-select and network display. No
@@ -7,10 +14,9 @@ overclocking.
 
 ![The Player Info Settings window: the You row with eye and TV icons, NetLatency and NetProfile](docs/media/settings-window.png)
 
-**0.7.0** (2026-10-22) adds the compact menu: privacy icons on the You row and
-one LLUltra resolution stop. The release tag is pushed, but its NRO and
-manifest upload is still pending ([Validation](docs/VALIDATION.md)). Version
-history and owed console checks: [Status](docs/STATUS.md).
+**[0.7.0 — download NRO and manifest](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.7.0)**
+adds the compact menu: privacy icons on the You row and one LLUltra resolution
+stop. Version history and detailed validation: [Status](docs/STATUS.md).
 
 > **Install only this NRO.** It replaces the original Online Deluxe fork,
 > SsbuSync and the PIA manager, so remove all three. If SsbuSync is still
@@ -85,6 +91,7 @@ Two things the original Online Deluxe does not do; both have an INI switch
 **Dispatcher backoff.** When the main CPU task keeps finding no work it can do,
 the rewrite lets it sleep briefly, with growing pauses up to a small limit, so
 other tasks get the core. Locks and checks stay as they are.
+The operator also observed its benefit on Switch, alongside the Eden results.
 [How it works](docs/DISPATCHER_BACKOFF.md).
 
 ![Dispatcher backoff, before and after](docs/media/dispatcher-backoff-before-after.svg)
@@ -212,13 +219,6 @@ Toolchain, native dependency and release steps: [Build](docs/BUILD.md).
 | Validation ledger (every build, install and console result) | [VALIDATION.md](docs/VALIDATION.md), [STATUS.md](docs/STATUS.md) |
 | Fork provenance and deliberate differences | [reference/README.md](reference/README.md), [FORK_PARITY.md](docs/FORK_PARITY.md) |
 
-## Project note
-
-This project was developed with the assistance of AI (Claude, Codex and other
-coding agents) under the operator's direction and review. Every build recorded
-here was tested as described in [validation](docs/VALIDATION.md); nothing is
-claimed beyond those records.
-
-Client-side rendering changes avoid gameplay and RNG modifications.
-Linked-match results are evidence for the trials they cover, not proof that
-every online scenario is desync-free.
+[firmware]: https://en-americas-support.nintendo.com/app/answers/detail/a_id/22525/~/nintendo-switch-system-updates-and-change-history#current
+[atmosphere]: https://github.com/Atmosphere-NX/Atmosphere/releases/tag/1.12.1
+[skyline]: https://github.com/skyline-dev/skyline/releases/tag/beta

@@ -29,7 +29,9 @@ Pinned releases: git tag `v0.2.0` on the Forgejo repository
 `deluxe-plugin-sdk` 2.0.0 (descriptor version 2); the 0.5.0 tag carries 3.0.0
 (descriptor version 3); 0.5.3 carries 5.0.0 (descriptor version 4 only; the
 4.0.0 crates of the earlier 0.5.3 builds still carried the retry chain; the
-crates are unchanged at 5.0.0 through 0.7.0). Each
+crates are unchanged at 5.0.0 through 0.7.0; main after v0.7.0 adds the
+unreleased revision-5 constants to `deluxe-plugin-abi` without a version bump,
+so depend on a release tag for the released ABI). Each
 tag is the tree the matching host NRO was built from; the NRO's SHA-256 and
 size are recorded in `docs/VALIDATION.md`. Consumers depend on the crates by
 git tag (cargo finds the package by name anywhere in the repository) or clone
@@ -69,7 +71,9 @@ is in [docs/PLUGINS.md](../docs/PLUGINS.md); this file is the reference.
   Both views draw the same row list: group rows and header rows are label
   only and never selected, every other row is `Label` and the current value.
 * Outside a match: a vertical table of those rows. Up/Down selects a row (the
-  selection wraps and skips group and header rows), ZR + Left/Right asks the
+  selection wraps and skips group and header rows; on unreleased main after
+  v0.7.0 it also skips read-only status rows and cells, see
+  [Plugins](../docs/PLUGINS.md)), ZR + Left/Right asks the
   plugin for the previous or next choice (a plain Left/Right is ignored in the
   open window since Deluxe 0.5.6). Lists longer than ten rows are clipped to
   a window around the selection with `...` markers.
@@ -276,10 +280,11 @@ mode=b
 ```
 
 (`status` is `no_persist`, so it never appears.) On the next start the demo
-reads the file and seeds its options from it. The persistence behaviour has the
-same verification status as the rest of this README: the SDK is unit tested
-against a fake host table only; the host-side write path is described by the ABI
-documentation, not observed here.
+reads the file and seeds its options from it. The SDK is unit tested against a
+fake host table. Host persistence was observed in Eden on 2026-10-12
+(`plugins-page-1012a` and `plugins-match-1012b` in `docs/VALIDATION.md`: the
+host wrote `enabled=on` and `mode=c`, codes 100 and 101). It has not been
+observed on hardware.
 
 ## Rust example
 
@@ -441,8 +446,8 @@ is 4 (2 and 3 are accepted with the same layout and rules). The table's own
 (-2) for a version 4 descriptor; a plugin may send version 3 or 2 to such a
 host only with that host's narrower limits (32 or 8 options, no header rows,
 and no own-page flag for version 2), which is not worth doing for new code.
-Emulator and hardware behaviour of tones is not yet observed (Eden-verified
-2026-10-12).
+Tones were verified in Eden on 2026-10-12; hardware behaviour is not yet
+observed.
 
 ```c
 #include <stdint.h>

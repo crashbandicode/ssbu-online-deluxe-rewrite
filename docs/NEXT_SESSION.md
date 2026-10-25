@@ -1,5 +1,22 @@
 # Resume and test plan
 
+## Latest evidence — 2026-10-25
+
+The operator reports that Deluxe works in Eden and on an Erista Switch without
+issues, including the current firmware/Atmosphère/Skyline stack
+([versions and report](VALIDATION.md#operator-report--eden-and-erista-switch--2026-10-25)).
+The released 0.7.0 offline UI review and the candidate's console LLUltra chord
+are recorded below. The remaining checklist is feature-specific: it does not
+mean the plugin has never been tested on console.
+The published v0.6.2 notes also record the operator's online `Auto (Nf)` pass
+on 2026-10-19; step 16 below is a retained comparison checklist, not a pending boot.
+The operator confirms dispatcher backoff also helped on Switch (2026-10-25).
+
+Use [Controls](CONTROLS.md) for the current UI. The older versioned baseline and
+test matrix are historical references, not current card inventory or directions
+to reinstall an older NRO. Live deployments and worker state remain outside this
+repository.
+
 ## 0.7.0 acceptance — 2026-10-22
 
 The operator tested installed candidate `2f5a…` on the Switch 2026-10-22 and
@@ -72,8 +89,8 @@ outside this repository, not here.
   cleared when the connection returns to Offline, and the label is plain `Auto`
   before the first online match of a session. Manual buffers, the Opp line, INI
   keys, event codes, chords and the plugin API are unchanged; the native You
-  line's latency field is 10 characters wide (line cap 32 → 38). Not booted on
-  the console yet (step 16).
+  line's latency field is 10 characters wide (line cap 32 → 38). The online
+  `Auto (Nf)` display was confirmed on Switch on 2026-10-19; see [Validation](VALIDATION.md).
 - 0.6.1 (2026-10-19, Forgejo release v0.6.1, NRO SHA-256 in that release's
   manifest): retitles the Player Info window's last page **Window Options**.
   The operator booted 0.6.0 on the console the same day ("seems to work great.
@@ -149,25 +166,31 @@ outside this repository, not here.
   and manifest.
   Gates on that commit: clippy with warnings denied, the no-default-features
   build, 233 + 1 host tests, Skyline release build. The 0.5.4 NRO was installed
-  on the operator's card on 2026-10-17 over DBI MTP and **has not booted yet**;
-  the card run is the acceptance test.
-- The card stacks other never-booted changes under it: FX Control 0.2.1
+  on the operator's card on 2026-10-17 over DBI MTP and booted on 2026-10-18;
+  see its [validation record](VALIDATION.md).
+- The historical card baseline also contained then-unverified changes: FX Control 0.2.1
   (`0c0d7e6`: page limited to the ten ledger fighters, EFF siblings removed,
   SDK pinned to `a63bc8c`), the gamepad overlay 0.1.2, the 0.5.3 work added since the last good boot (`48cce4f2`, 2026-10-16):
   `hide_pages` and the page rows, `perf_view`, `ultra_resolution`, the ZR hold
   for live edits, the clock probe and the L+R-only window chord; and the CFW
-  update (Atmosphère 1.12.1, Horizon OC 2.6.0, hekate 6.5.4 kept). The last
-  pair known to boot and play is Deluxe `48cce4f2` + FX Control `f3d52a38`.
+  update (Atmosphère 1.12.1, Horizon OC 2.6.0, hekate 6.5.4 kept). Before those
+  updates, the known working pair was Deluxe `48cce4f2` + FX Control `f3d52a38`.
 - FX Control 0.2.1 (`0c0d7e6`, Forgejo release v0.2.1) pins the plugin SDK to
   `a63bc8c`. Gated on 2026-10-18, checked in Eden next to 0.5.4 (registration
   with descriptor version 4, `99 0x0 0x4` in its install log) and installed on
   the card the same day over DBI MTP, together with the gamepad overlay 0.1.2
-  (`0d25b0d`, log strings only). Neither has booted on the console yet.
+  (`0d25b0d`, log strings only). At that checkpoint, their console boot was pending;
+  later general compatibility reporting is linked at the top of this document.
 - The code-reduction campaign is paused by the operator. The effects
   measurement (numbered per-move Reduced variants on the console) is dropped,
   as above; FX Control 0.2.1 stays on the card with its variants unmeasured.
 
 ## Test plan, in order
+
+This matrix retains the version-specific checks and original row numbers for
+cross-references. Superseded layouts/chords are labelled by version; use the
+compact-menu section above for 0.7.0. An old "on the card" statement describes
+that entry's checkpoint, not the currently installed artifact.
 
 ### 1. First boot (console, operator; logs pulled over DBI MTP). 0.5.4 booted on 2026-10-18 and 0.5.6, 0.6.0 and 0.6.1 on 2026-10-19; rows the operator did not report one by one stay open
 
@@ -176,7 +199,7 @@ outside this repository, not here.
 | 1 | CFW boots: hekate → sysMMC entry with the Horizon OC lines → HOME | HOME menu; HOC reports active | CFW problem, not plugins; the pre-update copies are in the evidence root |
 | 2 | Game launch | Logo clears in normal time, title screen | Pull the crash report; roll Deluxe back to the card backup (0.5.3 `8dde0f2`, itself never booted), then to `48cce4f2` + FX `f3d52a38` |
 | 3 | `install.log`, `events.log`, `hang-trace.log` | Clean init; FX Control registration (handle 1, descriptor 4); fighter hooks installed; event 111 clock reading; hang trace empty | FX not registered: deploy the SDK-5 FX build |
-| 4 | Window chord | L+R opens the window; ZL+ZR does nothing anywhere, including the peer cycle | Chord removal regressed |
+| 4 | Window chord | Hold L+R and tap Down to open/cycle the window; ZL+ZR does nothing anywhere, including the peer cycle | Chord removal regressed |
 | 5 | Page cycle | Settings → FX Control → Window Options → hidden (card INI `hide_pages=plugins,performance`); since 0.6.0 the Window Options page (titled just Window in 0.6.0 itself) ends the cycle and carries PluginsPage / OwnPages / PerfPage (Shown or Hidden), PerfView and Hints (before 0.6.0 the first four were Settings rows); setting PerfPage to Shown on the Window Options page (ZR + Right; every value edit needs ZR) adds Performance live | — |
 | 6 | Clock row and graph | Performance shows a MHz value and the frame-time plot; PerfView (on the Window Options page since 0.6.0) switches to a number (ZR + Left/Right) | A stock reading far from about 1020 MHz means the 1120 MHz threshold needs recalibrating ([VALIDATION](VALIDATION.md), clock probe entry) |
 | 7 | FX Control page | Ten fighter rows with On / Off / Reduced; move rows read `Original` / `Variant N`; Inkling On / Off only; no EFF row | — |
@@ -188,7 +211,7 @@ outside this repository, not here.
 | 13 | 1080p LLUltra under Horizon OC (0.5.6 or later; the card holds the `2f5a…` install). Training with the Training Modpack Input Display off (about 3 ms per frame), the Deluxe window hidden while performing, `CAPTURE_TIMING` for about 30 s per cell, one cell at 720p first and one at 1080p. Since 0.7.0: select manual LLUltra on NetProfile (ZR + Left/Right), then L+R+X steps LLUltra (576p) → LLUltra+ (720p) → LLUltra++ (1080p); then close the window. On 0.5.6–0.6.2 the same levels were the UltraRes row | The `Resolution` row reads 1080p; no one-second window below 59 frames, the seconds with the Deluxe window open (event code 23) excluded; the capture header reads `# clock=oc`, so it stays out of the move ledger and is read against the operator's uncaptured 720p observation. Expected: 60 | Drops at 1080p: cycle back to LLUltra+ (720p) or LLUltra (576p); that is a finding for the overclocked console, not a defect, and the default stays 576. Drops at 720p too: the operator's 720p statement does not reproduce; record the clock and the moves played. A boot or video fault: set `ultra_resolution=576` in the INI over MTP and restart |
 | 14 | ZR hold in every scene (0.5.6 or later). Open the window (L+R+Down) on the title or main menu, then the character select, Training and a match, and on a row such as NetLatency or NetProfile press plain Left/Right, then ZR + Left/Right, then Up/Down; then close the window and use ZL + D-pad on the online character select pane | A plain Left/Right changes no value and writes no `config.ini` change in any scene; ZR + Left/Right changes it; Up/Down move the selection; ZL + D-pad on the closed-window native pane still edits | A plain press changes a value: the hold is not reaching that scene, so pull `events.log` and the scene's name. ZR + Left/Right does nothing: check that ZL is not also held (ZR alone unlocks the edit) |
 | 15 | **Checked by the operator on the console 2026-10-19: the layout is OK; only the page title was changed (0.6.1, Window Options).** 0.6.0 Player Info layout (needs the 0.6.0 NRO). Open the window (L+R+Down) on the main menu, the character select, Training and in a match, with a live opponent for the Opp line (Quickplay or the LAN-Online harness); then cycle with L+R+Down through every page | Settings shows the **You** line (`<profile> \| <buffer> \| <interface>`), the **Opp** line only while a live opponent shows (`<name> \| <profile> \| <buffer> \| <ping> \| <interface>`, no `---` placeholders, painted in the ping's green, yellow or red), then exactly NetLatency, NetProfile (Status folded in, e.g. `LessLag \| Swap`), Stealth, Streamer and, on the console, UltraRes; no Name, Interface, Peer, Ping or Status row and no opponent column; the one-line footer (`60.0 fps \| 16.67 ms \| 1080p \| DRS on`) in the frame-time colour; the grey hint line wrapping to the window width. The cycle ends Performance → **Window Options** → hidden (Settings → FX Control → Window Options → hidden with `hide_pages=plugins,performance`); Window Options lists PluginsPage, OwnPages, PerfPage, PerfView and Hints, and Hints Hidden removes the hint line from Settings and Window Options and writes `hints=false` to `config.ini`. With ZR held the selected value reads `< value >` (e.g. `< Auto >`), without ZR it is plain; ZR + Left/Right on the Opp line cycles the remote station. In a match the strip's line 1 is `Net`, `Profile`, `Stealth`, `Stream`, `UltraRes` and line 2 is `>Opp:<name> \| <profile> \| <buffer> \| <ping> \| <interface>` followed by `FPS:.. FT:.. AVG:.. [####------]`; the Window Options page's strip shows `PlugPg`, `OwnPg`, `PerfPg`, `PerfView` and `Hints` | Any clipped, wrapped or overlapping text, a wrong colour, a missing or extra row, or a page out of order: photograph the window, note the scene and resolution, and pull `events.log`. `hints=false` in the INI (or the Hints row) removes the hint line if that line is the problem. The rollback is `pre-061-*` (0.6.0) or `pre-060-*` (0.5.7). Layout and colour were checked on the console by the operator on 2026-10-19; no Eden visual check has run |
-| 16 | 0.6.2 `Auto (Nf)` label (needs the 0.6.2 NRO, not booted yet). NetLatency on Auto (ZR + Left/Right in the window), then one real Quickplay match; read the in-match strip, then the window and the native character-select line after the match, then go back to the main menu | During the match the strip's `Net:` field reads `Auto (Nf)` (N is the game's own choice, at most 25; `Auto (4f)` is only an example); afterwards, still in the same session on the results screen and the rematch character select, the window's **You** line (`<profile> \| Auto (Nf) \| <interface>`), the NetLatency row and the native `You:` line (`You: Auto:Van \| Auto (Nf)`) read the same N; back on the main menu (connection Offline) all of them revert to plain `Auto`, as they do before the first online match; the Opp line still shows the opponent's announced `Auto`; `events.log` code 9 rows carry that same N as their first value (a); a manual buffer still reads its number | Wrong N (compare code 9's first value with the label), `Auto (Nf)` still shown after the main menu, no `Auto (Nf)` at all during the online match, or clipped native text (the You line's cap grew to 38 characters): photograph the screen, note the scene, pull `events.log`. Rollback `pre-062-*` |
+| 16 | **Online `Auto (Nf)` display confirmed by the operator on 2026-10-19**, recorded in the [v0.6.2 release](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.6.2). Remaining detailed comparison: NetLatency Auto, one Quickplay match, then the strip, window, native character-select line and main-menu reset | The strip, You summary, NetLatency and native You line agree on the game's N (at most 25); main-menu Offline resets them to plain `Auto`; Opp still shows the announced `Auto`; event code 9 carries N; manual values stay numeric. These details were not reported individually | On a mismatch, capture the affected label and scene and retain `events.log`; compare N against code 9. |
 
 ### 2. Measurement cells (dropped)
 
@@ -255,8 +278,10 @@ documentation of the delivered Eden build is under
   and keep the foreign-protocol guard for unbound indices. The Eden agent (the
   LAN-Online harness owner) is separately fixing the harness's decline path to
   behave like NSO's, so that an Eden run can exercise it.
-- Skyline version: the card runs a newer skyline-dev build than the one
-  upstream Online Deluxe pins; the operator wants 0.5.x verified on both.
+- Skyline version: the operator reports compatibility with the current runtime,
+  beta `2eb226f` as checked 2026-10-25 ([version evidence](VALIDATION.md)). The
+  earlier request to compare the upstream fork's older pin has no separate
+  paired-version result recorded.
 - Reduced effects for tournament-legal stages (Battlefield first): plan in the
   operator's evidence root; step 1 is a per-stage LLUltra capture set under
   the same acceptance rule as the moves.

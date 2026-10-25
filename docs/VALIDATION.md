@@ -1,5 +1,44 @@
 # Validation record
 
+## 0.7.0 — public release assets — 2026-10-25
+
+The [Forgejo release](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.7.0)
+now includes `libssbu_online_deluxe_rewrite.nro` and `manifest.json`. The
+existing `v0.7.0` tag and archived clean package were used unchanged; no retag
+or rebuild from post-tag main was performed. All 71 archived source inputs
+match the tag, 1,124,304 executable bytes match the ELF, and the package/native
+dependency hashes were reverified before upload.
+
+Both public downloads were read back and hash-verified:
+
+- NRO SHA-256: `2ff456161c52522c6881956d0ad3a5a037a1a3fc74c8757a1e3a7afe49012cae`.
+- Manifest SHA-256: `e01e26bd713e82bc5cf8b393afd79f9465a92dbcb42aa165d0029a28e3bd45b9`.
+
+The earlier API access block no longer occurred with the established publisher.
+The unchanged manifest's `runtime_tested=false` is its packaging-time field;
+the later exact-binary Eden capture and operator reports are recorded below.
+External receipt: `docs-notes-fx-1025/release-070/PUBLICATION.json`.
+
+## Operator report — Eden and Erista Switch — 2026-10-25
+
+The operator reports that Deluxe has been tested in Eden and on an Erista
+Switch without issues observed, and works with the latest firmware, Atmosphère
+and Skyline. The upstream versions checked on 2026-10-25 are:
+
+- [Switch firmware 23.0.1](https://en-americas-support.nintendo.com/app/answers/detail/a_id/22525/~/nintendo-switch-system-updates-and-change-history#current), released 2026-09-30.
+- [Atmosphère 1.12.1](https://github.com/Atmosphere-NX/Atmosphere/releases/tag/1.12.1), released 2026-10-16.
+- [Skyline beta](https://github.com/skyline-dev/skyline/releases/tag/beta), released 2026-04-12, at commit [`2eb226fa9e4ab023dc00cb0db10ad4ec50ac4fa3`](https://github.com/skyline-dev/skyline/commit/2eb226fa9e4ab023dc00cb0db10ad4ec50ac4fa3). Skyline's runtime release uses a `beta` tag, not the Rust crate's version number.
+
+This operator report is the basis for the README's testing and compatibility
+summary. The release links identify the upstream versions; they are not new
+agent-run compatibility tests. No plugin build hash or per-feature checklist
+was supplied with this report, so build-specific evidence remains separate below.
+
+The operator also confirmed that **dispatcher backoff's Eden benefit carried
+over to the Switch**. This is a positive console observation; no isolated
+numeric Switch A/B delta accompanied it. The 52 → 59 fps and 18% CPU-per-frame
+figures in [Dispatcher backoff](DISPATCHER_BACKOFF.md) remain Eden measurements.
+
 ## 0.7.0 — offline UI capture review — 2026-10-24
 
 The released NRO `2ff456161c52522c6881956d0ad3a5a037a1a3fc74c8757a1e3a7afe49012cae`
@@ -71,12 +110,13 @@ inputs match the operator-tested candidate; only root Cargo version entries
 changed. Symbols and receipts are outside the repository in
 `release-070-1022/out/2ff456161c52522c/` and `PACKAGE-VERIFIED.json`.
 
-**Publication state:** version commit and tag pushed to Forgejo. NRO/manifest
-upload is pending: the API publication client was rejected by Cloudflare with
-HTTP 403 / error 1010 on 2026-10-22, before release creation. No release asset
-or new console install is claimed. The local package remains preserved.
+**Publication history:** version commit and tag were pushed to Forgejo on
+2026-10-22. The NRO/manifest upload was initially blocked: the client was rejected by Cloudflare with
+HTTP 403 / error 1010 before release creation. Publication completed on
+2026-10-25 with the same archived package, as recorded above. No new console
+installation was performed as part of publication.
 
-**Operator-tested `2f5` archive (separate from future clean 0.7.0 rebuild).**
+**Operator-tested `2f5` archive (separate from the clean 0.7.0 package above).**
 Installed/readback-verified 2026-10-22 (`usb-install-1022/VERIFICATION.json`):
 NRO SHA-256 `2f5a1d4e4d99c58e0b351fd3af72e4f7e1cf121e017357d130a18fb2b151fc01`,
 build id `0.6.2-d86fac2a7ade-dirty-1792624156` (binary still reports 0.6.2).
@@ -3042,10 +3082,13 @@ endgame and keepalive logs).
   --all-targets -- -D warnings` clean; `cargo build --no-default-features` ok;
   `cargo skyline build --release` ok (the runtime callers compile only for the
   Switch target). Build id, NRO SHA-256 and size: the v0.6.2 release manifest.
-- Console: not booted. Owed: NetLatency Auto, one Quickplay match → the strip's
-  `Net:` field during the match, then the window and the character-select
-  `You:` line read `Auto (Nf)`; the main menu reverts to `Auto`; `events.log`
-  code 9 rows carry N as their first value.
+- Console follow-up: the [published v0.6.2 release notes](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.6.2)
+  record installation at 2026-10-19 13:01Z, a same-day online Switch run and the
+  operator's confirmation: "tested it, Auto (Nf) shows up fine online". Build
+  `0.6.2-302c09574b3e-1792414221`, NRO SHA-256
+  `59dab7a8cd60d8d770d7a7c4f30bb668b174854d666e72086ed06e5c238768c4`.
+  This supersedes this entry's original "not booted" note. It does not report
+  every location, main-menu reset and event-code comparison individually.
 
 ### 0.6.1 — 2026-10-19: the last page is titled Window Options
 
@@ -3062,9 +3105,9 @@ endgame and keepalive logs).
   --all-targets -- -D warnings` clean; `cargo build --no-default-features` ok;
   `cargo skyline build --release` through `tools/Build.ps1 -Package` ok. Build
   id, NRO SHA-256 and size: the v0.6.1 release manifest on Forgejo.
-- Console: not booted as 0.6.1. The layout it draws is the 0.6.0 one the
-  operator checked (next entry); only the title text differs. Docs renamed in
-  the same commit.
+- Console follow-up: booted on 2026-10-19; the operator confirmed "shows Window
+  Options now, works fine" (also recorded in the published v0.6.2 notes linked
+  above). The layout is the operator-tested 0.6.0 layout; only the title differs.
 
 ### 0.6.0 — 2026-10-19: Main page redesign (You/Opp lines, five rows, Window page)
 

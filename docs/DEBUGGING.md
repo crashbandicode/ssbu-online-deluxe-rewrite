@@ -125,6 +125,14 @@ data directory and flags.
 | 111 | Clock probe (0.5.3): a = CPU MHz from a timed chain of dependent adds (0 unknown; about 1020 at the official clock, 1785 during the game's own loading boost or under a Horizon-OC profile), b = Horizon-OC file bits (1 `atmosphere/kips/hoc.kip` present, 2 hoc-clk `boot2.flag` present, 4 a `[01006A800016E000]` section in `config/horizon-oc/config.ini`, 8 `uncapped_clocks=1`). Written at boot, on every stock/OC change and once a minute; the same values go into every capture header (`# clock_mhz`, `# clock`, `# hoc`), `renderer-status.txt` and the Performance row **Clock**. GPU and memory clocks are not readable from the game process |
 | 112 | Peer stale (0.5.5): the selected opponent station is still bound but produced no measured RTT sample for 10 s (`pia_rtt::LIVE_MS`), so the opponent column, the strip's `Peer:` line, the Ping cell and the CSS remote line were hidden (since 0.6.0 the Opp line, the strip's `>Opp:` line and the CSS remote line). a = station index, b = the silence in ms. One row per live-to-silent transition, not per frame; a newly bound station has a 10 s grace. Expected after an opponent declines a rematch without the station-left hook retiring the peer (console behaviour not yet observed) |
 
+Codes 73 `AutoContext` and 74 `AutoRequest`
+([`auto_driver.rs`](../src/runtime/auto_driver.rs)), 78 `ResolutionReport`,
+79 `ResolutionApplied` and 80 `ResolutionCrop`
+([`resolution.rs`](../src/resolution.rs)), 81 `FighterMain`
+([`fighter_main.rs`](../src/runtime/fighter_main.rs)) and 90
+`RenderPollProbe` ([`renderer.rs`](../src/runtime/renderer.rs)) are still
+emitted but not described in the table; their fields are defined at those
+call sites and in [`diagnostics.rs`](../src/diagnostics.rs).
 Codes 18–20 describe historical CSS builds; they are no longer emitted.
 Codes 11, 27–29, 84–87 and 91–97 were the character-FX records. They moved
 to the ssbu-fx-control plugin in 0.5.0 and are not reused here. Codes 75–77
@@ -327,9 +335,14 @@ window closes. Verify no Eden process remains before the next Start. The helper'
 -EdenPath parameter overrides its default local AppImage path. Pass -GamePath with
 the local game file to launch Smash directly using Eden's -g argument.
 For unattended stock-Eden trials, specify -MaxRuntimeSeconds 900 (or another finite
-bound). The default zero is for operator-controlled sessions. The incoming custom
-Eden build will supply its own CLI control instructions; read its handoff before
-adapting the launcher, and retain the same memory and single-instance safeguards.
+bound). The default zero is for operator-controlled sessions. The custom Eden
+build has since arrived: it was used for the 2026-10-24 0.7.0 UI campaign,
+including the Ally CLI-recording follow-up, with closed receipts
+([Validation](VALIDATION.md#070--offline-ui-capture-review--2026-10-24);
+binary identities in [Media provenance](MEDIA_PROVENANCE.md#capture-identity)).
+This launcher still defaults to the stock AppImage; follow that build's own CLI
+instructions before adapting it, and retain the same memory and single-instance
+safeguards.
 
 These limits contain cgroup-accounted memory for this test, not the entire desktop
 or all GPU-driver memory. They are test safeguards, not a memory-leak fix.

@@ -57,7 +57,7 @@ Immediate (LLUltra) is committed; in any other mode it counts the entry and
 returns without flushing or changing the mode. There is no separate
 observer flag (`src/runtime/render_ultra.rs`, `renderer.rs` `install`).
 
-**Teardown guard (candidate, 2026-10-15).** The relocated model update runs
+**Teardown guard (0.5.1, 2026-10-15).** The relocated model update runs
 after the scene update, so on the frame that leaves Training or a match it
 would touch fighters the scene update has just destroyed; four Eden runs on
 2026-10-14 aborted there in `nn::os::LockMutex` (kernel `InvalidHandle`) with
@@ -69,8 +69,11 @@ queue is still dispatched), records code 48 and hands the next 180 frames
 back to the game's own ordering (`src/teardown_guard.rs`,
 `render_sequence.rs`; `teardown_guard_skips` in `renderer-status.txt`).
 Render opts are therefore off for about three seconds after every scene
-transition and otherwise unchanged. Not yet verified in Eden or on the
-console.
+transition and otherwise unchanged. Eden: 22 Training exits on candidate
+`cc7f07f6…` with the guard firing and no abort; console: 0.5.1 passed
+Training exits and a LessLag match, with `teardown_guard_skips=2` read back
+([Validation](VALIDATION.md), 0.5.1). This is evidence for the guard, not a
+verified crash fix.
 
 The LessLag path reads the gate byte at `+0x1d18` and the dispatch index at
 `+0x1d20`, then writes `+0x1d30` and `+0x1d28` when the gate is nonzero.
@@ -206,8 +209,10 @@ the API CSV stopped mid-row6308 of6602 while the callback CSV was complete602
 samples. The old status stayed Capturing through export. Skyline std requests
 a native flush for every unbuffered formatting fragment; this motivated the
 buffering/status correction above. Source/test/build evidence is separate from
-device export acceptance. The new correction is not yet deployed. The operator
-already tried repeated waits; do not request another uninstrumented wait.
+device export acceptance. The correction was later installed on the Switch
+with `4c1947b84add6114` (2026-10-09 22:32Z, [Fork parity](FORK_PARITY.md)).
+Before it, the operator had already tried repeated waits; do not request
+another uninstrumented wait.
 
 The button field is a sample taken on the render callback. It does not timestamp
 the physical button press or the game's simulation input read. Do not calculate
