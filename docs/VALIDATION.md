@@ -1,5 +1,52 @@
 # Validation record
 
+## 0.8.0 — Auto observation freshness — 2026-10-25
+
+The operator reported the preceding match's `Auto (Nf)` count persisting through
+the next match. The old observation was session-scoped, cleared only on Offline;
+the UI consumers already rebuilt their labels on each draw/update. Historical
+latency-hook traces below include callbacks about three seconds after stage
+load, so the investigation does **not** establish that the old hook ran only
+after matches.
+
+The fix reads the buffer at its network-update consumption site `0x16d81a8`
+(`ldrb w9,[x19,#0x41]`) rather than relying on the calculation hook's snapshot.
+The preserved Smash 13.0.5 executable verifies that this is the same field the
+original calculation stores at `0x16ccaa0`; existing manual hook `0x16ccab8`
+remains after that store/clamp. The new hook requires the exact 20-byte window
+starting at `0x16d81a4`, reads only during the callback, and retains no pointer.
+
+A single packed atomic state carries generation, eligibility, activity and
+count. Stage entry starts a fresh unknown observation even for consecutive
+Singles stages; results close sampling but retain the count. Offline, Training,
+connection-mode changes and rejected stage context clear it. Manual selection/application invalidates
+Auto observation until the next match. A token captured before the memory read
+rejects publication after a lifecycle boundary. Diagnostic 113 records changed
+counts, with stage event 110 providing the match boundary.
+
+Completed on the 0.8.0 source tree:
+
+- `cargo test`: **264 unit tests + 1 SDK integration test**, all passed.
+  Eleven new Auto-state tests cover consecutive 4f→3f matches, unknown startup,
+  within-match updates, stale tokens, result retention, manual-to-Auto suppression,
+  boundaries and contending observations. Existing status-cell tests also pass.
+- `cargo clippy --all-targets -- -D warnings`: passed, zero warnings.
+- `cargo build --no-default-features`: passed.
+- `cargo skyline clippy -- -- -D warnings`: passed, zero warnings.
+- `tools/Build.ps1`: actual optimized Skyline release build passed.
+- Changed Rust files pass rustfmt; `git diff --check` passes.
+
+An initial compile rejected `u64::from` in const functions; lossless widening
+casts fixed the toolchain incompatibility before the successful checks above.
+External gate logs, native inspection, review and package/publication receipts
+are under `deluxe-auto-080/` in the operator's evidence root.
+
+**No 0.8.0 live-console or emulator run is claimed.** In particular the actual
+network-callback timing and consecutive online match display still need the
+[runtime check](NEXT_SESSION.md#latest-evidence--2026-10-25). The new release
+also includes the previously merged revision-5 plugin status cells; their
+runtime acceptance is separate from passing host coverage.
+
 ## 0.7.0 — public release assets — 2026-10-25
 
 The [Forgejo release](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.7.0)

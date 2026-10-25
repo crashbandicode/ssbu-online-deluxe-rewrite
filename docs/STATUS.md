@@ -1,6 +1,6 @@
 # Implementation and validation status
 
-Updated 2026-10-25 for **0.7.0** and the post-tag source noted below. Exact release/build and console evidence is in
+Updated 2026-10-25 for **0.8.0**. Exact release/build and console evidence is in
 [VALIDATION.md](VALIDATION.md). Earlier releases: 0.6.2 (NRO SHA-256 in its
 release manifest), 0.6.1 `9d0cec2`, 0.6.0 `a0dc5d6`, 0.5.7 `282a2df`,
 0.5.6 `fb2012a`, 0.5.5 `6a9e61a`, 0.5.4 `a63bc8c`. The rewrite is one Rust/Skyline
@@ -24,8 +24,7 @@ Publication routing: `origin` is Forgejo
 (`git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite`), authoritative
 and public; `github` is a downstream mirror that is not pushed automatically.
 Nothing is pushed without the operator's explicit permission. Forgejo
-releases carry the NRO and its SHA-256 manifest; the 0.7.0 assets were published
-and their public downloads verified on 2026-10-25 (see [Current: 0.7.0](#current-070)).
+releases carry the NRO and its SHA-256 manifest (see [Current: 0.8.0](#current-080)).
 
 Evidence levels used below: **host** = Rust host tests, clippy with warnings
 denied, the no-default-features build and the Skyline release build;
@@ -43,14 +42,14 @@ the operator's Switch, recorded with its build hash in [VALIDATION.md](VALIDATIO
 | Resolution / DRS | Cut-in trigger (shipped); per-move catalog `drs_moves=` and the adaptive trigger `drs_adaptive=` with threshold/trigger/release keys (0.5.2, experiment). The built-in Sephiroth Gigaflare trigger was removed in 0.5.4 (commit 49fbfe1) | The cut-in trigger drops resolution on the console (ledger observation). The 0.5.2 triggers have been on the card since 2026-10-15 with no hardware result yet; the resolution-comparison cells were dropped from the test plan with the other FX cells (operator, 2026-10-18). LLUltra's base level is `ultra_resolution`, the NetProfile LLUltra / LLUltra+ / LLUltra++ stop above (the UltraRes row before 0.7.0) |
 | Fighter Main | Guarded read-only fighter status callback, bounded report tokens | Two count-only Training sessions passed approximate tick-frequency checks; count mode installs no cut-in hook or reports |
 | Cut-in scaler | Original cut-in function chained, seven eligible fighter-tick cooldown | Luigi close-range Up-B cut-in passed in Eden: LLDoubles 1080→720→1080; console captures show the cut-in zoom pushes (56–59 fps seconds under LLUltra, 2026-10-16) |
-| Online input buffer | Auto or 0–25, retained null guard and Quickplay path. Since 0.6.2 an Auto selection shows the game's chosen frames, `Auto (4f)`, read before applying the selection and cleared when the connection returns to Offline. | The [v0.6.2 release](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.6.2) records the operator's 2026-10-19 online Switch confirmation: "Auto (Nf) shows up fine online". The 0.7.0 offline Eden capture also shows the Auto → 0 → Auto menu round trip. |
+| Online input buffer | Auto or 0–25, retained null guard and Quickplay path. 0.8.0 samples the live input-consumption byte for `Auto (Nf)` with per-match validity; new matches start plain Auto, results retain the last count, Offline/Training clear it, and manual choices block Auto observation until the next match. | Host regression and native-byte checks; 0.8.0 live-online timing remains untested. The earlier v0.6.2 operator confirmation showed the label appeared, but did not validate freshness across consecutive matches. |
 | Stealth | Default On, connection-latched beacon/payload suppression, reconnect notice | d9 fresh-On suppression/zero custom writes, pending-Off and saved Off after restart passed; earlier pending-On passed |
 | Peer display | Remote facts only for a selected connected station that is also live: a measured RTT sample within 10 s (`pia_rtt::LIVE_MS`, a new binding gets a 10 s grace), applied to the opponent column, the strip's `Peer:` line, the Ping cell, the peer-dependent rows and the native CSS remote line; event 112 `PeerStale` when a bound station goes silent (0.5.5). Since 0.6.0 the Settings page's opponent column, Name / Interface / Peer / Ping rows and the strip's `Peer:` / `IF:` / `Ping:` / `PeerNet:` / `PeerProfile:` fields are one **Opp** summary line (and the strip's `>Opp:` line) with the same live rule. Name, RTT/stability colors and announced settings; sixteen keyed RTT stations behind one lock (0.5.4) | 9e9 offline/connected/disconnected and two-remote-peer cycling passed in Eden; the 0.5.4 station table and the 0.5.5 live rule are host-tested only. The declined-rematch persistence the operator reported on the console could not be reproduced in Eden (a LAN-Online decline ends the session); console verification of 0.5.5 pending |
 | Ethernet / Wi-Fi | Local nifm type and peer announcement, otherwise Unknown | Never inferred from RTT; an emulator may report a virtual interface |
 | Streamer / peer cycle | Persistent display privacy, identity-consistent peer selection; the window chord is L+R only since 0.5.3 (ZL+ZR does nothing). Since 0.7.0 Streamer is toggled only by ZR+Y with the Settings **You** row selected; the L+R+ZR+Y chord of 0.5.7–0.6.2 is retired | d9 saved INI/privacy passed; 9e9 cycled two remote peers in a three-station lobby. The L+R-only chord was used on the console on 2026-10-19 (the 0.6.0 and 0.6.1 boots) |
 | Global Player Info | Compact Settings page: selectable **You** with Stealth eye and Streamer TV icons, **Opp** only for a live peer, **NetLatency**, **NetProfile**, performance footer and hints. ZR+X/Y act only with You selected; manual console LLUltra is one resolution-aware profile stop. The vertical window sits right in Training/lobbies; ordinary matches use a two-line strip at top left. Full details and the earlier 0.6.x layout: [Controls](CONTROLS.md). | Earlier layouts were operator-confirmed on console. Released 0.7.0 `2ff456…` has offline Eden evidence for Settings, privacy round trips, Training, match strips and banners (2026-10-24); the `2f5a…` console LLUltra chord was confirmed on 2026-10-22. The general Eden/Erista report is above; connected-peer and negative-control checks remain in [NEXT_SESSION.md](NEXT_SESSION.md). |
 | Window pages and rows | **Window Options** is the final page before hidden and always remains in the L+R+Down cycle. It carries PluginsPage / OwnPages / PerfPage, PerfView and Hints. Every value edit needs ZR without ZL in every scene; Up/Down selects and `< value >` marks the held edit. [Controls](CONTROLS.md), [Configuration](CONFIGURATION.md). | Host tests, operator-confirmed 0.6.0/0.6.1 page/title, and the complete 0.7.0 offline Eden page cycle. The capture shows a ZR-guarded NetLatency round trip and companion FX edits. The full every-scene positive/negative matrix and console Clock check are not recorded individually. |
-| Plugin menu API | `ssbu_online_deluxe_plugin_api_v1`; SDK and ABI crates 5.0.0 send descriptor version 4 (header and inline rows, 64 options); the released 0.7.0 host accepts versions 2–4; plugins may add their own page (0.5.0). **Unreleased** on main after v0.7.0 (`0d28adc`): the host also accepts revision 5 passive status cells; the SDK still sends 4. [Plugins](PLUGINS.md) | Console 2026-10-16: FX Control's page registered with descriptor 4 on the first good 0.5.3 boot; bootstrap hook chaining fixed the boot crash of the first v4 deploy. The 0.5.4 host consolidation is host-tested and Eden-checked (demo plugin and FX page on the candidate), console pending |
+| Plugin menu API | `ssbu_online_deluxe_plugin_api_v1`; SDK and ABI crates remain 5.0.0, SDK sends descriptor version 4 (header and inline rows, 64 options). The 0.8.0 host accepts revisions 2–5 including passive status cells from `0d28adc`; 0.7.0 accepts only 2–4. [Plugins](PLUGINS.md) | Console 2026-10-16: FX Control's page registered with descriptor 4 on the first good 0.5.3 boot. Status-cell layout/navigation has host coverage; runtime validation remains pending. |
 | Native CSS / arena | Fork CSS pane path, room-ID arena hooks, saved-style Streamer restoration | CSS edits, closed-window display and match return verified in Eden; two-peer arena and Background matches ran in Eden on 2026-10-18, but the `deluxe_rewrite_arena` and `deluxe_rewrite_background_matchmaking` hook sites are mis-addressed and never fire (open finding, below). [Details](NATIVE_DISPLAY.md) |
 | Embedded / standalone ImGui | Export/ABI detection, one active backend, namespaced hooks | Load-order tests and the Oct 9 frame-ownership correction passed in Eden; limits in [ImGui dependencies](IMGUI_DEPENDENCY.md) |
 | Elite Legal Stages | Separate plugin, standalone ImGui retained | Both menus and settings persist; offline stages unrestricted as intended; NSO filtering untested |
@@ -61,7 +60,24 @@ the operator's Switch, recorded with its build hash in [VALIDATION.md](VALIDATIO
 | Coverage build | Cargo feature `coverage`, raw profile writer, event code 109, manual snapshots from the Debug view (0.5.2) | Eden only. 2026-10-17 trace: 1,192 instrumented functions, 1,047 executed, 145 never executed. 2026-10-18 LAN Online run (two modded peers, NSO scenes only): 893 executed, 299 never executed, 12 functions new against the 10-17 report; [DEBUGGING.md](DEBUGGING.md) |
 | Removed in 0.5.4 | The opt-in peer observer, FPS++ (emulator-only diagnostic), the Gigaflare DRS trigger, five opt-in diagnostics, 21 helpers without a production caller; `peer_observer=` and `fps_boost=` are ignored legacy keys. Per-file reduction: `src/` 22,253 → 15,332 production lines (−31.1 %) | Host gates on every step; Eden latency, quota frame-rate, capture and plugin-page passes on the candidate. Console: the 0.5.4 first boot is the acceptance test. [FPS boost history](FPS_BOOST_INVESTIGATION.md) |
 
-## Current: 0.7.0
+## Current: 0.8.0
+
+0.8.0 fixes the stale `Auto (Nf)` observation across consecutive matches. It
+samples the same game buffer byte at the guarded network-consumption site
+`0x16d81a8`, with a match-generation token captured before reading. Every new
+Singles/Doubles stage starts unknown, stale callbacks cannot cross a lifecycle
+boundary, and valid observations can update during play. Results/rematch CSS
+retain the last count; Offline/Training clear it. A manual-to-Auto change stays
+plain Auto until a fresh match. Existing manual buffer application is unchanged.
+
+It also includes the already-merged revision-5 passive plugin status cells and
+navigation changes from `0d28adc`. SDK/table versions remain unchanged.
+Host regression tests and the original 13.0.5 instruction bytes support the
+fix; **live online timing and status-cell runtime validation remain pending**.
+See [Validation](VALIDATION.md), [next checks](NEXT_SESSION.md), and the
+[NRO and manifest](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.8.0).
+
+## 0.7.0
 
 Tag `v0.7.0` and version commit `9a7f81c` are on Forgejo. The
 [release NRO and manifest](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.7.0)
@@ -102,13 +118,12 @@ Training window, match strips and native return banners are shown in
 [Screenshots](SCREENSHOTS.md). This adds bounded emulator UI evidence; the
 console, connected-peer and negative-control checks remain separate.
 
-### Unreleased on main (after v0.7.0)
+### Post-v0.7.0 status cells (included in 0.8.0)
 
 Commit `0d28adc` (2026-10-24) adds descriptor revision 5 passive status cells
-to plugin pages ([Plugins](PLUGINS.md#status-cells-unreleased)). It is not in
-any release: Cargo still reads 0.7.0, the released v0.7.0 host refuses a
-revision 5 descriptor with `REGISTER_ERR_ABI`, and the SDK still sends
-revision 4. No validation entry records it yet.
+to plugin pages ([Plugins](PLUGINS.md#status-cells-080)). It first ships in
+0.8.0; the v0.7.0 host refuses a revision 5 descriptor with `REGISTER_ERR_ABI`.
+The SDK still sends revision 4. Runtime status-cell validation remains pending.
 
 ### 0.6.2
 

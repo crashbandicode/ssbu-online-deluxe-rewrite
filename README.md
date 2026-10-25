@@ -14,9 +14,10 @@ overclocking.
 
 ![The Player Info Settings window: the You row with eye and TV icons, NetLatency and NetProfile](docs/media/settings-window.png)
 
-**[0.7.0 — download NRO and manifest](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.7.0)**
-adds the compact menu: privacy icons on the You row and one LLUltra resolution
-stop. Version history and detailed validation: [Status](docs/STATUS.md).
+**[0.8.0 — download NRO and manifest](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.8.0)**
+fixes stale `Auto (Nf)` counts with current-match buffer sampling and includes
+passive plugin status cells. The new Auto sampling has host/static validation;
+live-console validation remains pending. [Status and version history](docs/STATUS.md).
 
 > **Install only this NRO.** It replaces the original Online Deluxe fork,
 > SsbuSync and the PIA manager, so remove all three. If SsbuSync is still

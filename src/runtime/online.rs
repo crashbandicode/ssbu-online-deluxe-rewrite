@@ -38,6 +38,7 @@ pub(super) fn mark_match() {
 }
 
 fn reject_stage() {
+    super::clear_auto_buffer();
     record(Code::HookRejected, STAGE_SETUP as u64, 0);
 }
 
@@ -98,6 +99,13 @@ unsafe fn deluxe_rewrite_stage_setup(ctx: &InlineCtx) {
     let stage_id = *(stage_addr as *const u32);
     let status =
         auto_policy::classify_stage(stage_id, is_training_mode(), get_fighter_entry_count());
+    // Reset on each stage entry, even if two consecutive stages classify alike.
+    // A result from the previous match must never become this match's value.
+    match status {
+        SceneStatus::Singles | SceneStatus::Doubles => super::begin_auto_buffer_match(),
+        SceneStatus::Training => super::clear_auto_buffer(),
+        SceneStatus::Inactive => super::end_auto_buffer_match(),
+    }
     record(Code::StageLoaded, u64::from(stage_id), status as u64);
     auto_driver::set_scene(None, Some(status), STAGE_SETUP as u64);
     super::capture::note_stage(status);

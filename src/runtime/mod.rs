@@ -42,11 +42,10 @@ static RENDER_MODE: AtomicU8 = AtomicU8::new(0);
 static AUTO_PROFILE: AtomicBool = AtomicBool::new(true);
 static PLATFORM: AtomicU8 = AtomicU8::new(0);
 static INPUT_BUFFER: AtomicI8 = AtomicI8::new(-1);
-/// The online input buffer the game chose while the selection is Auto (0.6.2):
-/// `u8::MAX` until the online-latency hook has seen one, cleared when the
-/// connection returns to Offline.
-static AUTO_BUFFER: AtomicU8 = AtomicU8::new(AUTO_BUFFER_UNKNOWN);
-const AUTO_BUFFER_UNKNOWN: u8 = u8::MAX;
+/// A match-scoped observation of the buffer the network update actually reads.
+/// No game pointer survives an observation callback.
+static AUTO_BUFFER: crate::auto_buffer::AutoBufferState =
+    crate::auto_buffer::AutoBufferState::new();
 static STEALTH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 static STREAMER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 /// `ultra_resolution` (0.5.3): `UltraResolution::to_byte` (0 = 576p, 1 = 720p,
@@ -73,22 +72,36 @@ static DRS_RELEASE_FRAMES: std::sync::atomic::AtomicU16 = std::sync::atomic::Ato
 static CONFIG_GENERATION: AtomicU64 = AtomicU64::new(0);
 pub(super) const DATA_DIR: &str = "sd:/ultimate/ssbu_online_deluxe_rewrite";
 
-pub(super) fn note_auto_buffer(frames: Option<u8>) {
-    if let Some(frames) = frames {
-        AUTO_BUFFER.store(frames, Ordering::Release);
-    }
+pub(super) fn begin_auto_buffer_match() {
+    AUTO_BUFFER.begin_match(INPUT_BUFFER.load(Ordering::Acquire));
+}
+
+pub(super) fn end_auto_buffer_match() {
+    AUTO_BUFFER.end_match();
 }
 
 pub(super) fn clear_auto_buffer() {
-    AUTO_BUFFER.store(AUTO_BUFFER_UNKNOWN, Ordering::Release);
+    AUTO_BUFFER.clear();
 }
 
-/// `Some(frames)` while an online session has told us what Auto chose.
-pub(super) fn auto_buffer() -> Option<u8> {
-    match AUTO_BUFFER.load(Ordering::Acquire) {
-        frames if frames <= 25 => Some(frames),
-        _ => None,
+pub(super) fn invalidate_manual_auto_buffer() {
+    AUTO_BUFFER.invalidate_manual();
+}
+
+pub(super) fn auto_buffer_observation() -> Option<crate::auto_buffer::ObservationToken> {
+    AUTO_BUFFER.observation_token()
+}
+
+pub(super) fn observe_auto_buffer(token: crate::auto_buffer::ObservationToken, frames: u8) {
+    if AUTO_BUFFER.observe(token, frames) {
+        record(Code::AutoBufferObserved, u64::from(frames), 0x16d81a8);
     }
+}
+
+/// Current-match count, or its result until the next stage starts. Unknown
+/// during a new match's setup or after a manual selection.
+pub(super) fn auto_buffer() -> Option<u8> {
+    AUTO_BUFFER.value()
 }
 
 pub(super) fn saved_render_mode() -> crate::config::RenderMode {
@@ -109,7 +122,9 @@ pub(super) fn settings() -> Config {
         streamer: STREAMER.load(Ordering::Acquire),
         drs_moves: drs_moves(),
         drs_adaptive: adaptive_settings(),
-        ultra_resolution: crate::config::UltraResolution::from_byte(ULTRA_RES.load(Ordering::Acquire)),
+        ultra_resolution: crate::config::UltraResolution::from_byte(
+            ULTRA_RES.load(Ordering::Acquire),
+        ),
         hide_pages: {
             let bits = HIDE_PAGES.load(Ordering::Acquire);
             crate::config::HiddenPages {
@@ -171,7 +186,13 @@ pub(super) fn stealth() -> bool {
 pub(super) fn publish(config: &Config) {
     let mode_changed = saved_render_mode() != config.render_mode;
     let auto_changed = AUTO_PROFILE.load(Ordering::Acquire) != config.auto_profile;
-    INPUT_BUFFER.store(config.input_buffer, Ordering::Release);
+    let previous_buffer = INPUT_BUFFER.swap(config.input_buffer, Ordering::AcqRel);
+    if previous_buffer != config.input_buffer && (previous_buffer >= 0 || config.input_buffer >= 0)
+    {
+        // A manual choice can already have overwritten the game byte. Returning
+        // to Auto must not present that manual byte as a fresh automatic choice.
+        AUTO_BUFFER.invalidate_manual();
+    }
     RENDER_MODE.store(config.render_mode as u8, Ordering::Release);
     AUTO_PROFILE.store(config.auto_profile, Ordering::Release);
     PLATFORM.store(config.platform as u8, Ordering::Release);

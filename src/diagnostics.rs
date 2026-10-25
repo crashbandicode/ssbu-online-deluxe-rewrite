@@ -185,6 +185,9 @@ pub enum Code {
     /// `b` = the silence in ms. One row per transition, not per frame. Seen
     /// after a declined rematch whose leave never reached the station hooks.
     PeerStale = 112,
+    /// A current-match Auto observation changed (0.8.0). `a` is the frame
+    /// count; `b` is the verified input-consumption hook. Not a per-frame log.
+    AutoBufferObserved = 113,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -321,6 +324,7 @@ mod tests {
         assert_eq!(Code::CoverageDump as u16, 109);
         assert_eq!(Code::StageLoaded as u16, 110);
         assert_eq!(Code::ClockSample as u16, 111);
+        assert_eq!(Code::AutoBufferObserved as u16, 113);
     }
     #[test]
     fn recursive_or_contended_logging_drops_instead_of_deadlocking() {

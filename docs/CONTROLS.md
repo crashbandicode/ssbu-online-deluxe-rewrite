@@ -140,15 +140,16 @@ separate from NetProfile's rendering policy. A menu change takes effect at once
 and is written to `config.ini` by the background thread within about half a
 second; the game's next relevant buffer hook applies the selected value.
 
-Since 0.6.2 an **Auto** selection shows the frame count the game itself chose
-for the current online session, `Auto (4f)` (`Auto (25f)` is the longest). It
-reads plain `Auto` before the first online match of a session and with no online
-session; a manual buffer still reads its number. The count is what the buffer
-hook finds in the game's byte before applying the selection, so it is recorded
-only while Auto is selected (a manual selection overwrites that byte). It is
-cleared when the connection returns to Offline (main menu reset, session end), so
-it stays visible through the results screen and the rematch character select of
-the same session. It appears on the You line, the NetLatency row, the in-match
+Since 0.6.2 an **Auto** selection shows the game's buffer as `Auto (4f)`
+(`Auto (25f)` is the longest). **0.8.0 scopes the count to each match** and
+samples the byte where the network update consumes it. A new match starts with
+plain `Auto` until a valid observation arrives, then the count can update during
+play. The last count remains through results and rematch character select;
+Offline, Training, a connection-mode change and the next match clear it. Choosing a manual buffer clears
+Auto's observation, and switching back to Auto stays plain until the next match
+so a manually overwritten byte cannot masquerade as the game's Auto choice.
+A manual buffer still reads its number. The Auto count appears on the You line,
+the NetLatency row, the in-match
 strip's `Net:` field and the native character-select and arena `You:` line
 (`You: Auto:Van | Auto (4f)`); the local-wireless lobby's one-digit pane keeps
 plain `Auto`. The Opp line still shows the opponent's announced `Auto`, not their

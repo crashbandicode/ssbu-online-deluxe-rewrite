@@ -18,20 +18,20 @@ that table version, not against the descriptor version. A second export,
 host's scene context as `ONLINE_CONTEXT_READY | ONLINE | MATCH | TRAINING`
 bits; the SDK wraps it as `host_online_context()`, `None` on older hosts.
 
-**Unreleased:** main after v0.7.0 (commit `0d28adc`) adds descriptor revision 5
+**Deluxe 0.8.0** includes commit `0d28adc`, adding descriptor revision 5
 (`CELL_ABI_VERSION`) with `OPTION_FLAG_CELL` passive status cells; that host
 accepts revisions 2 to 5. The released v0.7.0 host accepts 2 to 4 and refuses
 revision 5 with `REGISTER_ERR_ABI`. This SDK still sends revision 4 and has no
-cell layout. See [Status cells](../docs/PLUGINS.md#status-cells-unreleased).
+cell layout. See [Status cells](../docs/PLUGINS.md#status-cells-080).
 
 Pinned releases: git tag `v0.2.0` on the Forgejo repository
 (`intpa/ssbu-online-deluxe-rewrite`) carries `deluxe-plugin-abi` 2.0.0 and
 `deluxe-plugin-sdk` 2.0.0 (descriptor version 2); the 0.5.0 tag carries 3.0.0
 (descriptor version 3); 0.5.3 carries 5.0.0 (descriptor version 4 only; the
 4.0.0 crates of the earlier 0.5.3 builds still carried the retry chain; the
-crates are unchanged at 5.0.0 through 0.7.0; main after v0.7.0 adds the
-unreleased revision-5 constants to `deluxe-plugin-abi` without a version bump,
-so depend on a release tag for the released ABI). Each
+crates are unchanged at 5.0.0 through 0.7.0; 0.8.0 adds revision-5 constants
+to `deluxe-plugin-abi` without a crate-version bump, so depend on a release
+tag to identify the exact ABI source). Each
 tag is the tree the matching host NRO was built from; the NRO's SHA-256 and
 size are recorded in `docs/VALIDATION.md`. Consumers depend on the crates by
 git tag (cargo finds the package by name anywhere in the repository) or clone
@@ -71,8 +71,8 @@ is in [docs/PLUGINS.md](../docs/PLUGINS.md); this file is the reference.
   Both views draw the same row list: group rows and header rows are label
   only and never selected, every other row is `Label` and the current value.
 * Outside a match: a vertical table of those rows. Up/Down selects a row (the
-  selection wraps and skips group and header rows; on unreleased main after
-  v0.7.0 it also skips read-only status rows and cells, see
+  selection wraps and skips group and header rows; since
+  v0.8.0 it also skips read-only status rows and cells, see
   [Plugins](../docs/PLUGINS.md)), ZR + Left/Right asks the
   plugin for the previous or next choice (a plain Left/Right is ignored in the
   open window since Deluxe 0.5.6). Lists longer than ten rows are clipped to
@@ -459,7 +459,7 @@ observed.
 #define DELUXE_OPTION_FLAG_READ_ONLY (1u << 1)
 #define DELUXE_OPTION_FLAG_HEADER (1u << 2)    /* label only, choice_count 0 */
 #define DELUXE_OPTION_FLAG_INLINE (1u << 3)    /* accepted; drawn as a value row */
-/* Unreleased (main after v0.7.0): only with PluginDesc.abi_version = 5. */
+/* Deluxe 0.8.0: only with PluginDesc.abi_version = 5. */
 #define DELUXE_CELL_DESCRIPTOR_VERSION 5u
 #define DELUXE_OPTION_FLAG_CELL (1u << 4)      /* passive status cell; tones required */
 #define DELUXE_TONE_NEUTRAL 0u

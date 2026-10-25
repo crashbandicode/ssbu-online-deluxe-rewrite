@@ -2,6 +2,16 @@
 
 ## Latest evidence — 2026-10-25
 
+**0.8.0 Auto regression acceptance:** host tests and native byte verification
+cover match-scoped observations, but a live online run is still needed. With
+NetLatency on Auto, play consecutive matches whose buffers differ (for example
+4f then 3f). The next stage should start plain `Auto`, then show its own count
+during play, without waiting for match end. Check the Settings/strip and native
+return banner; retain `events.log` with stage event 110 and observation event
+113 (`b=0x16d81a8`) to establish timing. Check result retention, Offline/Training
+clear, and manual-to-Auto staying plain until a fresh match. Record the release
+manifest/build identity with the result. No 0.8.0 console pass is claimed yet.
+
 The operator reports that Deluxe works in Eden and on an Erista Switch without
 issues, including the current firmware/Atmosphère/Skyline stack
 ([versions and report](VALIDATION.md#operator-report--eden-and-erista-switch--2026-10-25)).

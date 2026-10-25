@@ -222,13 +222,24 @@ pub(crate) fn set_scene(
     let (previous_connection, previous_status) = scene_pair();
     let connection = next_connection.unwrap_or(previous_connection);
     let status = next_status.unwrap_or(previous_status);
-    if next_connection == Some(Connection::Offline) {
-        // The session is over; what Auto chose for it no longer applies.
+    if status == SceneStatus::Training
+        || connection != previous_connection
+        || next_connection == Some(Connection::Offline)
+    {
+        // A retained result belongs to its connection; do not carry it into
+        // another online mode's lobby or an offline/Training scene.
         super::clear_auto_buffer();
+    }
+    if next_connection == Some(Connection::Offline) {
         let was_marked = MATCH_MARKED.swap(false, Ordering::AcqRel);
         if was_marked && !previous_connection.is_online() {
             record(Code::OnlineContext, 0, source);
         }
+    } else if matches!(previous_status, SceneStatus::Singles | SceneStatus::Doubles)
+        && !matches!(status, SceneStatus::Singles | SceneStatus::Doubles)
+    {
+        // Keep the result for CSS/results, but reject late network callbacks.
+        super::end_auto_buffer_match();
     }
     if connection == previous_connection && status == previous_status {
         return;

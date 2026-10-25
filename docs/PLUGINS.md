@@ -82,7 +82,7 @@ grouping a long page. The SDK sends descriptor version 4 only; hosts from
 Deluxe 0.5.3 through the released 0.7.0 accept versions 2, 3 and 4 under the
 same rules (they share one layout), so plugins built against the 2.0.0 or
 3.0.0 SDK keep registering, and an older host answers `RegisterError::Abi`
-with no retry. Revision 5 is unreleased ([below](#status-cells-unreleased)). A plugin that
+with no retry. 0.8.0 also accepts revision 5 ([below](#status-cells-080)). A plugin that
 scopes its behaviour to online play reads
 `deluxe_plugin_sdk::host_online_context()` instead of hooking the game's
 scene sites itself: it returns the host's ready / online / match / training
@@ -103,7 +103,7 @@ with a single choice) is a status row; give its choices tones to show
 `Ready` / `Degraded` / `Failed` in green, yellow and red.
 
 A status row is passive: Left/Right do nothing and `request` is never called.
-On unreleased main (below) Up/Down also skip it (only an editable value row
+Since 0.8.0 Up/Down also skip it (only an editable value row
 holds the cursor, so a page with no editable row highlights nothing).
 
 The complete example is [`sdk/examples/demo`](../sdk/examples/demo/src/lib.rs)
@@ -111,11 +111,13 @@ The complete example is [`sdk/examples/demo`](../sdk/examples/demo/src/lib.rs)
 error codes, threading rules and host persistence are in
 [sdk/README.md](../sdk/README.md).
 
-### Status cells (unreleased)
+<a id="status-cells-unreleased"></a>
 
-**Not in any release.** Status cells, revision 5 and the passive-row
-navigation above exist only on main after v0.7.0 (commit `0d28adc`). The
-released 0.7.0 host refuses a revision 5 descriptor with `REGISTER_ERR_ABI`.
+### Status cells (0.8.0)
+
+Status cells, revision 5 and the passive-row navigation above first ship in
+**0.8.0**, from commit `0d28adc`. The 0.7.0 host refuses a revision 5 descriptor
+with `REGISTER_ERR_ABI`.
 
 **Status cells (descriptor revision 5, `OPTION_FLAG_CELL`).** A run of 1 to 4
 consecutive cell options is drawn as one table: each cell's label is a column
@@ -152,4 +154,5 @@ The Plugins page, pending requests and tones were verified in Eden on
 and read-only rows"). On the console, FX Control's own page registered with
 descriptor 4 and its rows were edited in Training on 2026-10-16
 ([Status](STATUS.md)); tones, pending requests and read-only rows have not
-been observed on hardware. Status cells have no validation record.
+been observed on hardware. Status cells have host layout/registration coverage;
+runtime validation remains pending.

@@ -4,7 +4,19 @@ use skyline::hooks::{getRegionAddress, InlineCtx, Region};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 const ONLINE_LATENCY: usize = 0x16ccab8;
+// 13.0.5 network-update consumer: `ldrb w9, [x19, #0x41]`.
+// The calculation hook above writes owner+0x41, then advances x19 to that byte.
+// Here x19 is still the owner. Observe only while the game itself owns/reads it.
+const ONLINE_BUFFER_READ: usize = 0x16d81a8;
+const ONLINE_BUFFER_GUARD: [u8; 20] = [
+    0x6a, 0xf2, 0x40, 0x39, // ldrb w10, [x19, #0x3c]
+    0x69, 0x06, 0x41, 0x39, // ldrb w9, [x19, #0x41]
+    0x68, 0x0a, 0x40, 0x79, // ldrh w8, [x19, #4]
+    0x2a, 0x01, 0x00, 0x34, // cbz w10, 0x16d81d4
+    0x6a, 0x06, 0x40, 0x79, // ldrh w10, [x19, #2]
+];
 static LATENCY_INSTALLED: AtomicBool = AtomicBool::new(false);
+static BUFFER_OBSERVER_INSTALLED: AtomicBool = AtomicBool::new(false);
 static BUFFER_ENABLED: AtomicBool = AtomicBool::new(false);
 
 // This detects common trampolines, NOT an original-instruction signature.
@@ -61,13 +73,58 @@ unsafe fn deluxe_rewrite_set_online_latency(ctx: &InlineCtx) {
         return;
     }
     let selected = INPUT_BUFFER.load(Ordering::Acquire);
+    if (0..=25).contains(&selected) {
+        super::invalidate_manual_auto_buffer();
+    }
     let automatic = *pointer;
-    super::note_auto_buffer(crate::policy::observed_auto_buffer(automatic, selected));
     let applied = crate::policy::apply_input_buffer(automatic, selected);
     if applied != automatic {
         *pointer = applied;
     }
     record(Code::LatencyApplied, automatic as u64, applied as u64);
+}
+
+/// Read-only sampling at the live input-buffer consumer, rather than a retained
+/// calculation-time snapshot. The original instruction still performs its read;
+/// no registers or game memory are changed and no pointer is retained.
+#[skyline::hook(offset = ONLINE_BUFFER_READ, inline)]
+unsafe fn deluxe_rewrite_observe_online_buffer(ctx: &InlineCtx) {
+    if !BUFFER_ENABLED.load(Ordering::Relaxed) {
+        return;
+    }
+    // Capture the generation before borrowing game memory. A stage transition
+    // or manual choice during this callback makes publication fail closed.
+    let Some(token) = super::auto_buffer_observation() else {
+        return;
+    };
+    let owner = ctx.registers[19].x() as usize;
+    let Some(address) = owner.checked_add(0x41).filter(|_| owner != 0) else {
+        return;
+    };
+    let automatic = std::ptr::read_volatile(address as *const u8);
+    if let Some(frames) =
+        crate::policy::observed_auto_buffer(automatic, INPUT_BUFFER.load(Ordering::Acquire))
+    {
+        super::observe_auto_buffer(token, frames);
+    }
+}
+
+fn install_buffer_observer() {
+    if BUFFER_OBSERVER_INSTALLED.load(Ordering::Relaxed) {
+        return;
+    }
+    unsafe {
+        if !guard_matches(ONLINE_BUFFER_READ - 4, &ONLINE_BUFFER_GUARD) {
+            record(Code::HookRejected, ONLINE_BUFFER_READ as u64, 0);
+            return;
+        }
+        if !preflight(ONLINE_BUFFER_READ) {
+            return;
+        }
+        skyline::install_hook!(deluxe_rewrite_observe_online_buffer);
+    }
+    BUFFER_OBSERVER_INSTALLED.store(true, Ordering::Relaxed);
+    record(Code::HookInstalled, ONLINE_BUFFER_READ as u64, 0);
 }
 
 /// Shared positive online-match signal, independent of buffer mutation.
@@ -89,5 +146,6 @@ pub(super) fn install_match_setup() -> bool {
 pub(super) fn install_latency() {
     if install_match_setup() {
         BUFFER_ENABLED.store(true, Ordering::Relaxed);
+        install_buffer_observer();
     }
 }

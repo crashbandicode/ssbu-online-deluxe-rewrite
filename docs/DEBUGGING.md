@@ -90,7 +90,7 @@ data directory and flags.
 | 3 / 4 / 5 | Hook installing / installed / rejected |
 | 6 / 7 | Config loaded (a = 0, b = input buffer) / rejected |
 | 8 | Setting changed: a = 0, b = input buffer |
-| 9 / 10 | Network buffer applied (a = the game's byte before ours is applied, which is what Auto chose; b = the value applied; since 0.6.2 that a is what the `Auto (Nf)` label shows) / null pointer skipped |
+| 9 / 10 | Network buffer applied (a = the byte at the calculation hook before our selection is applied; b = the applied value) / null pointer skipped. Versions 0.6.2–0.7.0 used a for the Auto display; 0.8.0 uses event 113's current-match observations instead. |
 | 12 / 13 | Sampled CSS entry / exit |
 | 14 / 15 / 16 | Panic / heartbeat (a = 0, b = iteration) / compatibility or diagnostic flag |
 | 17 | Shared function hook entry instruction before chaining |
@@ -124,6 +124,7 @@ data directory and flags.
 | 110 | Stage loaded (0.5.3): a = the game's stage id read at the stage-setup hook, b = the scene status it was classified as (0 Inactive, 1 Training, 2 Singles, 3 Doubles). One edge per stage load; join it with the `CAPTURE_MATCH` capture id (code 106) to attribute a capture to its stage |
 | 111 | Clock probe (0.5.3): a = CPU MHz from a timed chain of dependent adds (0 unknown; about 1020 at the official clock, 1785 during the game's own loading boost or under a Horizon-OC profile), b = Horizon-OC file bits (1 `atmosphere/kips/hoc.kip` present, 2 hoc-clk `boot2.flag` present, 4 a `[01006A800016E000]` section in `config/horizon-oc/config.ini`, 8 `uncapped_clocks=1`). Written at boot, on every stock/OC change and once a minute; the same values go into every capture header (`# clock_mhz`, `# clock`, `# hoc`), `renderer-status.txt` and the Performance row **Clock**. GPU and memory clocks are not readable from the game process |
 | 112 | Peer stale (0.5.5): the selected opponent station is still bound but produced no measured RTT sample for 10 s (`pia_rtt::LIVE_MS`), so the opponent column, the strip's `Peer:` line, the Ping cell and the CSS remote line were hidden (since 0.6.0 the Opp line, the strip's `>Opp:` line and the CSS remote line). a = station index, b = the silence in ms. One row per live-to-silent transition, not per frame; a newly bound station has a 10 s grace. Expected after an opponent declines a rematch without the station-left hook retiring the peer (console behaviour not yet observed) |
+| 113 | Auto buffer observed (0.8.0): a = current-match count, 0–25; b = guarded input-consumption site `0x16d81a8`. Emitted only when an eligible observation changes the displayed value, not every frame. Join with stage event 110; new stages invalidate older observations. Manual choices suppress observations until the next match. |
 
 Codes 73 `AutoContext` and 74 `AutoRequest`
 ([`auto_driver.rs`](../src/runtime/auto_driver.rs)), 78 `ResolutionReport`,

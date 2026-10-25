@@ -27,7 +27,9 @@ field uses the window's labels:
 0.7.0 console LLUltra reads `LLUltra`, `LLUltra+` or `LLUltra++` for 576p,
 720p or 1080p. Since 0.6.2 an Auto buffer carries the frames the game chose,
 for example `You: LessLag | Auto (4f)`, once an online match has set them
-(plain `Auto` before that and offline). The You line's latency field is 10
+(plain `Auto` before that and offline). Since 0.8.0 each new match starts with
+plain `Auto` until its own live buffer sample; the last result remains on
+rematch CSS. A manual-to-Auto switch waits for the next match. The You line's latency field is 10
 characters wide (the line is capped at 38 characters, was 32), and the lobby
 pane keeps plain `Auto`. The opponent line appears only with a connected
 station (since 0.5.5, one that has produced an RTT sample within 10 s). The
