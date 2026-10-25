@@ -1,5 +1,28 @@
 # Validation record
 
+## 0.8.0 — public release assets — 2026-10-25
+
+The [Forgejo release](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.8.0)
+contains the NRO and `manifest.json`, built from clean tag `v0.8.0` at
+`d92bc3d12ebc3bbbe640a9624d8df8a60ba3b430`.
+
+- Build ID: `0.8.0-d92bc3d12ebc-1792963475`.
+- NRO: **1,445,888 bytes**, SHA-256
+  `77c3ba0dff6c0fce7dd1f293610edbf1791f277e18de9eff19ea5e1a2c223cb7`.
+- Manifest SHA-256:
+  `0ea5d864a5fbdc7492fe0c821848516da343bad69be7e27b59bb43ba1aa6bb9c`.
+- All **73** archived source inputs match the tag; **1,130,256** executable
+  bytes match the optimized debug ELF. Native dependency and archive hashes
+  were checked before publication.
+- Both assets were downloaded without authentication and hash-verified after
+  publication at **2026-10-25T21:25:37Z** (release 479, assets 204/205).
+
+External receipts: `deluxe-auto-080/PACKAGE-VERIFIED.json` and
+`deluxe-auto-080/PUBLICATION.json`; retained NRO, debug ELF and source archive:
+`deluxe-auto-080/out/77c3ba0dff6c0fce/`. No device was deployed or run;
+`runtime_tested=false` remains accurate for this release. Gates and their scope
+are below.
+
 ## 0.8.0 — Auto observation freshness — 2026-10-25
 
 The operator reported the preceding match's `Auto (Nf)` count persisting through

@@ -62,6 +62,10 @@ the operator's Switch, recorded with its build hash in [VALIDATION.md](VALIDATIO
 
 ## Current: 0.8.0
 
+Published on Forgejo on 2026-10-25 from clean tag `v0.8.0` / `d92bc3d`.
+Both public assets were downloaded and hash-verified; exact build and hashes
+are in [Validation](VALIDATION.md#080--public-release-assets--2026-10-25).
+
 0.8.0 fixes the stale `Auto (Nf)` observation across consecutive matches. It
 samples the same game buffer byte at the guarded network-consumption site
 `0x16d81a8`, with a match-generation token captured before reading. Every new
