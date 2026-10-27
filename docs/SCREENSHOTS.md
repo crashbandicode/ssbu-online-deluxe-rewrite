@@ -1,9 +1,10 @@
 # Screenshots
 
-A short visual tour of the Deluxe 0.7.0 window. Every image is a real capture
-from an offline Eden session on 2026-10-24, with the separate
+A short visual tour of the Deluxe window. Every image is a real capture from an
+offline Eden session: most from the 0.7.0 session on 2026-10-24, with the separate
 [FX Control](https://git.syntaxbyexample.com/intpa/ssbu-fx-control) companion
-installed. The session used demonstration settings (manual LessLag,
+installed, and the ZR, privacy and Horizon-OC clips from a 0.9.0-candidate
+session on 2026-10-27. Both used demonstration settings (manual LessLag,
 `platform=emulator`, `vanilla_plus=false`), not the shipped defaults. Builds,
 encoding and scope are in [Media provenance](MEDIA_PROVENANCE.md); every
 control is in [Controls](CONTROLS.md).
@@ -33,7 +34,9 @@ navigation cannot change a setting.
 
 ![Editing NetLatency with the ZR guard](media/settings-edit.gif)
 
-Inputs also reach the game: here ZR opens the game's sidebar behind the window.
+Inputs also reach the game: in this Training clip ZR shields and Up/Down taunt
+behind the window. The grey clock after the privacy icons and `ZR+L3 OC` in the
+hint line are there because the Horizon-OC stand-in is loaded (see below).
 
 ## Stealth and Streamer
 
@@ -48,6 +51,28 @@ The two privacy switches are icons on the You row.
 
 This offline clip shows the saved icon states only; it does not test network
 suppression or reconnect behavior.
+
+## Horizon-OC only when online
+
+With the game-aware Horizon-OC fork, **ZR+L3** on Settings switches `hoc_oc`.
+In `online` mode a clock follows the privacy icons; `always` removes it.
+
+1. Hold **ZR** and press **L3**: the mode becomes always and the clock goes.
+2. Press **ZR+L3** again: online mode, the clock returns. Grey means the saved
+   profile is held back (offline here); green would mean it is applied.
+
+![Switching the Horizon-OC mode with ZR+L3](media/oc-indicator.gif)
+
+The Performance page's **Clock** row ends with the same state, wrapped to a
+second line:
+
+![Performance page Clock row reading OC online: idle](media/performance-window-oc.png)
+
+These are Eden captures with the test-only
+[hoc-standin](../tools/hoc-standin/README.md) answering protocol v1 in place of
+Horizon-OC: Deluxe's real client, gate and drawing, but no clock is changed and
+the MHz figure is the emulator host's CPU, not a console. The green state needs
+a connected player and is not shown.
 
 ## Edit a plugin page
 

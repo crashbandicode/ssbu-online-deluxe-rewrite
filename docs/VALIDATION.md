@@ -1,5 +1,37 @@
 # Validation record
 
+## Unreleased Horizon-OC online-only profile — Eden integration with the hoc-standin — 2026-10-27
+
+Operator: "3 it will serve as a a sanity integration test". Eden GIF build
+`9a5d704c9c`, isolated profile, plugins ARCropolis + Deluxe + `tools/hoc-standin`
+(test-only; registers `hoc:clk` and answers protocol v1, no clock control).
+
+1. **First boot, Deluxe `0.8.0-cc6d8fdff592`:** the stand-in registered
+   `hoc:clk`, yet Deluxe recorded event 114 `a=1 b=0` (no service). A stand-in
+   probe showed Eden's TIPC `AtmosphereHasService` reply
+   `0000fe5c 00000002 00000000 00000000` (present = false) for `hoc:clk`,
+   `nothere` and the built-in `fsp-srv` alike; the same query over CMIF
+   answered present. Atmosphère accepts that query only over TIPC
+   (`sm_user_service.cpp`), so the fix keeps TIPC on consoles and uses CMIF
+   when `platform=emulator` (`dd1862e`).
+2. **Second boot, Deluxe `0.8.0-93b4d7c27f56`:** stand-in log: session
+   accepted, first use of commands 0, 100, 101 with kernel PID 81, `armed`,
+   then 102 heartbeats. Deluxe: event 114 `a=4 b=0x10001` (fork present,
+   caps 1, version 1) and event 115 `a=0x6 b=1` (armed, `hoc_oc` online, not
+   applying, generation 1). Screenshots show the grey clock after the privacy
+   icons and `ZR+L3 OC` in the hint line; ZR+L3 removed and restored the clock
+   (mode always, then online), Stealth/Streamer and the NetLatency edit behaved
+   as before.
+3. **Performance page:** the Clock fact was clipped at the window edge, hiding
+   the gate state (Memory too). Facts now wrap (`ac503c0`); the re-check with
+   `0.8.0-ac503c0c48e7` reads `4739 MHz OC, HOC none, / OC online: idle`
+   (emulator host MHz).
+
+Not covered: the green (applied) state, which needs Pia samples from a
+connected player, and every console behavior. Evidence: operator evidence
+directory `horizon-oc-game-aware-tangent-20261027/eden-media/` (receipts, logs,
+frames, review sheets).
+
 ## Unreleased Horizon-OC online-only profile — card install — 2026-10-27
 
 Operator: "install it, we're connected via usb". Card install over DBI USB MTP

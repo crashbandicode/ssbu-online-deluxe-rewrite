@@ -8,7 +8,8 @@ and do not show. The observations themselves are recorded in
 
 The current UI examples were captured on **2026-10-24** in an isolated, muted
 Eden profile on Ubuntu, running Smash **13.0.5**. They replace the older 0.5.0
-UI examples.
+UI examples. Four files are from a later session; see
+[Horizon-OC indicator media](#horizon-oc-indicator-media-090-candidate-2026-10-27).
 
 - **Deluxe:** the released 0.7.0 NRO, build `0.7.0-9a7f81ce1937-1792670948`,
   tag `v0.7.0`, SHA-256
@@ -76,13 +77,16 @@ directory `deluxe-media-refresh-1024/`.
 
 ## Current assets
 
-All 27 are shown in [Screenshots](SCREENSHOTS.md).
+All 29 are shown in [Screenshots](SCREENSHOTS.md). The four marked 0.9.0 come
+from the Horizon-OC stand-in run described [below](#horizon-oc-indicator-media-090-candidate-2026-10-27).
 
 | File | Size | Length | Shows |
 | --- | --- | --- | --- |
 | [overlay-cycle.gif](media/overlay-cycle.gif) | 480×400 | 14 s | L+R+Down page cycle |
-| [settings-edit.gif](media/settings-edit.gif) | 480×220 | 10 s | ZR-guarded NetLatency edit |
-| [privacy-shortcuts.gif](media/privacy-shortcuts.gif) | 480×220 | 10 s | ZR+X / ZR+Y on the You row |
+| [settings-edit.gif](media/settings-edit.gif) | 480×200 | 10 s | ZR-guarded NetLatency edit (0.9.0, Training, with the OC clock) |
+| [privacy-shortcuts.gif](media/privacy-shortcuts.gif) | 480×200 | 10 s | ZR+X / ZR+Y on the You row (0.9.0, Training, with the OC clock) |
+| [oc-indicator.gif](media/oc-indicator.gif) | 480×200 | 10 s | ZR+L3 always/online, the OC clock (0.9.0) |
+| [performance-window-oc.png](media/performance-window-oc.png) | 300×336 | | Performance close-up, Clock row with `OC online: idle` (0.9.0) |
 | [fx-control-edit.gif](media/fx-control-edit.gif) | 480×340 | 8 s | Companion fighter-row edit |
 | [training-strip.gif](media/training-strip.gif) | 1280×720 | 6 s | Training with Settings open |
 | [match-strip.gif](media/match-strip.gif) | 1280×720 | 6 s | Match with the Settings strip |
@@ -107,6 +111,37 @@ All 27 are shown in [Screenshots](SCREENSHOTS.md).
 | [match-debug.png](media/match-debug.png) | 1280×720 | | Debug over the pause menu |
 | [results-quit.png](media/results-quit.png) | 1280×720 | | No Contest after Quit |
 | [smash-css-after-match.png](media/smash-css-after-match.png) | 1280×720 | | CSS after the match, `You: Vanilla* \| Auto` |
+
+## Horizon-OC indicator media (0.9.0 candidate, 2026-10-27)
+
+`settings-edit.gif`, `privacy-shortcuts.gif`, `oc-indicator.gif` and
+`performance-window-oc.png` replace or extend the 0.7.0 set so the Horizon-OC
+clock is visible. Eden cannot run Horizon-OC, so the test-only
+[hoc-standin](../tools/hoc-standin/README.md) registered `hoc:clk` and answered
+protocol v1; Deluxe's client, gate and drawing are real, no clock was changed,
+and the Clock row's MHz is the emulator host's CPU.
+
+- **Emulator:** Eden GIF build `9a5d704c9c` (release AppImage `c3fc1b3c…`),
+  muted, fullscreen 1920×1080 on a private headless display, isolated copy of
+  the `acceptance-fable` profile (protected files verified unchanged).
+- **Plugins:** ARCropolis, Deluxe and the stand-in only. The GIFs use Deluxe
+  build `0.8.0-93b4d7c27f56-1793139771`; the Performance close-up uses
+  `0.8.0-ac503c0c48e7-1793140514`, which adds only the Performance wrap.
+- **Settings:** the 0.7.0 media fixture INI (manual LessLag, emulator, Stealth
+  and Streamer off, Vanilla+ off) plus `hoc_oc=online`.
+- **Scene:** Training, Link against a CPU Bayonetta. ZR, X, Y and the D-pad
+  move only the fighters there, so the crop stays readable; the 0.7.0 clips
+  were on the main menu, where ZR opens the sidebar.
+- **Capture:** the same timed input jobs as 0.7.0 (`privacy-shortcuts`,
+  `settings-edit`) plus `oc-indicator`, 10 s at 10 images/s. Frames are Eden
+  window screenshots (the skill's `capture_eden.py` method), because X11 screen
+  capture returned only black on this host's headless display. The largest gap
+  between frames was 0.28 s.
+- **Encoding:** `record-ui-demo` `gif_tool.py frames`, crop `1440,0,480,200`
+  (the window sits top right in Training), 10 frames/s, source pixels, 480 wide.
+
+Evidence (receipts, raw frames, review sheets, stand-in and Deluxe logs) is in
+the operator's evidence directory `horizon-oc-game-aware-tangent-20261027/eden-media/`.
 
 ## Historical media and diagrams
 
