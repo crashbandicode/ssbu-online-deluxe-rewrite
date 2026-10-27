@@ -38,11 +38,17 @@ hoc-clk fork `c4c28125…`: no clock, and ZR+L3 did nothing.
   and the Deluxe, FX Control and Horizon-OC configs were unchanged.
 - **Not run:** an Eden smoke test of the new route, because another Eden
   session was active.
-- **Console result:** operator-confirmed. After the reboot and the requested
-  check (open Settings, grey clock after the privacy icons, ZR+L3 removes and
-  restores it), the operator reported "It works great".
-  - The card's event log was not read back for this build.
-  - The green (applied) state in an online session is not separately recorded.
+- **Console result:** operator-confirmed after a reboot ("It works great").
+  The operator then clarified the scope: "i tested everything the green icon
+  toggling it on and off alive match and confirming after the match that it
+  goes gray". That covers:
+  - the grey clock while idle;
+  - ZR+L3 switching the mode off and on;
+  - the green (applied) clock in a live online match;
+  - the return to grey after the match.
+
+  The card's event log was not read back for this build, so the
+  events 114/115 values are not recorded.
 
 ## Unreleased Horizon-OC online-only profile — Eden integration with the hoc-standin — 2026-10-27
 
