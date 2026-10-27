@@ -52,6 +52,19 @@ unsafe fn row(label: &str, value: &str) {
     text(value);
 }
 
+/// A Performance fact whose value wraps at the column's end instead of being
+/// clipped at the window edge (0.9.0): `Clock` with the Horizon-OC gate state
+/// and `Memory` outgrew the fixed window width.
+unsafe fn wrapped_row(label: &str, value: &str) {
+    igTableNextRow(0, 0.0);
+    igTableNextColumn();
+    text(label);
+    igTableNextColumn();
+    igPushTextWrapPos(0.0);
+    text(value);
+    igPopTextWrapPos();
+}
+
 unsafe fn paint_text(value: &str, color: Option<Vec4>) {
     if let Some(color) = color {
         igPushStyleColor_Vec4(TEXT, color);
@@ -389,7 +402,7 @@ unsafe fn performance(
         paint_text(label, ping.and_then(ping_color));
     }
     for (label, value) in perf_facts(width, height, false) {
-        row(label, &value);
+        wrapped_row(label, &value);
     }
     let mean = frames.average();
     let color = frame_color(mean);
