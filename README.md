@@ -135,7 +135,9 @@ in [Rendering profiles](docs/RENDERING.md#measured-results).
 
 Everything else, including 0.6.2's older chords, is in
 [Controls](docs/CONTROLS.md); the You-row icons are drawn in
-[privacy-indicators.svg](docs/privacy-indicators.svg).
+[privacy-indicators.svg](docs/privacy-indicators.svg), and the Horizon-OC
+clock that follows them (0.9.0, ZR+L3) in
+[oc-indicators.svg](docs/oc-indicators.svg).
 
 ## Rendering profiles
 

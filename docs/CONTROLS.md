@@ -87,6 +87,14 @@ The image above is an enlarged redraw of `privacy_icons` in `src/runtime/ui.rs`
 at the source's coordinates and colours, not a screenshot; text in it is a
 placeholder.
 
+![Horizon-OC clock states, redrawn from the source geometry](oc-indicators.svg)
+
+The clock image is the same kind of redraw, of `oc_clock` and its place after
+the privacy icons: green with a hub (profile applied), grey (held back), yellow
+(no signal or the fork not answering), and no clock at all with
+`hoc_oc=always` or without the fork. Its last panel shows when the clock
+changes.
+
 **Opp** appears only while the peer shows (Streamer off, and a connected, live
 station): `<name> | <announced profile> | <announced buffer> | <ping> |
 <interface>`, for example `Mario | LessLag | 3 | 23ms | Ethernet`. A fact the

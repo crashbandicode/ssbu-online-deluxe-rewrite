@@ -117,10 +117,11 @@ These are kept unchanged and are not part of the 0.7.0 UI session.
   [Latency methodology](LATENCY_METHODOLOGY.md).
 - **Feature-toggle comparisons:** the six `toggles-*` images and GIFs keep their
   original comparison scope in [Emulator method](EMULATOR_METHOD.md).
-- **Diagrams:** the nine SVGs are conceptual illustrations, used in the
+- **Diagrams:** the ten SVGs are conceptual illustrations, used in the
   [README](../README.md), [Controls](CONTROLS.md), [Rendering](RENDERING.md)
   and [LessLag and LLUltra](LESSLAG_LLULTRA.md).
-  [privacy-indicators.svg](privacy-indicators.svg) redraws source geometry and
-  is **not a screenshot**.
+  [privacy-indicators.svg](privacy-indicators.svg) and
+  [oc-indicators.svg](oc-indicators.svg) (0.9.0, the Horizon-OC clock) redraw
+  source geometry and are **not screenshots**.
 
 None of these retained assets is relabeled as a new Switch measurement.
