@@ -21,9 +21,11 @@ Operator: "install it, we're connected via usb". Card install over DBI USB MTP
   `ultimate/ssbu_online_deluxe_rewrite/backups/pre-hocga-hocclk-exefs-1027.nsp`
   (copy it back to `atmosphere/contents/00FF0000636C6BFF/exefs.nsp` and
   reboot).
-- **Unchanged and read back:** Horizon-OC `config.ini` (`4dbfd996…`, never
-  written), the Deluxe and FX `config.ini`, ARCropolis config, hoc-clk
-  `toolbox.json` and `boot2.flag`, and the other twelve plugins.
+- **Unchanged, read back byte for byte:** Horizon-OC `config.ini`
+  (`4dbfd996…`, never written), the Deluxe and FX `config.ini`, the ARCropolis
+  config, hoc-clk `toolbox.json` and the other twelve plugins.
+- **Unchanged by listing:** the plugin, hoc-clk, `flags` (the 0-byte
+  `boot2.flag`), `config/horizon-oc` and `ultimate/mods` directories.
 
 Activation needs a console reboot (the sysmodule) and a Smash start (the
 plugin). `hoc_oc` is absent, so the default `always` keeps Horizon-OC's own
