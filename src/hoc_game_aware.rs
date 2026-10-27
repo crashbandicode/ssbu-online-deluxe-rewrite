@@ -8,10 +8,13 @@
 //! title profile and Horizon-OC's own global/stock fallback.
 //!
 //! Framing follows libnx: `cmifMakeRequest` over `hipcMakeRequest` for CMIF
-//! (sm `RegisterClient`/`GetServiceHandle`, every hoc:clk command) and
-//! `tipcMakeRequest` for sm `AtmosphereHasService`, which never blocks.
-//! Atmosphère's sm defers `GetServiceHandle` for an unregistered service
-//! until it registers, so the client asks `HasService` first.
+//! (sm `GetServiceHandle`, every hoc:clk command) and `tipcMakeRequest` for
+//! sm `AtmosphereHasService`, which never blocks. Atmosphère's sm defers
+//! `GetServiceHandle` for an unregistered service until it registers, so the
+//! client asks `HasService` first.
+//!
+//! Both sm requests go over Smash's own `sm:` session ([`sdk_sm`]), not one
+//! of the plugin's: a console refuses a game a second session.
 
 use crate::online_session::TICKS_PER_SECOND;
 
@@ -19,12 +22,9 @@ use crate::online_session::TICKS_PER_SECOND;
 pub const IPC_BUFFER_SIZE: usize = 0x100;
 pub type IpcBuffer = [u8; IPC_BUFFER_SIZE];
 
-/// Named port of the service manager.
-pub const SM_PORT: &[u8; 4] = b"sm:\0";
 /// `SmServiceName` of the hoc-clk sysmodule.
 pub const SERVICE: [u8; 8] = *b"hoc:clk\0";
 
-pub const SM_REGISTER_CLIENT: u32 = 0;
 pub const SM_GET_SERVICE_HANDLE: u32 = 1;
 pub const SM_ATMOSPHERE_HAS_SERVICE: u32 = 65100;
 
@@ -66,6 +66,73 @@ pub const RECHECK_TICKS: u64 = 30 * TICKS_PER_SECOND;
 pub enum WireError {
     Truncated,
     BadMagic,
+}
+
+/// Smash's own `sm:` session, which the client borrows. A game may create
+/// one session itself (Atmosphère pm: the Application resource limit has
+/// `SessionCountMax = 1`) and Smash's SDK holds it for the whole process
+/// (`nn::sm::Finalize` is a no-op), so a second `svcConnectToNamedPort("sm:")`
+/// fails with `LimitReached` (`0x10801`) on a console. Eden does not enforce
+/// the limit. The SDK has no non-blocking lookup to call instead
+/// (`nn::sf::hipc::TryConnectToHipcService` and `IsHipcServiceRegistered`
+/// are abort stubs), and its `GetServiceHandle` would park every SDK thread's
+/// sm traffic behind a deferred request, so the client reads the session
+/// handle and sends `HasService` itself. The session is Smash's: it is
+/// never registered, detached or closed here.
+///
+/// Pinned to Smash 13.0.5's SDK (build id `5fd4f531…`): both functions must
+/// hash to these values before the offsets below are trusted.
+pub mod sdk_sm {
+    pub const GET_SERVICE_HANDLE: &[u8] = b"_ZN2nn2sm16GetServiceHandleEPNS_3svc6HandleEPKcm\0";
+    pub const INITIALIZE: &[u8] = b"_ZN2nn2sm10InitializeEv\0";
+    pub const GET_SERVICE_HANDLE_LEN: usize = 296;
+    pub const INITIALIZE_LEN: usize = 432;
+    pub const GET_SERVICE_HANDLE_FNV: u64 = 0x5E80_1D71_8C5C_1C9D;
+    pub const INITIALIZE_FNV: u64 = 0x66F5_F668_BB0C_088F;
+    /// `adrp x8; ldr x8, [x8, #0x3a8]` at `GetServiceHandle + 0xc`: the
+    /// pointer to the slot holding the session object.
+    pub const SLOT_POINTER_FROM_GET: usize = 0xCC_E3A8 - 0x36_9CE0;
+    /// `adrp x8; add x8, x8, #0x628` at `Initialize + 0x110`: the session
+    /// object's vtable.
+    pub const VTABLE_FROM_INITIALIZE: usize = 0xC0_C628 - 0x36_9B20;
+    /// `str w23, [x20, #0xc]` at `Initialize + 0x120`: the connected handle.
+    pub const HANDLE_OFFSET: usize = 0xC;
+    /// Event 114 `b` when the route is not usable: this plus a [`Route`] step.
+    pub const DETAIL_BASE: u64 = 0x5344_4B00;
+
+    /// Where reading the SDK's session stopped.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    #[repr(u8)]
+    pub enum Route {
+        /// A function symbol did not resolve.
+        Symbol = 1,
+        /// A function's bytes are not Smash 13.0.5's SDK.
+        Code = 2,
+        /// The slot or the object pointer is unreadable or null.
+        Object = 3,
+        /// The object is not the SDK's sm session (vtable).
+        Vtable = 4,
+        /// The handle is zero or a pseudo-handle.
+        Handle = 5,
+    }
+
+    impl Route {
+        pub const fn detail(self) -> u64 {
+            DETAIL_BASE | self as u64
+        }
+    }
+
+    /// A real session handle: nonzero and below the pseudo-handles.
+    pub const fn plausible_handle(handle: u32) -> bool {
+        handle != 0 && handle < 0xFFFF_8000
+    }
+
+    /// FNV-1a, 64-bit.
+    pub fn fnv1a64(bytes: &[u8]) -> u64 {
+        bytes.iter().fold(0xCBF2_9CE4_8422_2325, |hash, byte| {
+            (hash ^ u64::from(*byte)).wrapping_mul(0x0100_0000_01B3)
+        })
+    }
 }
 
 fn put_u32(buf: &mut IpcBuffer, offset: usize, value: u32) {
@@ -510,6 +577,65 @@ mod tests {
         (0..count).map(|i| get_u32(buf, i * 4).unwrap()).collect()
     }
 
+    /// AArch64 `adrp`: the 4 KiB page `pc`'s page plus the signed 21-bit
+    /// page count.
+    fn adrp_target(pc: u64, word: u32) -> u64 {
+        assert_eq!(word & 0x9F00_0000, 0x9000_0000, "not adrp");
+        let pages = ((word >> 5) & 0x7_FFFF) << 2 | (word >> 29) & 3;
+        let pages = (i64::from(pages) << 43) >> 43;
+        (pc & !0xFFF).wrapping_add_signed(pages << 12)
+    }
+
+    /// `ldr xt, [xn, #imm]` (unsigned offset): the byte offset.
+    fn ldr_x_offset(word: u32) -> u64 {
+        assert_eq!(word & 0xFFC0_0000, 0xF940_0000, "not ldr x");
+        u64::from((word >> 10) & 0xFFF) * 8
+    }
+
+    /// `add xd, xn, #imm` (no shift): the immediate.
+    fn add_x_immediate(word: u32) -> u64 {
+        assert_eq!(word & 0xFFC0_0000, 0x9100_0000, "not add x");
+        u64::from((word >> 10) & 0xFFF)
+    }
+
+    /// `str wt, [xn, #imm]` (unsigned offset): the byte offset.
+    fn str_w_offset(word: u32) -> u64 {
+        assert_eq!(word & 0xFFC0_0000, 0xB900_0000, "not str w");
+        u64::from((word >> 10) & 0xFFF) * 4
+    }
+
+    #[test]
+    fn sdk_sm_offsets_follow_from_the_sdk_instructions() {
+        // Instruction words read from Smash 13.0.5's SDK at these image
+        // offsets: GetServiceHandle 0x369ce0, Initialize 0x369b20.
+        let slot = adrp_target(0x36_9CEC, 0xB000_4B28) + ldr_x_offset(0xF941_D508);
+        assert_eq!(slot, 0xCC_E3A8);
+        assert_eq!(slot - 0x36_9CE0, sdk_sm::SLOT_POINTER_FROM_GET as u64);
+        let vtable = adrp_target(0x36_9C30, 0xF000_4508) + add_x_immediate(0x9118_A108);
+        assert_eq!(vtable, 0xC0_C628);
+        assert_eq!(vtable - 0x36_9B20, sdk_sm::VTABLE_FROM_INITIALIZE as u64);
+        // `str w23, [x20, #0xc]`: w23 is the handle ConnectToNamedPort returned.
+        assert_eq!(0xB900_0E97u32 & 0x1F, 23);
+        assert_eq!((0xB900_0E97u32 >> 5) & 0x1F, 20);
+        assert_eq!(str_w_offset(0xB900_0E97), sdk_sm::HANDLE_OFFSET as u64);
+        // nn::sm::Finalize (0x369cd0) is `mov x0, xzr; ret`
+        // (0xaa1f03e0, 0xd65f03c0): the session is never closed.
+    }
+
+    #[test]
+    fn sdk_sm_hash_and_route_details() {
+        assert_eq!(sdk_sm::fnv1a64(b""), 0xCBF2_9CE4_8422_2325);
+        assert_eq!(sdk_sm::fnv1a64(b"a"), 0xAF63_DC4C_8601_EC8C);
+        assert_eq!(sdk_sm::fnv1a64(b"foobar"), 0x8594_4171_F739_67E8);
+        assert_eq!(sdk_sm::Route::Symbol.detail(), 0x5344_4B01);
+        assert_eq!(sdk_sm::Route::Handle.detail(), 0x5344_4B05);
+        assert!(sdk_sm::GET_SERVICE_HANDLE.ends_with(b"\0"));
+        assert!(sdk_sm::INITIALIZE.ends_with(b"\0"));
+        assert!(sdk_sm::plausible_handle(0x0001_8005));
+        assert!(!sdk_sm::plausible_handle(0));
+        assert!(!sdk_sm::plausible_handle(0xFFFF_8001));
+    }
+
     #[test]
     fn cmif_without_pid_matches_libnx_layout() {
         let mut buf = [0xAA; IPC_BUFFER_SIZE];
@@ -526,7 +652,7 @@ mod tests {
     #[test]
     fn cmif_with_pid_carries_the_special_header_and_placeholder() {
         let mut buf = [0; IPC_BUFFER_SIZE];
-        encode_cmif(&mut buf, SM_REGISTER_CLIENT, true, &0u64.to_le_bytes());
+        encode_cmif(&mut buf, CMD_GET_API_VERSION, true, &0u64.to_le_bytes());
         // 16 + 16 + 8 = 40 bytes -> 10 words; special header bit; send_pid;
         // pid placeholder; data starts at 20, the header at 32.
         assert_eq!(
