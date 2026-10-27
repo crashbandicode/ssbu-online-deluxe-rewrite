@@ -1,5 +1,45 @@
 # Validation record
 
+## Unreleased Horizon-OC online-only profile — console handshake failure and sm-session fix — 2026-10-27
+
+Operator report after the card install of `0.8.0-cc6d8fdff592` with the
+hoc-clk fork `c4c28125…`: no clock, and ZR+L3 did nothing.
+
+- **Evidence:** the card's `events.log` (read over DBI) holds the only boot of
+  that build. The first handshake recorded event 114 `a=0x1 b=0x10801` and
+  event 115 `a=0 b=0x1_0001_0801`.
+- **Cause:** `0x10801` is the kernel's `LimitReached`, returned by Deluxe's own
+  `svcConnectToNamedPort("sm:")`.
+  - Atmosphère's pm gives the Application resource limit `SessionCountMax = 1`
+    (`stratosphere/pm/source/impl/pm_spec.cpp`).
+  - The kernel only expands limits for system processes (`kern_k_client_port.cpp`).
+  - Smash's SDK holds that one session for the whole process: `nn::sm::Finalize`
+    is `mov x0, xzr; ret`.
+  - Eden does not enforce the limit, so the Eden integration below could not
+    show this.
+- **Effect:** the client classified Horizon-OC as absent. No clock was drawn,
+  ZR+L3 was ignored, and the fork was never armed, so the saved profile kept
+  applying as in stock Horizon-OC.
+- **Ruled out:** the service-access list. Skyline's `exefs/main.npdm` on that
+  card grants the client wildcard `*` in both ACI and ACID, so sm's
+  `GetServiceHandle` check allows `hoc:clk`.
+- **Fix (`788537d`):** the client borrows Smash's registered `sm:` session.
+  - It reads the session the way `nn::sm::GetServiceHandle` reaches it: the
+    slot behind its `adrp`/`ldr`, the session object (checked by vtable), and
+    the handle `nn::sm::Initialize` stored at `+0xc`.
+  - Both functions must first hash to Smash 13.0.5's SDK, build id `5fd4f531…`.
+  - HasService is still asked first. The SDK's `TryConnectToHipcService` and
+    `IsHipcServiceRegistered` are abort stubs, and a deferred
+    `GetServiceHandle` would stall every SDK thread's sm traffic on the
+    shared session.
+  - Host tests derive the pinned offsets from the SDK's instruction words.
+- **Build and install:** `0.8.0-788537dd6f6d-1793142603`, NRO `778e94a8…`,
+  installed over DBI and read back at 23:13Z. The other plugins, the fork,
+  and the Deluxe, FX Control and Horizon-OC configs were unchanged.
+- **Not run:** an Eden smoke test of the new route, because another Eden
+  session was active.
+- **Console result:** pending.
+
 ## Unreleased Horizon-OC online-only profile — Eden integration with the hoc-standin — 2026-10-27
 
 Operator: "3 it will serve as a a sanity integration test". Eden GIF build
