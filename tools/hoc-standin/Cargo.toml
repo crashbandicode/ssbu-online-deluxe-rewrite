@@ -1,0 +1,27 @@
+[package]
+name = "hoc-standin"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Test-only stand-in for the game-aware hoc-clk fork's protocol v1, for Eden integration runs. Never part of a Deluxe release."
+
+[package.metadata.skyline]
+titleid = "01006A800016E000"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[target.'cfg(target_os = "switch")'.dependencies]
+skyline = "=0.6.0"
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+opt-level = "s"
+lto = "thin"
+codegen-units = 1
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("switch"))'] }
