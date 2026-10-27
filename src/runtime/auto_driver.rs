@@ -244,6 +244,20 @@ pub(crate) fn set_scene(
     if connection == previous_connection && status == previous_status {
         return;
     }
+    // 0.9.0: an earlier match's mark expires with the shared online session,
+    // so a stage entered after that session ended proves itself again.
+    // Code 107 `a=3`.
+    let entering_match = status != previous_status
+        && matches!(status, SceneStatus::Singles | SceneStatus::Doubles);
+    if auto_policy::carried_mark_expired(
+        connection,
+        entering_match,
+        MATCH_MARKED.load(Ordering::Acquire),
+        super::online_session::live_at(super::online_session::tick()),
+    ) && MATCH_MARKED.swap(false, Ordering::AcqRel)
+    {
+        record(Code::SceneHold, 3, source);
+    }
     // A match stage under a menu-set Quickplay starts the stale check; any
     // other status ends it.
     if matches!(status, SceneStatus::Singles | SceneStatus::Doubles)
