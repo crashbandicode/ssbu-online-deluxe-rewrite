@@ -198,20 +198,25 @@ impl Client {
         Ok(sm)
     }
 
-    /// `HasService` first (TIPC, never deferred), then the session, the API
-    /// version and cmd 100.
+    /// `HasService` first (never deferred; TIPC on a console, CMIF with
+    /// `platform=emulator`, see `HasServiceFraming`), then the session, the
+    /// API version and cmd 100.
     fn open(&mut self) -> Result<(Capability, u64), Failure> {
         let sm = self.sm()?;
+        let emulator = super::settings().platform == crate::config::Platform::Emulator;
+        let framing = wire::HasServiceFraming::for_platform(emulator);
         let mut request = [0; IPC_BUFFER_SIZE];
-        wire::encode_tipc(&mut request, wire::SM_ATMOSPHERE_HAS_SERVICE, &wire::SERVICE);
-        let has = match transact(sm, &request).and_then(|reply| {
-            wire::decode_tipc(&reply).map_err(Failure::Wire)
-        }) {
-            Ok(reply) if reply.result == 0 => reply.payload().first().is_some_and(|b| b & 1 != 0),
-            Ok(reply) => return Err(Failure::Result(reply.result)),
+        wire::encode_has_service(&mut request, framing);
+        let has = match transact(sm, &request) {
+            Ok(reply) => match wire::decode_has_service(&reply, framing) {
+                Ok(Ok(present)) => present,
+                Ok(Err(result)) => return Err(Failure::Result(result)),
+                // An unreadable reply leaves the session usable; keep it.
+                Err(error) => return Err(Failure::Wire(error)),
+            },
             Err(failure) => {
-                // A broken sm: session is dropped, not closed (see the module
-                // note); this path means sm itself is gone.
+                // The SVC failed: sm itself is gone. Drop the session, do not
+                // close it (see the module note).
                 self.sm = None;
                 return Err(failure);
             }

@@ -47,6 +47,19 @@ Streamer. The eye closes and the TV turns green when they are on.
 
 ![ZR+X closing the Stealth eye and ZR+Y turning the Streamer TV green, then both switched off again](docs/media/privacy-shortcuts.gif)
 
+### Horizon-OC only when online (ZR+L3)
+
+With the game-aware Horizon-OC fork, **ZR+L3** on Settings switches when Smash's
+saved Horizon-OC profile may apply: **always**, as Horizon-OC itself does, or
+only while you are **online**. In online mode a clock follows the privacy icons:
+green while the profile is applied, grey while it is held back.
+
+![ZR+L3 switching to always, which removes the clock, and back to online, where the grey clock returns](docs/media/oc-indicator.gif)
+
+These three clips are from Eden with the test-only
+[hoc-standin](tools/hoc-standin/README.md) answering for Horizon-OC, offline,
+so the clock stays grey; no clock was changed.
+
 ### A compact strip in matches
 
 In ordinary matches the window becomes a two-row strip at the top left.

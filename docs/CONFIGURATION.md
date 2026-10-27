@@ -35,7 +35,7 @@ hints=true
 | `input_buffer` | `auto`, `0`–`25` | The game's online input buffer (NetLatency) |
 | `render_mode` | `vanilla`, `lesslag`, `llultra`, `lldoubles` (also the restart-only experiments `lesslag_core`, `doubles_core`) | Saved manual profile; see [Rendering profiles](RENDERING.md) |
 | `auto_profile` | `true`, `false` | Let the scene choose the profile |
-| `platform` | `console`, `emulator` | Selects the Auto table and resolution policy |
+| `platform` | `console`, `emulator` | Selects the Auto table and resolution policy. Since 0.9.0 it also selects how the Horizon-OC client asks sm whether `hoc:clk` exists: TIPC on a console (the only framing Atmosphère accepts for that query), CMIF on an emulator (Eden's TIPC answer is always "absent"; see [hoc-standin](../tools/hoc-standin/README.md)) |
 | `stealth` | `true`, `false` | Suppress the recognition beacon and settings payload. The peer settings exchange (the peer's announced settings on the Settings page's Opp line; the Peer row before 0.6.0) needs Stealth Off on both peers, and the value is latched per connection, so start a new online session after changing it |
 | `streamer` | `true`, `false` | Hide remote identities and restore the original native styles |
 | `drs_moves` | `none`, `all`, or comma-separated move names (below) | 0.5.2 experiment: lower the internal resolution one level while a named move's status is active; see [Rendering profiles](RENDERING.md) |

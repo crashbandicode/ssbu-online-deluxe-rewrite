@@ -79,7 +79,13 @@ applied, grey while Horizon-OC's own fallback holds (offline, menus after the
 90 s hold), yellow when there is no Pia signal or the fork stopped answering.
 It is drawn geometry like the icons and adds no row. The Performance **Clock**
 row appends the same state (`OC online: on`, `OC online: idle`,
-`OC always`, `OC online: no signal`, `OC online: unavailable`).
+`OC always`, `OC online: no signal`, `OC online: unavailable`), wrapped onto a
+second line.
+
+![ZR+L3 switching to always, which removes the clock, and back to online, where the grey clock returns](media/oc-indicator.gif)
+
+Captured in Eden with the test-only Horizon-OC stand-in
+([hoc-standin](../tools/hoc-standin/README.md)); offline, so the clock is grey.
 
 ![Stealth eye and Streamer TV states, redrawn from the source geometry](privacy-indicators.svg)
 

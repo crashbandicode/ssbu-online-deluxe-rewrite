@@ -144,6 +144,52 @@ fn parse_hipc(buf: &IpcBuffer) -> Result<(usize, usize, Option<u32>), WireError>
     Ok((offset, words, moved))
 }
 
+/// How the `AtmosphereHasService` presence check is framed. Atmosphère's sm
+/// accepts it only over TIPC: its CMIF path covers RegisterClient,
+/// GetServiceHandle and (Un)RegisterService alone (`sm_user_service.cpp`).
+/// Eden lists 65100 in both tables, but its TIPC reply carries `false` for
+/// every service, `fsp-srv` included (measured with the hoc-standin probe on
+/// the Eden GIF build 9a5d704c9c); its CMIF reply is correct. So
+/// `platform=emulator` asks over CMIF and a console over TIPC.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum HasServiceFraming {
+    Tipc,
+    Cmif,
+}
+
+impl HasServiceFraming {
+    pub const fn for_platform(emulator: bool) -> Self {
+        if emulator {
+            Self::Cmif
+        } else {
+            Self::Tipc
+        }
+    }
+}
+
+pub fn encode_has_service(buf: &mut IpcBuffer, framing: HasServiceFraming) {
+    match framing {
+        HasServiceFraming::Tipc => encode_tipc(buf, SM_ATMOSPHERE_HAS_SERVICE, &SERVICE),
+        HasServiceFraming::Cmif => encode_cmif(buf, SM_ATMOSPHERE_HAS_SERVICE, false, &SERVICE),
+    }
+}
+
+/// `Ok(present)`, or `Err(result)` when sm answered with an error result.
+pub fn decode_has_service(
+    buf: &IpcBuffer,
+    framing: HasServiceFraming,
+) -> Result<Result<bool, u32>, WireError> {
+    let reply = match framing {
+        HasServiceFraming::Tipc => decode_tipc(buf)?,
+        HasServiceFraming::Cmif => decode_cmif(buf)?,
+    };
+    Ok(if reply.result == 0 {
+        Ok(reply.payload().first().is_some_and(|b| b & 1 != 0))
+    } else {
+        Err(reply.result)
+    })
+}
+
 /// A decoded response: the result, up to 32 payload bytes and a moved handle.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Reply {
@@ -519,6 +565,37 @@ mod tests {
         encode_tipc(&mut buf, SM_ATMOSPHERE_HAS_SERVICE, &SERVICE);
         assert_eq!(words(&buf, 2), [65116, 2]);
         assert_eq!(&buf[8..16], b"hoc:clk\0");
+        let mut framed = [0; IPC_BUFFER_SIZE];
+        encode_has_service(&mut framed, HasServiceFraming::for_platform(false));
+        assert_eq!(framed, buf);
+    }
+
+    fn from_words(values: &[u32]) -> IpcBuffer {
+        let mut buf = [0; IPC_BUFFER_SIZE];
+        for (i, value) in values.iter().enumerate() {
+            put_u32(&mut buf, i * 4, *value);
+        }
+        buf
+    }
+
+    #[test]
+    fn emulator_has_service_is_cmif_and_reads_edens_replies() {
+        let mut buf = [0; IPC_BUFFER_SIZE];
+        encode_has_service(&mut buf, HasServiceFraming::for_platform(true));
+        assert_eq!(words(&buf, 8), [4, 10, 0, 0, CMIF_IN_MAGIC, 0, 65100, 0]);
+        assert_eq!(&buf[32..40], b"hoc:clk\0");
+        // Eden 9a5d704c9c, hoc-standin probe: the CMIF reply says present...
+        let cmif = from_words(&[0, 0xc, 0, 0, CMIF_OUT_MAGIC, 0, 0, 0, 1, 0x006b_6c63, 0, 0]);
+        assert_eq!(decode_has_service(&cmif, HasServiceFraming::Cmif), Ok(Ok(true)));
+        // ...while its TIPC reply says absent for every name (fsp-srv too).
+        let tipc = from_words(&[0xfe5c, 2, 0, 0]);
+        assert_eq!(decode_has_service(&tipc, HasServiceFraming::Tipc), Ok(Ok(false)));
+        let refused = from_words(&[0, 0xc, 0, 0, CMIF_OUT_MAGIC, 0, 0x415, 0]);
+        assert_eq!(decode_has_service(&refused, HasServiceFraming::Cmif), Ok(Err(0x415)));
+        assert_eq!(
+            decode_has_service(&from_words(&[0, 0xc, 0, 0, 0x1234]), HasServiceFraming::Cmif),
+            Err(WireError::BadMagic)
+        );
     }
 
     /// hoc-clk's own response shape (`_ipcServerPrepareResponse`).
