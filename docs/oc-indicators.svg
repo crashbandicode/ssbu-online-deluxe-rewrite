@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+     width="1040" height="1010" viewBox="0 0 1040 1010"
+     font-family="DejaVu Sans, Verdana, sans-serif">
+  <title>Deluxe OC clock indicator: source-geometry preview (not a screenshot)</title>
+  <desc>Enlarged redraw of oc_clock() and its call in privacy_icons() in
+    src/runtime/ui.rs. Coordinates are in units of the ImGui font size, the same
+    normalized values the source passes to point(x, y): four quarter-arc
+    quadratic Beziers for the face, two hands from the centre, and a hub only
+    while the profile is applied. The clock follows the 2.5 x 1 privacy
+    reservation after a 0.3-unit gap and reserves 1 x 1. Colours: GREEN
+    rgb(0.45,0.90,0.45), GREY rgb(0.70,0.70,0.70), YELLOW rgb(0.95,0.85,0.25);
+    the theme text colour is shown as white.</desc>
+  <defs>
+    <!-- Privacy icons, as in privacy-indicators.svg. -->
+    <g id="eye-open" fill="none" stroke="currentColor" stroke-width="0.085">
+      <path d="M0.05 0.5 Q0.5 0.02 0.95 0.5"/>
+      <path d="M0.05 0.5 Q0.5 0.98 0.95 0.5"/>
+      <circle cx="0.5" cy="0.5" r="0.13" fill="currentColor" stroke="none"/>
+    </g>
+    <g id="eye-closed" fill="none" stroke="currentColor" stroke-width="0.085">
+      <path d="M0.05 0.35 Q0.5 0.95 0.95 0.35"/>
+      <path d="M0.24 0.55 L0.16 0.75 M0.5 0.65 L0.5 0.85 M0.76 0.55 L0.84 0.75"/>
+    </g>
+    <g id="tv" fill="none" stroke="currentColor" stroke-width="0.085">
+      <rect x="1.45" y="0.24" width="1" height="0.58" rx="0.08"/>
+      <path d="M1.7 0.02 L1.95 0.24 M2.2 0.02 L1.95 0.24 M1.95 0.82 L1.95 0.96 M1.72 0.96 L2.18 0.96"/>
+    </g>
+    <rect id="tv-screen" x="1.58" y="0.37" width="0.74" height="0.32" rx="0.03" fill="currentColor"/>
+    <rect id="reserve" x="0" y="0" width="2.5" height="1" fill="none"
+          stroke="#5a5a66" stroke-width="0.02" stroke-dasharray="0.08 0.06"/>
+
+    <!-- OC clock: four quarter arcs (one AddBezierQuadratic each) and two hands. -->
+    <g id="clock" fill="none" stroke="currentColor" stroke-width="0.085">
+      <path d="M0.5 0.05 Q0.95 0.05 0.95 0.5"/>
+      <path d="M0.95 0.5 Q0.95 0.95 0.5 0.95"/>
+      <path d="M0.5 0.95 Q0.05 0.95 0.05 0.5"/>
+      <path d="M0.05 0.5 Q0.05 0.05 0.5 0.05"/>
+      <path d="M0.5 0.5 L0.5 0.22 M0.5 0.5 L0.72 0.5"/>
+    </g>
+    <!-- Lit only: the filled hub. -->
+    <circle id="clock-hub" cx="0.5" cy="0.5" r="0.1" fill="currentColor"/>
+    <!-- igDummy reservation of the clock: 1 x 1 font units. -->
+    <rect id="clock-reserve" x="0" y="0" width="1" height="1" fill="none"
+          stroke="#5a5a66" stroke-width="0.02" stroke-dasharray="0.08 0.06"/>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#cfd3da"/>
+    </marker>
+  </defs>
+
+  <rect width="1040" height="1010" fill="#15151a"/>
+
+  <text x="40" y="40" font-size="22" font-weight="bold" fill="#ffffff">Deluxe OC clock indicator: source-geometry preview (not a screenshot)</text>
+  <text x="40" y="64" font-size="13" fill="#cfd3da">Traced from oc_clock() in src/runtime/ui.rs (feature/hoc-online-oc, cc6d8fd). 1 unit = the ImGui font size, enlarged here.</text>
+  <text x="40" y="82" font-size="13" fill="#cfd3da">Drawn only with hoc_oc=online and the game-aware Horizon-OC fork answering. Arcs are ideal; ImGui uses 8 segments each.</text>
+
+  <!-- A: the clock alone, 1 unit = 110 px. -->
+  <rect x="20" y="100" width="1000" height="220" rx="10" fill="#202028"/>
+  <text x="40" y="124" font-size="15" font-weight="bold" fill="#ffffff">Clock alone, 1 unit = 110 px: what each colour means</text>
+
+  <g transform="translate(90 140) scale(110)" color="#73e673">
+    <use xlink:href="#clock"/>
+    <use xlink:href="#clock-hub"/>
+  </g>
+  <use xlink:href="#clock" transform="translate(340 140) scale(110)" color="#b3b3b3"/>
+  <use xlink:href="#clock" transform="translate(590 140) scale(110)" color="#f2d940"/>
+  <use xlink:href="#clock-reserve" transform="translate(840 140) scale(110)"/>
+  <text x="895" y="200" font-size="13" fill="#5a5a66" text-anchor="middle">nothing</text>
+
+  <text x="145" y="278" font-size="13" fill="#cfd3da" text-anchor="middle">Profile applied: green, hub</text>
+  <text x="145" y="296" font-size="12" fill="#9aa0aa" text-anchor="middle">a player connected, or within 90 s</text>
+  <text x="395" y="278" font-size="13" fill="#cfd3da" text-anchor="middle">Held back: grey</text>
+  <text x="395" y="296" font-size="12" fill="#9aa0aa" text-anchor="middle">offline: HOC global or stock</text>
+  <text x="645" y="278" font-size="13" fill="#cfd3da" text-anchor="middle">No signal / unavailable: yellow</text>
+  <text x="645" y="296" font-size="12" fill="#9aa0aa" text-anchor="middle">no Pia, or fork not answering</text>
+  <text x="895" y="278" font-size="13" fill="#cfd3da" text-anchor="middle">No clock</text>
+  <text x="895" y="296" font-size="12" fill="#9aa0aa" text-anchor="middle">hoc_oc=always, or stock / no HOC</text>
+
+  <!-- B: the whole You-line block, 1 unit = 60 px. -->
+  <rect x="20" y="340" width="1000" height="190" rx="10" fill="#202028"/>
+  <text x="40" y="364" font-size="15" font-weight="bold" fill="#ffffff">Whole You-line block, 1 unit = 60 px (dashed: 2.5 x 1 icon and 1 x 1 clock reservations)</text>
+
+  <g transform="translate(45 390) scale(60)">
+    <use xlink:href="#reserve"/>
+    <use xlink:href="#eye-closed" color="#ffffff"/>
+    <use xlink:href="#tv" color="#b3b3b3"/>
+    <g transform="translate(2.8 0)" color="#73e673">
+      <use xlink:href="#clock-reserve"/>
+      <use xlink:href="#clock"/>
+      <use xlink:href="#clock-hub"/>
+    </g>
+  </g>
+  <g transform="translate(290 390) scale(60)">
+    <use xlink:href="#reserve"/>
+    <use xlink:href="#eye-closed" color="#ffffff"/>
+    <use xlink:href="#tv" color="#b3b3b3"/>
+    <g transform="translate(2.8 0)" color="#b3b3b3">
+      <use xlink:href="#clock-reserve"/>
+      <use xlink:href="#clock"/>
+    </g>
+  </g>
+  <g transform="translate(535 390) scale(60)">
+    <use xlink:href="#reserve"/>
+    <use xlink:href="#eye-open" color="#ffffff"/>
+    <g color="#73e673"><use xlink:href="#tv"/><use xlink:href="#tv-screen"/></g>
+    <g transform="translate(2.8 0)" color="#f2d940">
+      <use xlink:href="#clock-reserve"/>
+      <use xlink:href="#clock"/>
+    </g>
+  </g>
+  <g transform="translate(820 390) scale(60)">
+    <use xlink:href="#reserve"/>
+    <use xlink:href="#eye-closed" color="#ffffff"/>
+    <use xlink:href="#tv" color="#b3b3b3"/>
+  </g>
+
+  <text x="159" y="476" font-size="13" fill="#cfd3da" text-anchor="middle">Online, profile applied</text>
+  <text x="159" y="494" font-size="12" fill="#9aa0aa" text-anchor="middle">Stealth ON, Streamer OFF, green clock</text>
+  <text x="404" y="476" font-size="13" fill="#cfd3da" text-anchor="middle">Online, held back</text>
+  <text x="404" y="494" font-size="12" fill="#9aa0aa" text-anchor="middle">same icons, grey clock, no hub</text>
+  <text x="649" y="476" font-size="13" fill="#cfd3da" text-anchor="middle">Online, no signal / unavailable</text>
+  <text x="649" y="494" font-size="12" fill="#9aa0aa" text-anchor="middle">Stealth OFF, Streamer ON, yellow clock</text>
+  <text x="895" y="476" font-size="13" fill="#cfd3da" text-anchor="middle">Always (or no fork)</text>
+  <text x="895" y="494" font-size="12" fill="#9aa0aa" text-anchor="middle">privacy icons only</text>
+  <text x="40" y="518" font-size="12" fill="#9aa0aa">The 0.3-unit gap separates the icons from the clock. A pending Stealth reconnect adds the amber * after the TV; the clock then follows it.</text>
+
+  <!-- C: placement sketch, 1 unit = 24 px. -->
+  <rect x="20" y="550" width="1000" height="250" rx="10" fill="#202028"/>
+  <text x="40" y="574" font-size="15" font-weight="bold" fill="#ffffff">Placement sketch, 1 unit = 24 px; values are placeholders, not captured text</text>
+  <text x="40" y="594" font-size="12" fill="#9aa0aa">Settings table, You selected (the "&gt; " mark is the highlight)</text>
+  <text x="560" y="594" font-size="12" fill="#9aa0aa">In-match strip line 1, You selected</text>
+
+  <text x="40" y="625" font-size="24" fill="#ffffff">&gt; You</text>
+  <g transform="translate(128 606) scale(24)">
+    <use xlink:href="#eye-closed" color="#ffffff"/>
+    <use xlink:href="#tv" color="#b3b3b3"/>
+    <g transform="translate(2.8 0)" color="#73e673">
+      <use xlink:href="#clock"/>
+      <use xlink:href="#clock-hub"/>
+    </g>
+  </g>
+  <text x="260" y="625" font-size="24" fill="#ffffff">Vanilla+ | Auto | Wi-Fi</text>
+  <text x="40" y="657" font-size="24" fill="#ffffff">NetLatency</text>
+  <text x="260" y="657" font-size="24" fill="#ffffff">Auto</text>
+  <text x="40" y="689" font-size="24" fill="#ffffff">NetProfile</text>
+  <text x="260" y="689" font-size="24" fill="#ffffff">Vanilla+</text>
+
+  <text x="560" y="625" font-size="24" fill="#ffffff">&gt;You:</text>
+  <g transform="translate(652 606) scale(24)">
+    <use xlink:href="#eye-closed" color="#ffffff"/>
+    <use xlink:href="#tv" color="#b3b3b3"/>
+    <g transform="translate(2.8 0)" color="#73e673">
+      <use xlink:href="#clock"/>
+      <use xlink:href="#clock-hub"/>
+    </g>
+  </g>
+  <text x="760" y="625" font-size="24" fill="#ffffff">Net ...  Profile</text>
+
+  <text x="40" y="724" font-size="13" fill="#b3b3b3" xml:space="preserve">ZR+Left/Right edits   ZR+X Stealth   ZR+Y Streamer   ZR+L3 OC   L+R+Down next page   L+R+X Vanilla+/LLUltra</text>
+  <text x="40" y="742" font-size="12" fill="#9aa0aa">Hint line while the fork answers (HINT_LINE_OC in src/menu.rs); without the fork the plain line does not name ZR+L3.</text>
+  <text x="40" y="772" font-size="14" fill="#ffffff">Clock</text>
+  <text x="200" y="772" font-size="14" fill="#ffffff">1785 MHz OC, HOC kip+clk+smash, OC online: on</text>
+  <text x="40" y="790" font-size="12" fill="#9aa0aa">Performance page Clock row: the CPU estimate and Horizon-OC files, then the gate (on / idle / no signal / unavailable, or OC always).</text>
+
+  <!-- D: when the clock changes. -->
+  <rect x="20" y="820" width="1000" height="172" rx="10" fill="#202028"/>
+  <text x="40" y="844" font-size="15" font-weight="bold" fill="#ffffff">When it changes (hoc_oc=online)</text>
+
+  <rect x="40" y="860" width="250" height="78" rx="8" fill="#2a2a34" stroke="#5a5a66"/>
+  <use xlink:href="#clock" transform="translate(56 877) scale(44)" color="#b3b3b3"/>
+  <text x="114" y="894" font-size="14" font-weight="bold" fill="#ffffff">Held back</text>
+  <text x="114" y="914" font-size="12" fill="#9aa0aa">offline, menus, searching</text>
+
+  <rect x="420" y="860" width="250" height="78" rx="8" fill="#2a2a34" stroke="#5a5a66"/>
+  <g transform="translate(436 877) scale(44)" color="#73e673">
+    <use xlink:href="#clock"/>
+    <use xlink:href="#clock-hub"/>
+  </g>
+  <text x="494" y="894" font-size="14" font-weight="bold" fill="#ffffff">Profile applied</text>
+  <text x="494" y="914" font-size="12" fill="#9aa0aa">a player is connected</text>
+
+  <line x1="294" y1="880" x2="416" y2="880" stroke="#cfd3da" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="355" y="872" font-size="11" fill="#cfd3da" text-anchor="middle">first RTT sample</text>
+  <line x1="416" y1="918" x2="294" y2="918" stroke="#cfd3da" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="355" y="934" font-size="11" fill="#cfd3da" text-anchor="middle">no sample for 90 s</text>
+
+  <rect x="720" y="860" width="290" height="78" rx="8" fill="#2a2a34" stroke="#5a5a66"/>
+  <use xlink:href="#clock" transform="translate(736 877) scale(44)" color="#f2d940"/>
+  <text x="794" y="890" font-size="13" font-weight="bold" fill="#ffffff">No signal / unavailable</text>
+  <text x="794" y="908" font-size="12" fill="#9aa0aa">no Pia observer, or fork silent</text>
+  <text x="794" y="924" font-size="12" fill="#9aa0aa">(client retries every 5 s)</text>
+
+  <text x="40" y="962" font-size="13" fill="#cfd3da">ZR+L3 on Settings (any row, only while the fork answers) switches hoc_oc between online and always.</text>
+  <text x="40" y="980" font-size="13" fill="#cfd3da">always: no clock, and Horizon-OC applies Smash's saved profile exactly as it does without Deluxe.</text>
+</svg>

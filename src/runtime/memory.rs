@@ -82,6 +82,12 @@ pub(super) fn memory_snapshot() -> Option<crate::hang_trace::Memory> {
     }
 }
 
+/// This process's program id (`svcGetInfo` type 18), which the game-aware
+/// Horizon-OC fork checks against the application it is running (0.9.0).
+pub(super) fn program_id() -> Option<u64> {
+    unsafe { get_info(18, 0) }
+}
+
 /// Readable mapping that contains `address`, as `(base, size)`.
 pub(super) unsafe fn region(address: usize) -> Option<(usize, usize)> {
     if address < 0x10000 {

@@ -1,5 +1,39 @@
 # Validation record
 
+## Unreleased Horizon-OC online-only profile — card install — 2026-10-27
+
+Operator: "install it, we're connected via usb". Card install over DBI USB MTP
+(console `XAW10006803734`), finished 2026-10-27T20:15:12Z, state
+`installed_verified`.
+
+- **Deluxe:** build `0.8.0-cc6d8fdff592-1793130065` (feature branch
+  `feature/hoc-online-oc`; code identical at `76b5784`), NRO **1,458,176
+  bytes**, SHA-256
+  `b4a796195bd70b6f8bab8323e1a070011338661cf09f04dfbad3915d8967261d`. It
+  replaced v0.8.0 (`77c3ba0d…23cb7`). Card rollback:
+  `ultimate/ssbu_online_deluxe_rewrite/backups/pre-hocga-deluxe-1027.nro`.
+- **hoc-clk:** the game-aware fork
+  ([intpa/horizon-oc-game-aware](https://git.syntaxbyexample.com/intpa/horizon-oc-game-aware)
+  `28d0e351`, Horizon-OC `2.6.0-rel` `7960dd9` + protocol v1), `exefs.nsp`
+  SHA-256 `c4c28125cff7e17c30118e8595f14c224e3b85d9dda195b91004fbcfb7952576`.
+  It replaced the official Horizon-OC 2.6.0 `exefs.nsp` (`9b5ae2fd…14204`,
+  byte-identical to the release `dist.zip`). Card rollback:
+  `ultimate/ssbu_online_deluxe_rewrite/backups/pre-hocga-hocclk-exefs-1027.nsp`
+  (copy it back to `atmosphere/contents/00FF0000636C6BFF/exefs.nsp` and
+  reboot).
+- **Unchanged, read back byte for byte:** Horizon-OC `config.ini`
+  (`4dbfd996…`, never written), the Deluxe and FX `config.ini`, the ARCropolis
+  config, hoc-clk `toolbox.json` and the other twelve plugins.
+- **Unchanged by listing:** the plugin, hoc-clk, `flags` (the 0-byte
+  `boot2.flag`), `config/horizon-oc` and `ultimate/mods` directories.
+
+Activation needs a console reboot (the sysmodule) and a Smash start (the
+plugin). `hoc_oc` is absent, so the default `always` keeps Horizon-OC's own
+behavior until ZR+L3. Receipts and local backups are outside the repository:
+`horizon-oc-game-aware-tangent-20261027/usb-install-1027/` (`preflight.json`,
+`deployment.json`, `before/`). Installed only; nothing has run yet, so
+`runtime_tested=false`.
+
 ## 0.8.0 — public release assets — 2026-10-25
 
 The [Forgejo release](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.8.0)

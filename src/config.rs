@@ -7,6 +7,7 @@ use crate::drs_triggers::{
     format_threshold, parse_threshold, AdaptiveSettings, MoveSet, RELEASE_FRAMES_MAX,
     TRIGGER_FRAMES_MAX,
 };
+pub use crate::hoc_game_aware::OcMode;
 
 /// Live profiles plus the startup-only core experiments.
 /// `LessLagDoubles` is the 3-texture OneBehind profile. `DoublesCore` is not.
@@ -152,6 +153,13 @@ pub struct Config {
     /// 0.6.0: the dim chord hint line under the Settings and Window tables
     /// (`hints`). Default true; the Window page's Hints row toggles it.
     pub hints: bool,
+    /// 0.9.0: when Horizon-OC may apply Smash's saved profile (`hoc_oc`).
+    /// `always` (default, and a missing key) is Horizon-OC's own behavior;
+    /// `online` holds the profile back outside an online session through the
+    /// game-aware hoc-clk fork. Written only when `online`, so a file that
+    /// never chose it still loads in a build without the key. ZR+L3 on
+    /// Settings toggles it while the fork answers.
+    pub hoc_oc: OcMode,
 }
 
 /// Pages left out of the window cycle (`hide_pages=none` or a comma list of
@@ -365,6 +373,7 @@ impl Default for Config {
             dispatcher_backoff: true,
             vanilla_plus: true,
             hints: true,
+            hoc_oc: OcMode::Always,
         }
     }
 }
@@ -383,7 +392,7 @@ fn parse_count<T: TryFrom<u32>>(value: &str, max: u32, message: &str) -> Result<
 
 pub fn parse(text: &str) -> Result<Config, String> {
     let mut config = Config::default();
-    let mut seen = [false; 19];
+    let mut seen = [false; 20];
     for (index, raw) in text.lines().enumerate() {
         let line = raw.split('#').next().unwrap_or_default().trim();
         if line.is_empty() {
@@ -424,6 +433,7 @@ pub fn parse(text: &str) -> Result<Config, String> {
             "dispatcher_backoff" => 16,
             "vanilla_plus" => 17,
             "hints" => 18,
+            "hoc_oc" => 19,
             _ => return Err(error(&format!("unknown key '{key}'"))),
         };
         if seen[slot] {
@@ -547,6 +557,10 @@ pub fn parse(text: &str) -> Result<Config, String> {
                     _ => return Err(error("hints must be true or false")),
                 };
             }
+            "hoc_oc" => {
+                config.hoc_oc =
+                    OcMode::parse(value).ok_or_else(|| error("hoc_oc must be always or online"))?;
+            }
             "input_buffer" => {
                 config.input_buffer = if value == "auto" {
                     -1
@@ -606,7 +620,12 @@ pub fn serialize(config: &Config) -> String {
     };
     let vanilla_plus = if config.vanilla_plus { "true" } else { "false" };
     let hints = if config.hints { "true" } else { "false" };
-    format!(
+    // Only a chosen `online` is written: an older build rejects unknown keys.
+    let hoc_oc = match config.hoc_oc {
+        OcMode::Always => String::new(),
+        mode => format!("hoc_oc={}\n", mode.key()),
+    };
+    let mut text = format!(
         "# Online Deluxe settings\nversion=1\ninput_buffer={input_buffer}\nrender_mode={}\nauto_profile={auto_profile}\nplatform={}\nstealth={stealth}\nstreamer={streamer}\ndrs_moves={}\ndrs_adaptive={drs_adaptive}\ndrs_adaptive_threshold_ms={}\ndrs_adaptive_trigger_frames={}\ndrs_adaptive_release_frames={}\nultra_resolution={}\nhide_pages={}\nperf_view={}\nearly_present={early_present}\ndispatcher_backoff={dispatcher_backoff}\nvanilla_plus={vanilla_plus}\nhints={hints}\n",
         config.render_mode.key(),
         config.platform.key(),
@@ -617,7 +636,9 @@ pub fn serialize(config: &Config) -> String {
         config.ultra_resolution.key(),
         config.hide_pages.key(),
         config.perf_view.key(),
-    )
+    );
+    text.push_str(&hoc_oc);
+    text
 }
 
 impl Config {
@@ -693,9 +714,41 @@ mod tests {
                 dispatcher_backoff: true,
                 vanilla_plus: true,
                 hints: true,
+                hoc_oc: OcMode::Always,
             };
             assert_eq!(parse(&config.serialize()).unwrap(), config);
         }
+    }
+
+    #[test]
+    fn hoc_oc_defaults_to_always_and_is_written_only_when_online() {
+        // 0.9.0: a file from an older build has no key and keeps Horizon-OC's
+        // own behavior; a default save stays loadable by those builds.
+        assert_eq!(Config::default().hoc_oc, OcMode::Always);
+        assert_eq!(parse("version=1").unwrap().hoc_oc, OcMode::Always);
+        assert_eq!(
+            parse("version=1\nhoc_oc=online").unwrap().hoc_oc,
+            OcMode::Online
+        );
+        assert_eq!(
+            parse("version=1\nhoc_oc=always").unwrap().hoc_oc,
+            OcMode::Always
+        );
+        assert!(!Config::default().serialize().contains("hoc_oc"));
+        let online = Config {
+            hoc_oc: OcMode::Online,
+            ..Config::default()
+        };
+        assert!(online.serialize().ends_with("\nhints=true\nhoc_oc=online\n"));
+        assert_eq!(parse(&online.serialize()).unwrap(), online);
+        assert_eq!(
+            parse("version=1\nhoc_oc=on").unwrap_err(),
+            "line 2: hoc_oc must be always or online"
+        );
+        assert_eq!(
+            parse("version=1\nhoc_oc=online\nhoc_oc=always").unwrap_err(),
+            "line 3: duplicate key 'hoc_oc'"
+        );
     }
 
     #[test]

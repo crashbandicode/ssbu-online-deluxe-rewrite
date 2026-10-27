@@ -225,6 +225,7 @@ pub(super) fn start(version: &str) {
                 super::auto_driver::poll();
                 super::dispatcher_backoff::publish();
                 super::pia_rtt::poll();
+                super::online_session::poll();
                 super::connection_transport::poll();
                 super::fighter_probe::poll();
                 iteration += 1;

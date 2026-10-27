@@ -12,6 +12,8 @@ const ZR: u64 = 1 << 9;
 /// You-selected ZR+X toggles Stealth.
 const X: u64 = 1 << 2;
 const Y: u64 = 1 << 3;
+/// Left stick press. ZR+L3 on Settings toggles `hoc_oc` (0.9.0).
+const STICK_L: u64 = 1 << 4;
 const PLUS_MINUS: u64 = (1 << 10) | (1 << 11);
 pub(crate) const LEFT: u64 = 1 << 12;
 pub(crate) const UP: u64 = 1 << 13;
@@ -141,6 +143,10 @@ pub struct Overlay {
     /// not ZL, because ZL + D-pad Left/Right in Training swaps which fighter
     /// the player controls. Up/Down still move the selection.
     pub edit_hold: bool,
+    /// The game-aware Horizon-OC fork answered (0.9.0); the runtime sets it
+    /// every draw. ZR+L3 changes `hoc_oc` only then, so stock Horizon-OC
+    /// cannot be given a setting it would ignore.
+    pub oc_available: bool,
     previous_buttons: u64,
     latch: CommandLatch,
 }
@@ -216,6 +222,16 @@ impl Overlay {
             if stealth || streamer {
                 return true;
             }
+        }
+        // ZR+L3 anywhere on Settings flips Always/Online (0.9.0). The OC mark
+        // on the You line shows the result. A held press is not a new edge.
+        if self.view == View::Settings
+            && self.oc_available
+            && edit_modifier(buttons)
+            && pressed & STICK_L != 0
+        {
+            config.hoc_oc = config.hoc_oc.toggled();
+            return true;
         }
         // L+R+X with neither trigger held. A manual console LLUltra selection
         // cycles its saved resolution forward in place (576 → 720 → 1080 →
@@ -1522,5 +1538,42 @@ mod tests {
         ui.poll_native(0, &mut config, css);
         assert!(ui.poll_native(RIGHT, &mut config, css));
         assert_eq!(config.input_buffer, before + 2);
+    }
+
+    #[test]
+    fn zr_l3_toggles_hoc_oc_on_settings_only_while_the_fork_answers() {
+        use crate::config::OcMode;
+        let mut ui = Overlay::default();
+        let mut config = Config::default();
+        ui.view = View::Settings;
+        ui.menu.open = true;
+        ui.menu.selected = crate::menu::ROW_NET_PROFILE;
+        // Stock Horizon-OC: the press is ignored.
+        assert!(!ui.poll(ZR | STICK_L, &mut config));
+        assert_eq!(config.hoc_oc, OcMode::Always);
+        ui.poll(0, &mut config);
+        ui.oc_available = true;
+        // L3 alone and ZL+ZR+L3 are not the chord.
+        assert!(!ui.poll(STICK_L, &mut config));
+        ui.poll(0, &mut config);
+        assert!(!ui.poll(ZL | ZR | STICK_L, &mut config));
+        ui.poll(0, &mut config);
+        assert_eq!(config.hoc_oc, OcMode::Always);
+        // Any Settings row; a held press does not repeat.
+        assert!(ui.poll(ZR | STICK_L, &mut config));
+        assert_eq!(config.hoc_oc, OcMode::Online);
+        assert!(!ui.poll(ZR | STICK_L, &mut config));
+        assert_eq!(config.hoc_oc, OcMode::Online);
+        ui.poll(ZR, &mut config);
+        assert!(ui.poll(ZR | STICK_L, &mut config));
+        assert_eq!(config.hoc_oc, OcMode::Always);
+        // Other views leave it alone.
+        ui.poll(0, &mut config);
+        ui.view = View::Performance;
+        assert!(!ui.poll(ZR | STICK_L, &mut config));
+        ui.view = View::Hidden;
+        ui.poll(0, &mut config);
+        assert!(!ui.poll(ZR | STICK_L, &mut config));
+        assert_eq!(config.hoc_oc, OcMode::Always);
     }
 }

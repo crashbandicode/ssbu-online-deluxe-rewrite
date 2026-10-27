@@ -257,6 +257,27 @@ pub fn offline_match_due(
         && now.wrapping_sub(armed_tick) >= OFFLINE_CHECK_TICKS
 }
 
+/// 0.9.0: entering a Singles/Doubles stage drops the online-latency mark an
+/// earlier match left once the shared online session
+/// ([`crate::online_session`]) is no longer live: that match's session has
+/// ended, so its mark says nothing about this stage. A stored Quickplay then
+/// runs the five-second stale check ([`offline_match_due`]) and an Offline
+/// connection stops counting as Quickplay; a real online match marks itself
+/// again through the latency hook (3.1–3.3 s), as the first match of a
+/// session always has. A live session keeps the carried mark. Arena and
+/// Local are online by connection, so their mark is left alone.
+pub const fn carried_mark_expired(
+    connection: Connection,
+    entering_match: bool,
+    marked: bool,
+    session_live: bool,
+) -> bool {
+    entering_match
+        && marked
+        && !session_live
+        && matches!(connection, Connection::Quickplay | Connection::Offline)
+}
+
 /// After a real match or Training ends, manual requests Vanilla until the next
 /// match or a newer explicit selection. A guard failure returns the saved mode
 /// and does not apply Auto.
@@ -380,6 +401,32 @@ fn auto_choice_label(requested: RenderMode) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_carried_mark_expires_only_after_the_session_on_a_new_match() {
+        use Connection::*;
+        // The D9 sequence: a marked Quickplay match, the main menu keeps
+        // Quickplay, the session ends, then an offline match starts.
+        assert!(carried_mark_expired(Quickplay, true, true, false));
+        assert!(carried_mark_expired(Offline, true, true, false));
+        // Back-to-back online matches keep it while samples still flow.
+        assert!(!carried_mark_expired(Quickplay, true, true, true));
+        // Not a new match stage, or nothing carried.
+        assert!(!carried_mark_expired(Quickplay, false, true, false));
+        assert!(!carried_mark_expired(Quickplay, true, false, false));
+        // Arena and Local are online by connection.
+        assert!(!carried_mark_expired(Arena, true, true, false));
+        assert!(!carried_mark_expired(Local, true, true, false));
+        // With the mark gone the existing stale check demotes an unproven
+        // stage five seconds in.
+        assert!(offline_match_due(
+            Quickplay,
+            SceneStatus::Singles,
+            false,
+            1,
+            1 + OFFLINE_CHECK_TICKS
+        ));
+    }
 
     fn selection(auto_profile: bool, manual: RenderMode, platform: Platform) -> Selection {
         Selection {

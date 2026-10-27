@@ -404,6 +404,20 @@ pub(crate) fn perf_footer(mean_ms: Option<f32>, resolution: &str, drs: bool) -> 
 pub const HINT_LINE: &str =
     "ZR+Left/Right edits   ZR+X Stealth   ZR+Y Streamer   L+R+Down next page   L+R+X Vanilla+/LLUltra";
 
+/// [`HINT_LINE`] while the game-aware Horizon-OC fork answers (0.9.0): ZR+L3
+/// on Settings switches `hoc_oc` between always and online. Without the fork
+/// the chord does nothing, so the plain line does not name it.
+pub const HINT_LINE_OC: &str =
+    "ZR+Left/Right edits   ZR+X Stealth   ZR+Y Streamer   ZR+L3 OC   L+R+Down next page   L+R+X Vanilla+/LLUltra";
+
+pub const fn hint_line(oc_available: bool) -> &'static str {
+    if oc_available {
+        HINT_LINE_OC
+    } else {
+        HINT_LINE
+    }
+}
+
 /// Shows the edit state (0.6.0): while the ZR hold is on, the selected row's
 /// value reads `< value >`; without it the value is plain, so the hold rule
 /// explains itself. Label-only rows are never marked.
@@ -1166,6 +1180,10 @@ mod tests {
         assert!(HINT_LINE.contains("ZR+X Stealth"));
         assert!(HINT_LINE.contains("ZR+Y Streamer"));
         assert!(HINT_LINE.contains("L+R+X Vanilla+/LLUltra"));
+        assert!(!HINT_LINE.contains("L3"));
+        assert_eq!(HINT_LINE_OC.replace("   ZR+L3 OC", ""), HINT_LINE);
+        assert_eq!(hint_line(false), HINT_LINE);
+        assert_eq!(hint_line(true), HINT_LINE_OC);
         let mut rows = vec![
             strip_row("You", "Vanilla+ | Auto | Wi-Fi", false),
             strip_row("NetLatency", "Auto", true),
