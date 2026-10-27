@@ -188,6 +188,17 @@ pub enum Code {
     /// A current-match Auto observation changed (0.8.0). `a` is the frame
     /// count; `b` is the verified input-consumption hook. Not a per-frame log.
     AutoBufferObserved = 113,
+    /// Horizon-OC game-aware handshake (0.9.0): `a` = the
+    /// `hoc_game_aware::Capability` byte (1 no `hoc:clk`, 2 stock, 3
+    /// incompatible, 4 fork present, 5 fork stopped answering), `b` = the
+    /// failing result or reply detail (cmd 100 result, or `caps << 16 |
+    /// version` when present). One row per capability change.
+    HocCapability = 114,
+    /// Game-aware gate edge (0.9.0): `a` = applying (bit 0), armed (bit 1),
+    /// `hoc_oc` online (bit 2), online session live (bit 3); `b` = the reply
+    /// generation, or the failing result with bit 32 set. One row per change
+    /// of `a`, not per heartbeat.
+    HocGate = 115,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -325,6 +336,8 @@ mod tests {
         assert_eq!(Code::StageLoaded as u16, 110);
         assert_eq!(Code::ClockSample as u16, 111);
         assert_eq!(Code::AutoBufferObserved as u16, 113);
+        assert_eq!(Code::HocCapability as u16, 114);
+        assert_eq!(Code::HocGate as u16, 115);
     }
     #[test]
     fn recursive_or_contended_logging_drops_instead_of_deadlocking() {

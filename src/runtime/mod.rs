@@ -12,6 +12,7 @@ mod dispatcher_backoff;
 mod fighter_main;
 mod fighter_probe;
 mod hang_trace;
+mod hoc_client;
 mod hooks;
 mod imgui;
 mod imgui_stats;
@@ -21,6 +22,7 @@ mod memory;
 mod native_banner;
 mod nvn;
 mod online;
+mod online_session;
 mod overlay_host;
 mod pia_rtt;
 mod plugin_export;
@@ -64,6 +66,9 @@ static BACKOFF_ENABLED: AtomicBool = AtomicBool::new(true);
 static VANILLA_PLUS: AtomicBool = AtomicBool::new(true);
 /// `hints` (0.6.0): the chord hint line under the Settings and Window tables.
 static HINTS: AtomicBool = AtomicBool::new(true);
+/// `hoc_oc` (0.9.0): `OcMode` as u8. The game-aware client thread reads it
+/// every pass; ZR+L3 on Settings flips it.
+static HOC_OC: AtomicU8 = AtomicU8::new(0);
 static DRS_MOVES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 static DRS_ADAPTIVE: AtomicBool = AtomicBool::new(false);
 static DRS_THRESHOLD: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(1750);
@@ -142,7 +147,13 @@ pub(super) fn settings() -> Config {
         dispatcher_backoff: BACKOFF_ENABLED.load(Ordering::Acquire),
         vanilla_plus: VANILLA_PLUS.load(Ordering::Acquire),
         hints: HINTS.load(Ordering::Acquire),
+        hoc_oc: hoc_oc(),
     }
+}
+
+/// `hoc_oc` (0.9.0). Atomic read for the game-aware client thread.
+pub(super) fn hoc_oc() -> crate::config::OcMode {
+    crate::config::OcMode::from_byte(HOC_OC.load(Ordering::Acquire))
 }
 
 /// `early_present` (0.5.3). Read by the flush wrapper every frame.
@@ -213,6 +224,7 @@ pub(super) fn publish(config: &Config) {
     BACKOFF_ENABLED.store(config.dispatcher_backoff, Ordering::Release);
     VANILLA_PLUS.store(config.vanilla_plus, Ordering::Release);
     HINTS.store(config.hints, Ordering::Release);
+    HOC_OC.store(config.hoc_oc as u8, Ordering::Release);
     DRS_MOVES.store(config.drs_moves.0, Ordering::Release);
     DRS_ADAPTIVE.store(config.drs_adaptive.enabled, Ordering::Release);
     DRS_THRESHOLD.store(
@@ -296,6 +308,9 @@ pub fn main() {
         ("SCENE", online::install as fn()),
         ("BUFFER", hooks::install_latency as fn()),
         ("PIA", pia_rtt::install as fn()),
+        // Game-aware Horizon-OC client (0.9.0): a thread and IPC only, no hook.
+        // After PIA, whose samples are its only online evidence.
+        ("HOC", hoc_client::install as fn()),
         ("BACKOFF", dispatcher_backoff::install as fn()),
     ] {
         if std::path::Path::new(DATA_DIR)

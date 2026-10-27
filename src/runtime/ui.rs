@@ -1,8 +1,9 @@
 //! Fork-style global Player Info window. This window does not write panes.
 use super::{cells, imgui::*, input, overlay_host, publish, record, settings, Code};
+use crate::hoc_game_aware::{Indicator, MarkTone};
 use crate::menu::{
-    mark_editing, net_profile_value, opp_line, perf_footer, strip_line, strip_segments, you_line,
-    Cell, ProfileAction, Row, HINT_LINE, MARK_SLOT,
+    hint_line, mark_editing, net_profile_value, opp_line, perf_footer, strip_line,
+    strip_segments, you_line, Cell, ProfileAction, Row, MARK_SLOT,
 };
 use crate::overlay::{FrameTimes, Overlay, View};
 use crate::pia_rtt::PresentedPing;
@@ -120,6 +121,65 @@ struct Privacy {
     stealth: bool,
     streamer: bool,
     reconnect: bool,
+    /// The game-aware Horizon-OC clock after the privacy icons (0.9.0);
+    /// `hoc_oc=online` with the fork answering only.
+    oc: Option<MarkTone>,
+}
+
+/// What the game-aware gate shows for `config` right now (0.9.0).
+fn oc_indicator(config: &crate::config::Config) -> Indicator {
+    crate::hoc_game_aware::indicator(
+        config.hoc_oc,
+        super::hoc_client::capability(),
+        super::pia_rtt::ready(),
+        super::hoc_client::applying(),
+    )
+}
+
+/// Clock mark (0.9.0), drawn like the privacy icons and one text line tall:
+/// green with a hub while Smash's saved Horizon-OC profile is applied, grey
+/// while Horizon-OC's own fallback holds, yellow without Pia evidence or with
+/// the fork not answering. Quarter arcs and lines only, the primitives the
+/// embedded and the borrowed ImGui both provide.
+unsafe fn oc_clock(tone: MarkTone) {
+    let size = igGetFontSize();
+    let origin = igGetCursorScreenPos();
+    let list = igGetWindowDrawList();
+    igDummy(Vec2 { x: size, y: size });
+    if list.is_null() {
+        return;
+    }
+    let point = |x: f32, y: f32| Vec2 {
+        x: origin.x + x * size,
+        y: origin.y + y * size,
+    };
+    let color = igGetColorU32_Vec4(match tone {
+        MarkTone::Lit => GREEN,
+        MarkTone::Dim => GREY,
+        MarkTone::Warn => YELLOW,
+    });
+    let stroke = size * 0.085;
+    for (from, corner, to) in [
+        ((0.5, 0.05), (0.95, 0.05), (0.95, 0.5)),
+        ((0.95, 0.5), (0.95, 0.95), (0.5, 0.95)),
+        ((0.5, 0.95), (0.05, 0.95), (0.05, 0.5)),
+        ((0.05, 0.5), (0.05, 0.05), (0.5, 0.05)),
+    ] {
+        ImDrawList_AddBezierQuadratic(
+            list,
+            point(from.0, from.1),
+            point(corner.0, corner.1),
+            point(to.0, to.1),
+            color,
+            stroke,
+            8,
+        );
+    }
+    ImDrawList_AddLine(list, point(0.5, 0.5), point(0.5, 0.22), color, stroke);
+    ImDrawList_AddLine(list, point(0.5, 0.5), point(0.72, 0.5), color, stroke);
+    if tone == MarkTone::Lit {
+        ImDrawList_AddCircleFilled(list, point(0.5, 0.5), size * 0.1, color, 8);
+    }
 }
 
 /// Font-independent You-line icons. Reserve one text line so the table and
@@ -201,6 +261,10 @@ unsafe fn privacy_icons(privacy: Privacy) {
     if privacy.reconnect {
         igSameLine(0.0, 0.0);
         paint_text("*", Some(YELLOW));
+    }
+    if let Some(tone) = privacy.oc {
+        igSameLine(0.0, size * 0.3);
+        oc_clock(tone);
     }
 }
 
@@ -290,7 +354,12 @@ fn perf_facts(width: f32, height: f32, strip: bool) -> Vec<(&'static str, String
         let memory = crate::hang_trace::memory_label(super::hang_trace::memory());
         facts.push(("Backoff", super::dispatcher_backoff::status_label()));
         facts.push(("Memory", memory));
-        facts.push(("Clock", crate::clock_probe::status_label(mhz, hoc)));
+        let mut clock = crate::clock_probe::status_label(mhz, hoc);
+        if let Some(gate) = oc_indicator(&settings).label() {
+            clock.push_str(", ");
+            clock.push_str(gate);
+        }
+        facts.push(("Clock", clock));
     }
     facts
 }
@@ -559,8 +628,9 @@ unsafe fn footer(frames: &FrameTimes, config: &crate::config::Config, perf: bool
         paint_text("* Stealth changes after reconnect", Some(YELLOW));
     }
     if config.hints {
+        let oc = Indicator::toggle_available(super::hoc_client::capability());
         igPushTextWrapPos(0.0);
-        paint_text(HINT_LINE, Some(GREY));
+        paint_text(hint_line(oc), Some(GREY));
         igPopTextWrapPos();
     }
 }
@@ -825,6 +895,8 @@ unsafe fn poll(ui: &mut UiState, sample: input::Sample) -> Frame {
     // swaps the controlled fighter in Training). Up/Down still move the
     // selection. Until 0.5.5 the hold applied only while a fight was live.
     ui.controls.edit_hold = true;
+    // ZR+L3 (0.9.0) changes `hoc_oc` only while the game-aware fork answers.
+    ui.controls.oc_available = Indicator::toggle_available(super::hoc_client::capability());
     if ui.controls.poll_native(buttons, &mut config, native) {
         match crate::menu::profile_action(&saved, &config) {
             ProfileAction::EnableAuto => {
@@ -904,6 +976,7 @@ unsafe fn poll(ui: &mut UiState, sample: input::Sample) -> Frame {
         streamer: config.streamer,
         reconnect: crate::peer_transport::latched_stealth()
             .is_some_and(|latched| latched != config.stealth),
+        oc: oc_indicator(&config).mark(),
     };
     Frame {
         config,

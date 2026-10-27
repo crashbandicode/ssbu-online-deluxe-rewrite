@@ -235,6 +235,15 @@ pub(super) fn ready() -> bool {
     INSTALLED.load(Ordering::Acquire)
 }
 
+/// Cumulative RTT samples the table accepted, mapped and foreign (0.9.0).
+/// Any change is traffic with another player; `online_session` turns it into
+/// the shared online session. Read-only; the hooks are unchanged.
+pub(super) fn evidence_count() -> u64 {
+    SAMPLES
+        .load(Ordering::Relaxed)
+        .wrapping_add(FOREIGN.load(Ordering::Relaxed))
+}
+
 /// `None` when the lock was busy: the hook cannot say what the table would
 /// have done.
 fn with_session<T>(update: impl FnOnce(&mut Session, u64) -> T) -> Option<T> {
