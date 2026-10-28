@@ -3,9 +3,12 @@
 ## One-boot checks: You-line controls, lobby window, 120 Hz — 2026-10-28
 
 Installed on the card on 2026-10-28: candidate
-`0.8.1-062bf65b0227-1793217135` (NRO `0e58e76a…`, branch
-`fix/lobby-practice-window`), with `hoc_oc=online` restored in the config. It
-carries three changes
+`0.8.1-3ea3c490c9dc-1793217844` (NRO `a0a4c9a0…`, branch
+`fix/lobby-practice-window`), with `hoc_oc=online` restored in the config.
+L+R+X acts only on the highlighted row, and code 120 logs the refresh-clock
+counters every 5 s from boot
+([Validation](VALIDATION.md#unreleased-lrx-only-on-the-highlight-refresh-clock-counters-from-boot--2026-10-28)).
+It carries three changes
 ([Validation](VALIDATION.md#unreleased-you-line-mode-focus-and-per-stage-logs--2026-10-28)):
 
 - the You-line mode focus;

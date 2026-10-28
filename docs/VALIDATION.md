@@ -24,7 +24,22 @@ the card, so its status file updates every second from launch.
 - `cargo build --no-default-features` succeeds.
 - `cargo test`: 311 passed, including a parse of the 2026-10-28 card status
   file.
-- A trial Skyline build had no warnings.
+- The Skyline build had no warnings.
+
+**Card install (DBI, 2026-10-28 20:05:15Z, `installed_verified`).** Installed
+at the operator's request.
+
+- Build `0.8.1-3ea3c490c9dc-1793217844`, NRO SHA-256
+  `a0a4c9a04409bea8a6225995c9c31ccbd9f275a3a8e991e22e3357a37406b79b`
+  (1,474,560 bytes).
+- It replaced candidate `062bf65` (`0e58e76a…`). The config `20de5c13…`
+  (`hoc_oc=online`), the hoc-clk fork, the FX Control and Horizon-OC configs
+  and the other plugins were unchanged.
+- The refresh-clock folder holds `status.txt` and `telemetry.flag`.
+- **Rollback:** copy `backups/pre-highlight-deluxe-1028.nro` over the plugin.
+- Receipt: `usb-highlight-1028/deployment.json`.
+
+Not run yet on the console.
 
 ## Unreleased: You-line mode focus and per-stage logs — 2026-10-28
 
