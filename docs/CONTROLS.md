@@ -31,7 +31,7 @@ fork's room-ID path, but still needs an NSO test. See [native display](NATIVE_DI
 | ZL + Left / Right or Up / Down on an online character select or arena pane, window closed | Edit the input buffer or the profile on the native status (since 0.4.1 the D-pad alone only moves the hand) |
 | ZR + X (Settings, You selected) | Toggle Stealth; the You-line eye closes when enabled and opens when disabled. A session-latched change is amber with `*` and a reconnect notice |
 | ZR + Y (Settings, You selected) | Toggle Streamer; the You-line TV has a green filled screen when enabled and a grey outline when disabled. These privacy shortcuts work only while the Settings page has **You** selected (`> You` in the table, `>You:` in the match strip), with ZR held and ZL released: each new X or Y press toggles once. A held button does not repeat, and one already held when the selection reaches You does not fire. They do nothing on other rows, on other pages or with the window hidden |
-| ZR + L3 (Settings, any row) | 0.9.0, only while the game-aware Horizon-OC fork answers: switch `hoc_oc` between **always** (Horizon-OC applies Smash's saved profile whenever Smash runs, as it always has) and **online** (the profile applies only while connected to another player, internet or local wireless, and for 90 s after). Saved to the INI. One toggle per new L3 press with ZR held and ZL released. With stock Horizon-OC or none, the press does nothing and the hint line does not name it |
+| ZR + L3 (Settings, any row) | 0.9.0, only while the game-aware Horizon-OC fork answers: switch `hoc_oc` between **always** (Horizon-OC applies Smash's saved profile whenever Smash runs, as it always has) and **online** (the profile applies only while connected to another player, internet or local wireless, and for 15 s after the last player disconnects). Saved to the INI. One toggle per new L3 press with ZR held and ZL released. With stock Horizon-OC or none, the press does nothing and the hint line does not name it |
 | L+R + X (neither ZL nor ZR held) | With manual console LLUltra selected, cycle 576p → 720p → 1080p → 576p in place (LLUltra → LLUltra+ → LLUltra++ → LLUltra), saving `ultra_resolution`. For Auto, the emulator and every other profile, toggle and save Vanilla+ instead (0.5.6). A new X press is required; holding X does not repeat. See [Rendering profiles](RENDERING.md#vanilla-056) |
 | L+R + Plus or Minus | Open the debug view; again to hide it. ZL+ZR stopped being a window chord in 0.5.3, so a trigger chord during play cannot open the window |
 | L+R + Up in the Debug view | Start a 30 s timing capture (see [Captures](CAPTURES.md)) |
@@ -75,8 +75,9 @@ visible even when Hints is hidden. Select You, then toggle with ZR+X / ZR+Y.
 With `hoc_oc=online` and the game-aware Horizon-OC fork answering (0.9.0), a
 small clock follows the privacy icons, on the table's You row and the strip's
 `You:` alike: green with a centre hub while Smash's saved Horizon-OC profile is
-applied, grey while Horizon-OC's own fallback holds (offline, menus after the
-90 s hold), yellow when there is no Pia signal or the fork stopped answering.
+applied, grey while Horizon-OC's own fallback holds (offline, and from 15 s
+after the last player disconnects unless one reconnects), yellow when there is
+no Pia signal or the fork stopped answering.
 It is drawn geometry like the icons and adds no row. The Performance **Clock**
 row appends the same state (`OC online: on`, `OC online: idle`,
 `OC always`, `OC online: no signal`, `OC online: unavailable`), wrapped onto a

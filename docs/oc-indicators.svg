@@ -68,7 +68,7 @@
   <text x="895" y="200" font-size="13" fill="#5a5a66" text-anchor="middle">nothing</text>
 
   <text x="145" y="278" font-size="13" fill="#cfd3da" text-anchor="middle">Profile applied: green, hub</text>
-  <text x="145" y="296" font-size="12" fill="#9aa0aa" text-anchor="middle">a player connected, or within 90 s</text>
+  <text x="145" y="296" font-size="12" fill="#9aa0aa" text-anchor="middle">a player connected, or within 15 s</text>
   <text x="395" y="278" font-size="13" fill="#cfd3da" text-anchor="middle">Held back: grey</text>
   <text x="395" y="296" font-size="12" fill="#9aa0aa" text-anchor="middle">offline: HOC global or stock</text>
   <text x="645" y="278" font-size="13" fill="#cfd3da" text-anchor="middle">No signal / unavailable: yellow</text>
@@ -182,7 +182,7 @@
   <line x1="294" y1="880" x2="416" y2="880" stroke="#cfd3da" stroke-width="2" marker-end="url(#arrow)"/>
   <text x="355" y="872" font-size="11" fill="#cfd3da" text-anchor="middle">first RTT sample</text>
   <line x1="416" y1="918" x2="294" y2="918" stroke="#cfd3da" stroke-width="2" marker-end="url(#arrow)"/>
-  <text x="355" y="934" font-size="11" fill="#cfd3da" text-anchor="middle">no sample for 90 s</text>
+  <text x="355" y="934" font-size="11" fill="#cfd3da" text-anchor="middle">no sample for 15 s</text>
 
   <rect x="720" y="860" width="290" height="78" rx="8" fill="#2a2a34" stroke="#5a5a66"/>
   <use xlink:href="#clock" transform="translate(736 877) scale(44)" color="#f2d940"/>

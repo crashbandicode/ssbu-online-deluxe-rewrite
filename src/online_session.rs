@@ -1,4 +1,4 @@
-//! Network-proven online session (0.9.0). The one answer to "is this console
+//! Network-proven online session (0.8.1). The one answer to "is this console
 //! playing online right now" for every consumer: the Horizon-OC game-aware
 //! gate and Auto's carried-mark check. The evidence is Pia's RTT samples, which
 //! exist only while the game is connected to another player over the internet
@@ -9,11 +9,12 @@
 /// `nn::os::GetSystemTick` rate (19.2 MHz).
 pub const TICKS_PER_SECOND: u64 = 19_200_000;
 
-/// The session stays live this long after the last sample: across results,
-/// a rematch character select and a short Quickplay search, and at most this
-/// long into offline play after leaving online (operator 2026-10-27: on early,
-/// off late is fine; never on offline).
-pub const HOLD_TICKS: u64 = 90 * TICKS_PER_SECOND;
+/// The session stays live this long after the last sample, so it ends 15 s
+/// after the last player disconnects unless one reconnects (operator
+/// 2026-10-28: the candidate's 90 s kept the overclock on too long; never on
+/// offline). Longer than the 10 s a connected peer may go without a sample
+/// ([`crate::pia_rtt::LIVE_MS`]), which covers loading gaps.
+pub const HOLD_TICKS: u64 = 15 * TICKS_PER_SECOND;
 
 /// Last cumulative sample count seen and the tick it last changed (0 never).
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -112,7 +113,7 @@ mod tests {
     }
 
     #[test]
-    fn hold_is_ninety_seconds() {
-        assert_eq!(HOLD_TICKS, 1_728_000_000);
+    fn hold_is_fifteen_seconds() {
+        assert_eq!(HOLD_TICKS, 288_000_000);
     }
 }
