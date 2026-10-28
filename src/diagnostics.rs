@@ -45,7 +45,9 @@ pub enum Code {
     OverlayEntered = 21,
     OverlayExited = 22,
     OverlayView = 23,
-    /// `a` is the config generation. `b` is 0 (the FX mode until 0.5.0).
+    /// `a` is the config generation. `b` has bit `n` set for each config key
+    /// slot `n` the save changed (0.8.2; `config::changed_keys`); it was 0
+    /// before, and the FX mode until 0.5.0.
     ConfigSaved = 24,
     OverlayHealth = 25,
     OverlayBackendReady = 26,
@@ -204,6 +206,18 @@ pub enum Code {
     /// 8), reads armed by the 13.0.5 guard (bit 9), classified as lobby
     /// practice (bit 10); `b` = the game's mode word (0 while disarmed).
     SceneMode = 116,
+    /// Two actual presents (early at the flush, or the game's own) of the
+    /// tracked window were not 14–19 ms apart (0.8.2, `present_pace`):
+    /// `a` = texture index (bits 0–7), path (bits 8–15: 1 early, 2 the
+    /// game's), last present-interval readback (bits 16–23, 0xff unknown);
+    /// `b` = the spacing in µs. At most four pacing rows per second.
+    PresentPace = 117,
+    /// A tracked acquire returned the index presented last (0.8.2): `a` =
+    /// the index, `b` = µs since that present. Shares the pacing budget.
+    PresentReacquire = 118,
+    /// The window's present-interval readback changed (0.8.2): `a` = new,
+    /// `b` = previous (-1 before the first readback, as u64).
+    PresentInterval = 119,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -344,6 +358,9 @@ mod tests {
         assert_eq!(Code::HocCapability as u16, 114);
         assert_eq!(Code::HocGate as u16, 115);
         assert_eq!(Code::SceneMode as u16, 116);
+        assert_eq!(Code::PresentPace as u16, 117);
+        assert_eq!(Code::PresentReacquire as u16, 118);
+        assert_eq!(Code::PresentInterval as u16, 119);
     }
     #[test]
     fn recursive_or_contended_logging_drops_instead_of_deadlocking() {

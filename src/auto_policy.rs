@@ -609,7 +609,14 @@ mod tests {
 
     #[test]
     fn other_modes_ignore_a_stale_practice_melee_value() {
-        for mode in [0, 0x0201_0001, 0x0202_0000, 0x0700_0000, 0x0702_0000, u32::MAX] {
+        for mode in [
+            0,
+            0x0201_0001,
+            0x0202_0000,
+            0x0700_0000,
+            0x0702_0000,
+            u32::MAX,
+        ] {
             assert!(!is_waiting_practice(true, 0x0d, mode));
         }
     }

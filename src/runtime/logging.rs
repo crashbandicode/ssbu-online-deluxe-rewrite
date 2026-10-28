@@ -200,6 +200,8 @@ pub(super) fn start(version: &str) {
     record(Code::Boot, plugin_start, text_base);
 
     let mut generation = CONFIG_GENERATION.load(Ordering::Acquire);
+    // The settings as loaded, then as last saved, so each save names its keys.
+    let mut saved = settings().serialize();
     startup_phase("diagnostic_thread_begin");
     // The Switch std default is a 2 MiB stack per thread, taken from the game
     // heap for the whole run. This thread formats log lines and streams CSV
@@ -289,10 +291,14 @@ pub(super) fn start(version: &str) {
                 super::plugin_export::flush_persistence();
                 let next_generation = CONFIG_GENERATION.load(Ordering::Acquire);
                 if next_generation != generation {
-                    match save_config(&settings()) {
+                    let config = settings();
+                    match save_config(&config) {
                         Ok(()) => {
                             generation = next_generation;
-                            record(Code::ConfigSaved, generation, 0);
+                            let text = config.serialize();
+                            let changed = crate::config::changed_keys(&saved, &text);
+                            record(Code::ConfigSaved, generation, changed);
+                            saved = text;
                         }
                         Err(error) if !error_reported => {
                             skyline::println!("[Deluxe] config save failed: {}", error);

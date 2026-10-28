@@ -116,7 +116,10 @@ unsafe fn deluxe_rewrite_stage_setup(ctx: &InlineCtx) {
     }
     record(Code::StageLoaded, u64::from(stage_id), status as u64);
     let (fields, word) = mode.map_or((0, 0), |(initialized, melee, word)| {
-        (u64::from(melee) | u64::from(initialized) << 8 | 1 << 9, u64::from(word))
+        (
+            u64::from(melee) | u64::from(initialized) << 8 | 1 << 9,
+            u64::from(word),
+        )
     });
     record(Code::SceneMode, fields | u64::from(lobby) << 10, word);
     auto_driver::set_scene(None, Some(status), STAGE_SETUP as u64);
