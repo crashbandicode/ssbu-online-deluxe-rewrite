@@ -75,7 +75,7 @@ fn pace_row_allowed(tick: u64) -> bool {
 
 /// One actual present of the tracked window; `path` 1 early, 2 the game's.
 fn note_actual_present(index: i32, path: u64) {
-    let tick = skyline::nn::os::GetSystemTick() as u64;
+    let tick = unsafe { skyline::nn::os::GetSystemTick() as u64 };
     let previous = ACTUAL_TICK.swap(tick, Ordering::Relaxed);
     ACTUAL_INDEX.store(index, Ordering::Release);
     if previous == 0 {
