@@ -1,5 +1,31 @@
 # Validation record
 
+## Unreleased: L+R+X only on the highlight; refresh-clock counters from boot — 2026-10-28
+
+The operator asked for two corrections to candidate `062bf65`:
+
+- L+R+X must toggle only what is highlighted.
+- The 120 Hz plugin's diagnostics should be observed from the start of a
+  session, so the data exists without a restart.
+
+**Changes.**
+
+| Commit | Change |
+| --- | --- |
+| `866d8b2` | L+R+X acts on the framed mode with You highlighted, and on Vanilla+ (or the manual console LLUltra resolution) with NetProfile highlighted. It does nothing on any other row, page, or with the window hidden; `062bf65` flipped Vanilla+ from all of those. The hint line names the rule. |
+| `791f22b` | Every 5 s from boot the diagnostics thread reads the refresh-clock `status.txt` and records code 120: interval VSync events and game ticks, refresh, swap interval, normalizing / valid / observe-only bits, mode transitions and docked target, plus the interval's system ticks. The rows reach `events.log` and the running stage log. Deluxe only reads the file. |
+
+The refresh-clock plugin was not changed. Its `telemetry.flag` was already on
+the card, so its status file updates every second from launch.
+
+**Gates.**
+
+- `cargo clippy --all-targets -- -D warnings` is clean.
+- `cargo build --no-default-features` succeeds.
+- `cargo test`: 311 passed, including a parse of the 2026-10-28 card status
+  file.
+- A trial Skyline build had no warnings.
+
 ## Unreleased: You-line mode focus and per-stage logs — 2026-10-28
 
 **Why.**

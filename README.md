@@ -158,7 +158,8 @@ in [Rendering profiles](docs/RENDERING.md#measured-results).
 | Up / Down | Select a row |
 | ZR + Left / Right | Change the selected value (shown as `< value >`); on You, move the light-blue frame between Stealth, Streamer and OC |
 | L+R + X, You selected | Toggle the framed mode: Stealth, Streamer or OC (online/always) |
-| L+R + X, other rows or window hidden | Toggle Vanilla+; with manual console LLUltra, cycle LLUltra → LLUltra+ → LLUltra++ |
+| L+R + X, NetProfile selected | Toggle Vanilla+; with manual console LLUltra, cycle LLUltra → LLUltra+ → LLUltra++ |
+| L+R + X anywhere else | Nothing: it toggles only what is highlighted |
 | L+R + Plus or Minus | Show or hide Debug |
 
 Everything else, including 0.6.2's older chords, is in

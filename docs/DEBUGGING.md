@@ -30,7 +30,9 @@ Under sd:/ultimate/ssbu_online_deluxe_rewrite/:
     `ultimate/ssbu-refresh-clock/status.txt` as `refresh_clock_start.*`.
     `refresh_clock_start=absent` appears without that plugin. Its `interval_*`
     counters are live only while its `telemetry.flag` exists.
-  - Then come the stage's `events.log` rows.
+  - Then come the stage's `events.log` rows. These include a code 120 row every
+    5 s with the refresh-clock counters, which gives a time series for each
+    match.
   - The footer is written when the next stage loads or the scene context (code
     73) turns Inactive. It has the stage length, actual presents, early presents,
     skips, mismatches, pacing outliers (code 117) and reacquires (code 118). It
@@ -157,6 +159,7 @@ data directory and flags.
 | 117 | Present pacing outlier (0.8.2, `present_pace`): two actual presents of the tracked window (Deluxe's early present at the flush, or the game's own, not the skipped duplicate) were not 14–19 ms apart. a bits 0–7 = texture index, bits 8–15 = path (1 early, 2 the game's), bits 16–23 = the last present-interval readback (0xff unknown); b = the spacing in µs. Codes 117 and 118 share four rows per second; `renderer-status.txt` `present_pace_outliers` is the exact total. Stage loads and stalls produce some; a stream of ~8,333 µs spacings at 120 Hz would be two presents per 60 Hz frame |
 | 118 | Present reacquire (0.8.2): a tracked acquire returned the index presented last, which could draw into an image still on screen. a = index, b = µs since that present. Assumes the present comes before the next acquire, as the 2026-10-28 captures show for Vanilla+ and LessLag; total in `present_reacquired_last` |
 | 119 | Present interval changed (0.8.2): the window's present-interval readback (every 60 presents) changed. a = new, b = previous (`0xffffffffffffffff` before the first readback). 2 is expected at 120 Hz with a 60 FPS target |
+| 120 | Refresh-clock 120 Hz counters (0.8.2, `refresh_clock_status`), every 5 s from boot while `ultimate/ssbu-refresh-clock/status.txt` parses. Deluxe only reads it. a bits 0–15 = VSync events in the plugin's last telemetry interval, 16–31 = game ticks in it, 32–39 = refresh (Hz), 40–43 = swap interval, 44 = normalizing, 45 = interval valid, 46 = observe-only, 48–55 = mode transitions, 56–63 = docked FPS target; b = the interval's system ticks. VSync rate = events × 19,200,000 / b (about 120 at 120 Hz) and the tick rate likewise (about 60 while normalizing). The interval fields are 0 unless the plugin's `telemetry.flag` existed when Smash started. The rows also land in the running stage log |
 
 Codes 73 `AutoContext` and 74 `AutoRequest`
 ([`auto_driver.rs`](../src/runtime/auto_driver.rs)), 78 `ResolutionReport`,

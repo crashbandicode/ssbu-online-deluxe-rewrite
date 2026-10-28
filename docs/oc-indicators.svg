@@ -169,7 +169,7 @@
   </g>
   <text x="760" y="625" font-size="24" fill="#ffffff">Net ...  Profile</text>
 
-  <text x="40" y="724" font-size="13" fill="#b3b3b3" xml:space="preserve">ZR+Left/Right edits or picks a You icon   L+R+X toggles it (other rows: Vanilla+/LLUltra)   L+R+Down next page</text>
+  <text x="40" y="724" font-size="12" fill="#b3b3b3" xml:space="preserve">ZR+Left/Right edits or picks a You icon   L+R+X toggles the highlight (You icon, or Vanilla+/LLUltra on NetProfile)   L+R+Down next page</text>
   <text x="40" y="742" font-size="12" fill="#9aa0aa">Hint line (HINT_LINE in src/menu.rs, 0.8.2), the same with or without the fork. 0.8.1 named ZR+X, ZR+Y and ZR+L3 OC.</text>
   <text x="40" y="772" font-size="14" fill="#ffffff">Clock</text>
   <text x="200" y="772" font-size="14" fill="#ffffff">1785 MHz OC, HOC kip+clk+smash, OC online: on</text>

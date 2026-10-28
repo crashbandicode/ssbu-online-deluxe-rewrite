@@ -25,6 +25,8 @@ Everything here fits in one boot, and no flag file needs adding or removing.
 4. ZR+X, ZR+Y and ZR+L3 do nothing anywhere, including in a match.
 5. On NetProfile, L+R+X still toggles Vanilla+ (or cycles manual console
    LLUltra).
+6. On NetLatency, with the window hidden, or in a match with a row other than
+   You or NetProfile highlighted, L+R+X changes nothing.
 
 **120 Hz A/B on one boot.** Leave the dock at 120 Hz, the refresh-clock NRO
 and its `telemetry.flag` as they are. Between matches, change the profile in
@@ -35,7 +37,10 @@ Each match's log in `matches/` records:
 
 - the profile it ran (`render_start` / `render_end`);
 - `present_spacing` and the pacing outliers;
-- the refresh-clock 120 Hz counters at both ends.
+- the refresh-clock 120 Hz counters at both ends;
+- a code 120 row every 5 s with the refresh-clock VSync and game-tick counts.
+
+Code 120 runs from boot, so `events.log` also covers menus and lobbies.
 
 The earlier five-step plan below asked for relaunches to remove
 `telemetry.flag`; the per-stage logs make that unnecessary unless they show

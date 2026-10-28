@@ -40,13 +40,14 @@ shortcut; the hidden-window Streamer chord is retired. **0.8.2** replaces ZR+X/Y
 ZR+Left/Right moves a light-blue frame between the icons and L+R+X toggles the
 framed one. Neither the fork nor any earlier build of this rewrite has it.
 Stealth's session latch and reconnect requirement remain, with an amber eye,
-asterisk and notice. L+R+X still toggles Vanilla+, except while manual
-console LLUltra is selected, where that chord cycles the saved resolution in
-place and leaves Vanilla+ unchanged.
+asterisk and notice. L+R+X still toggles Vanilla+ (since 0.8.2 only with
+NetProfile highlighted), except while manual console LLUltra is selected,
+where that chord cycles the saved resolution in place and leaves Vanilla+
+unchanged.
 
 Console NetProfile keeps one LLUltra stop. The labels LLUltra (576p), LLUltra+
 (720p) and LLUltra++ (1080p) name the saved `ultra_resolution`. Left or Right
-leaves the stop and remembers the resolution; L+R+X cycles 576 → 720 → 1080 →
+leaves the stop and remembers the resolution; L+R+X on NetProfile cycles 576 → 720 → 1080 →
 576 while that manual console selection is current. Mode bytes, INI keys, Auto,
 cleanup holds, DRS/application hooks, peer wire bits/names and plugin ABI remain
 unchanged. A resolution-only chord publishes settings without selecting the
