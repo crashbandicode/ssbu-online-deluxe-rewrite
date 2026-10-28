@@ -1,5 +1,78 @@
 # Validation record
 
+## 120 Hz tearing report — logs show no cause — 2026-10-28
+
+The operator saw what looked like tearing while playing at 120 Hz (SaltyNX
+and FPSLocker, docked 120 Hz, 60 FPS target, interval 2) with the
+refresh-clock plugin `0.0.2-dev`.
+
+**Evidence.**
+
+- Read over DBI, with nothing written (`usb-logs-1028/read1.json`): this
+  session's `events.log`, `renderer-status.txt`, 15 `CAPTURE_MATCH` /
+  `CAPTURE_CSS` capture pairs, and refresh-clock `status.txt`.
+- A read-only research worker analysed them (report
+  `usb-logs-1028/TEARING-ANALYSIS.md`). Its present statistics were rechecked
+  independently on three captures (`usb-logs-1028/check_presents.py`).
+
+**What the logs show.** The quoted values were confirmed by the independent
+recheck.
+
+- Profiles:
+  - The Quickplay and local-wireless matches ran Vanilla+ (three images; boot
+    settings had `vanilla_plus: true`).
+  - The later matches ran manual LessLag (two images), with Horizon-OC
+    applied in most of them.
+- 69,892 actual presents across 14 captures.
+  - Median spacing 16.67 ms in every capture. In the long LessLag Singles,
+    p99 was 16.84 ms and 16.88 ms.
+  - Gaps under 12 ms were 0.21%, clustered at character-select motion and
+    stage exits.
+- No acquire returned the image presented last.
+- Every early present had its duplicate skipped; `early_present_mismatches=0`.
+- The texture-sync wait still ran on LessLag (median 7.86 ms, none over
+  16.67 ms).
+- refresh-clock was normalising as designed: 124 VSync events to 62 game
+  ticks in 1.03 s, with refresh 120, interval 2 and target 60. Its only hook
+  is the VSync-count worker; it never presents or picks a buffer.
+- The once-per-second `telemetry.flag` status write shows no periodic stall
+  in the captures.
+
+**Conclusion.**
+
+- The CPU-side present sequence was regular in both Vanilla+ and LessLag.
+- The captures record API calls, not scanout. A tear inside the display mode
+  or on screen would leave this trace unchanged, so the report is neither
+  confirmed nor explained.
+- Also not established: which save turned `vanilla_plus` off (code 24 did
+  not name keys) and the present interval during each capture.
+
+**Diagnostics added** (candidate `ae69cce`, see [DEBUGGING.md](DEBUGGING.md)):
+
+| Code | Records |
+| --- | --- |
+| 117 | Present spacing outside 14–19 ms |
+| 118 | An acquire of the image presented last |
+| 119 | Present-interval changes |
+| 24 | Each save's changed keys (b is now a mask) |
+
+Codes 117 and 118 are rate limited; `renderer-status.txt` adds exact
+`present_pace_outliers` and `present_reacquired_last` totals.
+
+**Gates.**
+
+- Clippy clean.
+- `--no-default-features` build succeeds.
+- `cargo test`: 302 passed.
+- The Skyline build has no warnings: package
+  `DELUXE-build-lobby/47fc0dc468b8bffc`, build
+  `0.8.1-ae69cce7e744-1793214821`, NRO `47fc0dc4…`.
+- The first diagnostics commit failed the Skyline build (an unsafe call in
+  runtime code that host builds do not compile); `ae69cce` fixed it.
+
+The console A/B plan is in
+[next checks](NEXT_SESSION.md#lobby-practice-window-and-120-hz-tearing-checks--2026-10-28).
+
 ## Unreleased: lobby practice window — 2026-10-28
 
 The operator reported that the Player Info window became the in-match strip
@@ -43,8 +116,10 @@ the cause.
   - Skyline package `DELUXE-build-lobby/e7ae1fa0d5c48fa3`: build
     `0.8.1-dfa1608b3f73-1793213529`, NRO `e7ae1fa0…`, 1,462,272 bytes,
     `runtime_tested=false`.
+  - Superseded by `0.8.1-ae69cce7e744-1793214821` (NRO `47fc0dc4…`), the
+    same fix plus the diagnostics in the entry above.
 - **Not tested.** No console or Eden run of the candidate yet; see
-  [next checks](NEXT_SESSION.md#lobby-practice-window-check--2026-10-28).
+  [next checks](NEXT_SESSION.md#lobby-practice-window-and-120-hz-tearing-checks--2026-10-28).
 - **Other observations from the same log.**
   - After the local-wireless visit, Deluxe never saw the second Quickplay
     entry, so the connection stayed Offline in that lobby. The online

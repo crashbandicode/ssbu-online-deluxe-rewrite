@@ -1,11 +1,14 @@
 # Resume and test plan
 
-## Lobby practice window check — 2026-10-28
+## Lobby practice window and 120 Hz tearing checks — 2026-10-28
 
-Candidate `0.8.1-dfa1608b3f73-1793213529` (NRO `e7ae1fa0…`, branch
+Candidate `0.8.1-ae69cce7e744-1793214821` (NRO `47fc0dc4…`, branch
 `fix/lobby-practice-window`) classifies waiting-room lobby practice as
-Training ([Validation](VALIDATION.md#unreleased-lobby-practice-window--2026-10-28)).
-On the console:
+Training and adds the present-pacing diagnostics
+([Validation](VALIDATION.md#unreleased-lobby-practice-window--2026-10-28),
+[tearing analysis](VALIDATION.md#120-hz-tearing-report--logs-show-no-cause--2026-10-28)).
+
+**Lobby window.** On the console:
 
 1. Enter a local-wireless lobby, then load a different practice stage. The
    Player Info window should stay the vertical window at the right.
@@ -16,6 +19,22 @@ In the retained `events.log`, each code 110 row has a code 116 row after it.
 Lobby stages should show bit 10 set and code 110 scene 1 (Training). Match
 stages should show bit 10 clear, with scene 2 or 3. If bit 9 is clear, the
 13.0.5 guard rejected the reads and nothing changed.
+
+**120 Hz tearing A/B.** Keep the dock at 120 Hz and the refresh-clock NRO
+installed, and change one thing per match:
+
+1. Remove `ultimate/ssbu-refresh-clock/telemetry.flag` and relaunch Smash, so
+   no status file is written once a second.
+2. Play one match on manual LessLag.
+3. Play one match on manual Vanilla with `vanilla_plus=false`.
+4. If both are clean, play one with Vanilla+ (`vanilla_plus=true`), the
+   profile of the earlier Quickplay matches.
+5. If Vanilla and LessLag both tear, add `observe-only.flag` (the
+   refresh-clock README) for one match before changing Deluxe.
+
+Note which matches tore. Then read back `events.log` (codes 117, 118, 119
+and the code 24 masks) and `renderer-status.txt` (`present_pace_outliers`,
+`present_reacquired_last`, `present_interval`).
 
 ## 0.8.1 Horizon-OC release check — 2026-10-28
 
