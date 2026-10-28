@@ -3,6 +3,12 @@
 The compact You-line icons and LLUltra controls below are new in 0.7.0;
 older 0.6.2 has separate privacy and UltraRes rows.
 
+**Since 0.8.2** the player modes (Stealth, Streamer and the Horizon-OC clock)
+share one control. Select **You**, move the light-blue frame with
+**ZR + Left / Right**, and toggle the framed mode with **L+R + X**. This
+replaces ZR+X (Stealth), ZR+Y (Streamer) and ZR+L3 (OC). ZR+L3 was the one that
+caught presses during online matches.
+
 Hold **L+R**, then tap **D-pad Down** to cycle
 **settings → performance → window options → hidden**. When a separately installed plugin NRO has
 registered options, a **plugins** page sits between settings and performance,
@@ -24,15 +30,13 @@ fork's room-ID path, but still needs an NSO test. See [native display](NATIVE_DI
 | Control | Action |
 | --- | --- |
 | L+R + Down | Cycle settings → (plugins) → (own plugin pages) → performance → window options → hidden. The Window Options page rows PluginsPage, OwnPages and PerfPage (or `hide_pages` in the INI, 0.5.3; the rows moved from Settings to the Window Options page in 0.6.0) take pages out of the cycle, e.g. settings → FX Control → window options → hidden; Settings and Window Options are always in it. See [Configuration](CONFIGURATION.md) |
-| Up / Down | Move the selection; it wraps within the page. **Settings**: You (the first row, carrying the privacy icons), the Opp line (only while the peer shows), NetLatency, NetProfile. You has no Left/Right value; its only edits are the ZR + X / Y privacy shortcuts below. There are no separate Stealth or Streamer rows. **Window Options**: PluginsPage / OwnPages / PerfPage (Shown or Hidden), PerfView (Graph or Number) and Hints (Shown or Hidden). On a plugin page, the plugin's rows |
+| Up / Down | Move the selection; it wraps within the page. **Settings**: You (the first row, carrying the player-mode icons), the Opp line (only while the peer shows), NetLatency, NetProfile. You has no value: ZR + Left/Right moves the light-blue frame between its icons and L+R + X toggles the framed one (0.8.2). There are no separate Stealth, Streamer or OC rows. **Window Options**: PluginsPage / OwnPages / PerfPage (Shown or Hidden), PerfView (Graph or Number) and Hints (Shown or Hidden). On a plugin page, the plugin's rows |
 | Left / Right (window open) | Does not change a value since 0.5.6; the window ignores a plain press in every scene (until 0.5.5 it changed values in menus and on the character select). Use ZR + Left / Right below |
-| ZR + Left / Right | Change the selected value on any Settings row, Window Options row or plugin row; on the Opp line (Settings) it cycles the selected remote station, what the Peer row did before 0.6.0. The hold is required in **every scene since 0.5.6** (menus, character select, Training and matches); in 0.5.3–0.5.5 it applied only while a fight was live (Training, Singles, Doubles). A plain Left/Right is ignored, so a menu D-pad press, a taunt or a stray press cannot change a setting (operator rule, 2026-10-18); Up/Down still move the selection. Since 0.6.0 the selected row's value reads `< value >` (for example `< Auto >`) while ZR is held and is plain text without it, on Settings, Window Options and in the match strip. ZR rather than ZL because ZL + D-pad Left/Right in Training swaps the controlled fighter. Window closed, the ZL-gated native pane edits below are unchanged |
+| ZR + Left / Right | Change the selected value on any Settings row, Window Options row or plugin row; on the Opp line (Settings) it cycles the selected remote station, what the Peer row did before 0.6.0. On **You** (0.8.2) it moves the light-blue frame Stealth → Streamer → OC (the clock only while it shows), wrapping, and saves nothing. The hold is required in **every scene since 0.5.6** (menus, character select, Training and matches); in 0.5.3–0.5.5 it applied only while a fight was live (Training, Singles, Doubles). A plain Left/Right is ignored, so a menu D-pad press, a taunt or a stray press cannot change a setting (operator rule, 2026-10-18); Up/Down still move the selection. Since 0.6.0 the selected row's value reads `< value >` (for example `< Auto >`) while ZR is held and is plain text without it, on Settings, Window Options and in the match strip. ZR rather than ZL because ZL + D-pad Left/Right in Training swaps the controlled fighter. Window closed, the ZL-gated native pane edits below are unchanged |
 | Shoulder chord + Left / Right outside Settings and Window Options | Cycle the selected remote peer |
 | ZL + Left / Right or Up / Down on an online character select or arena pane, window closed | Edit the input buffer or the profile on the native status (since 0.4.1 the D-pad alone only moves the hand) |
-| ZR + X (Settings, You selected) | Toggle Stealth; the You-line eye closes when enabled and opens when disabled. A session-latched change is amber with `*` and a reconnect notice |
-| ZR + Y (Settings, You selected) | Toggle Streamer; the You-line TV has a green filled screen when enabled and a grey outline when disabled. These privacy shortcuts work only while the Settings page has **You** selected (`> You` in the table, `>You:` in the match strip), with ZR held and ZL released: each new X or Y press toggles once. A held button does not repeat, and one already held when the selection reaches You does not fire. They do nothing on other rows, on other pages or with the window hidden |
-| ZR + L3 (Settings, any row) | 0.8.1, only while the game-aware Horizon-OC fork answers: switch `hoc_oc` between **always** (Horizon-OC applies Smash's saved profile whenever Smash runs, as it always has) and **online** (the profile applies only while connected to another player, internet or local wireless, and for 15 s after the last player disconnects). Saved to the INI. One toggle per new L3 press with ZR held and ZL released. With stock Horizon-OC or none, the press does nothing and the hint line does not name it |
-| L+R + X (neither ZL nor ZR held) | With manual console LLUltra selected, cycle 576p → 720p → 1080p → 576p in place (LLUltra → LLUltra+ → LLUltra++ → LLUltra), saving `ultra_resolution`. For Auto, the emulator and every other profile, toggle and save Vanilla+ instead (0.5.6). A new X press is required; holding X does not repeat. See [Rendering profiles](RENDERING.md#vanilla-056) |
+| L+R + X with **You** selected on Settings (neither ZL nor ZR held) | 0.8.2: toggle the framed player mode and save it. **Stealth**: the eye closes when enabled and opens when disabled; a session-latched change is amber with `*` and a reconnect notice. **Streamer**: the TV has a green filled screen when enabled and a grey outline when disabled. **OC** (only while the game-aware Horizon-OC fork answers, when the clock shows): switch `hoc_oc` between **online** (Smash's saved profile applies only while connected to another player, internet or local wireless, and for 15 s after the last player disconnects) and **always** (Horizon-OC applies it whenever Smash runs, as it always has). Works in the table (`> You`) and the match strip (`>You:`). A new X press is required: holding X does not repeat, and an X already held when the selection reaches You does not fire. ZR+X, ZR+Y and ZR+L3 (0.7.0–0.8.1) do nothing since 0.8.2 |
+| L+R + X on any other row, or with the window hidden (neither ZL nor ZR held) | With manual console LLUltra selected, cycle 576p → 720p → 1080p → 576p in place (LLUltra → LLUltra+ → LLUltra++ → LLUltra), saving `ultra_resolution`. For Auto, the emulator and every other profile, toggle and save Vanilla+ instead (0.5.6). A new X press is required; holding X does not repeat. See [Rendering profiles](RENDERING.md#vanilla-056) |
 | L+R + Plus or Minus | Open the debug view; again to hide it. ZL+ZR stopped being a window chord in 0.5.3, so a trigger chord during play cannot open the window |
 | L+R + Up in the Debug view | Start a 30 s timing capture (see [Captures](CAPTURES.md)) |
 | L+R + Left in the Debug view | Coverage build only: write a `manual-NNN.profraw` snapshot (see [Coverage build](DEBUGGING.md#coverage-build-052)) |
@@ -70,23 +74,32 @@ computer's physical network connection.
 The icons are drawn geometry, so no eye/TV font glyph or emoji support is
 required. They reflect the saved settings. If Stealth differs from the current
 connection's latched value, its eye is amber with `*`; a reconnect notice remains
-visible even when Hints is hidden. Select You, then toggle with ZR+X / ZR+Y.
+visible even when Hints is hidden. Select You, frame an icon with ZR+Left/Right,
+then toggle it with L+R+X (0.8.2). The light-blue frame shows only while You is
+selected; it starts on Stealth after each boot and is not saved.
 
-With `hoc_oc=online` and the game-aware Horizon-OC fork answering (0.8.1), a
-small clock follows the privacy icons, on the table's You row and the strip's
-`You:` alike: green with a centre hub while Smash's saved Horizon-OC profile is
-applied, grey while Horizon-OC's own fallback holds (offline, and from 15 s
-after the last player disconnects unless one reconnects), yellow when there is
-no Pia signal or the fork stopped answering.
-It is drawn geometry like the icons and adds no row. The Performance **Clock**
-row appends the same state (`OC online: on`, `OC online: idle`,
-`OC always`, `OC online: no signal`, `OC online: unavailable`), wrapped onto a
-second line.
+While the game-aware Horizon-OC fork answers, a small clock follows the
+privacy icons, on the table's You row and the strip's `You:` alike. It is the
+third player-mode icon.
 
-![ZR+L3 switching to always, which removes the clock, and back to online, where the grey clock returns](media/oc-indicator.gif)
+| Clock | Mode | Meaning |
+| --- | --- | --- |
+| Green, with a centre hub | `hoc_oc=online` | Smash's saved Horizon-OC profile is applied |
+| Grey | `hoc_oc=online` | Horizon-OC's own fallback holds (offline, and from 15 s after the last player disconnects unless one reconnects) |
+| Yellow | `hoc_oc=online` | No Pia signal, or the fork stopped answering |
+| White, with a centre hub (0.8.2) | `hoc_oc=always` | The profile applies wherever Horizon-OC applies it |
 
-Captured in Eden with the test-only Horizon-OC stand-in
+Before 0.8.2, `always` showed no clock at all. The clock is drawn geometry like
+the icons and adds no row. The Performance **Clock** row appends the same state
+(`OC online: on`, `OC online: idle`, `OC always`, `OC online: no signal`,
+`OC online: unavailable`), wrapped onto a second line.
+
+![0.8.1: ZR+L3 switching to always, which removed the clock, and back to online, where the grey clock returns](media/oc-indicator.gif)
+
+Captured in Eden with 0.8.1 and the test-only Horizon-OC stand-in
 ([hoc-standin](../tools/hoc-standin/README.md)); offline, so the clock is grey.
+That build used ZR+L3. Since 0.8.2 the clock stays white in `always`, and
+L+R+X on the framed clock switches the mode. The GIF has not been re-recorded.
 
 ![Stealth eye and Streamer TV states, redrawn from the source geometry](privacy-indicators.svg)
 
@@ -98,9 +111,10 @@ placeholder.
 
 The clock image is the same kind of redraw, of `oc_clock` and its place after
 the privacy icons: green with a hub (profile applied), grey (held back), yellow
-(no signal or the fork not answering), and no clock at all with
-`hoc_oc=always` or without the fork. Its last panel shows when the clock
-changes.
+(no signal or the fork not answering), and no clock without the fork. Its last
+panel shows when the clock changes. The redraw predates 0.8.2. It does not
+show the white `always` clock or the light-blue focus frame (a
+rounded rectangle around the framed icon).
 
 **Opp** appears only while the peer shows (Streamer off, and a connected, live
 station): `<name> | <announced profile> | <announced buffer> | <ping> |
@@ -125,12 +139,9 @@ The full Performance block and the frame-time plot are on the Performance page
 (and in Debug) only.
 
 A dim grey hint line under the footer, wrapping to the window width, lists the
-chords: `ZR+Left/Right edits   ZR+X Stealth   ZR+Y Streamer   L+R+Down next page   L+R+X Vanilla+/LLUltra`.
-The ZR+X/Y entries carry no "You selected" prefix because the row marker and
-icons already show the selection; they still act only with Settings' **You**
-row highlighted, ZR held and ZL released (see the table above). The earlier
-`5a2a5f05` candidate showed the `You selected: ZR+X Stealth / ZR+Y
-Streamer` wording. The hint line is on by default; `hints=false` in the INI or the Window Options page's
+chords: `ZR+Left/Right edits or picks a You icon   L+R+X toggles it (other rows: Vanilla+/LLUltra)   L+R+Down next page`
+(0.8.2). Until 0.8.1 it named `ZR+X Stealth`, `ZR+Y Streamer` and, with the
+fork, `ZR+L3 OC`. The hint line is on by default; `hints=false` in the INI or the Window Options page's
 **Hints** row (Shown / Hidden) turns it off ([Configuration](CONFIGURATION.md)).
 
 ## Window Options page (0.6.0; retitled 0.6.1)
@@ -149,7 +160,7 @@ the page.
 
 In a ready Singles or Doubles match the window is the compact two-line strip.
 Line 1 of the Settings strip is `You:` (`>You:` while You is selected) with the
-two privacy icons, then `Net`
+player-mode icons (and the light-blue frame while You is selected), then `Net`
 and `Profile`; the `PlugPg`, `OwnPg`, `PerfPg` and `PerfView` fields moved to the
 Window Options page's strip, which shows them plus `Hints`. Line 2 is
 `>Opp:<name> | <profile> | <buffer> | <ping> | <interface>` (when the peer
@@ -229,7 +240,8 @@ The fork's **FPS++** row was removed on 2026-10-17, and its L+R+ZL/ZR+X chord
 with it. Since 0.5.6 plain **L+R+X** (neither ZL nor ZR held) toggles Vanilla+
 instead, except while manual console LLUltra is selected: that same chord then
 cycles LLUltra → LLUltra+ → LLUltra++ → LLUltra and leaves Vanilla+ unchanged.
-ZL+X still does nothing, and ZR+X with You selected on Settings is now
-the Stealth shortcut.
+Since 0.8.2, with **You** selected on Settings, L+R+X toggles the framed player
+mode instead. ZL+X still does nothing, and ZR+X (the 0.7.0–0.8.1 Stealth
+shortcut) does nothing.
 See [Rendering profiles](RENDERING.md#fps)
 and [Vanilla+](RENDERING.md#vanilla-056).

@@ -36,32 +36,40 @@ navigation cannot change a setting.
 
 Inputs also reach the game: in this Training clip ZR shields and Up/Down taunt
 behind the window. The grey clock after the privacy icons and `ZR+L3 OC` in the
-hint line are there because the Horizon-OC stand-in is loaded (see below).
+hint line are there because the Horizon-OC stand-in is loaded (see below); the
+clip is from 0.8.1, and the 0.8.2 hint line no longer names ZR+L3.
 
-## Stealth and Streamer
+## Stealth, Streamer and OC
 
-The two privacy switches are icons on the You row.
+The player modes are icons on the You row. Since 0.8.2 one control serves all
+of them:
 
 1. Select **You**, the first Settings row.
-2. **ZR+X** toggles Stealth: the eye closes.
-3. **ZR+Y** toggles Streamer: the TV screen turns green. Press each again to
-   turn it off.
+2. Hold **ZR** and press **Left/Right** to move the light-blue frame to the
+   eye (Stealth), the TV (Streamer) or, with the Horizon-OC fork, the clock.
+3. Press **L+R+X** to toggle the framed mode. The eye closes for Stealth and
+   the TV screen turns green for Streamer. Press it again to turn it off.
 
-![Toggling the You-row privacy icons](media/privacy-shortcuts.gif)
+![0.8.1: ZR+X and ZR+Y toggling the You-row privacy icons](media/privacy-shortcuts.gif)
 
-This offline clip shows the saved icon states only; it does not test network
-suppression or reconnect behavior.
+This offline clip is from 0.8.1, which used ZR+X / ZR+Y (retired in 0.8.2); it
+has not been re-recorded. It shows the saved icon states only. It does not test
+network suppression or reconnect behavior.
 
 ## Horizon-OC only when online
 
-With the game-aware Horizon-OC fork, **ZR+L3** on Settings switches `hoc_oc`.
-In `online` mode a clock follows the privacy icons; `always` removes it.
+With the game-aware Horizon-OC fork the clock after the privacy icons is the
+third player mode.
 
-1. Hold **ZR** and press **L3**: the mode becomes always and the clock goes.
-2. Press **ZR+L3** again: online mode, the clock returns. Grey means the saved
-   profile is held back (offline here); green would mean it is applied.
+- Frame it and press **L+R+X** to switch `hoc_oc` between `online` and `always`.
+- In `online` mode the clock is grey while the saved profile is held back
+  (offline here) and green while it is applied.
+- In `always` it is white with a hub (0.8.2; 0.8.1 removed it).
 
-![Switching the Horizon-OC mode with ZR+L3](media/oc-indicator.gif)
+![0.8.1: switching the Horizon-OC mode with ZR+L3](media/oc-indicator.gif)
+
+The clip is from 0.8.1, which switched the mode with ZR+L3 and showed no clock
+in `always`.
 
 The Performance page's **Clock** row ends with the same state, wrapped to a
 second line:

@@ -1,5 +1,58 @@
 # Validation record
 
+## Unreleased: You-line mode focus and per-stage logs — 2026-10-28
+
+**Why.**
+
+- The 2026-10-28 log showed ZR+L3 switching `hoc_oc` three times during
+  online Singles matches. The operator confirmed none were intended.
+- The operator asked to consolidate the You-line shortcuts:
+  - ZR+D-pad Left/Right picks a mode icon, highlighted in light blue;
+  - L+R+X toggles it;
+  - L+R+Down keeps opening the window and stepping pages.
+- The operator also asked for one log per match, and for everything the 120 Hz
+  checks need to be logged up front, so the A/B fits on one boot.
+
+**Controls (`a49ec48`).**
+
+- The per-mode chords are retired: ZR+X Stealth, ZR+Y Streamer, ZR+L3 OC.
+- On the Settings You row, ZR+Left/Right moves the focus
+  (`menu::YouIcon`): Stealth → Streamer → OC, wrapping. OC is a stop only
+  while the clock shows.
+- `runtime/ui.rs` draws the focus as a light-blue rounded frame,
+  `LIGHT_BLUE` rgb(0.45, 0.78, 1.0).
+- L+R+X (no trigger held) toggles the framed mode. On other rows, and with
+  the window hidden, L+R+X keeps the Vanilla+ / LLUltra-resolution behaviour.
+- The clock now stays in `hoc_oc=always`, drawn white with a hub
+  (`MarkTone::Always`), so it can be switched back.
+- The hint line names the single chord.
+- The strip's width allowance counts the clock.
+- Host tests cover the focus walk, OC skipping, held-press edges, the retired
+  chords on every view and row, and the OC toggle only while the clock shows.
+
+**Per-stage logs (`8d965ba`).** `matches/NNNNNN-<scene>-<stage>.log` for
+every Training, Singles or Doubles stage, described in
+[DEBUGGING.md](DEBUGGING.md).
+
+- Header: settings, render profile, textures and present interval, clock, and
+  the refresh-clock status.
+- Body: the stage's events.
+- Footer: present counts, a present-spacing histogram, pacing outliers,
+  reacquires, the end render state, and the refresh-clock status again.
+- `matches/index.txt` keeps 60; no directory listing is used.
+- A replayed events batch is skipped by sequence.
+
+**Gates.**
+
+- `cargo clippy --all-targets -- -D warnings` is clean.
+- `cargo build --no-default-features` succeeds.
+- `cargo test`: 309 passed.
+- The trial Skyline build compiled the runtime with no warnings. The
+  installed build and its card read-back are recorded below once done.
+
+**Not tested.** No Eden or console run yet. The light-blue frame, white clock
+and per-stage files have not been seen running.
+
 ## 120 Hz tearing report — logs show no cause — 2026-10-28
 
 The operator saw what looked like tearing while playing at 120 Hz (SaltyNX

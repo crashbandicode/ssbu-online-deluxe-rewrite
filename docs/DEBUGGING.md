@@ -20,6 +20,28 @@ Under sd:/ultimate/ssbu_online_deluxe_rewrite/:
   Previous boot: install.previous.log.
 - events.log: background snapshots flushed every 500 ms. One previous log is retained;
   each is capped at 4 MiB.
+- matches/NNNNNN-<scene>-<stage>.log (0.8.2): one log per stage load (Training,
+  Singles or Doubles, including lobby practice), so a session of many matches
+  needs no manual rotation. `matches/index.txt` lists the kept logs; the newest
+  60 are kept, numbered on across boots. Always on, no flag.
+  - The header has the build, stage, scene, connection, the full settings, the
+    render profile (`render_start selected/auto_profile/requested/committed/effective`,
+    textures, present interval), the clock probe, and every line of
+    `ultimate/ssbu-refresh-clock/status.txt` as `refresh_clock_start.*`.
+    `refresh_clock_start=absent` appears without that plugin. Its `interval_*`
+    counters are live only while its `telemetry.flag` exists.
+  - Then come the stage's `events.log` rows.
+  - The footer is written when the next stage loads or the scene context (code
+    73) turns Inactive. It has the stage length, actual presents, early presents,
+    skips, mismatches, pacing outliers (code 117) and reacquires (code 118). It
+    also has `present_spacing` (counts of present-to-present spacing in <6, 6–10,
+    10–14, 14–19, 19–25, 25–40 and ≥40 ms bins), the render state at the end
+    (`render_end`), the clock, and the refresh-clock status again
+    (`refresh_clock_end.*`).
+  - At 60 FPS nearly every present falls in 14–19 ms. Two presents per 60 Hz
+    frame at 120 Hz would fill 6–10 ms. Change profiles in-game between matches
+    and each match's log records which profile it ran, so a 120 Hz A/B fits in
+    one boot.
 - panic.log: best-effort Rust panic message/location and recent events. Retained until another panic.
 - config.ini: saved settings; invalid input is reported and preserved. config.previous.ini
   retains the last good version and is recovered if replacement was interrupted.

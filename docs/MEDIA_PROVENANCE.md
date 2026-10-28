@@ -84,8 +84,8 @@ from the Horizon-OC stand-in run described [below](#horizon-oc-indicator-media-0
 | --- | --- | --- | --- |
 | [overlay-cycle.gif](media/overlay-cycle.gif) | 480×400 | 14 s | L+R+Down page cycle |
 | [settings-edit.gif](media/settings-edit.gif) | 480×200 | 10 s | ZR-guarded NetLatency edit (0.8.1, Training, with the OC clock) |
-| [privacy-shortcuts.gif](media/privacy-shortcuts.gif) | 480×200 | 10 s | ZR+X / ZR+Y on the You row (0.8.1, Training, with the OC clock) |
-| [oc-indicator.gif](media/oc-indicator.gif) | 480×200 | 10 s | ZR+L3 always/online, the OC clock (0.8.1) |
+| [privacy-shortcuts.gif](media/privacy-shortcuts.gif) | 480×200 | 10 s | ZR+X / ZR+Y on the You row (0.8.1, Training, with the OC clock); chords retired in 0.8.2, not re-recorded |
+| [oc-indicator.gif](media/oc-indicator.gif) | 480×200 | 10 s | ZR+L3 always/online, the OC clock (0.8.1); chord retired and `always` clock added in 0.8.2, not re-recorded |
 | [performance-window-oc.png](media/performance-window-oc.png) | 300×336 | | Performance close-up, Clock row with `OC online: idle` (0.8.1) |
 | [fx-control-edit.gif](media/fx-control-edit.gif) | 480×340 | 8 s | Companion fighter-row edit |
 | [training-strip.gif](media/training-strip.gif) | 1280×720 | 6 s | Training with Settings open |

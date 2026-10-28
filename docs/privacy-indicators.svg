@@ -95,11 +95,12 @@
   <!-- D: placement sketch, 1 unit = 24 px. -->
   <rect x="20" y="520" width="1000" height="230" rx="10" fill="#202028"/>
   <text x="40" y="544" font-size="15" font-weight="bold" fill="#ffffff">Placement sketch, 1 unit = 24 px; values are placeholders, not captured text</text>
-  <text x="40" y="564" font-size="12" fill="#9aa0aa">Settings table, You selected (the "&gt; " mark is the highlight)</text>
+  <text x="40" y="564" font-size="12" fill="#9aa0aa">Settings table, You selected, Stealth framed (0.8.2 light-blue focus)</text>
   <text x="560" y="564" font-size="12" fill="#9aa0aa">In-match strip line 1, You selected</text>
 
   <text x="40" y="595" font-size="24" fill="#ffffff">&gt; You</text>
   <g transform="translate(128 576) scale(24)">
+    <rect x="-0.12" y="-0.12" width="1.24" height="1.24" rx="0.15" fill="none" stroke="#73c7ff" stroke-width="0.09"/>
     <use xlink:href="#eye-closed" color="#ffffff"/>
     <use xlink:href="#tv" color="#b3b3b3"/>
   </g>
@@ -116,13 +117,13 @@
   </g>
   <text x="730" y="595" font-size="24" fill="#ffffff">Net ...  Profile ...</text>
 
-  <text x="40" y="694" font-size="14" fill="#b3b3b3" xml:space="preserve">ZR+Left/Right edits   ZR+X Stealth   ZR+Y Streamer   L+R+Down next page   L+R+X Vanilla+</text>
-  <text x="40" y="712" font-size="12" fill="#9aa0aa">Hint line (HINT_LINE in src/menu.rs, while hints=true), text reduced to fit. ZR+X/Y still act only with You selected.</text>
+  <text x="40" y="694" font-size="14" fill="#b3b3b3" xml:space="preserve">ZR+Left/Right edits or picks a You icon   L+R+X toggles it (other rows: Vanilla+/LLUltra)   L+R+Down next page</text>
+  <text x="40" y="712" font-size="12" fill="#9aa0aa">Hint line (HINT_LINE in src/menu.rs, 0.8.2, while hints=true), text reduced to fit. 0.7.0–0.8.1 named ZR+X Stealth / ZR+Y Streamer.</text>
   <text x="40" y="736" font-size="14" fill="#f2d940">* Stealth changes after reconnect</text>
   <text x="290" y="736" font-size="12" fill="#9aa0aa">Footer line only while a Stealth change is pending; shown even with hints off.</text>
 
   <!-- Intended controls. -->
-  <text x="40" y="784" font-size="13" fill="#cfd3da">Intended controls: on Settings with You selected, hold ZR (ZL released). Each new X press toggles Stealth, each new Y press toggles Streamer.</text>
-  <text x="40" y="804" font-size="13" fill="#cfd3da">A button already held when the selection reaches You neither fires nor repeats. No privacy shortcut elsewhere or with the window hidden.</text>
+  <text x="40" y="784" font-size="13" fill="#cfd3da">Controls (0.8.2): on Settings with You selected, ZR+Left/Right moves the light-blue frame (Stealth, Streamer, OC); L+R+X toggles it.</text>
+  <text x="40" y="804" font-size="13" fill="#cfd3da">An X already held when the selection reaches You neither fires nor repeats. Elsewhere L+R+X is Vanilla+/LLUltra; ZR+X/Y do nothing.</text>
   <text x="40" y="824" font-size="13" fill="#cfd3da">Selection order on Settings: You, Opp (only while the peer shows), NetLatency, NetProfile, wrapping.</text>
 </svg>

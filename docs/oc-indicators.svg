@@ -6,11 +6,13 @@
   <desc>Enlarged redraw of oc_clock() and its call in privacy_icons() in
     src/runtime/ui.rs. Coordinates are in units of the ImGui font size, the same
     normalized values the source passes to point(x, y): four quarter-arc
-    quadratic Beziers for the face, two hands from the centre, and a hub only
-    while the profile is applied. The clock follows the 2.5 x 1 privacy
-    reservation after a 0.3-unit gap and reserves 1 x 1. Colours: GREEN
-    rgb(0.45,0.90,0.45), GREY rgb(0.70,0.70,0.70), YELLOW rgb(0.95,0.85,0.25);
-    the theme text colour is shown as white.</desc>
+    quadratic Beziers for the face, two hands from the centre, and a hub
+    while the profile is applied and (0.8.2) in hoc_oc=always. The clock
+    follows the 2.5 x 1 privacy reservation after a 0.3-unit gap and reserves
+    1 x 1. Colours: GREEN rgb(0.45,0.90,0.45), GREY rgb(0.70,0.70,0.70),
+    YELLOW rgb(0.95,0.85,0.25), the theme text colour (always) shown as white,
+    and the 0.8.2 You focus frame LIGHT_BLUE rgb(0.45,0.78,1.0), a rounded
+    rectangle from -0.12 to 1.12 around the framed icon.</desc>
   <defs>
     <!-- Privacy icons, as in privacy-indicators.svg. -->
     <g id="eye-open" fill="none" stroke="currentColor" stroke-width="0.085">
@@ -43,6 +45,9 @@
     <!-- igDummy reservation of the clock: 1 x 1 font units. -->
     <rect id="clock-reserve" x="0" y="0" width="1" height="1" fill="none"
           stroke="#5a5a66" stroke-width="0.02" stroke-dasharray="0.08 0.06"/>
+    <!-- 0.8.2 You focus: focus_frame() around the framed icon's 1 x 1 cell. -->
+    <rect id="focus" x="-0.12" y="-0.12" width="1.24" height="1.24" rx="0.15"
+          fill="none" stroke="#73c7ff" stroke-width="0.09"/>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
       <path d="M0 0 L10 5 L0 10 z" fill="#cfd3da"/>
     </marker>
@@ -51,8 +56,8 @@
   <rect width="1040" height="1010" fill="#15151a"/>
 
   <text x="40" y="40" font-size="22" font-weight="bold" fill="#ffffff">Deluxe OC clock indicator: source-geometry preview (not a screenshot)</text>
-  <text x="40" y="64" font-size="13" fill="#cfd3da">Traced from oc_clock() in src/runtime/ui.rs (feature/hoc-online-oc, cc6d8fd). 1 unit = the ImGui font size, enlarged here.</text>
-  <text x="40" y="82" font-size="13" fill="#cfd3da">Drawn only with hoc_oc=online and the game-aware Horizon-OC fork answering. Arcs are ideal; ImGui uses 8 segments each.</text>
+  <text x="40" y="64" font-size="13" fill="#cfd3da">Traced from oc_clock() in src/runtime/ui.rs (0.8.1 cc6d8fd; always clock and focus frame a49ec48). 1 unit = the ImGui font size.</text>
+  <text x="40" y="82" font-size="13" fill="#cfd3da">Drawn while the game-aware Horizon-OC fork answers, in both modes since 0.8.2. Arcs are ideal; ImGui uses 8 segments each.</text>
 
   <!-- A: the clock alone, 1 unit = 110 px. -->
   <rect x="20" y="100" width="1000" height="220" rx="10" fill="#202028"/>
@@ -64,8 +69,10 @@
   </g>
   <use xlink:href="#clock" transform="translate(340 140) scale(110)" color="#b3b3b3"/>
   <use xlink:href="#clock" transform="translate(590 140) scale(110)" color="#f2d940"/>
-  <use xlink:href="#clock-reserve" transform="translate(840 140) scale(110)"/>
-  <text x="895" y="200" font-size="13" fill="#5a5a66" text-anchor="middle">nothing</text>
+  <g transform="translate(840 140) scale(110)" color="#ffffff">
+    <use xlink:href="#clock"/>
+    <use xlink:href="#clock-hub"/>
+  </g>
 
   <text x="145" y="278" font-size="13" fill="#cfd3da" text-anchor="middle">Profile applied: green, hub</text>
   <text x="145" y="296" font-size="12" fill="#9aa0aa" text-anchor="middle">a player connected, or within 15 s</text>
@@ -73,8 +80,8 @@
   <text x="395" y="296" font-size="12" fill="#9aa0aa" text-anchor="middle">offline: HOC global or stock</text>
   <text x="645" y="278" font-size="13" fill="#cfd3da" text-anchor="middle">No signal / unavailable: yellow</text>
   <text x="645" y="296" font-size="12" fill="#9aa0aa" text-anchor="middle">no Pia, or fork not answering</text>
-  <text x="895" y="278" font-size="13" fill="#cfd3da" text-anchor="middle">No clock</text>
-  <text x="895" y="296" font-size="12" fill="#9aa0aa" text-anchor="middle">hoc_oc=always, or stock / no HOC</text>
+  <text x="895" y="278" font-size="13" fill="#cfd3da" text-anchor="middle">Always: white, hub (0.8.2)</text>
+  <text x="895" y="296" font-size="12" fill="#9aa0aa" text-anchor="middle">no clock: stock / no HOC</text>
 
   <!-- B: the whole You-line block, 1 unit = 60 px. -->
   <rect x="20" y="340" width="1000" height="190" rx="10" fill="#202028"/>
@@ -108,10 +115,15 @@
       <use xlink:href="#clock"/>
     </g>
   </g>
-  <g transform="translate(820 390) scale(60)">
+  <g transform="translate(780 390) scale(60)">
     <use xlink:href="#reserve"/>
     <use xlink:href="#eye-closed" color="#ffffff"/>
     <use xlink:href="#tv" color="#b3b3b3"/>
+    <g transform="translate(2.8 0)" color="#ffffff">
+      <use xlink:href="#clock-reserve"/>
+      <use xlink:href="#clock"/>
+      <use xlink:href="#clock-hub"/>
+    </g>
   </g>
 
   <text x="159" y="476" font-size="13" fill="#cfd3da" text-anchor="middle">Online, profile applied</text>
@@ -120,14 +132,14 @@
   <text x="404" y="494" font-size="12" fill="#9aa0aa" text-anchor="middle">same icons, grey clock, no hub</text>
   <text x="649" y="476" font-size="13" fill="#cfd3da" text-anchor="middle">Online, no signal / unavailable</text>
   <text x="649" y="494" font-size="12" fill="#9aa0aa" text-anchor="middle">Stealth OFF, Streamer ON, yellow clock</text>
-  <text x="895" y="476" font-size="13" fill="#cfd3da" text-anchor="middle">Always (or no fork)</text>
-  <text x="895" y="494" font-size="12" fill="#9aa0aa" text-anchor="middle">privacy icons only</text>
+  <text x="895" y="476" font-size="13" fill="#cfd3da" text-anchor="middle">Always (0.8.2)</text>
+  <text x="895" y="494" font-size="12" fill="#9aa0aa" text-anchor="middle">white clock; no fork: icons only</text>
   <text x="40" y="518" font-size="12" fill="#9aa0aa">The 0.3-unit gap separates the icons from the clock. A pending Stealth reconnect adds the amber * after the TV; the clock then follows it.</text>
 
   <!-- C: placement sketch, 1 unit = 24 px. -->
   <rect x="20" y="550" width="1000" height="250" rx="10" fill="#202028"/>
   <text x="40" y="574" font-size="15" font-weight="bold" fill="#ffffff">Placement sketch, 1 unit = 24 px; values are placeholders, not captured text</text>
-  <text x="40" y="594" font-size="12" fill="#9aa0aa">Settings table, You selected (the "&gt; " mark is the highlight)</text>
+  <text x="40" y="594" font-size="12" fill="#9aa0aa">Settings table, You selected, clock framed (light blue; ZR+Left/Right moves the frame)</text>
   <text x="560" y="594" font-size="12" fill="#9aa0aa">In-match strip line 1, You selected</text>
 
   <text x="40" y="625" font-size="24" fill="#ffffff">&gt; You</text>
@@ -135,6 +147,7 @@
     <use xlink:href="#eye-closed" color="#ffffff"/>
     <use xlink:href="#tv" color="#b3b3b3"/>
     <g transform="translate(2.8 0)" color="#73e673">
+      <use xlink:href="#focus"/>
       <use xlink:href="#clock"/>
       <use xlink:href="#clock-hub"/>
     </g>
@@ -156,8 +169,8 @@
   </g>
   <text x="760" y="625" font-size="24" fill="#ffffff">Net ...  Profile</text>
 
-  <text x="40" y="724" font-size="13" fill="#b3b3b3" xml:space="preserve">ZR+Left/Right edits   ZR+X Stealth   ZR+Y Streamer   ZR+L3 OC   L+R+Down next page   L+R+X Vanilla+/LLUltra</text>
-  <text x="40" y="742" font-size="12" fill="#9aa0aa">Hint line while the fork answers (HINT_LINE_OC in src/menu.rs); without the fork the plain line does not name ZR+L3.</text>
+  <text x="40" y="724" font-size="13" fill="#b3b3b3" xml:space="preserve">ZR+Left/Right edits or picks a You icon   L+R+X toggles it (other rows: Vanilla+/LLUltra)   L+R+Down next page</text>
+  <text x="40" y="742" font-size="12" fill="#9aa0aa">Hint line (HINT_LINE in src/menu.rs, 0.8.2), the same with or without the fork. 0.8.1 named ZR+X, ZR+Y and ZR+L3 OC.</text>
   <text x="40" y="772" font-size="14" fill="#ffffff">Clock</text>
   <text x="200" y="772" font-size="14" fill="#ffffff">1785 MHz OC, HOC kip+clk+smash, OC online: on</text>
   <text x="40" y="790" font-size="12" fill="#9aa0aa">Performance page Clock row: the CPU estimate and Horizon-OC files, then the gate (on / idle / no signal / unavailable, or OC always).</text>
@@ -190,6 +203,6 @@
   <text x="794" y="908" font-size="12" fill="#9aa0aa">no Pia observer, or fork silent</text>
   <text x="794" y="924" font-size="12" fill="#9aa0aa">(client retries every 5 s)</text>
 
-  <text x="40" y="962" font-size="13" fill="#cfd3da">ZR+L3 on Settings (any row, only while the fork answers) switches hoc_oc between online and always.</text>
-  <text x="40" y="980" font-size="13" fill="#cfd3da">always: no clock, and Horizon-OC applies Smash's saved profile exactly as it does without Deluxe.</text>
+  <text x="40" y="962" font-size="13" fill="#cfd3da">You selected: ZR+Left/Right frames the clock, L+R+X switches hoc_oc between online and always (0.8.2; ZR+L3 in 0.8.1).</text>
+  <text x="40" y="980" font-size="13" fill="#cfd3da">always: white clock with a hub, and Horizon-OC applies Smash's saved profile exactly as it does without Deluxe.</text>
 </svg>
