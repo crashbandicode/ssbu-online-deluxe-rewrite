@@ -5,8 +5,9 @@ use crate::config::{Config, Platform, RenderMode};
 
 /// Selectable Player Info rows, top to bottom. Settings has You, the optional Opp
 /// selector and two controls. The player modes belong to You. Console LLUltra is
-/// one NetProfile stop; L+R+X on another row cycles its saved resolution in
-/// place. The remaining rows configure the Window Options page.
+/// one NetProfile stop; L+R+X with NetProfile highlighted cycles its saved
+/// resolution in place (and otherwise flips Vanilla+). L+R+X acts only on the
+/// highlighted row (0.8.2). The remaining rows configure the Window Options page.
 ///
 /// The `You` summary line (0.8.2): ZR+Left/Right moves the light-blue focus
 /// between its mode icons and L+R+X toggles the focused one ([`YouIcon`]).
@@ -439,7 +440,7 @@ pub(crate) fn perf_footer(mean_ms: Option<f32>, resolution: &str, drs: bool) -> 
 /// Since 0.8.2 the player modes are You-line icons ([`YouIcon`]), so the
 /// line names one chord for them instead of one per mode.
 pub const HINT_LINE: &str =
-    "ZR+Left/Right edits or picks a You icon   L+R+X toggles it (other rows: Vanilla+/LLUltra)   L+R+Down next page";
+    "ZR+Left/Right edits or picks a You icon   L+R+X toggles the highlight (You icon, or Vanilla+/LLUltra on NetProfile)   L+R+Down next page";
 
 /// Shows the edit state (0.6.0): while the ZR hold is on, the selected row's
 /// value reads `< value >`; without it the value is plain, so the hold rule

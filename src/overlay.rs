@@ -8,10 +8,11 @@ pub(crate) const L: u64 = 1 << 6;
 pub(crate) const R: u64 = 1 << 7;
 const ZL: u64 = 1 << 8;
 const ZR: u64 = 1 << 9;
-/// L+R+X toggles the focused You-line mode on the You row (0.8.2); on any
-/// other row, or with the window hidden, it toggles Vanilla+ or cycles
-/// manual console LLUltra in place. The ZR+X, ZR+Y and ZR+L3 mode chords
-/// were retired in 0.8.2 after an accidental in-match ZR+L3.
+/// L+R+X toggles only the highlighted row's value (0.8.2): the focused
+/// You-line mode on You, Vanilla+ or the manual console LLUltra resolution on
+/// NetProfile, nothing elsewhere or with the window hidden. The ZR+X, ZR+Y
+/// and ZR+L3 mode chords were retired in 0.8.2 after an accidental in-match
+/// ZR+L3.
 const X: u64 = 1 << 2;
 const PLUS_MINUS: u64 = (1 << 10) | (1 << 11);
 pub(crate) const LEFT: u64 = 1 << 12;
@@ -211,34 +212,37 @@ impl Overlay {
         let pressed = buttons & !self.previous_buttons;
         self.previous_buttons = buttons;
         let shoulders = buttons & (L | R) == L | R;
-        // L+R+X with neither trigger held. A held chord, or X pressed before
-        // the shoulders, is not a new edge; neither is a selection that moves
-        // onto You while it is held. Every result is saved.
+        // L+R+X with neither trigger held toggles only what is highlighted
+        // (0.8.2): the framed mode on You, the profile's Vanilla+ or LLUltra
+        // resolution on NetProfile, and nothing on any other row, page or with
+        // the window hidden. A held chord, or X pressed before the shoulders,
+        // is not a new edge; neither is a selection that moves onto a row
+        // while it is held. Every result is saved.
         if shoulders && buttons & (ZL | ZR) == 0 && pressed & X != 0 {
-            // On the You row (0.8.2): the focused mode. An OC focus without
-            // the clock is shown, and acts, as Stealth.
-            if self.view == View::Settings
-                && self.menu.open
-                && self.menu.selected == crate::menu::ROW_YOU
-            {
-                match self.you_focus.shown(self.oc_available) {
+            let row = (self.view == View::Settings && self.menu.open).then_some(self.menu.selected);
+            match row {
+                // An OC focus without the clock is shown, and acts, as Stealth.
+                Some(crate::menu::ROW_YOU) => match self.you_focus.shown(self.oc_available) {
                     YouIcon::Stealth => config.stealth = !config.stealth,
                     YouIcon::Streamer => config.streamer = !config.streamer,
                     YouIcon::Oc => config.hoc_oc = config.hoc_oc.toggled(),
+                },
+                // A manual console LLUltra selection cycles its saved
+                // resolution forward in place (576 → 720 → 1080 → 576) and
+                // leaves the mode, Auto and Vanilla+ unchanged. Every other
+                // selection, including Auto and emulator LLUltra, flips
+                // Vanilla+.
+                Some(crate::menu::ROW_NET_PROFILE) => {
+                    let cycle_ultra = !config.auto_profile
+                        && config.render_mode == crate::config::RenderMode::LessLagUltra
+                        && config.platform == crate::config::Platform::Console;
+                    if cycle_ultra {
+                        config.ultra_resolution = config.ultra_resolution.cycle(1);
+                    } else {
+                        config.vanilla_plus = !config.vanilla_plus;
+                    }
                 }
-                return true;
-            }
-            // Elsewhere a manual console LLUltra selection cycles its saved
-            // resolution forward in place (576 → 720 → 1080 → 576) and leaves
-            // the mode, Auto and Vanilla+ unchanged. Every other selection,
-            // including Auto and emulator LLUltra, flips Vanilla+.
-            let cycle_ultra = !config.auto_profile
-                && config.render_mode == crate::config::RenderMode::LessLagUltra
-                && config.platform == crate::config::Platform::Console;
-            if cycle_ultra {
-                config.ultra_resolution = config.ultra_resolution.cycle(1);
-            } else {
-                config.vanilla_plus = !config.vanilla_plus;
+                _ => return false,
             }
             return true;
         }
@@ -1099,10 +1103,13 @@ mod tests {
                     ui.poll(0, &mut config);
                     assert_eq!(config, base);
                 }
+                // L+R+X toggles only the highlighted row: the framed mode on
+                // You, Vanilla+ on NetProfile, nothing anywhere else.
                 let on_you = view == View::Settings && selected == crate::menu::ROW_YOU;
-                assert!(ui.poll(L | R | X, &mut config));
+                let on_profile = view == View::Settings && selected == crate::menu::ROW_NET_PROFILE;
+                assert_eq!(ui.poll(L | R | X, &mut config), on_you || on_profile);
                 assert_eq!(config.stealth, base.stealth != on_you);
-                assert_eq!(config.vanilla_plus, base.vanilla_plus == on_you);
+                assert_eq!(config.vanilla_plus, base.vanilla_plus != on_profile);
                 assert_eq!(config.hoc_oc, base.hoc_oc);
                 // A held chord is one edge.
                 assert!(!ui.poll(L | R | X, &mut config));
@@ -1110,24 +1117,34 @@ mod tests {
         }
     }
 
+    /// The Settings page with NetProfile highlighted, where L+R+X acts on the
+    /// profile (0.8.2).
+    fn on_profile() -> Overlay {
+        Overlay {
+            view: View::Settings,
+            menu: Menu {
+                open: true,
+                selected: crate::menu::ROW_NET_PROFILE,
+            },
+            ..Overlay::default()
+        }
+    }
+
     #[test]
     fn a_held_lrx_is_not_replayed_when_the_selection_reaches_you() {
         let _gate = crate::peer_transport::global_gate();
         crate::peer_transport::clear_session();
-        let mut ui = Overlay {
-            view: View::Settings,
-            menu: Menu {
-                open: true,
-                selected: crate::menu::ROW_NET_LATENCY,
-            },
-            ..Overlay::default()
-        };
+        let mut ui = on_profile();
         let mut config = Config::default();
-        // Off You the chord flips Vanilla+.
+        // On NetProfile the chord flips Vanilla+.
         assert!(ui.poll(L | R | X, &mut config));
         let flipped = config.clone();
         assert_eq!(flipped.vanilla_plus, !Config::default().vanilla_plus);
-        // Moving onto You with the chord held is not a new press.
+        // Moving up to NetLatency, then You, with the chord held is not a new
+        // press on either row.
+        assert!(!ui.poll(L | R | X | UP, &mut config));
+        assert_eq!(ui.menu.selected, crate::menu::ROW_NET_LATENCY);
+        ui.poll(L | R | X, &mut config);
         assert!(!ui.poll(L | R | X | UP, &mut config));
         assert_eq!(ui.menu.selected, crate::menu::ROW_YOU);
         assert!(!ui.poll(L | R | X, &mut config));
@@ -1175,8 +1192,12 @@ mod tests {
     #[test]
     fn shoulder_x_toggles_vanilla_plus_once_per_press_without_a_trigger() {
         let _gate = crate::peer_transport::global_gate();
-        let mut ui = Overlay::default();
+        // With the window hidden the chord does nothing (0.8.2).
+        let mut hidden = Overlay::default();
         let mut config = Config::default();
+        assert!(!hidden.poll(L | R | X, &mut config));
+        assert_eq!(config, Config::default());
+        let mut ui = on_profile();
         assert!(config.vanilla_plus);
         // One edge per press: holding the chord does not flip it again.
         assert!(ui.poll(L | R | X, &mut config));
@@ -1192,7 +1213,7 @@ mod tests {
         assert!(!ui.poll(X, &mut config));
         assert!(!ui.poll(L | X, &mut config));
         assert_eq!(config, before);
-        assert_eq!(ui.view, View::Hidden);
+        assert_eq!(ui.view, View::Settings);
     }
 
     #[test]
@@ -1205,7 +1226,7 @@ mod tests {
         ];
         let labels = ["LLUltra", "LLUltra+", "LLUltra++"];
         for start in 0..3 {
-            let mut ui = Overlay::default();
+            let mut ui = on_profile();
             let mut config = Config {
                 platform: crate::config::Platform::Console,
                 auto_profile: false,
@@ -1280,7 +1301,7 @@ mod tests {
                 crate::config::UltraResolution::P720,
                 crate::config::UltraResolution::P1080,
             ] {
-                let mut ui = Overlay::default();
+                let mut ui = on_profile();
                 let mut config = Config {
                     platform,
                     auto_profile: auto,
@@ -1319,7 +1340,7 @@ mod tests {
             streamer: false,
             ..Config::default()
         };
-        let mut ui = Overlay::default();
+        let mut ui = on_profile();
         let mut config = base.clone();
         assert!(!ui.poll(L | R | ZL | X, &mut config));
         ui.poll(0, &mut config);
@@ -1338,7 +1359,7 @@ mod tests {
         assert!(config.vanilla_plus);
         assert!(config.stealth);
 
-        let mut ui = Overlay::default();
+        let mut ui = on_profile();
         let mut emulator = Config {
             platform: crate::config::Platform::Emulator,
             auto_profile: false,

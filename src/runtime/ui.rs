@@ -1281,7 +1281,11 @@ unsafe fn draw_window(ui: &UiState, view: View, frame: &Frame) {
                 // Conservative text-width allowance for the You label and
                 // two one-em icons, including the optional reconnect marker,
                 // plus the OC clock while it shows (both modes since 0.8.2).
-                let clock = if frame.privacy.oc.is_some() { "[ ] " } else { "" };
+                let clock = if frame.privacy.oc.is_some() {
+                    "[ ] "
+                } else {
+                    ""
+                };
                 first = format!(">You: [ ] [ ] {clock}*   {first}");
             }
             crate::menu::compact_font_size(&first, second, configured, scale.x, scale.y)
