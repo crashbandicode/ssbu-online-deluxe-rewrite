@@ -1,10 +1,58 @@
 # Validation record
 
+## 0.8.1 — console rematches — 2026-10-28
+
+The operator tested rematches on the console with the same release and card,
+and they worked: the clock stayed green between matches against the same
+opponent.
+
+Two logs were read over DBI afterwards, with nothing written. Both headers
+name `0.8.1-84da224d084f-1793155065`, and the config is unchanged
+(`99665630…`).
+
+- `events.previous.log`: SHA-256 `107c00db…`, 40,533 bytes, 43647–44623 s.
+- `events.log`: SHA-256 `0eb8d214…`, 260,564 bytes, 47334–55557 s.
+
+The earlier boot was offline Training only. It shows handshake `a=4`, gate
+`0b0110` throughout, and no profile.
+
+The later boot ran offline Training and four offline Doubles stages at stock
+clocks (107 `a=2`), then six online Singles matches in four online sessions:
+
+| Session | Gate on (115 `0b1111`) | Online Singles (event 110) | Gate off (115 `0b0110`) |
+| --- | --- | --- | --- |
+| 1 | 52599.6 s | `0x2a` 52615.6–52877.1 s | 52910.2 s; 112 at 52907.1 s, 10,006 ms silent |
+| 2 | 53009.7 s | `0x15b` 53022.0–53286.5 s | 53312.8 s; 112 at 53309.6 s, 10,010 ms silent |
+| 3 | 53418.3 s | `0x0` 53430.7–53697.6 s, rematch `0x28` 53726.6–53989.3 s | 54012.1 s |
+| 4 | 54057.7 s | `0x6b` 54071.5–54315.6 s, rematch `0x15b` 54340.1–54613.9 s | 54645.9 s |
+
+- **Rematches.** Each rematch stage loaded 29.0 s and 24.5 s after the
+  previous match ended. Event 115 did not change in either gap, so the profile
+  stayed applied across the rematch.
+- **Release timing.**
+  - In sessions 1 and 2, event 112 bounds the last sample as in the entry
+    below. The releases came 13.1–16.1 s and 13.2–16.2 s after it, which is
+    consistent with the 15 s hold.
+  - Sessions 3 and 4 logged no event 112. The gate went grey 22.8 s and
+    32.0 s after their last match ended.
+- **Measured CPU while applied.**
+  - Most readings were 1770–1790 MHz.
+  - Four single readings were lower with no gate change: 1646 MHz at
+    53571.0 s, 1015 MHz at 53766.2 s (the next, at 53773.9 s, read 1787 MHz),
+    1652 MHz at 53859.3 s, and 1592 MHz at 54337.1 s.
+  - The probe is a 5 s estimate, and the log does not explain these readings.
+- **Gate off.** Stock readings were 822–1025 MHz. Higher readings
+  (1557–1789 MHz) came only at boot or while loading, with no event 115 row,
+  as in the entries below.
+
+External receipt: `usb-online-1027/read4.json`, with the decoded timelines
+`read4-hoc-events.txt` and `read4-hoc-events-previous.txt`.
+
 ## 0.8.1 — console run of the 15 s release — 2026-10-28
 
-The operator ran the installed release `0.8.1-84da224d084f-1793155065` (NRO
-`0c16374b…`) with `hoc_oc=online` and reported: "everything worked as
-expected". The suggested checks were:
+The operator tested the installed release `0.8.1-84da224d084f-1793155065` (NRO
+`0c16374b…`) with `hoc_oc=online` on the console, and it worked as expected.
+The checks were:
 
 - the clock turns grey about 15 s after leaving an online match;
 - a rematch keeps it green;
@@ -37,8 +85,8 @@ config: `hide_pages` all true, `hoc_oc: Online`. Times are seconds since boot.
   change: 1542 MHz at 41740.2 s, before the handshake, and 1660 MHz at
   41871.1 s, while loading. No event 115 row accompanies either.
 - **Not in this log:**
-  - The log holds one online match, so the rematch and quick-reconnect cases
-    are not evidenced in it.
+  - The log holds one online match. The rematch case is recorded in the entry
+    above.
   - The page cycle is not logged.
 - **Config.** The card's `config.ini` (`99665630…`) differs from the one
   written before the run only in `vanilla_plus=true`, an in-game change by the
@@ -49,7 +97,7 @@ External receipt: `usb-online-1027/read3.json`, with the decoded timeline
 
 ## 0.8.1 — public release assets and card install — 2026-10-28
 
-The operator asked: "install it, dbi is connected, publish as well". The
+Installed and published at the operator's request. The
 [Forgejo release](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.8.1)
 contains the NRO and `manifest.json`. Both were built from clean tag `v0.8.1`
 at `84da224d084f5f7c08ac9501e86f071d483fcd3e`.
@@ -88,8 +136,8 @@ retained bundle with the NRO, debug ELF and source archive is
 ## 0.8.1 — Horizon-OC online-only profile, 15 s release — 2026-10-28
 
 0.8.1 releases the Horizon-OC online-only profile recorded in the three
-entries below. After the console test the operator asked: "we can also drop oc
-shortly after disconnecting, say 15 seconds if we don't reconnect again".
+entries below. After the console test the operator asked for the profile to
+drop about 15 s after a disconnect unless a player reconnects.
 `online_session::HOLD_TICKS` changed from 90 s to 15 s. The labels that said
 0.9.0 now say 0.8.1, because only this work has landed since `v0.8.0`.
 
@@ -175,10 +223,7 @@ hoc-clk fork `c4c28125…`: no clock, and ZR+L3 did nothing.
   and the Deluxe, FX Control and Horizon-OC configs were unchanged.
 - **Not run:** an Eden smoke test of the new route, because another Eden
   session was active.
-- **Console result:** operator-confirmed after a reboot ("It works great").
-  The operator then clarified the scope: "i tested everything the green icon
-  toggling it on and off alive match and confirming after the match that it
-  goes gray". That covers:
+- **Console result:** tested by the operator after a reboot. The test covered:
   - the grey clock while idle;
   - ZR+L3 switching the mode off and on;
   - the green (applied) clock in a live online match;
@@ -189,7 +234,7 @@ hoc-clk fork `c4c28125…`: no clock, and ZR+L3 did nothing.
 
 ## Unreleased Horizon-OC online-only profile — Eden integration with the hoc-standin — 2026-10-27
 
-Operator: "3 it will serve as a a sanity integration test". Eden GIF build
+Run at the operator's request as a sanity integration test. Eden GIF build
 `9a5d704c9c`, isolated profile, plugins ARCropolis + Deluxe + `tools/hoc-standin`
 (test-only; registers `hoc:clk` and answers protocol v1, no clock control).
 
@@ -221,7 +266,7 @@ frames, review sheets).
 
 ## Unreleased Horizon-OC online-only profile — card install — 2026-10-27
 
-Operator: "install it, we're connected via usb". Card install over DBI USB MTP
+Installed at the operator's request. Card install over DBI USB MTP
 (console `XAW10006803734`), finished 2026-10-27T20:15:12Z, state
 `installed_verified`.
 

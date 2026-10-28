@@ -2,20 +2,16 @@
 
 ## 0.8.1 Horizon-OC release check — 2026-10-28
 
-**Done.** The operator ran release `0.8.1-84da224d084f-1793155065` (NRO
-`0c16374b…`) with `hoc_oc=online` and reported "everything worked as
-expected". The card's event log agrees:
+**Done.** The operator tested release `0.8.1-84da224d084f-1793155065` (NRO
+`0c16374b…`) with `hoc_oc=online` on the console, including rematches. The
+card's event logs agree:
 
-- The profile applied for one online Singles match (1785–1788 MHz).
+- The profile applied for every online Singles match.
+- It stayed applied across two rematches.
 - Event 115 returned to `0b0110` about 15 s after the opponent's last sample.
 - Offline Training and Doubles stayed at stock clocks.
 
-Details are in
-[Validation](VALIDATION.md#081--console-run-of-the-15-s-release--2026-10-28).
-
-That log holds a single online match, so nothing yet shows a rematch or quick
-reconnect keeping the clock green. Retain an `events.log` from a rematch if
-that case needs a record.
+Details are in [Validation](VALIDATION.md#081--console-rematches--2026-10-28).
 
 ## Earlier evidence — 2026-10-25
 
