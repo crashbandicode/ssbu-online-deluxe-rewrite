@@ -1,5 +1,42 @@
 # Validation record
 
+## 0.8.1 — public release assets and card install — 2026-10-28
+
+The operator asked: "install it, dbi is connected, publish as well". The
+[Forgejo release](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.8.1)
+contains the NRO and `manifest.json`. Both were built from clean tag `v0.8.1`
+at `84da224d084f5f7c08ac9501e86f071d483fcd3e`.
+
+- Build ID: `0.8.1-84da224d084f-1793155065`.
+- NRO: **1,462,272 bytes**, SHA-256
+  `0c16374b11d3d592d79b98f1435a0acf3f339c836fbc91eb7be6ee40087b48d0`.
+- Manifest SHA-256:
+  `f67c1b8b6fd692a24ddc47d0486194951a5c70b146415b761a096ea0093596ca`.
+- All **77** archived source inputs match the tag, and **1,138,752**
+  executable bytes match the optimized debug ELF. The ImGui archive matches
+  its pin (`09b296a0…`).
+- Both assets were downloaded without authentication and hash-verified after
+  publication at **2026-10-28T02:42:05Z** (release 633, assets 221/222).
+
+**Card install (DBI, 02:40:54Z, state `installed_verified`).**
+
+- The card's Deluxe NRO changed from the candidate `778e94a8…`
+  (`0.8.0-788537dd6f6d-1793142603`) to the release NRO `0c16374b…`, which read
+  back identical.
+- Unchanged on read-back: the other plugins, the hoc-clk fork `c4c28125…`,
+  and the Deluxe, FX Control and Horizon-OC configs.
+- The Deluxe config already had the operator's page change of the same
+  session: `hide_pages=plugins,own_pages,performance`.
+- **Rollback:** copy `ultimate/ssbu_online_deluxe_rewrite/backups/pre-081-deluxe-1028.nro`
+  (`778e94a8…`) over the plugin.
+- The 15 s release has not yet run on the console; `runtime_tested=false`
+  remains accurate.
+
+External receipts: `usb-081-1028/deployment.json`,
+`release-081/PACKAGE-VERIFIED.json` and `release-081/PUBLICATION.json`. The
+retained bundle with the NRO, debug ELF and source archive is
+`DELUXE-build-081/0c16374b11d3d592/`.
+
 ## 0.8.1 — Horizon-OC online-only profile, 15 s release — 2026-10-28
 
 0.8.1 releases the Horizon-OC online-only profile recorded in the three

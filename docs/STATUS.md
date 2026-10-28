@@ -65,6 +65,11 @@ the operator's Switch, recorded with its build hash in [VALIDATION.md](VALIDATIO
 
 ## Current: 0.8.1
 
+Published on Forgejo on 2026-10-28 from clean tag `v0.8.1` / `84da224`.
+Both public assets were downloaded and hash-verified, and the same NRO is
+installed on the operator's Switch; exact build, hashes and the rollback path
+are in [Validation](VALIDATION.md#081--public-release-assets-and-card-install--2026-10-28).
+
 0.8.1 adds the online-only mode for the game-aware Horizon-OC fork
 ([source](https://git.syntaxbyexample.com/intpa/horizon-oc-game-aware), branch
 `game-aware/2.6.0`). With `hoc_oc=online`, toggled by **ZR+L3** on Settings,
