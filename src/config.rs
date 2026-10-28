@@ -157,8 +157,9 @@ pub struct Config {
     /// `always` (default, and a missing key) is Horizon-OC's own behavior;
     /// `online` holds the profile back outside an online session through the
     /// game-aware hoc-clk fork. Written only when `online`, so a file that
-    /// never chose it still loads in a build without the key. ZR+L3 on
-    /// Settings toggles it while the fork answers.
+    /// never chose it still loads in a build without the key. L+R+X on the
+    /// You line's OC clock toggles it while the fork answers (0.8.2; ZR+L3
+    /// in 0.8.1).
     pub hoc_oc: OcMode,
 }
 

@@ -24,7 +24,7 @@ const PERIOD: Duration = Duration::from_millis(500);
 static CAPABILITY: AtomicU8 = AtomicU8::new(Capability::Unknown as u8);
 static APPLYING: AtomicBool = AtomicBool::new(false);
 
-/// The last handshake result, for the window and ZR+L3.
+/// The last handshake result, for the window and the You line's OC clock.
 pub(super) fn capability() -> Capability {
     Capability::from_byte(CAPABILITY.load(Ordering::Acquire))
 }

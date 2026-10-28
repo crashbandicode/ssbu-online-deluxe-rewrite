@@ -4,12 +4,47 @@ use crate::auto_policy::{cycle_profile_choice, Connection, ProfileChoice, SceneS
 use crate::config::{Config, Platform, RenderMode};
 
 /// Selectable Player Info rows, top to bottom. Settings has You, the optional Opp
-/// selector and two controls. Privacy edits require You. Console LLUltra is one
-/// NetProfile stop; L+R+X cycles its saved resolution in place. The remaining
-/// rows configure the Window Options page.
+/// selector and two controls. The player modes belong to You. Console LLUltra is
+/// one NetProfile stop; L+R+X on another row cycles its saved resolution in
+/// place. The remaining rows configure the Window Options page.
 ///
-/// The `You` summary line: ZR+X/Y edit privacy; Left/Right do nothing.
+/// The `You` summary line (0.8.2): ZR+Left/Right moves the light-blue focus
+/// between its mode icons and L+R+X toggles the focused one ([`YouIcon`]).
 pub const ROW_YOU: usize = 0;
+
+/// The player-mode icons on the You line (0.8.2), left to right: Stealth
+/// (incognito), Streamer and the Horizon-OC clock. OC is a stop only while
+/// its clock shows (the game-aware fork answered).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum YouIcon {
+    #[default]
+    Stealth,
+    Streamer,
+    Oc,
+}
+
+impl YouIcon {
+    /// The next icon in `direction` (wrapping), skipping OC without its clock.
+    pub const fn step(self, direction: i8, oc_shown: bool) -> Self {
+        match (self, direction < 0, oc_shown) {
+            (Self::Stealth, false, _) => Self::Streamer,
+            (Self::Streamer, false, true) => Self::Oc,
+            (Self::Streamer, false, false) | (Self::Oc, false, _) => Self::Stealth,
+            (Self::Stealth, true, true) => Self::Oc,
+            (Self::Stealth, true, false) | (Self::Oc, true, _) => Self::Streamer,
+            (Self::Streamer, true, _) => Self::Stealth,
+        }
+    }
+
+    /// The focus actually drawn: an OC focus falls back to Stealth while the
+    /// clock is not shown.
+    pub const fn shown(self, oc_shown: bool) -> Self {
+        match self {
+            Self::Oc if !oc_shown => Self::Stealth,
+            focus => focus,
+        }
+    }
+}
 /// The `Opp` summary line: Left/Right cycles the selected remote station.
 pub const ROW_PEER: usize = 1;
 pub const ROW_NET_LATENCY: usize = 2;
@@ -401,22 +436,10 @@ pub(crate) fn perf_footer(mean_ms: Option<f32>, resolution: &str, drs: bool) -> 
 
 /// The dim hint line under the Settings and Window tables (0.6.0, `hints`).
 /// It wraps to the window width; every chord it names is in CONTROLS.md.
+/// Since 0.8.2 the player modes are You-line icons ([`YouIcon`]), so the
+/// line names one chord for them instead of one per mode.
 pub const HINT_LINE: &str =
-    "ZR+Left/Right edits   ZR+X Stealth   ZR+Y Streamer   L+R+Down next page   L+R+X Vanilla+/LLUltra";
-
-/// [`HINT_LINE`] while the game-aware Horizon-OC fork answers (0.8.1): ZR+L3
-/// on Settings switches `hoc_oc` between always and online. Without the fork
-/// the chord does nothing, so the plain line does not name it.
-pub const HINT_LINE_OC: &str =
-    "ZR+Left/Right edits   ZR+X Stealth   ZR+Y Streamer   ZR+L3 OC   L+R+Down next page   L+R+X Vanilla+/LLUltra";
-
-pub const fn hint_line(oc_available: bool) -> &'static str {
-    if oc_available {
-        HINT_LINE_OC
-    } else {
-        HINT_LINE
-    }
-}
+    "ZR+Left/Right edits or picks a You icon   L+R+X toggles it (other rows: Vanilla+/LLUltra)   L+R+Down next page";
 
 /// Shows the edit state (0.6.0): while the ZR hold is on, the selected row's
 /// value reads `< value >`; without it the value is plain, so the hold rule
@@ -733,6 +756,26 @@ impl Menu {
 mod tests {
     use super::*;
     use crate::config::UltraResolution;
+
+    #[test]
+    fn you_focus_walks_the_shown_icons_both_ways() {
+        use YouIcon::{Oc, Stealth, Streamer};
+        assert_eq!(YouIcon::default(), Stealth);
+        // With the clock: Stealth → Streamer → OC → Stealth, and back.
+        assert_eq!(Stealth.step(1, true), Streamer);
+        assert_eq!(Streamer.step(1, true), Oc);
+        assert_eq!(Oc.step(1, true), Stealth);
+        assert_eq!(Stealth.step(-1, true), Oc);
+        assert_eq!(Oc.step(-1, true), Streamer);
+        assert_eq!(Streamer.step(-1, true), Stealth);
+        // Without it OC is never a stop.
+        assert_eq!(Streamer.step(1, false), Stealth);
+        assert_eq!(Stealth.step(-1, false), Streamer);
+        assert_eq!(Oc.step(1, false), Stealth);
+        assert_eq!(Oc.shown(false), Stealth);
+        assert_eq!(Oc.shown(true), Oc);
+        assert_eq!(Streamer.shown(false), Streamer);
+    }
 
     #[test]
     fn opening_focuses_the_first_row_and_closed_input_cannot_edit_settings() {
@@ -1177,13 +1220,13 @@ mod tests {
         );
         assert!(HINT_LINE.is_ascii());
         assert!(HINT_LINE.contains("ZR+Left/Right"));
-        assert!(HINT_LINE.contains("ZR+X Stealth"));
-        assert!(HINT_LINE.contains("ZR+Y Streamer"));
-        assert!(HINT_LINE.contains("L+R+X Vanilla+/LLUltra"));
-        assert!(!HINT_LINE.contains("L3"));
-        assert_eq!(HINT_LINE_OC.replace("   ZR+L3 OC", ""), HINT_LINE);
-        assert_eq!(hint_line(false), HINT_LINE);
-        assert_eq!(hint_line(true), HINT_LINE_OC);
+        assert!(HINT_LINE.contains("L+R+X"));
+        assert!(HINT_LINE.contains("Vanilla+/LLUltra"));
+        assert!(HINT_LINE.contains("L+R+Down"));
+        // 0.8.2: the per-mode chords are gone.
+        for retired in ["ZR+X", "ZR+Y", "L3"] {
+            assert!(!HINT_LINE.contains(retired), "{retired}");
+        }
         let mut rows = vec![
             strip_row("You", "Vanilla+ | Auto | Wi-Fi", false),
             strip_row("NetLatency", "Auto", true),
