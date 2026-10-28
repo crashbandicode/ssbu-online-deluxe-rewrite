@@ -12,7 +12,7 @@ const ZR: u64 = 1 << 9;
 /// You-selected ZR+X toggles Stealth.
 const X: u64 = 1 << 2;
 const Y: u64 = 1 << 3;
-/// Left stick press. ZR+L3 on Settings toggles `hoc_oc` (0.9.0).
+/// Left stick press. ZR+L3 on Settings toggles `hoc_oc` (0.8.1).
 const STICK_L: u64 = 1 << 4;
 const PLUS_MINUS: u64 = (1 << 10) | (1 << 11);
 pub(crate) const LEFT: u64 = 1 << 12;
@@ -143,7 +143,7 @@ pub struct Overlay {
     /// not ZL, because ZL + D-pad Left/Right in Training swaps which fighter
     /// the player controls. Up/Down still move the selection.
     pub edit_hold: bool,
-    /// The game-aware Horizon-OC fork answered (0.9.0); the runtime sets it
+    /// The game-aware Horizon-OC fork answered (0.8.1); the runtime sets it
     /// every draw. ZR+L3 changes `hoc_oc` only then, so stock Horizon-OC
     /// cannot be given a setting it would ignore.
     pub oc_available: bool,
@@ -223,7 +223,7 @@ impl Overlay {
                 return true;
             }
         }
-        // ZR+L3 anywhere on Settings flips Always/Online (0.9.0). The OC mark
+        // ZR+L3 anywhere on Settings flips Always/Online (0.8.1). The OC mark
         // on the You line shows the result. A held press is not a new edge.
         if self.view == View::Settings
             && self.oc_available

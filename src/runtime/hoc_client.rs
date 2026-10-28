@@ -1,4 +1,4 @@
-//! Game-aware Horizon-OC client (0.9.0). One small thread of its own owns
+//! Game-aware Horizon-OC client (0.8.1). One small thread of its own owns
 //! the only `hoc:clk` session this plugin opens; hooks, the renderer and the
 //! diagnostics thread never wait on it. Every message is framed and every
 //! decision made by [`crate::hoc_game_aware`]; this file only moves bytes

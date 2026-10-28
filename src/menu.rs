@@ -404,7 +404,7 @@ pub(crate) fn perf_footer(mean_ms: Option<f32>, resolution: &str, drs: bool) -> 
 pub const HINT_LINE: &str =
     "ZR+Left/Right edits   ZR+X Stealth   ZR+Y Streamer   L+R+Down next page   L+R+X Vanilla+/LLUltra";
 
-/// [`HINT_LINE`] while the game-aware Horizon-OC fork answers (0.9.0): ZR+L3
+/// [`HINT_LINE`] while the game-aware Horizon-OC fork answers (0.8.1): ZR+L3
 /// on Settings switches `hoc_oc` between always and online. Without the fork
 /// the chord does nothing, so the plain line does not name it.
 pub const HINT_LINE_OC: &str =

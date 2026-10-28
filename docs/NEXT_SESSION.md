@@ -1,6 +1,21 @@
 # Resume and test plan
 
-## Latest evidence — 2026-10-25
+## 0.8.1 Horizon-OC release check — 2026-10-28
+
+The online-only profile was operator-confirmed with candidate `788537d`,
+which held the profile 90 s after the last Pia sample
+([Validation](VALIDATION.md)). For 0.8.1, play one online match with
+`hoc_oc=online` and leave after the results screen.
+
+- The clock should turn grey about 15 s after the opponent's connection ends.
+- A rematch or a quick reconnect should keep it green.
+- In the retained `events.log`, the event 115 change from `0b1111` to
+  `0b0110` should come about 15 s after the last sample. Event 111 should
+  return from about 1785 MHz to stock.
+
+Record the build id and NRO hash with the result.
+
+## Earlier evidence — 2026-10-25
 
 **0.8.0 Auto regression acceptance:** host tests and native byte verification
 cover match-scoped observations, but a live online run is still needed. With

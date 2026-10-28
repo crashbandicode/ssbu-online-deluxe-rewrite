@@ -1,4 +1,4 @@
-//! Switch side of [`crate::online_session`] (0.9.0): the diagnostics poll
+//! Switch side of [`crate::online_session`] (0.8.1): the diagnostics poll
 //! feeds Pia's cumulative RTT sample count every 500 ms; any thread asks
 //! whether the online session is live. Without the Pia observer there is no
 //! evidence and the session is never live.

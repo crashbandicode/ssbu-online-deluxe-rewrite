@@ -153,7 +153,7 @@ pub struct Config {
     /// 0.6.0: the dim chord hint line under the Settings and Window tables
     /// (`hints`). Default true; the Window page's Hints row toggles it.
     pub hints: bool,
-    /// 0.9.0: when Horizon-OC may apply Smash's saved profile (`hoc_oc`).
+    /// 0.8.1: when Horizon-OC may apply Smash's saved profile (`hoc_oc`).
     /// `always` (default, and a missing key) is Horizon-OC's own behavior;
     /// `online` holds the profile back outside an online session through the
     /// game-aware hoc-clk fork. Written only when `online`, so a file that
@@ -722,7 +722,7 @@ mod tests {
 
     #[test]
     fn hoc_oc_defaults_to_always_and_is_written_only_when_online() {
-        // 0.9.0: a file from an older build has no key and keeps Horizon-OC's
+        // 0.8.1: a file from an older build has no key and keeps Horizon-OC's
         // own behavior; a default save stays loadable by those builds.
         assert_eq!(Config::default().hoc_oc, OcMode::Always);
         assert_eq!(parse("version=1").unwrap().hoc_oc, OcMode::Always);

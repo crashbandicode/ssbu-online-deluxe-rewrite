@@ -1,4 +1,4 @@
-//! Horizon-OC game-aware gate, pure side (0.9.0). The wire format and the
+//! Horizon-OC game-aware gate, pure side (0.8.1). The wire format and the
 //! semantics are protocol v1, the contract shared with the hoc-clk fork
 //! (`hoc:clk` commands 100-103; `GetApiVersion` stays 2 so the stock overlay
 //! keeps working). This module frames the IPC messages, classifies the

@@ -66,7 +66,7 @@ static BACKOFF_ENABLED: AtomicBool = AtomicBool::new(true);
 static VANILLA_PLUS: AtomicBool = AtomicBool::new(true);
 /// `hints` (0.6.0): the chord hint line under the Settings and Window tables.
 static HINTS: AtomicBool = AtomicBool::new(true);
-/// `hoc_oc` (0.9.0): `OcMode` as u8. The game-aware client thread reads it
+/// `hoc_oc` (0.8.1): `OcMode` as u8. The game-aware client thread reads it
 /// every pass; ZR+L3 on Settings flips it.
 static HOC_OC: AtomicU8 = AtomicU8::new(0);
 static DRS_MOVES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
@@ -151,7 +151,7 @@ pub(super) fn settings() -> Config {
     }
 }
 
-/// `hoc_oc` (0.9.0). Atomic read for the game-aware client thread.
+/// `hoc_oc` (0.8.1). Atomic read for the game-aware client thread.
 pub(super) fn hoc_oc() -> crate::config::OcMode {
     crate::config::OcMode::from_byte(HOC_OC.load(Ordering::Acquire))
 }
@@ -308,7 +308,7 @@ pub fn main() {
         ("SCENE", online::install as fn()),
         ("BUFFER", hooks::install_latency as fn()),
         ("PIA", pia_rtt::install as fn()),
-        // Game-aware Horizon-OC client (0.9.0): a thread and IPC only, no hook.
+        // Game-aware Horizon-OC client (0.8.1): a thread and IPC only, no hook.
         // After PIA, whose samples are its only online evidence.
         ("HOC", hoc_client::install as fn()),
         ("BACKOFF", dispatcher_backoff::install as fn()),

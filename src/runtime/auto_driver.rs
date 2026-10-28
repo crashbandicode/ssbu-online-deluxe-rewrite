@@ -244,7 +244,7 @@ pub(crate) fn set_scene(
     if connection == previous_connection && status == previous_status {
         return;
     }
-    // 0.9.0: an earlier match's mark expires with the shared online session,
+    // 0.8.1: an earlier match's mark expires with the shared online session,
     // so a stage entered after that session ended proves itself again.
     // Code 107 `a=3`.
     let entering_match = status != previous_status

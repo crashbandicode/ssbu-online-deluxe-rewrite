@@ -1,5 +1,56 @@
 # Validation record
 
+## 0.8.1 — Horizon-OC online-only profile, 15 s release — 2026-10-28
+
+0.8.1 releases the Horizon-OC online-only profile recorded in the three
+entries below. After the console test the operator asked: "we can also drop oc
+shortly after disconnecting, say 15 seconds if we don't reconnect again".
+`online_session::HOLD_TICKS` changed from 90 s to 15 s. The labels that said
+0.9.0 now say 0.8.1, because only this work has landed since `v0.8.0`.
+
+**Console event log of the 90 s candidate.** The log for
+`0.8.0-788537dd6f6d-1793142603` covers its first boot, 42–1598 s. It was read
+over DBI and nothing was written. Times are seconds since boot.
+
+| Time | Event | Measured CPU (event 111) |
+| --- | --- | --- |
+| 56.0 s | 114 `a=4` (fork present), `caps=0x1`, protocol 1; 115 `0b0110` (armed, online mode), grey | |
+| 106.1 s / 108.1 s | 115 `0` then `0b0110`: ZR+L3 off and on | |
+| 240.7 s / 245.7 s | 115 `0` then `0b0110`: ZR+L3 off and on | 1789 MHz at 245.4 s, 991 MHz at 252.5 s |
+| 335.5 s | gate unchanged (idle) | 1782 MHz, then 912 MHz at 342.8 s: the game's loading boost |
+| 396.6 s | 115 `0b1111` (applied, online live), green | 1789 MHz at 399.9 s |
+| 413.7–524.9 s | online Singles stage `0x6b` (event 110) | 1780 MHz at 487.7 s |
+| 578.1 s | Training stage `0x134`, still inside the 90 s hold | 1789 MHz at 580.4 s |
+| 628.3 s | 115 `0b0110`, grey: 90 s after the last sample at about 538 s | 905–915 MHz from 630.6 s to the end |
+
+- About 910 MHz is a stock reading of the probe. Console logs from 2026-10-18,
+  before the game-aware fork existed, alternate between about 1020 and about
+  910 MHz at stock clocks.
+- The previous boot ran the pre-fix build `0.8.0-cc6d8fdff592`. It logged 114
+  `a=1 b=0x10801` and 115 `0b0100` with error `0x10801`, and Training ran at
+  1787 MHz: the profile applied offline, as the entry below describes.
+- With 0.8.1 the 628.3 s release would come about 15 s after the last
+  sample, near 553 s.
+
+**Why 15 s is safe.**
+
+- 15 s is longer than the 10 s a connected peer may go without a sample
+  (`pia_rtt::LIVE_MS`), which already covers loading gaps.
+- A new sample inside the window keeps the session live.
+- Auto's carried-mark check uses the same signal. If a real online match
+  arrives after the session lapsed, it re-marks itself through the latency
+  hook in 3.1–3.3 s. In the log above, the next opponent's samples began
+  17 s before the match stage loaded.
+
+**Gates on the 0.8.1 tree:**
+
+- `cargo clippy --all-targets -- -D warnings` is clean.
+- `cargo build --no-default-features` succeeds.
+- `cargo test`: 294 passed, including `hold_is_fifteen_seconds`.
+
+The Skyline build, NRO hash and release state are recorded with the release
+assets. The 15 s hold is not yet observed on a console or in Eden.
+
 ## Unreleased Horizon-OC online-only profile — console handshake failure and sm-session fix — 2026-10-27
 
 Operator report after the card install of `0.8.0-cc6d8fdff592` with the
@@ -47,8 +98,8 @@ hoc-clk fork `c4c28125…`: no clock, and ZR+L3 did nothing.
   - the green (applied) clock in a live online match;
   - the return to grey after the match.
 
-  The card's event log was not read back for this build, so the
-  events 114/115 values are not recorded.
+  The card's event log for this build was read back on 2026-10-28; see the
+  0.8.1 entry above.
 
 ## Unreleased Horizon-OC online-only profile — Eden integration with the hoc-standin — 2026-10-27
 
@@ -182,7 +233,7 @@ are under `deluxe-auto-080/` in the operator's evidence root.
 
 **No 0.8.0 live-console or emulator run is claimed.** In particular the actual
 network-callback timing and consecutive online match display still need the
-[runtime check](NEXT_SESSION.md#latest-evidence--2026-10-25). The new release
+[runtime check](NEXT_SESSION.md#earlier-evidence--2026-10-25). The new release
 also includes the previously merged revision-5 plugin status cells; their
 runtime acceptance is separate from passing host coverage.
 

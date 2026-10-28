@@ -1,16 +1,17 @@
 # Implementation and validation status
 
-Updated 2026-10-25 for **0.8.0**. Exact release/build and console evidence is in
-[VALIDATION.md](VALIDATION.md). Earlier releases: 0.6.2 (NRO SHA-256 in its
+Updated 2026-10-28 for **0.8.1**. Exact release/build and console evidence is in
+[VALIDATION.md](VALIDATION.md). Earlier releases: 0.8.0 `d92bc3d`, 0.7.0 `9a7f81c`, 0.6.2 (NRO SHA-256 in its
 release manifest), 0.6.1 `9d0cec2`, 0.6.0 `a0dc5d6`, 0.5.7 `282a2df`,
 0.5.6 `fb2012a`, 0.5.5 `6a9e61a`, 0.5.4 `a63bc8c`. The rewrite is one Rust/Skyline
 NRO for Smash 13.0.5. Auto is enabled by default; it chooses Vanilla (Vanilla+
 since 0.5.6) in menus,
 offline play and Training, LessLag for console online singles, LLUltra for
 emulator online singles, and LLDoubles for online matches with more than two
-fighters. Platform is an explicit INI setting. No hardware overclocking is
-implemented; the clock probe (0.5.3) only records the clock state so that
-performance captures can be classified.
+fighters. Platform is an explicit INI setting. Deluxe sets no clocks itself;
+the clock probe (0.5.3) only records the clock state so that performance
+captures can be classified, and since 0.8.1 `hoc_oc=online` tells the
+game-aware Horizon-OC fork when Smash's saved profile may apply.
 
 The operator reports testing in **Eden and on an Erista Switch without issues**,
 with Switch firmware **23.0.1**, Atmosphère **1.12.1** and Skyline
@@ -24,7 +25,7 @@ Publication routing: `origin` is Forgejo
 (`git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite`), authoritative
 and public; `github` is a downstream mirror that is not pushed automatically.
 Nothing is pushed without the operator's explicit permission. Forgejo
-releases carry the NRO and its SHA-256 manifest (see [Current: 0.8.0](#current-080)).
+releases carry the NRO and its SHA-256 manifest (see [Current: 0.8.1](#current-081)).
 
 Evidence levels used below: **host** = Rust host tests, clippy with warnings
 denied, the no-default-features build and the Skyline release build;
@@ -55,14 +56,34 @@ the operator's Switch, recorded with its build hash in [VALIDATION.md](VALIDATIO
 | Elite Legal Stages | Separate plugin, standalone ImGui retained | Both menus and settings persist; offline stages unrestricted as intended; NSO filtering untested |
 | Character FX | Moved to the separate [ssbu-fx-control](https://git.syntaxbyexample.com/intpa/ssbu-fx-control) plugin in 0.5.0; Deluxe has no effect hooks and exports the online context the plugin reads. FX Control 0.2.1 has per-move numbered Reduced variants for the ten ledger fighters and the SDK pinned to `a63bc8c`. | Clean 0.2.1 registration with descriptor 4 was checked against Deluxe 0.5.4 in Eden. The later `8bf2…` development menu was captured with Deluxe 0.7.0. On 2026-10-25 the operator reported FX testing in Eden/on Erista without issues; no build hash or Reduced performance acceptance accompanied that report. |
 | Match and CSS capture | `CAPTURE_MATCH` / `CAPTURE_CSS` boot flags stream timing and API CSVs; one `capture.rs` pair since 0.5.4; CSV headers carry build and clock (`# clock_mhz`, `# clock`, `# hoc`) | Shipped in 0.4.0 and used for every console ledger capture; the 0.5.4 consolidation keeps the CSV output byte-identical in host tests, console parity still owed. [Captures](CAPTURES.md) |
-| Clock probe | Horizon-OC file checks at boot, a 5 s add-latency MHz estimate, event code 111, status lines, Performance Clock row (0.5.3) | Host-tested only. The 1020 / 1785 MHz figures are a calculation from the A57 add latency, not a console measurement, until the first boot's event 111 is read |
-| Horizon-OC online-only profile (0.9.0 candidate) | `hoc_oc=online` lets Smash's saved Horizon-OC profile apply only while the shared online session is live (Pia RTT samples, internet or local wireless, 15 s hold). Client of the game-aware hoc-clk fork (protocol v1, `hoc:clk` commands 100–103, API version still 2) on its own thread; handshake-gated ZR+L3 toggle, You-line clock mark and Performance Clock state; events 114/115; `DISABLE_HOC` | Host-tested (framing golden bytes against libnx's layout, handshake classification, gate, heartbeat, config, chord). Eden integration with the test-only `tools/hoc-standin` (2026-10-27): handshake present (event 114 `a=4`), Arm with the kernel PID and the SetApply heartbeat seen by the stand-in, grey clock, ZR+L3 and the Performance Clock state checked on screen; the run found and fixed Eden's broken TIPC presence reply (CMIF on `platform=emulator`) and a clipped Performance row ([Validation](VALIDATION.md)). Console (2026-10-27): the first card install (`cc6d8fdff592`) failed the handshake with `LimitReached`, because a game may hold only one `sm:` session and Smash's SDK owns it. Eden does not enforce that. Fixed in `788537d` by borrowing Smash's session. The operator confirmed the fixed build on console: the grey clock, ZR+L3 on and off, green during a live online match, and grey again after the match. The event log was not read back ([Validation](VALIDATION.md)). The fork is source-only on Forgejo, [intpa/horizon-oc-game-aware](https://git.syntaxbyexample.com/intpa/horizon-oc-game-aware) branch `game-aware/2.6.0` on Horizon-OC `2.6.0-rel` `7960dd9`; no release or binary yet |
-| Shared online session (0.9.0 candidate) | One network-proven online signal for every consumer; Auto drops an earlier match's latency mark at a new match stage once that session has ended (event 107 `a=3`) | Host-tested only |
+| Clock probe | Horizon-OC file checks at boot, a 5 s add-latency MHz estimate, event code 111, status lines, Performance Clock row (0.5.3) | Console event log (2026-10-27 boot, read 2026-10-28): about 1020 or 905–915 MHz at stock, 1780–1789 MHz under Smash's Horizon-OC profile or the game's loading boost. The ~910 readings also appear in 2026-10-18 logs, before the game-aware fork existed ([Validation](VALIDATION.md)) |
+| Horizon-OC online-only profile (0.8.1) | `hoc_oc=online` lets Smash's saved Horizon-OC profile apply only while the shared online session is live (Pia RTT samples, internet or local wireless, 15 s hold). Client of the game-aware hoc-clk fork (protocol v1, `hoc:clk` commands 100–103, API version still 2) on its own thread; handshake-gated ZR+L3 toggle, You-line clock mark and Performance Clock state; events 114/115; `DISABLE_HOC` | Host-tested (framing golden bytes against libnx's layout, handshake classification, gate, heartbeat, config, chord). Eden integration with the test-only `tools/hoc-standin` (2026-10-27): handshake present (event 114 `a=4`), Arm with the kernel PID and the SetApply heartbeat seen by the stand-in, grey clock, ZR+L3 and the Performance Clock state checked on screen; the run found and fixed Eden's broken TIPC presence reply (CMIF on `platform=emulator`) and a clipped Performance row ([Validation](VALIDATION.md)). Console (2026-10-27): the first card install (`cc6d8fdff592`) failed the handshake with `LimitReached`, because a game may hold only one `sm:` session and Smash's SDK owns it. Eden does not enforce that. Fixed in `788537d` by borrowing Smash's session. The operator confirmed the fixed build on console: the grey clock, ZR+L3 on and off, green during a live online match, and grey again after the match. Its event log, read back on 2026-10-28, agrees: handshake `a=4`, two toggle round trips, the profile applied from the first Pia sample through the match (1780–1789 MHz measured), and released 90 s after the last sample, the hold that candidate used. The 0.8.1 hold of 15 s is host-tested only ([Validation](VALIDATION.md)). The fork is source-only on Forgejo, [intpa/horizon-oc-game-aware](https://git.syntaxbyexample.com/intpa/horizon-oc-game-aware) branch `game-aware/2.6.0` on Horizon-OC `2.6.0-rel` `7960dd9`; no release or binary yet |
+| Shared online session (0.8.1) | One network-proven online signal for every consumer, live until 15 s after the last Pia RTT sample; Auto drops an earlier match's latency mark at a new match stage once that session has ended (event 107 `a=3`) | The Horizon-OC gate's use was observed on console with the 90 s candidate; Auto's use and the 15 s hold are host-tested only |
 | ZL-gated native edits | Native pane D-pad edits need ZL held (0.4.1) | Host-verified; console results in VALIDATION.md |
 | Coverage build | Cargo feature `coverage`, raw profile writer, event code 109, manual snapshots from the Debug view (0.5.2) | Eden only. 2026-10-17 trace: 1,192 instrumented functions, 1,047 executed, 145 never executed. 2026-10-18 LAN Online run (two modded peers, NSO scenes only): 893 executed, 299 never executed, 12 functions new against the 10-17 report; [DEBUGGING.md](DEBUGGING.md) |
 | Removed in 0.5.4 | The opt-in peer observer, FPS++ (emulator-only diagnostic), the Gigaflare DRS trigger, five opt-in diagnostics, 21 helpers without a production caller; `peer_observer=` and `fps_boost=` are ignored legacy keys. Per-file reduction: `src/` 22,253 → 15,332 production lines (−31.1 %) | Host gates on every step; Eden latency, quota frame-rate, capture and plugin-page passes on the candidate. Console: the 0.5.4 first boot is the acceptance test. [FPS boost history](FPS_BOOST_INVESTIGATION.md) |
 
-## Current: 0.8.0
+## Current: 0.8.1
+
+0.8.1 adds the online-only mode for the game-aware Horizon-OC fork
+([source](https://git.syntaxbyexample.com/intpa/horizon-oc-game-aware), branch
+`game-aware/2.6.0`). With `hoc_oc=online`, toggled by **ZR+L3** on Settings,
+Smash's saved Horizon-OC profile applies only while the shared online session
+is live: from the first Pia RTT sample (internet or local wireless) until 15 s
+after the last one. A clock after the You-row privacy icons shows the state,
+and the Performance **Clock** row repeats it. Deluxe sends no clock value and
+never touches Horizon-OC's `config.ini`. With stock Horizon-OC, or none,
+nothing changes. On a console the client borrows Smash's own `sm:` session,
+because a game may hold only one. The same session signal lets Auto drop an
+earlier match's latency mark (event 107 `a=3`).
+
+Console evidence comes from the operator's test of candidate `788537d`, which
+released 90 s after the last sample, and from its event log. Release 0.8.1
+shortens that hold to 15 s, which is host-tested only. See
+[Validation](VALIDATION.md), [next checks](NEXT_SESSION.md), and the
+[NRO and manifest](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.8.1).
+
+## 0.8.0
 
 Published on Forgejo on 2026-10-25 from clean tag `v0.8.0` / `d92bc3d`.
 Both public assets were downloaded and hash-verified; exact build and hashes

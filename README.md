@@ -14,10 +14,10 @@ overclocking.
 
 ![The Player Info Settings window: the You row with eye and TV icons, NetLatency and NetProfile](docs/media/settings-window.png)
 
-**[0.8.0 — download NRO and manifest](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.8.0)**
-fixes stale `Auto (Nf)` counts with current-match buffer sampling and includes
-passive plugin status cells. The new Auto sampling has host/static validation;
-live-console validation remains pending. [Status and version history](docs/STATUS.md).
+**[0.8.1 — download NRO and manifest](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.8.1)**
+adds an online-only mode for the game-aware Horizon-OC fork: Smash's saved
+overclock profile applies only while you are connected to another player, and
+stops 15 s after the last one leaves. [Status and version history](docs/STATUS.md).
 
 > **Install only this NRO.** It replaces the original Online Deluxe fork,
 > SsbuSync and the PIA manager, so remove all three. If SsbuSync is still
@@ -52,7 +52,8 @@ Streamer. The eye closes and the TV turns green when they are on.
 With the game-aware Horizon-OC fork, **ZR+L3** on Settings switches when Smash's
 saved Horizon-OC profile may apply: **always**, as Horizon-OC itself does, or
 only while you are **online**. In online mode a clock follows the privacy icons:
-green while the profile is applied, grey while it is held back.
+green while the profile is applied, grey while it is held back. The profile
+stops 15 s after the last player disconnects unless one reconnects.
 
 ![ZR+L3 switching to always, which removes the clock, and back to online, where the grey clock returns](docs/media/oc-indicator.gif)
 
@@ -149,7 +150,7 @@ in [Rendering profiles](docs/RENDERING.md#measured-results).
 Everything else, including 0.6.2's older chords, is in
 [Controls](docs/CONTROLS.md); the You-row icons are drawn in
 [privacy-indicators.svg](docs/privacy-indicators.svg), and the Horizon-OC
-clock that follows them (0.9.0, ZR+L3) in
+clock that follows them (0.8.1, ZR+L3) in
 [oc-indicators.svg](docs/oc-indicators.svg).
 
 ## Rendering profiles

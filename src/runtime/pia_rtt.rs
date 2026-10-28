@@ -235,7 +235,7 @@ pub(super) fn ready() -> bool {
     INSTALLED.load(Ordering::Acquire)
 }
 
-/// Cumulative RTT samples the table accepted, mapped and foreign (0.9.0).
+/// Cumulative RTT samples the table accepted, mapped and foreign (0.8.1).
 /// Any change is traffic with another player; `online_session` turns it into
 /// the shared online session. Read-only; the hooks are unchanged.
 pub(super) fn evidence_count() -> u64 {

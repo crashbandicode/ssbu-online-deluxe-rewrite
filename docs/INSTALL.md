@@ -6,7 +6,7 @@ Close Smash before replacing files. Copy the rewrite NRO to:
 sd:/atmosphere/contents/01006A800016E000/romfs/skyline/plugins/libssbu_online_deluxe_rewrite.nro
 ```
 
-The [0.8.0 Forgejo release](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.8.0)
+The [0.8.1 Forgejo release](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.8.1)
 carries the NRO and its `manifest.json` (SHA-256, build id, module id).
 Skyline is required. The operator reports
 Eden and Erista Switch compatibility with firmware **23.0.1**, Atmosphère

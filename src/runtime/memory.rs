@@ -83,7 +83,7 @@ pub(super) fn memory_snapshot() -> Option<crate::hang_trace::Memory> {
 }
 
 /// This process's program id (`svcGetInfo` type 18), which the game-aware
-/// Horizon-OC fork checks against the application it is running (0.9.0).
+/// Horizon-OC fork checks against the application it is running (0.8.1).
 pub(super) fn program_id() -> Option<u64> {
     unsafe { get_info(18, 0) }
 }

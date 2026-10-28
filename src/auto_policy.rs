@@ -257,7 +257,7 @@ pub fn offline_match_due(
         && now.wrapping_sub(armed_tick) >= OFFLINE_CHECK_TICKS
 }
 
-/// 0.9.0: entering a Singles/Doubles stage drops the online-latency mark an
+/// 0.8.1: entering a Singles/Doubles stage drops the online-latency mark an
 /// earlier match left once the shared online session
 /// ([`crate::online_session`]) is no longer live: that match's session has
 /// ended, so its mark says nothing about this stage. A stored Quickplay then

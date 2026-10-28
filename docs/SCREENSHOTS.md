@@ -3,7 +3,7 @@
 A short visual tour of the Deluxe window. Every image is a real capture from an
 offline Eden session: most from the 0.7.0 session on 2026-10-24, with the separate
 [FX Control](https://git.syntaxbyexample.com/intpa/ssbu-fx-control) companion
-installed, and the ZR, privacy and Horizon-OC clips from a 0.9.0-candidate
+installed, and the ZR, privacy and Horizon-OC clips from a 0.8.1-candidate
 session on 2026-10-27. Both used demonstration settings (manual LessLag,
 `platform=emulator`, `vanilla_plus=false`), not the shipped defaults. Builds,
 encoding and scope are in [Media provenance](MEDIA_PROVENANCE.md); every

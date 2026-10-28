@@ -53,7 +53,7 @@ unsafe fn row(label: &str, value: &str) {
 }
 
 /// A Performance fact whose value wraps at the column's end instead of being
-/// clipped at the window edge (0.9.0): `Clock` with the Horizon-OC gate state
+/// clipped at the window edge (0.8.1): `Clock` with the Horizon-OC gate state
 /// and `Memory` outgrew the fixed window width.
 unsafe fn wrapped_row(label: &str, value: &str) {
     igTableNextRow(0, 0.0);
@@ -134,12 +134,12 @@ struct Privacy {
     stealth: bool,
     streamer: bool,
     reconnect: bool,
-    /// The game-aware Horizon-OC clock after the privacy icons (0.9.0);
+    /// The game-aware Horizon-OC clock after the privacy icons (0.8.1);
     /// `hoc_oc=online` with the fork answering only.
     oc: Option<MarkTone>,
 }
 
-/// What the game-aware gate shows for `config` right now (0.9.0).
+/// What the game-aware gate shows for `config` right now (0.8.1).
 fn oc_indicator(config: &crate::config::Config) -> Indicator {
     crate::hoc_game_aware::indicator(
         config.hoc_oc,
@@ -149,7 +149,7 @@ fn oc_indicator(config: &crate::config::Config) -> Indicator {
     )
 }
 
-/// Clock mark (0.9.0), drawn like the privacy icons and one text line tall:
+/// Clock mark (0.8.1), drawn like the privacy icons and one text line tall:
 /// green with a hub while Smash's saved Horizon-OC profile is applied, grey
 /// while Horizon-OC's own fallback holds, yellow without Pia evidence or with
 /// the fork not answering. Quarter arcs and lines only, the primitives the
@@ -908,7 +908,7 @@ unsafe fn poll(ui: &mut UiState, sample: input::Sample) -> Frame {
     // swaps the controlled fighter in Training). Up/Down still move the
     // selection. Until 0.5.5 the hold applied only while a fight was live.
     ui.controls.edit_hold = true;
-    // ZR+L3 (0.9.0) changes `hoc_oc` only while the game-aware fork answers.
+    // ZR+L3 (0.8.1) changes `hoc_oc` only while the game-aware fork answers.
     ui.controls.oc_available = Indicator::toggle_available(super::hoc_client::capability());
     if ui.controls.poll_native(buttons, &mut config, native) {
         match crate::menu::profile_action(&saved, &config) {

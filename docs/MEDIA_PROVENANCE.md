@@ -77,16 +77,16 @@ directory `deluxe-media-refresh-1024/`.
 
 ## Current assets
 
-All 29 are shown in [Screenshots](SCREENSHOTS.md). The four marked 0.9.0 come
+All 29 are shown in [Screenshots](SCREENSHOTS.md). The four marked 0.8.1 come
 from the Horizon-OC stand-in run described [below](#horizon-oc-indicator-media-090-candidate-2026-10-27).
 
 | File | Size | Length | Shows |
 | --- | --- | --- | --- |
 | [overlay-cycle.gif](media/overlay-cycle.gif) | 480×400 | 14 s | L+R+Down page cycle |
-| [settings-edit.gif](media/settings-edit.gif) | 480×200 | 10 s | ZR-guarded NetLatency edit (0.9.0, Training, with the OC clock) |
-| [privacy-shortcuts.gif](media/privacy-shortcuts.gif) | 480×200 | 10 s | ZR+X / ZR+Y on the You row (0.9.0, Training, with the OC clock) |
-| [oc-indicator.gif](media/oc-indicator.gif) | 480×200 | 10 s | ZR+L3 always/online, the OC clock (0.9.0) |
-| [performance-window-oc.png](media/performance-window-oc.png) | 300×336 | | Performance close-up, Clock row with `OC online: idle` (0.9.0) |
+| [settings-edit.gif](media/settings-edit.gif) | 480×200 | 10 s | ZR-guarded NetLatency edit (0.8.1, Training, with the OC clock) |
+| [privacy-shortcuts.gif](media/privacy-shortcuts.gif) | 480×200 | 10 s | ZR+X / ZR+Y on the You row (0.8.1, Training, with the OC clock) |
+| [oc-indicator.gif](media/oc-indicator.gif) | 480×200 | 10 s | ZR+L3 always/online, the OC clock (0.8.1) |
+| [performance-window-oc.png](media/performance-window-oc.png) | 300×336 | | Performance close-up, Clock row with `OC online: idle` (0.8.1) |
 | [fx-control-edit.gif](media/fx-control-edit.gif) | 480×340 | 8 s | Companion fighter-row edit |
 | [training-strip.gif](media/training-strip.gif) | 1280×720 | 6 s | Training with Settings open |
 | [match-strip.gif](media/match-strip.gif) | 1280×720 | 6 s | Match with the Settings strip |
@@ -112,7 +112,7 @@ from the Horizon-OC stand-in run described [below](#horizon-oc-indicator-media-0
 | [results-quit.png](media/results-quit.png) | 1280×720 | | No Contest after Quit |
 | [smash-css-after-match.png](media/smash-css-after-match.png) | 1280×720 | | CSS after the match, `You: Vanilla* \| Auto` |
 
-## Horizon-OC indicator media (0.9.0 candidate, 2026-10-27)
+## Horizon-OC indicator media (0.8.1 candidate, 2026-10-27)
 
 `settings-edit.gif`, `privacy-shortcuts.gif`, `oc-indicator.gif` and
 `performance-window-oc.png` replace or extend the 0.7.0 set so the Horizon-OC
@@ -156,7 +156,7 @@ These are kept unchanged and are not part of the 0.7.0 UI session.
   [README](../README.md), [Controls](CONTROLS.md), [Rendering](RENDERING.md)
   and [LessLag and LLUltra](LESSLAG_LLULTRA.md).
   [privacy-indicators.svg](privacy-indicators.svg) and
-  [oc-indicators.svg](oc-indicators.svg) (0.9.0, the Horizon-OC clock) redraw
+  [oc-indicators.svg](oc-indicators.svg) (0.8.1, the Horizon-OC clock) redraw
   source geometry and are **not screenshots**.
 
 None of these retained assets is relabeled as a new Switch measurement.
