@@ -175,8 +175,8 @@ opponent's announced `Auto`), the INI keys, the event codes, the chords and the
 plugin API are unchanged; the original Online Deluxe showed only `Auto`, so this
 is a deliberate difference ([FORK_PARITY.md](FORK_PARITY.md)). The
 [published v0.6.2 notes](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.6.2)
-record the operator's online Switch confirmation on 2026-10-19: "tested it,
-Auto (Nf) shows up fine online". Step 16 of [NEXT_SESSION.md](NEXT_SESSION.md)
+record that the operator tested it online on the Switch on 2026-10-19 and
+`Auto (Nf)` showed correctly. Step 16 of [NEXT_SESSION.md](NEXT_SESSION.md)
 retains the fuller comparison checklist, not a pending first boot.
 
 ### 0.6.1
@@ -239,9 +239,8 @@ needs. Host-tested; no console run of 0.5.7 yet.
 ### 0.5.6
 
 0.5.6 (2026-10-18; commit `fb2012a`, Forgejo release v0.5.6, NRO `df757ce2f8130fddd0c2ba69e35c0f2dd7eae5505365ce969ec88134a2fadad9`) makes
-**Vanilla+** the default mode, on the operator's decision of 2026-10-18
-("ship it with the next version as vanilla+ and make it the default mode,
-togglable by holding L+R+X instead of a separate scrolled entry"). With the new
+**Vanilla+** the default mode, on the operator's decision of 2026-10-18: on by
+default, toggled by L+R+X rather than a separate menu entry. With the new
 INI key `vanilla_plus` on (the default), the Vanilla profile keeps the game's
 three-image swap chain but presents the acquired image at the flush that
 carried that frame's last submission, one CPU update earlier than the game
@@ -257,11 +256,11 @@ There is no new NetProfile entry; L+R+X (neither ZL nor ZR held) toggles the
 flag and saves it, and `early_present=false` still disables every early
 present.
 
-Two more operator changes landed in the same release (message of 2026-10-18
-21:16Z: "also enable 1080p llultra and make it so no matter what when the menu
-is open you have to hold ZR to change even outside of training and matches.
-I'm not going to do all the effects testing. an OC made 720p LLUltra locked
-60"). **UltraRes 1080p:** `ultra_resolution=1080` and the UltraRes row
+Two more operator changes landed in the same release (request of 2026-10-18
+21:16Z): enable 1080p LLUltra, and require ZR to change any value while the
+menu is open, outside Training and matches too. The same request dropped the
+full effects testing and reported that an overclock held 720p LLUltra at a
+locked 60. **UltraRes 1080p:** `ultra_resolution=1080` and the UltraRes row
 (576p → 720p → 1080p → 576p with Right, backwards with Left) let console
 LLUltra render at the native 1080p, with dynamic resolution still stepping down
 from it; the default stays 576 and emulator profiles ignore the key. The

@@ -116,8 +116,8 @@ outside this repository, not here.
   `Auto (Nf)` display was confirmed on Switch on 2026-10-19; see [Validation](VALIDATION.md).
 - 0.6.1 (2026-10-19, Forgejo release v0.6.1, NRO SHA-256 in that release's
   manifest): retitles the Player Info window's last page **Window Options**.
-  The operator booted 0.6.0 on the console the same day ("seems to work great.
-  menu is much cleaner") and asked only for a real title on that page. The
+  The operator tested 0.6.0 on the console the same day (it worked, with a
+  cleaner menu) and asked only for a real title on that page. The
   rows, chords, INI keys and plugin API are unchanged. Booted on the console on
   2026-10-19; the operator confirmed the title.
 - 0.6.0 (2026-10-19, Forgejo release v0.6.0, NRO SHA-256 in that release's
@@ -171,8 +171,8 @@ outside this repository, not here.
   change needs ZR in every scene, a plain Left/Right is ignored and Up/Down
   still move the selection; the window-closed ZL native edits are unchanged
   (step 14). Both are host-tested only.
-- The operator dropped the FX measurement cells A–R on 2026-10-18 ("I'm not
-  going to do all the effects testing"); the per-move ledger stays in the
+- The operator dropped the FX measurement cells A–R on 2026-10-18 (the full
+  effects testing will not be done); the per-move ledger stays in the
   evidence root (`MOVE-LEDGER.md`).
 - 0.5.5 (commit `6a9e61a`, Forgejo release v0.5.5, on the card for a few hours on 2026-10-18 and replaced by 0.5.6 without booting, NRO `cf57cf80f25f2e837deabaf859489dc00653692c269fb4a6e2069a6a1b9bf8c2`): the live-peer
   requirement for the operator's declined-rematch report. The opponent column,
@@ -238,8 +238,8 @@ that entry's checkpoint, not the currently installed artifact.
 
 ### 2. Measurement cells (dropped)
 
-The operator dropped the FX measurement cells A–R on 2026-10-18 ("I'm not going
-to do all the effects testing"); no result is owed for them. The per-move
+The operator dropped the FX measurement cells A–R on 2026-10-18 (the full
+effects testing will not be done); no result is owed for them. The per-move
 ledger stays in the evidence root (`MOVE-LEDGER.md`).
 
 ### 3. Host side, around the console run

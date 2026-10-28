@@ -581,10 +581,10 @@ records the corrected candidate's exact operational state and Ally review launch
 on the Ally (Smash 13.0.5, loading complete, title and Settings/Player Info
 rendered); the review screenshot shows the You row with the eye and TV icons.
 This is a bounded boot and visible-UI observation only: no control, FPS or
-gameplay acceptance. The operator then approved it ("ship it").
+gameplay acceptance. The operator then approved it for release.
 
-**Installed on Switch, 2026-10-21 21:45:07Z.** At the operator's request ("copy
-to switch first so I can start using it right away"), the same `5a2a5f05` NRO
+**Installed on Switch, 2026-10-21 21:45:07Z.** At the operator's request, so
+it could be used right away, the same `5a2a5f05` NRO
 (1,441,792 bytes, build `0.6.2-302c09574b3e-dirty-1792617097`) was installed
 over DBI USB MTP. It replaced 0.6.2 SHA-256
 `59dab7a8cd60d8d770d7a7c4f30bb668b174854d666e72086ed06e5c238768c4`; the
@@ -2046,8 +2046,7 @@ Forgejo release `v0.3.1` (id 246, tag on ed8de66) carries the clean NRO
 (asset 68, 2174976 B, download read back as 9511e8c0…e840) and
 `manifest.json` (asset 69).
 
-Switch install of 0.3.1, 2026-10-13 11:48Z (operator: "ship 0.3.1 to the
-switch"): DBI MTP single-writer transaction `switch-mtp-9511/` in the tangent
+Switch install of 0.3.1, 2026-10-13 11:48Z (at the operator's request): DBI MTP single-writer transaction `switch-mtp-9511/` in the tangent
 evidence, preflight on f22d, rollback archive
 `backups/pre-css-capture-9511e8c0f7946bd5.nro` read back as f22d, target read
 back as 9511e8c0…e840, other plugins and protected files unchanged; empty
@@ -2116,8 +2115,7 @@ Forgejo release `v0.3.2` (id 356, tag on 022a7d0) carries the clean NRO
 (asset 70, 2183168 B, download read back as 73823f8f…fd8d) and
 `manifest.json` (asset 71).
 
-Switch install of 0.3.2, 2026-10-13 17:26Z (operator: "ship 0.3.2 to the
-switch"): DBI MTP transaction `switch-mtp-7382/` in the tangent evidence,
+Switch install of 0.3.2, 2026-10-13 17:26Z (at the operator's request): DBI MTP transaction `switch-mtp-7382/` in the tangent evidence,
 preflight on 9511e8c0, rollback archive
 `backups/pre-hang-trace-73823f8f67d6a3b2.nro` read back as 9511e8c0, target
 read back as 73823f8f…fd8d, other plugins and protected files unchanged.
@@ -2172,8 +2170,8 @@ sections .text 1590848 / .data 176136 / .bss 122152, resident 2.23 MB (was
 NRO (asset 72, 2183168 B, download read back as e930c8f3…25f3) and
 `manifest.json` (asset 73).
 
-Switch install of 0.3.3, 2026-10-13 ~22:10Z (operator: "ship 0.3.3 to the
-switch, ftp is live"): DBI FTP transaction `switch-ftp-e930/` in the tangent
+Switch install of 0.3.3, 2026-10-13 ~22:10Z (at the operator's request, with
+DBI's FTP server running): DBI FTP transaction `switch-ftp-e930/` in the tangent
 evidence (temp-name upload, readback, rename; one connection per step
 because DBI's server drops long or overwriting STORs). Installed NRO read
 back as 73823f8f…fd8d (0.3.2) before, saved to
@@ -2181,8 +2179,8 @@ back as 73823f8f…fd8d (0.3.2) before, saved to
 locally; target read back as e930c8f3…25f3 after; the other nine plugins
 unchanged. Runtime result pending.
 
-0.3.4 (same evening, operator question "won't doing the dump crash it once
-activated?"): in 0.3.3 the per-capture allocation used `vec!`, so arming a
+0.3.4 (same evening; the operator asked whether the dump would crash once
+activated): in 0.3.3 the per-capture allocation used `vec!`, so arming a
 capture on a game heap that could not spare 2 MiB would have aborted the
 process. 0.3.4 reserves the buffer with `Vec::try_reserve_exact` and makes
 `Trace::begin` return false when that fails; `timing::Service::poll` already
@@ -2199,7 +2197,7 @@ unchanged from 0.3.3 (.bss 122152, resident 2.23 MB). Forgejo release
 f514bfe8…42de), `manifest.json` asset 75. Not installed on hardware (the
 Switch has 0.3.3).
 
-0.3.5 (operator: "I'd do all of those, test and ship") removes the capture
+0.3.5 (requested by the operator) removes the capture
 buffer as a memory question altogether:
 
 - Rows are packed to 20 B (begin and span relative to the capture start, both
@@ -2235,8 +2233,8 @@ chunks), idle resident 2.21 MB (0.3.4: 2.23 MB; 0.3.2: 3.99 MB). A running
 capture adds about 190 KB of heap (one-chunk scratch plus the 64 KiB file
 buffer) where 0.3.3/0.3.4 added 2 MiB plus a 2 MiB copy at export.
 
-Switch install of 0.3.5, 2026-10-13 ~23:25Z (operator: "test and ship",
-"sd card is connected via usb, copy over when done"): hekate USB mass
+Switch install of 0.3.5, 2026-10-13 ~23:25Z (at the operator's request, with
+the SD card connected over USB): hekate USB mass
 storage, tangent `switch-ums-6b22/deployment.json`. Installed NRO read back
 as e930c8f3…25f3 (0.3.3) before, saved to
 `backups/pre-stream-trace-6b22546e0a057901.nro` on the card (verified) and
@@ -2246,7 +2244,7 @@ other plugins untouched (the Training Modpack on the card is now a
 Forgejo release `v0.3.5` (id 359, tag on 08eedf1): NRO asset 76 (download
 read back as 6b22546e…5dfb), `manifest.json` asset 77.
 
-0.3.6 (operator: "Yes build the memory probe") adds the measurement the
+0.3.6 (requested by the operator) adds the measurement the
 memory investigation lacked: every hang-trace heartbeat carries the kernel's
 accounting for the game process, `mem_used`, `mem_total`, `mem_free` and
 `heap_region` in bytes, read with `svcGetInfo` (TotalMemorySize,
@@ -2266,8 +2264,7 @@ for 0.3.5. Package `artifacts/792d88778925c0e6/`: build
 Forgejo release `v0.3.6` (id 360, tag on ec2847f): NRO asset 78 (download
 read back as 792d8877…c5e4), `manifest.json` asset 79.
 
-Switch install of 0.3.6, 2026-10-14 ~00:40Z (operator: "ship 0.3.6 to the
-switch"): hekate USB mass storage, tangent `switch-ums-792d/deployment.json`.
+Switch install of 0.3.6, 2026-10-14 ~00:40Z (at the operator's request): hekate USB mass storage, tangent `switch-ums-792d/deployment.json`.
 Installed NRO read back as 6b22546e…5dfb (0.3.5) before, saved to
 `backups/pre-memory-probe-792d88778925c0e6.nro` on the card (verified) and
 locally; copied under a temp name, renamed, read back as 792d8877…c5e4. The
@@ -2277,7 +2274,7 @@ nro_hook, param_hook 53248 each, gamepad overlay 151552, OBS companion
 from 3379200), stage pack 1351680, imgui 1282048. Runtime result pending:
 the first boot's heartbeats give the first `mem_used`/`mem_total` numbers.
 
-0.3.7 (operator: "do all of them, test and ship") trims what the plugin holds
+0.3.7 (requested by the operator) trims what the plugin holds
 while the game runs, after a symbol-level pass over the 0.3.6 ELF:
 
 - Diagnostics thread stack 2 MiB → 256 KiB (`logging::DIAGNOSTICS_STACK_BYTES`).
@@ -2323,8 +2320,8 @@ denied, no-default build, fmt, Skyline release. Sections `.text` 1402336 /
 SHA-256 `8562746a292942cf23df19f9e6781cc37b623dda305337161b730e14813707ea`
 (1896448 B, module `c4beb790…d5f7`), ELF `55b8208c…cf9f0`.
 
-Switch install of 0.3.7, 2026-10-14 02:38Z (operator: "do all of them, test
-and ship"; the card was still mounted over hekate USB mass storage from the
+Switch install of 0.3.7, 2026-10-14 02:38Z (at the operator's request; the
+card was still mounted over hekate USB mass storage from the
 0.3.6 install): tangent `switch-ums-8562/deployment.json`. Installed NRO read
 back as 792d8877…c5e4 (0.3.6) before, saved to
 `backups/pre-runtime-trim-8562746a292942cf.nro` on the card (verified) and
@@ -2339,16 +2336,16 @@ the first boot decides the 256 KiB stack (heartbeats continuing in
 Forgejo release `v0.3.7` (id 363, tag on d41ad35): NRO asset 80 (download
 read back as 8562746a…07ea), `manifest.json` asset 81.
 
-Hardware result, 2026-10-14 (operator, verbatim: "so everything boots and
-seems to work now"): the console booted with 0.3.7 and the current plugin
+Hardware result, 2026-10-14 (tested by the operator; everything booted and
+worked): the console booted with 0.3.7 and the current plugin
 set, the first boot since the 0.3.2 build, so this is the first hardware run
 of 0.3.3–0.3.7 together, including the 256 KiB diagnostics stack. Heartbeat
 continuity and the first `mem_used` numbers are to be read from the card's
 `hang-trace.log` at the next connection.
 
-0.3.8 (operator: "fork imgui to forgejo and look for ways to save there next
-and replace the standalone with our fork after testing it", then "ship it
-when it's done and when the imgui agent is done") moves the ImGui backend to
+0.3.8 (requested by the operator: fork ImGui to Forgejo, look for savings
+there, replace the standalone with the fork once tested, and ship when the
+ImGui work is done) moves the ImGui backend to
 the Forgejo fork `intpa/imgui-smash` (private; `main` = upstream `bb47b205`,
 branch `deluxe` = renderer correction + companion crate + memory trims, head
 `7f0e47c`; details and the deferred-trim table in `docs/IMGUI_DEPENDENCY.md`
@@ -2390,8 +2387,8 @@ NRO SHA-256 `c247bd377a4220233c4bf56470d23a6ea267b752b99cfd02eb3b26b480557222`
 records the fork commit and the `8a06be16` archive.
 
 Switch install of 0.3.8 plus the trimmed standalone, 2026-10-14 10:36Z
-(operator: "ship it when it's done and when the imgui agent is done. switch
-is connected via usb"): DBI USB MTP, two-target transaction
+(at the operator's request, once the ImGui work was done, with the Switch
+connected over USB): DBI USB MTP, two-target transaction
 `switch-mtp-038/deploy-038-mtp-1014.py` (preflight backed up every plugin and
 the protected files; `deployment.json` `installed_verified`). Deluxe read back
 as 8562746a…07ea (0.3.7) before, saved to
@@ -2463,8 +2460,8 @@ clock or memory changes are recommended for the dips. Follow-up capture
 acceptance: one CSS visit, 10 s still then 20 s repeatable directional
 sweep, zero API overflow, engine and scene constant.
 
-0.3.9 (operator: "go ahead and do the draw slot trims too, test and ship
-with astra's findings") takes the first deferred fork trim. Fork commit
+0.3.9 (requested by the operator: the draw-slot trims as well, tested and
+shipped with Astra's findings) takes the first deferred fork trim. Fork commit
 `c185303` (pin `77cdab7`): each of the backend's eight draw slots held a
 256 KiB + 256 KiB command pool and a 64 KiB + 64 KiB control block of game
 heap (5 MiB in all) for recordings that never exceeded 1,256 B of command
@@ -2561,10 +2558,10 @@ back decides; the memory bisect is plugin removal, not Deluxe flags.
 
 ### LessLag render-poll candidate — 2026-10-14 (commit b044752, no version, no toggle)
 
-Operator: "implement and test the fix Astra proposed for the fps drops",
-then "build it without the version, prove it works in Eden and switch then
-tag a new version once validated. no toggle, it either works or it doesn't
-and will become the standard if it does or ripped out if it doesn't help".
+The operator asked for the fix Astra proposed for the FPS drops. It was to be
+built without a version, proven in Eden and on the Switch, and then tagged as
+a new version. It has no toggle: it becomes the standard if it helps and is
+removed if it doesn't.
 `render_policy::skip_wait` now skips the game's timeout-zero render poll at
 main+0x387029c only for LLUltra and the Doubles shapes; two-image LessLag
 (and LessLagCore) run the original poll like Vanilla. `PROBE_RENDER_POLL`
@@ -2602,8 +2599,8 @@ Training-mode character select with LessLag live (two textures confirmed in
   CSS is Vanilla as well). Hardware capture D matched this. LessLag CSS
   observations therefore come from re-selected or Training CSS visits.
 
-Switch install of the candidate, 2026-10-14 13:49Z (operator: "prove it
-works in Eden and switch"): DBI USB MTP, `switch-mtp-poll/deploy-poll-mtp-1014.py`
+Switch install of the candidate, 2026-10-14 13:49Z (the operator asked for
+proof in Eden and on the Switch): DBI USB MTP, `switch-mtp-poll/deploy-poll-mtp-1014.py`
 (`preflight.json` 13:49:38Z, `deployment.json` `installed_verified`
 13:49:56Z). Deluxe read back as 8c20799f…6cca (0.3.9) before, saved to
 `backups/pre-render-poll-021a03dee556fdc4.nro`, replaced by copy from a
@@ -2660,8 +2657,8 @@ the arena lines and the settings row; tests updated. Not yet on the card.
 
 ### Present-at-flush candidate — 2026-10-14 (commit 8687eee, no version, no toggle)
 
-Operator, after the render-poll verdict: "letting the UI job overlap with the
-previous frame's GPU work instead of serialising behind it — let's try that".
+After the render-poll verdict, the operator asked to try letting the UI job
+overlap the previous frame's GPU work instead of serialising behind it.
 The console capture `switch-mtp-poll/boot-logs-1437/` (genuine LessLag)
 gives the main thread's frame order relative to the game's submit: UI
 dispatch 0.2 ms → UI job 0.2–10.7 ms (13.2 ms with the hand moving) with the
@@ -2727,8 +2724,8 @@ not help or shows artifacts: revert 8687eee and reinstall the rollback.
 
 ### Match capture (`CAPTURE_MATCH`) — 2026-10-14 (commits aa7ae78, 210f83f)
 
-Operator: "go ahead and build the match capture now and ship it so I can
-share both results when I come back." The finite capture pair now records a
+The operator asked for the match capture to be built and shipped. The finite
+capture pair now records a
 whole match: with `CAPTURE_MATCH` in the data directory at boot, every stage
 load (stage-setup hook; Singles, Doubles, Training) arms `timing-<id>.csv` +
 `api-<id>.csv` (label `match_*`), and the capture ends when the game leaves
@@ -2796,8 +2793,8 @@ transition at t≈33–38 s, memory unmapped, no Deluxe frame in the chain,
 Deluxe idle (`switch-mtp-match/boot-logs-1611/CRASH-1611.md`). Config
 restored to manual LessLag, 3 frames, streamer off (readback verified);
 the second boot ran 743 s with two online matches and did not crash.
-Operator: "it booted, felt buttery smooth. fps reflected it too… this was
-def a good version so I would ship it after confirming in the logs."
+The operator tested it: it booted and played smoothly, the FPS readout agreed,
+and it was approved for release once the logs confirmed it.
 
 Hardware captures (`switch-mtp-match/boot-logs-1640/`, build 210f83f, same
 console as `switch-mtp-poll/boot-logs-1437/`):
@@ -2842,8 +2839,8 @@ kept, config manual LessLag / 3 frames.
 
 ### 0.4.1 — 2026-10-14: the three follow-ups from the 0.4.0 console boot
 
-Operator: "okay go ahead and build those and ship the minor version to the
-usb. I'll keep playing and when an fps drop occurs I will let you know."
+The operator asked for these fixes to be built and the minor version installed
+over USB, and kept playing to watch for FPS drops.
 
 - **Opponent window after a declined rematch.** The station-leave hook
   (`pia_rtt` `STATION_LEAVE_OFFSET`) calls `peer_transport::clear_station`,
@@ -2888,7 +2885,7 @@ the three fixes above; the operator plays it next.
 
 ### 0.4.2 — 2026-10-14: why the scene hooks "missed" the online entry
 
-Operator: "we should find why the hooks miss the entry." The events of the
+The operator asked why the hooks miss the entry. The events of the
 b044752 session (`switch-mtp-match/boot-logs-1611/data/events.previous.log`,
 code 73 `AutoContext` with the source hook) answer it:
 
@@ -3201,14 +3198,14 @@ listening on 8443/8444); its partial profiles are in the evidence root's
 
 ### 0.5.4 — 2026-10-17: reduction-candidate merged into main; whole-product coverage trace closed with what it has
 
-Operator order: "let's just stop this for now with what we have … Merge the
-code into main … and push to switch." `reduction-candidate` (code tip
+Operator order: stop the reduction work with what it had, merge the code into
+`main` and install it on the Switch. `reduction-candidate` (code tip
 962eb3d, ledger 4a2006a) merged into `main` with a merge commit (Cargo
 version bump only; no code change since the candidate package
 `5357da2626a98fb9` that carried the latency rerun below). The merge was first
 labelled 0.6.0 (tag `v0.6.0`, Forgejo release 384, card install
 `switch-mtp-060/`) by misreading the order; the operator corrected it to a
-patch version ("I meant patch sorry not minor") within the hour, so the
+patch version within the hour, so the
 version is 0.5.4 (commit on top of the merge), the `v0.6.0` tag and release
 were removed and the card reinstalled (`switch-mtp-054/`). Gates on the merge:
 `cargo clippy --all-targets -- -D warnings` clean, `cargo build
@@ -3314,10 +3311,8 @@ profiles under `/home/intpa/eden-nso-autolan`.
 
 ### 0.5.5 — 2026-10-18: declined-rematch peer persistence; live-peer requirement
 
-Operator report from the console (real NSO): "when a person chooses not to
-rematch it still shows their player info on the screen if I chose to rematch
-and they didn't." That is, after Rematch Yes on one side and No on the other,
-the Yes side keeps showing the opponent. The Eden attempt below is emulator
+Operator report from the console (real NSO): after Rematch Yes on one side and
+No on the other, the Yes side keeps showing the opponent's player info. The Eden attempt below is emulator
 evidence; the console behaviour, both of the report and of the fix, is
 untested here, and no console log of the incident is part of this entry.
 
@@ -3424,8 +3419,8 @@ endgame and keepalive logs).
 
 ### 0.6.2 — 2026-10-19: Auto shows the frame count the game chose
 
-- Request (operator, after the 0.6.1 console boot): "can we also have Auto
-  say what frame was chosen like (Auto (4f))".
+- Request (operator, after the 0.6.1 console boot): have Auto show the chosen
+  buffer, as in `Auto (4f)`.
 - Change: the online-latency hook (`runtime/hooks.rs`, fork hook `0x16ccab8`,
   event code 9) already reads the game's buffer byte before applying our
   selection. New `policy::observed_auto_buffer(automatic, selected)` returns
@@ -3452,7 +3447,7 @@ endgame and keepalive logs).
   Switch target). Build id, NRO SHA-256 and size: the v0.6.2 release manifest.
 - Console follow-up: the [published v0.6.2 release notes](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.6.2)
   record installation at 2026-10-19 13:01Z, a same-day online Switch run and the
-  operator's confirmation: "tested it, Auto (Nf) shows up fine online". Build
+  operator's confirmation that `Auto (Nf)` shows correctly online. Build
   `0.6.2-302c09574b3e-1792414221`, NRO SHA-256
   `59dab7a8cd60d8d770d7a7c4f30bb668b174854d666e72086ed06e5c238768c4`.
   This supersedes this entry's original "not booted" note. It does not report
@@ -3466,29 +3461,29 @@ endgame and keepalive logs).
   (PluginsPage, OwnPages, PerfPage, PerfView, Hints), the cycle, the INI keys,
   the event codes and the plugin API (descriptor 4, SDK/ABI crates 5.0.0) are
   as in 0.6.0.
-- Why: the operator's console boot of 0.6.0 the same day: "seems to work great.
-  menu is much cleaner. Only thing I'd change is the third window just says
-  "window" as its title. I would add an actual name to what it is".
+- Why: the operator tested 0.6.0 on the console the same day. It worked and
+  the menu was cleaner; the one requested change was a real name for the third
+  page, which was titled only "window".
 - Gates on this commit: `cargo test` 239 + 1 passed; `cargo clippy
   --all-targets -- -D warnings` clean; `cargo build --no-default-features` ok;
   `cargo skyline build --release` through `tools/Build.ps1 -Package` ok. Build
   id, NRO SHA-256 and size: the v0.6.1 release manifest on Forgejo.
-- Console follow-up: booted on 2026-10-19; the operator confirmed "shows Window
-  Options now, works fine" (also recorded in the published v0.6.2 notes linked
+- Console follow-up: booted on 2026-10-19; the operator confirmed the Window
+  Options title and that it works (also recorded in the published v0.6.2 notes linked
   above). The layout is the operator-tested 0.6.0 layout; only the title differs.
 
 ### 0.6.0 — 2026-10-19: Main page redesign (You/Opp lines, five rows, Window page)
 
-The operator's reading of the 0.5.7 window: "the main screen is pretty
-bloated, lots of info". An inventory of the Settings view confirmed it: 14
+The operator found the 0.5.7 main screen bloated, with too much
+information. An inventory of the Settings view confirmed it: 14
 settings rows in three columns (Name, Interface, Peer, Ping, NetLatency,
 NetProfile, Status, Stealth, Streamer, UltraRes, PluginsPage, OwnPages,
 PerfPage, PerfView), four of them configuration of the window itself with a
 meaningless `---` in the opponent column, Ping shown twice (Settings row and
 Performance block), the 11-row Performance block and the 180-sample plot on
 the same page, and no on-screen hint for any chord, which is how Streamer
-flipped unnoticed before 0.5.7. The operator approved the whole proposal
-("do all of it as 0.6.0").
+flipped unnoticed before 0.5.7. The operator approved the whole proposal as
+0.6.0.
 
 Change (`src/menu.rs`, `src/overlay.rs`, `src/runtime/ui.rs`, `src/config.rs`,
 `src/runtime/mod.rs`):
@@ -3539,15 +3534,14 @@ colour, five rows, footer, hint line); the Window page after Performance and
 its five rows editing live; `< value >` while ZR is held and plain without;
 the strip's two lines in a match; a Streamer round trip hiding the Opp line.
 
-Console 2026-10-19 (operator's boot of the 0.6.0 NRO `4741645e…`): "seems to
-work great. menu is much cleaner ... other than that things are working". The
-one change requested was a real title for the last page, done in 0.6.1 (Window
+Console 2026-10-19 (operator's boot of the 0.6.0 NRO `4741645e…`): tested by
+the operator; it worked and the menu was cleaner. The one change requested was a real title for the last page, done in 0.6.1 (Window
 Options). Checklist rows 12–16 were not individually reported.
 
 ### 0.5.7 — 2026-10-18: Streamer chord behind ZR
 
 After the evening's first 0.5.6 online session the operator reported that
-the opponent's connection "didn't show at all in the menu". The card's saved
+the opponent's connection did not show in the menu at all. The card's saved
 `config.ini` (pulled over MTP afterwards, `switch-mtp-056/logs-online-1018/`)
 had `streamer=true`; the previous boot's `config.previous.ini` had it too,
 while the afternoon's 0.5.4 config had `streamer=false`. Streamer hides the
@@ -3581,9 +3575,9 @@ and the ZR hold for every window edit, plus a plan change (the FX measurement
 cells are dropped). Vanilla+ is the Decision through Code paragraphs below; the
 other items follow them.
 
-**Decision.** Operator, 2026-10-18 about 20:50Z: "ship it with the next version
-as vanilla+ and make it the default mode… togglable by holding L+R+X instead of
-a separate scrolled entry." So the change is a flag, not a fifth profile: new
+**Decision.** Operator, 2026-10-18 about 20:50Z: ship it in the next version
+as Vanilla+, on by default and toggled by L+R+X rather than a separate menu
+entry. So the change is a flag, not a fifth profile: new
 INI key `vanilla_plus`, default true, live. With it on, the Vanilla profile keeps
 the game's own three-image swap chain but presents the acquired image at the
 flush that carried that frame's last submission, one CPU update earlier than the
@@ -3631,7 +3625,7 @@ banner's `You:` field read `Vanilla+` (manual), `Vanilla+*` (cleanup hold) and
 present, Vanilla+ included. The peer exchange still announces Vanilla, because
 the ring shape is unchanged. Version 0.5.5 → 0.5.6 (Cargo.toml and Cargo.lock).
 
-**UltraRes 1080p** (operator, 2026-10-18 21:16Z: "also enable 1080p llultra").
+**UltraRes 1080p** (requested by the operator, 2026-10-18 21:16Z).
 Code: `src/config.rs` adds `UltraResolution::P1080` (key `1080`, label `1080p`,
 `Level::P1080`); the Settings row's `cycle` walks 576p → 720p → 1080p → 576p
 with Right and backwards with Left (it swapped two values before); the INI
@@ -3646,8 +3640,8 @@ ignore the key, and dynamic resolution still steps down from the chosen base
 table and adaptive triggers lower it. The config test covers all three values
 (parse, serialize round trip, byte round trip, cycle in both directions,
 labels) and rejects `900`, `480`, `720p`, `1080p`, an empty value and `true`.
-Reasoning, **operator-reported and uncaptured:** "an OC made 720p LLUltra
-locked 60" (Horizon OC 2.6.0, installed 2026-10-16; the operator's statement,
+Reasoning, **operator-reported and uncaptured:** an overclock held 720p
+LLUltra at a locked 60 (Horizon OC 2.6.0, installed 2026-10-16; the operator's statement,
 no capture, so the build, clock state and moves played are unrecorded and it is
 not a result of this repository). The 0.5.3 analysis put LLUltra's limit at
 CPU work plus GPU time inside one vblank (GPU about 3.4–5.3 ms at 576p); if an
@@ -3655,9 +3649,9 @@ overclock lets 720p fit, the native level is the next thing to try. Whether
 1080p fits is unmeasured, on a stock or an overclocked console. Host-tested
 only.
 
-**ZR hold for every window edit** (operator, same message: "make it so no
-matter what when the menu is open you have to hold ZR to change even outside of
-training and matches"). `src/runtime/ui.rs` now sets `ui.controls.edit_hold =
+**ZR hold for every window edit** (operator, same request: holding ZR is
+required to change a value whenever the menu is open, including outside
+Training and matches). `src/runtime/ui.rs` now sets `ui.controls.edit_hold =
 true` in every scene; through 0.5.5 it was set only while the scene was ready
 and not Inactive, that is while a fight was live (the 0.5.3 rule). With the
 window open, a Left/Right value change on any Settings row or plugin row needs
@@ -3672,8 +3666,8 @@ the runtime change is the one assignment and has no new test, and the
 edits on a plain press, so this is a deliberate difference
 ([parity](FORK_PARITY.md)).
 
-**FX measurement cells dropped** (operator, same message: "I'm not going to do
-all the effects testing"). Cells A–R of the test plan (Kirby, Pyra and
+**FX measurement cells dropped** (operator, same request: the full effects
+testing will not be done). Cells A–R of the test plan (Kirby, Pyra and
 Falcon On and Reduced baselines and variants, the `drs_adaptive` and
 `drs_moves=all` resolution comparisons, the leftover LessLag and Gigaflare
 cells and the online LLUltra cell) are no longer planned and no result is owed
@@ -3684,7 +3678,7 @@ option and variant code is unchanged.
 warnings` clean, `cargo build --no-default-features` ok, for the whole 0.5.6
 tree. Skyline package NRO SHA-256 `df757ce2f8130fddd0c2ba69e35c0f2dd7eae5505365ce969ec88134a2fadad9`. Released as Forgejo v0.5.6 (release
 395, NRO and manifest attached, download readback matched) and installed on the card the same
-evening over 0.5.5 (`backups/pre-056-df757ce2f8130fdd.nro` keeps 0.5.5). **First console boot of 0.5.6 (same evening, operator; logs pulled over MTP to `switch-mtp-056/logs-online-1018/`):** clean boot, hooks installed, clock 1642–1788 MHz under Horizon OC. Vanilla+ ran in the menus, the character select and Training: `renderer-status.txt` ended at `present_calls=89500 early_presents=89483 early_present_skips=89483 early_present_mismatches=0`, so on hardware too every early present was matched by one skipped game present. One online Quickplay Singles match ran in manual LessLag with a locked render cadence (`timing-3592420657006.csv`: 217 s, p50 16.667 ms, p99 16.871 ms, 40 intervals above 20 ms mostly at the start and the results transition, two mid-match hitches of 63 and 77 ms, 5 one-second windows below 59 of 217) while the hang trace shows the simulation stalling and catching up (fighter `main` ticks 106–168 per second against the nominal 120, presents flat at 60): the operator's "most unstable match" was the connection, with a manual `input_buffer=3`, not frame drops; the API trace shows no GPU or sync stall. The missing opponent column was `streamer=true` in the saved config (see the 0.5.7 entry). LLUltra 1080p and the ZR-hold round trip were not exercised.
+evening over 0.5.5 (`backups/pre-056-df757ce2f8130fdd.nro` keeps 0.5.5). **First console boot of 0.5.6 (same evening, operator; logs pulled over MTP to `switch-mtp-056/logs-online-1018/`):** clean boot, hooks installed, clock 1642–1788 MHz under Horizon OC. Vanilla+ ran in the menus, the character select and Training: `renderer-status.txt` ended at `present_calls=89500 early_presents=89483 early_present_skips=89483 early_present_mismatches=0`, so on hardware too every early present was matched by one skipped game present. One online Quickplay Singles match ran in manual LessLag with a locked render cadence (`timing-3592420657006.csv`: 217 s, p50 16.667 ms, p99 16.871 ms, 40 intervals above 20 ms mostly at the start and the results transition, two mid-match hitches of 63 and 77 ms, 5 one-second windows below 59 of 217) while the hang trace shows the simulation stalling and catching up (fighter `main` ticks 106–168 per second against the nominal 120, presents flat at 60): what the operator reported as the most unstable match was the connection, with a manual `input_buffer=3`, not frame drops; the API trace shows no GPU or sync stall. The missing opponent column was `streamer=true` in the saved config (see the 0.5.7 entry). LLUltra 1080p and the ZR-hold round trip were not exercised.
 
 **Eden smoke of the Vanilla+ build (emulator evidence, 21:02–21:17Z).** The
 Vanilla+ code of `ee5c6ce` (dirty-tree package `96a03725…`, before the 1080p
@@ -3726,8 +3720,8 @@ match.
 
 ### 0.5.3 — 2026-10-17: latency response trials repeated on candidate package `5357da2626a98fb9` (Eden) — frame reduction unchanged
 
-Operator: "redo the test to make sure that we still have the same frame
-reduction for input latency on the reduction candidate." Same method,
+The operator asked for the test to be repeated to confirm the reduction
+candidate keeps the same input-latency frame reduction. Same method,
 Eden, isolated profile and scripts as the benchmark entry below (evidence
 root `bench-latency-5357-1017/`: `RESULTS.md`, `summary-table.md`,
 `reviewed-trials.json`, `trials/`, `ui/`, `DRIVE-LOG-BENCH.md`,
@@ -3832,8 +3826,8 @@ Not run in Eden or on the console; the owed console checks for the transport
 
 ### 0.5.3 — 2026-10-17: `peer_transport.rs` cut to its production surface (host tests, Skyline build)
 
-Operator: "take each file as its own plan and get the code down without reducing
-functionality … don't just shift the code to other files". Plan:
+Operator order: plan each file separately and reduce its code without losing
+functionality or just moving the code to other files. Plan:
 evidence root `reduction-1017/PLAN-peer-transport.md`. Commit 7e6097e on
 `reduction-candidate` (plus ec250b4 docs, 26620e4 rustfmt-only fixes in
 `clock_probe.rs`, `coverage_profile.rs`, `runtime/clock_probe.rs`).
@@ -3871,8 +3865,8 @@ announce) now also cover this cut.
 
 ### 0.5.3 — 2026-10-17: reduction candidate ecb9923 benchmarked in Eden (latency, quota frame rate, captures, plugin pages)
 
-Operator: "Rerun the benchmarks after for frame reduction and test correction."
-Candidate package `artifacts/3f8855a2bec44ecc/` (build `0.5.3-ecb99238f02b-1792210040`,
+The operator asked for the frame-reduction and correction benchmarks to be
+rerun. Candidate package `artifacts/3f8855a2bec44ecc/` (build `0.5.3-ecb99238f02b-1792210040`,
 NRO 1,437,696 B) with the FX Control candidate `artifacts-fx/0c7e626d64f35128/`
 (SDK 5.0.0). All four passes are Eden measurements with Astra low driving the game
 and the primary running the scripts; evidence root `bench-reduction-1017/` (RESULTS.md,
@@ -4206,8 +4200,8 @@ behaviour change. Branch `work/reduction-1017` from main 690dc57.
 
 ### 0.5.3 — 2026-10-17: two-host NSO session — arena, Quickplay, Background and Co-op matches reached; category A is live code
 
-Operator: "you need two eden instances to run quickplay or arenas" … "can you
-not do it?" — so this thread started the companion itself on the Surface (its
+The operator pointed out that Quickplay and arenas need two Eden instances and
+asked this thread to run both, so it started the companion itself on the Surface (its
 owner's bounded launcher, own unit names, one-hour cap 01:48–02:48Z), ran the
 Yoga coverage peer on NSO profile `b` (account 49154, coverage build
 292a402a…, LessLag, `platform=console`, player 2 enabled) and drove the Ally's
@@ -4430,8 +4424,8 @@ fireballs at 576p and at 720p, and Kirby Hammer at 720p
 
 ### 0.5.3 — 2026-10-16: boot crashes after the plugin API v4 deploy; bootstrap hook chaining and SDK header fix (host tests only)
 
-Operator report: "a few crashes in the beginning" after the first 0.5.3 +
-FX Control 0.2.0 deploy; the third boot came up. Two Atmosphère reports
+Operator report: a few crashes at first after the first 0.5.3 + FX Control
+0.2.0 deploy; the third boot came up. Two Atmosphère reports
 (01792152191, 01792152247) and both plugins' install/event logs for the
 crashed and the good boot were pulled to the evidence root
 (`switch-mtp-fx02/logs-1016/`, analysis `CRASH-ANALYSIS-1016.md`, read-only
@@ -4576,15 +4570,14 @@ frames rather than 4, with a plain-language note in the README).
 
 ### 0.5.2 — 2026-10-15: present at the flush for LLUltra and LLDoubles (candidate for the console LLUltra drop)
 
-Operator report: LLUltra "drops fps dramatically" on the console (scene not
+Operator report: LLUltra drops FPS sharply on the console (scene not
 yet specified, no capture yet). Code reading: `render_policy::present_at_flush`
 was gated to LessLag, so LLUltra, the other two-image ring, still presented
 each frame after the next frame's whole CPU update, exactly the mechanism
 the 0.4.0 analysis traced on the console character select (update over
 about 13.7 ms → missed vblank → the acquire waits for the following one →
 33 ms frames). LLUltra's 576p lightens the GPU and cannot touch that.
-Operator decision ("can we just apply the fix to LLUltra and Doubles too?"):
-commit ce0145a extends the predicate to every committed, idle render-opts
+Operator decision: apply the fix to LLUltra and Doubles too. Commit ce0145a extends the predicate to every committed, idle render-opts
 profile (LessLag, Ultra, Doubles; Vanilla and every swap, drain, forced-wait
 or refused state still refused) and the flush hook calls
 `nvn::present_at_flush` whenever the policy allows instead of only on the
@@ -4608,10 +4601,10 @@ waits compared against the 0.5.1 LessLag Training capture; `early_presents`
 
 ### 0.5.2 — 2026-10-15: per-move and adaptive dynamic-resolution triggers (experiment, on the card)
 
-Operator order after the Training analysis and the console A/B (Falcon Punch
-"barely budged", Pyra's side special "dropped several frames, especially when
-it connected"): "build the 0.5.2 experiment with both flags … make the
-threshold where it triggers configurable in the ini as well". Commit 03bd237:
+Operator order after the Training analysis and the console A/B, where Falcon
+Punch barely changed and Pyra's side special dropped several frames, mostly on
+hit: build the 0.5.2 experiment with both flags, with the trigger threshold
+configurable in the INI. Commit 03bd237:
 `src/drs_triggers.rs` (catalog of eleven named moves as fighter kind + status
 sets from skyline-smash bed642e, `MoveSet` mask parsing, threshold parsing in
 hundredths of a millisecond, the `Adaptive` over/under-budget state machine),
@@ -4665,14 +4658,14 @@ denied, `tools/Build.ps1` release. Package
 `aee3852d905218e922886d338e2540cd4dd379a25c23e5f4f32981b2a24642da`
 (1,462,272 B, module `d60c4a2e…1fdf`).
 
-Card install, 2026-10-15 11:45Z (operator: "test 0.5.1 before the
-release"): `switch-mtp-051/deploy-051-mtp-1015.py` preflight and install
+Card install, 2026-10-15 11:45Z (the operator asked to test 0.5.1 before
+the release): `switch-mtp-051/deploy-051-mtp-1015.py` preflight and install
 over DBI USB MTP, `installed_verified`; the 0.5.0 release NRO is archived on
 the card under `ultimate/ssbu_online_deluxe_rewrite/backups/pre-0.5.1-
 20261015T114532Z/` and locally; the other ten plugins, `config.ini` (manual
 LessLag, Auto off) and the protected files are unchanged.
 
-Hardware result, 2026-10-15 ~12:10Z (operator, verbatim: "0.5.1 passed"):
+Hardware result, 2026-10-15 ~12:10Z (tested by the operator; 0.5.1 passed):
 repeated Training → character-select exits and a LessLag match on this NRO
 with the full plugin set, Skyline `9959ecb1…` (latest skyline-dev release),
 no crash. This is the first console run of the teardown guard; the guard
@@ -4685,8 +4678,8 @@ is a candidate for the 0.5.2 per-move dynamic-resolution experiment. Planned
 next: the same build on upstream Online Deluxe's bundled Skyline `d3630815…`
 so neither user group has to change Skyline.
 
-Training frame-rate analysis from the card, 2026-10-15 ~12:30Z (operator:
-"see why lesslag was in the 50s though without any effects"). The
+Training frame-rate analysis from the card, 2026-10-15 ~12:30Z (the operator
+asked why LessLag ran in the 50s with no effects active). The
 `CAPTURE_MATCH` flag on the card recorded the Training session as
 `timing-1794782036751.csv` / `api-1794782036751.csv` (label `match_training`,
 build 0.5.1, 165 s, 8,609 frames; Kirby vs CPU Corrin per the modpack's
@@ -4722,9 +4715,9 @@ for the operator: the same Kirby Training scene (a) with hitbox
 visualization off, (b) on Vanilla, (c) on the archived 0.5.0 NRO (one
 restore command). Evidence copies: session scratchpad `card-051/`.
 
-Resolved by the operator, 2026-10-15 ~12:55Z (verbatim: "It's not the
-hitbox visualization it's the Input Display. When I switch it to off it
-goes to 60 and stays locked there"): the Training Modpack's Input Display
+Resolved by the operator, 2026-10-15 ~12:55Z: turning off Training Modpack's
+Input Display, not the hitbox visualization, brought Training back to a locked
+60 fps. The Training Modpack's Input Display
 overlay was the ~3 ms of extra frame work. With it off, LessLag Training
 holds 60 on the console; the operator is taking the cost up with the
 modpack's maintainers. Consequence for the fork/upstream comparison above:
@@ -4737,10 +4730,9 @@ experiment) is the mitigation that does not depend on naming the cause.
 
 ### 0.5.0 — 2026-10-14: character FX split into `ssbu-fx-control`; plugin own pages
 
-Operator: "project out the fx mods into their own repo … a plugin that users
-can use to toggle effects on or off or reduced in its own window … an option
-for each character as well as an 'all' option … make the menu a little
-leaner for deluxe." Decisions: rows only for covered fighters plus All;
+The operator asked to move the FX mods into their own repository: a plugin
+with its own window that turns effects on, off or reduced, with an option per
+character plus an All option, leaving Deluxe's menu leaner. Decisions: rows only for covered fighters plus All;
 Reduced only where a variant exists; repo `intpa/ssbu-fx-control`; the menu
 API stays in Deluxe (imgui-smash stays a renderer).
 
@@ -4956,7 +4948,7 @@ strings). Package: tangent evidence `artifacts/7585760b9bc4c634/`.
 
 ### DBI USB MTP installation of d773 — 2026-10-12 15:46Z
 
-Operator authorized ("deploy d773 to the switch"); the live DBI MTP mount
+The operator authorized installing d773 on the Switch; the live DBI MTP mount
 implies Smash was closed. Preflight confirmed the installed rewrite was 9d08
 and backed up the nine plugins and six protected files. The transaction wrote
 `ultimate/ssbu_online_deluxe_rewrite/backups/pre-chord-tones-d773e7bfc5764ab7.nro`
