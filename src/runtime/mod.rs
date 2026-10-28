@@ -31,6 +31,7 @@ mod render_ultra;
 mod renderer;
 mod resolution;
 mod response_probe;
+mod scene_mode;
 mod ui;
 
 use crate::{

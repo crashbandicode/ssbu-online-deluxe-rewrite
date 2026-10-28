@@ -168,6 +168,17 @@ pub fn classify_stage(stage_id: u32, training: bool, fighter_count: i32) -> Scen
     }
 }
 
+/// Lobby practice in a local-wireless or online waiting room (0.8.2). The
+/// game's shared practice-scene setup selects melee mode `0x0d`, which the
+/// normal match setup never does; the mode word must also be the
+/// local-wireless room (`0x02010000`) or the online family (`0x0701xxxx`, top
+/// bit ignored). Lobby practice can load any stage with extra fighters, so
+/// neither the stage id nor the fighter count identifies it. Same mapping as
+/// the operator's Training Modpack fork and smash-gamepad-overlay v0.1.3.
+pub const fn is_waiting_practice(initialized: bool, melee: u8, mode: u32) -> bool {
+    initialized && melee == 0x0d && (mode == 0x0201_0000 || mode & 0x7fff_0000 == 0x0701_0000)
+}
+
 /// CSS reflects the live Training-mode bit, not the stage that led to it.
 pub fn classify_css(training_mode: bool) -> SceneStatus {
     if training_mode {
@@ -577,6 +588,40 @@ mod tests {
         assert_eq!(classify_stage(1, false, 3), SceneStatus::Doubles);
         assert_eq!(classify_stage(1, false, 4), SceneStatus::Doubles);
         assert_eq!(classify_stage(1, false, 0), SceneStatus::Singles);
+    }
+
+    #[test]
+    fn local_and_online_waiting_rooms_are_lobby_practice() {
+        for mode in [0x0201_0000, 0x0701_0000, 0x0701_0001, 0x8701_0000] {
+            assert!(is_waiting_practice(true, 0x0d, mode));
+            assert!(!is_waiting_practice(false, 0x0d, mode));
+        }
+    }
+
+    #[test]
+    fn real_matches_in_the_waiting_room_families_are_not_lobby_practice() {
+        for melee in (0..=u8::MAX).filter(|melee| *melee != 0x0d) {
+            for mode in [0x0201_0000, 0x0701_0000, 0x8701_0000] {
+                assert!(!is_waiting_practice(true, melee, mode));
+            }
+        }
+    }
+
+    #[test]
+    fn other_modes_ignore_a_stale_practice_melee_value() {
+        for mode in [0, 0x0201_0001, 0x0202_0000, 0x0700_0000, 0x0702_0000, u32::MAX] {
+            assert!(!is_waiting_practice(true, 0x0d, mode));
+        }
+    }
+
+    #[test]
+    fn a_lobby_practice_stage_with_extra_fighters_is_training() {
+        // 2026-10-28 console log: lobby stages 0x0, 0x3, 0xe and 0x1a loaded
+        // with more than two fighters and Training mode off, so they were
+        // classified Doubles and drew the match strip.
+        let lobby = is_waiting_practice(true, 0x0d, 0x0201_0000);
+        assert_eq!(classify_stage(0x1a, lobby, 4), SceneStatus::Training);
+        assert_eq!(classify_stage(0x1a, false, 4), SceneStatus::Doubles);
     }
 
     #[test]

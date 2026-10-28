@@ -199,6 +199,11 @@ pub enum Code {
     /// generation, or the failing result with bit 32 set. One row per change
     /// of `a`, not per heartbeat.
     HocGate = 115,
+    /// Waiting-room observation at a stage load (0.8.2), right after its
+    /// `StageLoaded` row: `a` = melee mode (bits 0–7), scene initialized (bit
+    /// 8), reads armed by the 13.0.5 guard (bit 9), classified as lobby
+    /// practice (bit 10); `b` = the game's mode word (0 while disarmed).
+    SceneMode = 116,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -338,6 +343,7 @@ mod tests {
         assert_eq!(Code::AutoBufferObserved as u16, 113);
         assert_eq!(Code::HocCapability as u16, 114);
         assert_eq!(Code::HocGate as u16, 115);
+        assert_eq!(Code::SceneMode as u16, 116);
     }
     #[test]
     fn recursive_or_contended_logging_drops_instead_of_deadlocking() {
