@@ -2,18 +2,20 @@
 
 ## 0.8.1 Horizon-OC release check — 2026-10-28
 
-The online-only profile was operator-confirmed with candidate `788537d`,
-which held the profile 90 s after the last Pia sample
-([Validation](VALIDATION.md)). For 0.8.1, play one online match with
-`hoc_oc=online` and leave after the results screen.
+**Done.** The operator ran release `0.8.1-84da224d084f-1793155065` (NRO
+`0c16374b…`) with `hoc_oc=online` and reported "everything worked as
+expected". The card's event log agrees:
 
-- The clock should turn grey about 15 s after the opponent's connection ends.
-- A rematch or a quick reconnect should keep it green.
-- In the retained `events.log`, the event 115 change from `0b1111` to
-  `0b0110` should come about 15 s after the last sample. Event 111 should
-  return from about 1785 MHz to stock.
+- The profile applied for one online Singles match (1785–1788 MHz).
+- Event 115 returned to `0b0110` about 15 s after the opponent's last sample.
+- Offline Training and Doubles stayed at stock clocks.
 
-Record the build id and NRO hash with the result.
+Details are in
+[Validation](VALIDATION.md#081--console-run-of-the-15-s-release--2026-10-28).
+
+That log holds a single online match, so nothing yet shows a rematch or quick
+reconnect keeping the clock green. Retain an `events.log` from a rematch if
+that case needs a record.
 
 ## Earlier evidence — 2026-10-25
 

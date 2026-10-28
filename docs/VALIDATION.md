@@ -1,5 +1,52 @@
 # Validation record
 
+## 0.8.1 — console run of the 15 s release — 2026-10-28
+
+The operator ran the installed release `0.8.1-84da224d084f-1793155065` (NRO
+`0c16374b…`) with `hoc_oc=online` and reported: "everything worked as
+expected". The suggested checks were:
+
+- the clock turns grey about 15 s after leaving an online match;
+- a rematch keeps it green;
+- the window cycles only Settings and Window Options.
+
+The card's `events.log` (SHA-256 `3ddd2788…`, 58,314 bytes) was read over DBI
+afterwards, with nothing written. Its header names that build and the loaded
+config: `hide_pages` all true, `hoc_oc: Online`. Times are seconds since boot.
+
+| Time | Event | Measured CPU (event 111) |
+| --- | --- | --- |
+| 41746.6 s | 114 `a=4` (fork present), `caps=0x1`, protocol 1; 115 `0b0110` (armed, online mode), grey | |
+| 41885–42642 s | offline Training stages `0x134` and `0x4` (event 110) | 1016–1022 MHz and 906–911 MHz (stock) |
+| 42674.6 s | 115 `0b1111` (applied, online live), green, generation 10 | |
+| 42676.8 s | Training stage `0x137`, the online wait | 1787 MHz at 42684.8 s |
+| 42689.3–42848.4 s | online Singles stage `0x15f` | 1788 MHz, 1785 MHz |
+| 42870.0 s | 112 `PeerStale`, station 1 silent for 10,002 ms | |
+| 42874.2 s | 115 `0b0110`, grey, generation 11 | 1019 MHz at 42877.5 s |
+| 42881.8 s | offline Doubles stage `0x2c`; 107 `a=3` drops the earlier match's latency mark, then 107 `a=2` at 42887.2 s | 1019 MHz |
+
+- **Release timing.** The log does not time the last raw Pia sample.
+  - The poll keeps a publication measured for up to 3 s after its sample
+    (`pia_rtt::STALE_MS`). Event 112 puts the last measured publication at
+    about 42860.0 s, so the last sample came between about 42857.0 and
+    42860.0 s.
+  - The release at 42874.2 s is therefore 14.2–17.2 s after that sample.
+  - A 15 s hold requires the sample at or before 42859.2 s, which lies in
+    that range.
+- **Readings with the gate off.** Two higher readings come before any gate
+  change: 1542 MHz at 41740.2 s, before the handshake, and 1660 MHz at
+  41871.1 s, while loading. No event 115 row accompanies either.
+- **Not in this log:**
+  - The log holds one online match, so the rematch and quick-reconnect cases
+    are not evidenced in it.
+  - The page cycle is not logged.
+- **Config.** The card's `config.ini` (`99665630…`) differs from the one
+  written before the run only in `vanilla_plus=true`, an in-game change by the
+  operator.
+
+External receipt: `usb-online-1027/read3.json`, with the decoded timeline
+`read3-hoc-events.txt`.
+
 ## 0.8.1 — public release assets and card install — 2026-10-28
 
 The operator asked: "install it, dbi is connected, publish as well". The
@@ -29,8 +76,9 @@ at `84da224d084f5f7c08ac9501e86f071d483fcd3e`.
   session: `hide_pages=plugins,own_pages,performance`.
 - **Rollback:** copy `ultimate/ssbu_online_deluxe_rewrite/backups/pre-081-deluxe-1028.nro`
   (`778e94a8…`) over the plugin.
-- The 15 s release has not yet run on the console; `runtime_tested=false`
-  remains accurate.
+- At install the 15 s release had not yet run on the console. The
+  published manifest's `runtime_tested=false` describes the build at
+  publication. The console run is recorded in the entry above.
 
 External receipts: `usb-081-1028/deployment.json`,
 `release-081/PACKAGE-VERIFIED.json` and `release-081/PUBLICATION.json`. The
@@ -86,7 +134,8 @@ over DBI and nothing was written. Times are seconds since boot.
 - `cargo test`: 294 passed, including `hold_is_fifteen_seconds`.
 
 The Skyline build, NRO hash and release state are recorded with the release
-assets. The 15 s hold is not yet observed on a console or in Eden.
+assets. The 15 s hold was later observed on the console (first entry above),
+not in Eden.
 
 ## Unreleased Horizon-OC online-only profile — console handshake failure and sm-session fix — 2026-10-27
 
