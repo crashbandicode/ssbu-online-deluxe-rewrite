@@ -1,5 +1,60 @@
 # Validation record
 
+## Unreleased: lobby practice window — 2026-10-28
+
+The operator reported that the Player Info window became the in-match strip
+in the local-wireless lobby, and in the Quickplay lobby after loading a
+different stage. The card's `events.log` for release `0.8.1-84da224d084f`
+(read over DBI, nothing written; receipt `usb-logs-1028/read1.json`) shows
+the cause.
+
+| Time | Connection (code 73) | Stage (code 110) | Classified |
+| --- | --- | --- | --- |
+| 68277.9 s | Quickplay | `0x0` | Training (Training-mode bit set) |
+| 68530.4 s | Local | `0x0` | Doubles |
+| 68659.5 s | Local | `0x3` | Doubles |
+| 68917.4 s | Offline (lobby, see below) | `0x3` | Doubles |
+| 69155.0 s / 69166.4 s | Offline (lobby) | `0xe`, `0x1a` | Doubles |
+| 69445.9 s | Offline (lobby) | `0x1a` | Doubles |
+
+- **Cause.** Stage setup classified Training only from the game's
+  Training-mode bit or the default waiting-room stage 311 (`0x137`).
+  - Lobby practice can load any stage with more than two fighters, and its
+    Training-mode bit was clear.
+  - Those stages fell through to the fighter count and became Doubles.
+  - The UI draws the strip for a ready Singles or Doubles scene
+    (`menu::menu_shape`).
+- **Fix (`dfa1608`).** Stage setup also reads the game's scene-mode values
+  that the operator's Training Modpack fork and smash-gamepad-overlay v0.1.3
+  use for the waiting room: initialized, melee `0x0d`, and mode `0x02010000`
+  (local) or `0x0701xxxx` (online).
+  - The reads are read-only and armed only when
+    `app::smashball::is_training_mode` matches 13.0.5 byte for byte.
+  - The fork's source notes that the game's practice-scene setup selects
+    melee `0x0d` and the normal match setup never does.
+  - Lobby practice then classifies as Training. That gives the window and,
+    under Auto, the Training profile.
+  - New code 116 records the raw values at every stage load.
+- **Gates.**
+  - `cargo clippy --all-targets -- -D warnings` is clean.
+  - `cargo build --no-default-features` succeeds.
+  - `cargo test`: 298 passed, including four new predicate and
+    classification tests.
+  - Skyline package `DELUXE-build-lobby/e7ae1fa0d5c48fa3`: build
+    `0.8.1-dfa1608b3f73-1793213529`, NRO `e7ae1fa0…`, 1,462,272 bytes,
+    `runtime_tested=false`.
+- **Not tested.** No console or Eden run of the candidate yet; see
+  [next checks](NEXT_SESSION.md#lobby-practice-window-check--2026-10-28).
+- **Other observations from the same log.**
+  - After the local-wireless visit, Deluxe never saw the second Quickplay
+    entry, so the connection stayed Offline in that lobby. The online
+    latency hook marked each match online at its start (code 30, source
+    `0x16ccab8`). This is unchanged and not yet explained.
+  - ZR+L3 switched `hoc_oc` three times, each during an online Singles match:
+    to always at 69077.4 s, back to online at 69118.9 s, and to always at
+    69221.0 s. The saved config therefore omits `hoc_oc` (always is the
+    default), and the profile now applies offline too.
+
 ## 0.8.1 — console rematches — 2026-10-28
 
 The operator tested rematches on the console with the same release and card,

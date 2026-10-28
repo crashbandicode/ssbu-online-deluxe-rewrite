@@ -1,5 +1,22 @@
 # Resume and test plan
 
+## Lobby practice window check — 2026-10-28
+
+Candidate `0.8.1-dfa1608b3f73-1793213529` (NRO `e7ae1fa0…`, branch
+`fix/lobby-practice-window`) classifies waiting-room lobby practice as
+Training ([Validation](VALIDATION.md#unreleased-lobby-practice-window--2026-10-28)).
+On the console:
+
+1. Enter a local-wireless lobby, then load a different practice stage. The
+   Player Info window should stay the vertical window at the right.
+2. Do the same in the Quickplay lobby.
+3. Play an online match. It should still show the two-line strip.
+
+In the retained `events.log`, each code 110 row has a code 116 row after it.
+Lobby stages should show bit 10 set and code 110 scene 1 (Training). Match
+stages should show bit 10 clear, with scene 2 or 3. If bit 9 is clear, the
+13.0.5 guard rejected the reads and nothing changed.
+
 ## 0.8.1 Horizon-OC release check — 2026-10-28
 
 **Done.** The operator tested release `0.8.1-84da224d084f-1793155065` (NRO
