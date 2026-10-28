@@ -218,6 +218,12 @@ pub enum Code {
     /// The window's present-interval readback changed (0.8.2): `a` = new,
     /// `b` = previous (-1 before the first readback, as u64).
     PresentInterval = 119,
+    /// The refresh-clock plugin's 120 Hz counters from its `status.txt`
+    /// (0.8.2), every 5 s from boot while the file parses: packed by
+    /// `refresh_clock_status::pack` (physical events, logical ticks, refresh,
+    /// swap interval, normalizing / valid / observe-only bits, transitions,
+    /// docked target); `b` = the interval's system ticks.
+    RefreshClock = 120,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -361,6 +367,7 @@ mod tests {
         assert_eq!(Code::PresentPace as u16, 117);
         assert_eq!(Code::PresentReacquire as u16, 118);
         assert_eq!(Code::PresentInterval as u16, 119);
+        assert_eq!(Code::RefreshClock as u16, 120);
     }
     #[test]
     fn recursive_or_contended_logging_drops_instead_of_deadlocking() {

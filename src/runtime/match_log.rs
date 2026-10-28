@@ -3,7 +3,7 @@
 //! at stage entry, every `events.log` row while the stage runs, and a
 //! present-pacing summary at its end. `crate::match_log` names the files and
 //! keeps the newest `KEEP`. Runs on the diagnostics thread only.
-use super::{auto_driver, nvn, settings, Code, DATA_DIR};
+use super::{auto_driver, nvn, record, settings, Code, DATA_DIR};
 use crate::auto_policy::SceneStatus;
 use crate::diagnostics::Event;
 use crate::match_log as plan;
@@ -110,6 +110,18 @@ impl MatchLog {
             .file
             .write_all(footer(&stage, tick, reason).as_bytes());
         let _ = stage.file.sync_all();
+    }
+}
+
+/// Code 120 (0.8.2): the refresh-clock plugin's 120 Hz counters, called every
+/// 5 s from boot. The row reaches `events.log` and, during a stage, its log, so
+/// the 120 Hz data needs no relaunch or flag change. Nothing is recorded while
+/// the file is absent or mid-rewrite.
+pub(super) fn record_refresh_clock() {
+    let text = fs::read_to_string(REFRESH_CLOCK_STATUS).unwrap_or_default();
+    if let Some(sample) = crate::refresh_clock_status::parse(&text) {
+        let (a, b) = crate::refresh_clock_status::pack(sample);
+        record(Code::RefreshClock, a, b);
     }
 }
 

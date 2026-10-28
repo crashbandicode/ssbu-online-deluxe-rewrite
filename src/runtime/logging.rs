@@ -238,6 +238,7 @@ pub(super) fn start(version: &str) {
                 super::coverage::poll(iteration);
                 if iteration.is_multiple_of(10) {
                     super::nvn::write_status();
+                    super::match_log::record_refresh_clock();
                     record(Code::Heartbeat, 0, iteration);
                     record(
                         Code::OverlayHealth,

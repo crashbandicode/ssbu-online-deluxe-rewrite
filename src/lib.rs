@@ -24,6 +24,7 @@ mod pia_rtt;
 pub mod plugin_api;
 pub mod policy;
 pub mod present_pace;
+pub mod refresh_clock_status;
 pub mod ui_safety;
 
 pub mod build_info {
