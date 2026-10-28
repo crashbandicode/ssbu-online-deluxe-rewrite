@@ -13,6 +13,7 @@ pub mod hoc_game_aware;
 pub mod hook_chain;
 pub mod hud_place;
 mod imgui_host;
+pub mod match_log;
 pub mod menu;
 pub mod native_banner;
 pub mod online_session;

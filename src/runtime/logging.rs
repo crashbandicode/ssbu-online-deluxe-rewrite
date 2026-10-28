@@ -215,6 +215,7 @@ pub(super) fn start(version: &str) {
             let mut iteration = 0u64;
             let mut error_reported = false;
             let mut capture = super::capture::Service::default();
+            let mut stages = super::match_log::MatchLog::default();
             loop {
                 // A running capture drains its rings twice per period so a
                 // match's row rate has twice the headroom of the 30 s capture.
@@ -254,6 +255,9 @@ pub(super) fn start(version: &str) {
                                 writeln!(file, "gap: ring overwritten after sequence {persisted}")?;
                             }
                             for event in snapshot.after(persisted) {
+                                // The per-stage logs (0.8.2); a replayed row
+                                // is skipped there by its sequence.
+                                stages.event(event);
                                 writeln!(
                                     file,
                                     "{} {} {} 0x{:x} 0x{:x}",
@@ -263,6 +267,7 @@ pub(super) fn start(version: &str) {
                             if snapshot.dropped != dropped {
                                 writeln!(file, "dropped_total={}", snapshot.dropped)?;
                             }
+                            stages.sync();
                             file.sync_data()
                         })();
                         match result {
