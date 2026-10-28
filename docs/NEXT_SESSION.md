@@ -2,7 +2,10 @@
 
 ## One-boot checks: You-line controls, lobby window, 120 Hz — 2026-10-28
 
-The candidate on branch `fix/lobby-practice-window` carries three changes
+Installed on the card on 2026-10-28: candidate
+`0.8.1-062bf65b0227-1793217135` (NRO `0e58e76a…`, branch
+`fix/lobby-practice-window`), with `hoc_oc=online` restored in the config. It
+carries three changes
 ([Validation](VALIDATION.md#unreleased-you-line-mode-focus-and-per-stage-logs--2026-10-28)):
 
 - the You-line mode focus;

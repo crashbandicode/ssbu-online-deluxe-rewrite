@@ -47,11 +47,33 @@ every Training, Singles or Doubles stage, described in
 - `cargo clippy --all-targets -- -D warnings` is clean.
 - `cargo build --no-default-features` succeeds.
 - `cargo test`: 309 passed.
-- The trial Skyline build compiled the runtime with no warnings. The
-  installed build and its card read-back are recorded below once done.
+- The Skyline build compiled the runtime with no warnings.
 
-**Not tested.** No Eden or console run yet. The light-blue frame, white clock
-and per-stage files have not been seen running.
+**Card install (DBI, 2026-10-28 19:53:16Z, `installed_verified`).** Installed
+at the operator's request.
+
+- Build `0.8.1-062bf65b0227-1793217135`, NRO SHA-256
+  `0e58e76a35ac3f46a625754903f46f180dbade5a2f532999b5ad52d387adda05`
+  (1,474,560 bytes), from package `DELUXE-build-lobby/0e58e76a35ac3f46`.
+  `runtime_tested=false`.
+- It replaced release 0.8.1 `0c16374b…`, which read back identical before the
+  write.
+- Unchanged on read-back: the other plugins, the hoc-clk fork `c4c28125…`, and
+  the FX Control and Horizon-OC configs.
+- **Rollback:** copy `ultimate/ssbu_online_deluxe_rewrite/backups/pre-lobby-deluxe-1028.nro`
+  over the plugin.
+- Config write: since the in-match switches to `always` were accidental,
+  `hoc_oc=online` was appended to the card's `config.ini`.
+  - `c720724e…` (416 bytes) became `20de5c13…` (430 bytes), read back
+    verified. That is the same file as the earlier `hide_pages` write:
+    `vanilla_plus=false`, `hoc_oc=online`.
+  - The original is saved as `backups/pre-hoc-online-1028.ini`.
+- Receipts: `usb-lobby-1028/deployment.json` and `usb-lobby-1028/hoc1.json`.
+
+**Not tested.** No Eden or console run yet. The light-blue frame, white clock,
+per-stage files, lobby window and pacing events have not been seen running.
+The console checks are in
+[next checks](NEXT_SESSION.md#one-boot-checks-you-line-controls-lobby-window-120-hz--2026-10-28).
 
 ## 120 Hz tearing report — logs show no cause — 2026-10-28
 
