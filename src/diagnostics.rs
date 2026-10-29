@@ -224,6 +224,33 @@ pub enum Code {
     /// swap interval, normalizing / valid / observe-only bits, transitions,
     /// docked target); `b` = the interval's system ticks.
     RefreshClock = 120,
+    /// Pia's station-left hook ran (0.8.2, `net_watch`): `a` = station
+    /// (bits 0–7), accepted by the RTT table (bit 8); `b` = ms since that
+    /// station's last RTT sample (`0xffffffff` if none).
+    PeerLeft = 121,
+    /// Pia's session cleanup ran (0.8.2): `a` = accepted (bit 0); `b` = ms since
+    /// the newest RTT sample from any station.
+    SessionEnded = 122,
+    /// A station's RTT samples resumed after at least 1 s of silence (0.8.2):
+    /// `a` = station, `b` = the gap in ms. Gaps of a minute or more are new
+    /// sessions and are not recorded.
+    RttGap = 123,
+    /// This console's `nifm` status changed (0.8.2), polled every 500 ms:
+    /// `a` = the status object's first 8 bytes (interface, Wi-Fi strength);
+    /// `b` = the call's result (bits 0–31, 0 while connected) and the
+    /// connection state (32–63). See `net_watch::pack_link`.
+    LocalLink = 124,
+    /// RTT samples of the last 5 s while any arrived within 30 s (0.8.2):
+    /// packed by `net_watch::Window::pack`.
+    RttWindow = 125,
+    /// A melee-sequence state command (0.8.2, `match_state`): `a` = target
+    /// state id (bits 0–7, `match_state::NAMES`) and command kind (8–15);
+    /// `b` = the previous state's id (0xff if not a melee state).
+    MatchState = 126,
+    /// The game's sync-communication check failed (0.8.2): `a` = the network
+    /// component's status byte; `b` = failed checks since the last
+    /// wait-for-sync state began. One row per new status.
+    SyncCheckFailed = 127,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -368,6 +395,13 @@ mod tests {
         assert_eq!(Code::PresentReacquire as u16, 118);
         assert_eq!(Code::PresentInterval as u16, 119);
         assert_eq!(Code::RefreshClock as u16, 120);
+        assert_eq!(Code::PeerLeft as u16, 121);
+        assert_eq!(Code::SessionEnded as u16, 122);
+        assert_eq!(Code::RttGap as u16, 123);
+        assert_eq!(Code::LocalLink as u16, 124);
+        assert_eq!(Code::RttWindow as u16, 125);
+        assert_eq!(Code::MatchState as u16, 126);
+        assert_eq!(Code::SyncCheckFailed as u16, 127);
     }
     #[test]
     fn recursive_or_contended_logging_drops_instead_of_deadlocking() {

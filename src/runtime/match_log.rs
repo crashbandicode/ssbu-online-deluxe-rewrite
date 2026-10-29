@@ -22,6 +22,8 @@ struct Stage {
     file: File,
     opened_tick: u64,
     start: nvn::Pacing,
+    /// The stage's `net_watch` rows, for the closing `net` line.
+    net: crate::net_watch::Summary,
 }
 
 #[derive(Default)]
@@ -54,6 +56,7 @@ impl MatchLog {
                 "{} {} {} 0x{:x} 0x{:x}",
                 event.sequence, event.tick, event.code, event.a, event.b
             );
+            stage.net.row(event.code, event.a, event.b);
         }
         if event.code == Code::AutoContext as u16
             && plan::context_scene(event.a) == SceneStatus::Inactive
@@ -99,6 +102,7 @@ impl MatchLog {
             file,
             opened_tick: event.tick,
             start: nvn::pacing(),
+            net: crate::net_watch::Summary::default(),
         });
     }
 
@@ -174,7 +178,7 @@ fn footer(stage: &Stage, tick: u64, reason: &str) -> String {
     let pacing = nvn::pacing().since(stage.start);
     let seconds = tick.saturating_sub(stage.opened_tick) as f64 / 19_200_000.0;
     format!(
-        "closed_tick={tick} reason={reason} seconds={seconds:.1}\npresents={} early_presents={} early_present_skips={} early_present_mismatches={} present_pace_outliers={} present_reacquired_last={}\n{}\n{}{}\n{}",
+        "closed_tick={tick} reason={reason} seconds={seconds:.1}\npresents={} early_presents={} early_present_skips={} early_present_mismatches={} present_pace_outliers={} present_reacquired_last={}\n{}\n{}{}{}\n{}",
         pacing.actual,
         pacing.early,
         pacing.skips,
@@ -182,6 +186,7 @@ fn footer(stage: &Stage, tick: u64, reason: &str) -> String {
         pacing.outliers,
         pacing.reacquired,
         plan::spacing_line(&pacing.spacing),
+        stage.net.line(),
         render_line("render_end"),
         clock(),
         refresh_clock("refresh_clock_end"),
