@@ -34,12 +34,15 @@ Under sd:/ultimate/ssbu_online_deluxe_rewrite/:
     5 s with the refresh-clock counters, which gives a time series for each
     match.
   - The footer is written when the next stage loads or the scene context (code
-    73) turns Inactive. It has the stage length, actual presents, early presents,
-    skips, mismatches, pacing outliers (code 117) and reacquires (code 118). It
-    also has `present_spacing` (counts of present-to-present spacing in <6, 6–10,
-    10–14, 14–19, 19–25, 25–40 and ≥40 ms bins), the render state at the end
-    (`render_end`), the clock, and the refresh-clock status again
-    (`refresh_clock_end.*`).
+    73) turns Inactive. It has the stage length, `online_marked` (the header's
+    `connection` is read at stage load and console Quickplay can leave it
+    `offline`; this is the online mark set once the match runs), actual
+    presents, early presents, skips, mismatches, pacing outliers (code 117) and
+    reacquires (code 118). It also has `present_spacing` (counts of
+    present-to-present spacing in <6, 6–10, 10–14, 14–19, 19–25, 25–40 and
+    ≥40 ms bins), the `net` line (see "Who ended an online match early"), the
+    render state at the end (`render_end`), the clock, and the refresh-clock
+    status again (`refresh_clock_end.*`).
   - At 60 FPS nearly every present falls in 14–19 ms. Two presents per 60 Hz
     frame at 120 Hz would fill 6–10 ms. Change profiles in-game between matches
     and each match's log records which profile it ran, so a 120 Hz A/B fits in
@@ -160,6 +163,13 @@ data directory and flags.
 | 118 | Present reacquire (0.8.2): a tracked acquire returned the index presented last, which could draw into an image still on screen. a = index, b = µs since that present. Assumes the present comes before the next acquire, as the 2026-10-28 captures show for Vanilla+ and LessLag; total in `present_reacquired_last` |
 | 119 | Present interval changed (0.8.2): the window's present-interval readback (every 60 presents) changed. a = new, b = previous (`0xffffffffffffffff` before the first readback). 2 is expected at 120 Hz with a 60 FPS target |
 | 120 | Refresh-clock 120 Hz counters (0.8.2, `refresh_clock_status`), every 5 s from boot while `ultimate/ssbu-refresh-clock/status.txt` parses. Deluxe only reads it. a bits 0–15 = VSync events in the plugin's last telemetry interval, 16–31 = game ticks in it, 32–39 = refresh (Hz), 40–43 = swap interval, 44 = normalizing, 45 = interval valid, 46 = observe-only, 48–55 = mode transitions, 56–63 = docked FPS target; b = the interval's system ticks. VSync rate = events × 19,200,000 / b (about 120 at 120 Hz) and the tick rate likewise (about 60 while normalizing). The interval fields are 0 unless the plugin's `telemetry.flag` existed when Smash started. The rows also land in the running stage log |
+| 121 | Pia station left (0.8.2, `net_watch`): a bits 0–7 = the station, bit 8 = accepted by the RTT table (its protocol is the live one), bits 16–23 = this console's own station (0xff before the first ping); b = ms since that station's last ping (`0xffffffff` if never). A teardown also lists stale stations unaccepted |
+| 122 | Pia session cleanup (0.8.2): a bit 0 = accepted; b = ms since the newest ping from any station. Several per teardown are normal |
+| 123 | Ping gap (0.8.2): a station's RTT pings resumed after at least 1 s of silence. a = station, b = the gap in ms (gaps of a minute or more are a new session and not recorded) |
+| 124 | This console's network status changed (0.8.2): `nn::nifm::GetInternetConnectionStatus`, read-only, polled every 500 ms; a row at boot and on every change. a = the status object's first 8 bytes (byte 0 interface: 1 Wi-Fi, 2 Ethernet; byte 4 Wi-Fi strength 0–3); b bits 0–31 = the call's result (0 while connected), 32–63 = the connection state. A non-zero result or a strength drop near an early end points at this console's link |
+| 125 | Ping window (0.8.2), every 5 s while a ping arrived in the last 30 s: a bits 0–15 = pings, 16–31 = min ms, 32–47 = max ms, 48–63 = mean ms; b bits 0–31 = longest gap in the window (ms), 32–63 = ms since the newest ping at the window's end. Pings arrive about twice a second |
+| 126 | Melee-sequence state command (0.8.2, `match_state`), observed in the game's state-machine command processor (`.text+0x135b8bc`): a bits 0–7 = state id (`match_state::NAMES`; 14 = `StateDisconnectSyncCommunication`), 8–15 = command kind; b = the previous state's id (0xff if not a melee state). In the 2026-10-29 Eden runs only the disconnect state appeared (kind 3), also at the end of offline demo matches |
+| 127 | The game's sync-communication check failed (0.8.2): the wait-for-sync states call `.text+0x1502bd0`, which returns 1 while the link is up; on failure it stores the network component's status byte (`manager+0x58`) and the state queues `StateDisconnectSyncCommunication`. a = that status byte, b = failed checks since the wait began. Status 9 followed every online early end in the Eden runs |
 
 Codes 73 `AutoContext` and 74 `AutoRequest`
 ([`auto_driver.rs`](../src/runtime/auto_driver.rs)), 78 `ResolutionReport`,
@@ -199,6 +209,39 @@ NRO is reused when present; unknown external ABIs are refused. Hook exports use
 unique names to prevent dynamic symbol collisions. NVN bootstrap interposition
 chains other wrappers and records the entry word. See
 [dependency details](IMGUI_DEPENDENCY.md); future LessLag/acquire changes need new tests.
+
+## Who ended an online match early (0.8.2)
+
+Codes 121–127 are read-only: they reuse the Pia observers, read the
+console's own network status and watch two game code paths; nothing is sent
+and no game value changes. Each stage log closes with a `net` line: ping
+count, min/mean/max, gaps, leaves, session cleanups, `first_end` (the first
+leave or cleanup row and the ping age at that moment), link changes, the
+sync status and the melee-state path.
+
+Two Eden LAN Online instances (Surface + Yoga, 2026-10-29, evidence in the
+experiment folder `usb-desync-1029/eden/`) gave these signatures:
+
+| What happened | This console's rows | Its screen |
+|---|---|---|
+| This console was disconnected by the game (excessive self-destructs, inactivity) | `first_end=session_ended` with pings 0.3–0.7 s old | "You have been disconnected for …" |
+| The other console was disconnected for inactivity | `first_end=peer_left` (accepted) with pings ~0.5 s old, then cleanup | "Canceled." |
+| The other console was disconnected for self-destructs | pings stop; ~10 s later `session_ended` with ~10.8 s of silence | "A communication error has occurred." |
+| Deliberate desync on the other console (a KO only it saw) | `first_end=session_ended` with pings 0.4 s old, at the moment of the KO | "A connection error has occurred." |
+| The console that diverged (same run) | the same dialog; pings stop; ~9 s later `peer_left`/`session_ended` with ~9.3 s of silence, then code 127 status 9 | "A connection error has occurred." |
+| Desync in damage only (30% on one console) | nothing: the match ran to time and both results screens agreed | normal results |
+
+Reading: fresh pings at `first_end` mean a game decided to end the session
+(this console's when it is `session_ended`, the other's when it is an
+accepted `peer_left`); seconds of ping silence first mean the other console
+stopped answering. In one run the console that ended up in the menus saw an
+accepted `peer_left` first while the other played on to its results screen, so a
+`peer_left` can also be the other game removing this console. In a desync the
+console that ended the session was the one that did not diverge, so leaving
+first is not proof of fault. A code 124
+change near the end shows this console's own link failing. Eden's LAN mode
+has no Nintendo match server, so an aborted match ends in a dialog and the
+menus; a console session may end on a results screen instead.
 
 ## Connection transport
 

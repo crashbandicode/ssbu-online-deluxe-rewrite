@@ -225,7 +225,8 @@ pub enum Code {
     /// docked target); `b` = the interval's system ticks.
     RefreshClock = 120,
     /// Pia's station-left hook ran (0.8.2, `net_watch`): `a` = station
-    /// (bits 0–7), accepted by the RTT table (bit 8); `b` = ms since that
+    /// (bits 0–7), accepted by the RTT table (bit 8), this console's own
+    /// station (bits 16–23, 0xff before a sample); `b` = ms since that
     /// station's last RTT sample (`0xffffffff` if none).
     PeerLeft = 121,
     /// Pia's session cleanup ran (0.8.2): `a` = accepted (bit 0); `b` = ms since

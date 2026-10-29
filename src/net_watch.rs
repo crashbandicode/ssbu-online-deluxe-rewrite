@@ -5,14 +5,20 @@
 //!
 //! Rows (all in `events.log` and the stage log):
 //! - 121 `PeerLeft`: Pia's station-left hook. `a` = station (bits 0–7),
-//!   accepted by the RTT table (bit 8); `b` = ms since that station's last RTT
-//!   sample ([`NEVER`] if none).
+//!   accepted by the RTT table (bit 8), this console's own station (16–23);
+//!   `b` = ms since that station's last RTT sample ([`NEVER`] if none).
 //! - 122 `SessionEnded`: Pia's session cleanup. `a` = accepted (bit 0);
 //!   `b` = ms since the newest RTT sample from any station.
 //! - 123 `RttGap`: a station's RTT samples resumed after at least [`GAP_MS`]
 //!   of silence. `a` = station; `b` = the gap in ms.
 //! - 124 `LocalLink`: this console's `nifm` status changed. See [`pack_link`].
 //! - 125 `RttWindow`: the RTT samples of the last 5 s, see [`Window::pack`].
+//!
+//! The stage log's `first_end` is the first leave or cleanup row (an accepted
+//! one if any) with its ping age: in the 2026-10-29 Eden runs, this console
+//! ending the session showed `session_ended` with fresh pings, an orderly
+//! leave by the other console `peer_left` with fresh pings, and the other
+//! console vanishing seconds of silence first (`docs/DEBUGGING.md`).
 
 /// RTT samples arrive about twice a second; a gap this long lost at least one.
 pub const GAP_MS: u64 = 1_000;
@@ -91,6 +97,8 @@ const PATH_CAP: usize = 24;
 pub struct Summary {
     path: Vec<u8>,
     sync_status: Option<u64>,
+    /// The first leave/cleanup row: (accepted, name, ms since the last ping).
+    first_end: Option<(bool, &'static str, u64)>,
     samples: u64,
     weighted: u64,
     min: Option<u64>,
@@ -124,8 +132,14 @@ impl Summary {
                 self.gaps += 1;
                 self.max_gap = self.max_gap.max(b);
             }
-            c if c == Code::PeerLeft as u16 => self.peer_left += 1,
-            c if c == Code::SessionEnded as u16 => self.session_ended += 1,
+            c if c == Code::PeerLeft as u16 => {
+                self.peer_left += 1;
+                self.note_end(a >> 8 & 1 != 0, "peer_left", b);
+            }
+            c if c == Code::SessionEnded as u16 => {
+                self.session_ended += 1;
+                self.note_end(a & 1 != 0, "session_ended", b);
+            }
             c if c == Code::LocalLink as u16 => {
                 self.link_changes += 1;
                 self.link_down = b & NEVER != 0;
@@ -141,8 +155,18 @@ impl Summary {
         }
     }
 
+    /// Keeps the first end row, replaced once by the first accepted one.
+    fn note_end(&mut self, accepted: bool, name: &'static str, silent_ms: u64) {
+        if self.first_end.is_none_or(|(kept, _, _)| !kept && accepted) {
+            self.first_end = Some((accepted, name, silent_ms));
+        }
+    }
+
     pub fn line(&self) -> String {
         let ms = |value: Option<u64>| value.map_or("none".to_string(), |v| v.to_string());
+        let first_end = self
+            .first_end
+            .map_or("none".to_string(), |(_, name, ms)| format!("{name}@{ms}ms"));
         let path: Vec<&str> = self
             .path
             .iter()
@@ -158,7 +182,7 @@ impl Summary {
             path.join(">")
         };
         format!(
-            "net rtt_samples={} rtt_min_ms={} rtt_mean_ms={} rtt_max_ms={} max_gap_ms={} gaps={} peer_left={} session_ended={} link_changes={} link_down_at_end={} silent_ms_at_last_window={} sync_check_failed={} states={path}\n",
+            "net rtt_samples={} rtt_min_ms={} rtt_mean_ms={} rtt_max_ms={} max_gap_ms={} gaps={} peer_left={} session_ended={} first_end={first_end} link_changes={} link_down_at_end={} silent_ms_at_last_window={} sync_check_failed={} states={path}\n",
             self.samples,
             ms(self.min),
             ms(self.weighted.checked_div(self.samples)),
@@ -243,7 +267,9 @@ mod tests {
         .pack(2_100);
         summary.row(Code::RttWindow as u16, a, b);
         summary.row(Code::RttGap as u16, 3, 2_500);
-        summary.row(Code::PeerLeft as u16, 1 | 1 << 8, 2_400);
+        // An unaccepted leave of a stale station, then the accepted one.
+        summary.row(Code::PeerLeft as u16, 0, 90_000);
+        summary.row(Code::PeerLeft as u16, 1 | 1 << 8 | 2 << 16, 2_400);
         let (a, b) = pack_link(0, [1, 0, 0, 0, 3, 0, 0, 0, 4, 0, 0, 0]);
         summary.row(Code::LocalLink as u16, a, b);
         let state =
@@ -263,13 +289,17 @@ mod tests {
         );
         assert_eq!(
             summary.line(),
-            "net rtt_samples=16 rtt_min_ms=15 rtt_mean_ms=27 rtt_max_ms=50 max_gap_ms=2500 gaps=1 peer_left=1 session_ended=0 link_changes=1 link_down_at_end=false silent_ms_at_last_window=2100 sync_check_failed=8 states=Melee>WaitForSyncWhenEnding>DisconnectSyncCommunication\n"
+            "net rtt_samples=16 rtt_min_ms=15 rtt_mean_ms=27 rtt_max_ms=50 max_gap_ms=2500 gaps=1 peer_left=2 session_ended=0 first_end=peer_left@2400ms link_changes=1 link_down_at_end=false silent_ms_at_last_window=2100 sync_check_failed=8 states=Melee>WaitForSyncWhenEnding>DisconnectSyncCommunication\n"
         );
+        // A later accepted row does not replace an accepted first end.
+        summary.row(Code::SessionEnded as u16, 1, 2_401);
+        assert!(summary.line().contains("first_end=peer_left@2400ms"));
         let (a, b) = pack_link(0x2a8, [0; 12]);
         summary.row(Code::LocalLink as u16, a, b);
         assert!(summary.line().contains("link_down_at_end=true"));
         let empty = Summary::default().line();
         assert!(empty.contains("rtt_min_ms=none"));
+        assert!(empty.contains("first_end=none"));
         assert!(empty.ends_with("sync_check_failed=none states=none\n"));
     }
 }

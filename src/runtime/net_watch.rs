@@ -12,6 +12,8 @@ const STATIONS: usize = crate::pia_rtt::MAX_STATION_INDEX as usize + 1;
 static LAST: [AtomicU64; STATIONS] = [const { AtomicU64::new(0) }; STATIONS];
 /// Tick of the newest sample from any station.
 static NEWEST: AtomicU64 = AtomicU64::new(0);
+/// This console's station index from the newest sample, 0xff before one.
+static LOCAL: AtomicU64 = AtomicU64::new(0xff);
 static COUNT: AtomicU64 = AtomicU64::new(0);
 static SUM: AtomicU64 = AtomicU64::new(0);
 static MIN: AtomicU64 = AtomicU64::new(u64::MAX);
@@ -31,6 +33,7 @@ pub(super) fn sample(remote: u32, local: u8, rtt_ms: i64) {
     if remote >= STATIONS as u32 || remote == u32::from(local) {
         return;
     }
+    LOCAL.store(u64::from(local), Ordering::Relaxed);
     let now = tick();
     let last = LAST[remote as usize].swap(now, Ordering::AcqRel);
     NEWEST.fetch_max(now, Ordering::AcqRel);
@@ -54,7 +57,7 @@ pub(super) fn left(remote: u32, accepted: bool) {
     };
     record(
         Code::PeerLeft,
-        u64::from(remote & 0xff) | u64::from(accepted) << 8,
+        u64::from(remote & 0xff) | u64::from(accepted) << 8 | LOCAL.load(Ordering::Relaxed) << 16,
         silent,
     );
 }

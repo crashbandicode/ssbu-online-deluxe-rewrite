@@ -178,7 +178,11 @@ fn footer(stage: &Stage, tick: u64, reason: &str) -> String {
     let pacing = nvn::pacing().since(stage.start);
     let seconds = tick.saturating_sub(stage.opened_tick) as f64 / 19_200_000.0;
     format!(
-        "closed_tick={tick} reason={reason} seconds={seconds:.1}\npresents={} early_presents={} early_present_skips={} early_present_mismatches={} present_pace_outliers={} present_reacquired_last={}\n{}\n{}{}{}\n{}",
+        "closed_tick={tick} reason={reason} seconds={seconds:.1} online_marked={}\npresents={} early_presents={} early_present_skips={} early_present_mismatches={} present_pace_outliers={} present_reacquired_last={}\n{}\n{}{}{}\n{}",
+        // The header's `connection` is the scene tracker's byte at stage load,
+        // which console Quickplay can leave Offline; this is the online mark
+        // the latency hook sets once the match runs (see `auto_driver`).
+        auto_driver::context_online(),
         pacing.actual,
         pacing.early,
         pacing.skips,

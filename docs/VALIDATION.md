@@ -1,5 +1,44 @@
 # Validation record
 
+## Unreleased: who-ended-it telemetry (codes 121–127) — 2026-10-29
+
+Telemetry to tell this console's side from the other when an online match
+ends early. All of it is read-only.
+
+**Changes** (`698ca14` and follow-ups):
+
+- `net_watch`: Pia station-left and session-cleanup rows with the ping age,
+  ping gaps, a 5 s ping window, and this console's `nifm` status on change.
+- `match_state`: the melee sequence's state commands (`.text+0x135b8bc`) and
+  the sync-communication check's failure status (`.text+0x1502c60`), both
+  guarded by 64 bytes.
+- Stage-log footers gain `online_marked` and a `net` line with `first_end`.
+
+**Gates.** clippy `-D warnings` clean; `cargo build --no-default-features`;
+`cargo test` 318 passed (packing, the footer line, the guards, Hash40 against
+the game's own constants); the Skyline build had no warnings.
+
+**Eden LAN Online, Surface + Yoga (2026-10-29).** Telemetry build on one
+instance, the same build with an Eden-only probe on the other (never committed
+or shipped): with a flag file the probe either added 30% damage to entry 0 or
+moved it below the blast zone, on that instance only.
+
+- A full match with no probe stayed in sync (paired screenshots agree each
+  ~6 s) and reached results on both.
+- One instance at 150% emulation speed stayed in sync through attacks: the
+  timers agreed within hundredths; lockstep held the faster side back.
+- 30% damage on one instance only (seen on its HUD, 0% on the other) was not
+  detected: the match ran to time and both results screens agreed.
+- A KO on one instance only was caught at once: both showed "A connection
+  error has occurred." The console that did not diverge ended its session
+  first with fresh pings; the diverged one timed out ~9 s later.
+- Disconnects for self-destructs and for inactivity gave the signatures in
+  `DEBUGGING.md` ("Who ended an online match early").
+- Not reproduced: the "No contest" results screen. Eden's LAN mode has no
+  Nintendo match server; aborted matches end in a dialog and the menus.
+
+Not run on the console yet.
+
 ## Unreleased: L+R+X only on the highlight; refresh-clock counters from boot — 2026-10-28
 
 The operator asked for two corrections to candidate `062bf65`:
