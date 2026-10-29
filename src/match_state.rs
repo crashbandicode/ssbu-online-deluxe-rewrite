@@ -20,6 +20,24 @@
 //!   command kind (8–15); `b` = the previous state's id ([`UNKNOWN`] if not one).
 //! - 127 `SyncCheckFailed`: `a` = the status byte; `b` = failed checks since the
 //!   last wait-for-sync state began. One row per new status.
+//!
+//! The match's own lockstep (`S` = its session object) carries a desync check:
+//! every input record holds the XOR of all game-RNG words for its frame, and
+//! `.text+0x16cf1d0` compares a peer's value with ours. A mismatch ends the
+//! session with kind 2 and broadcasts an abort (control message type 7) whose
+//! receiver ends at once; the match then ends through
+//! `StateDisconnectSyncCommunication` with result 10, "No contest". Every
+//! session end passes `.text+0x16ce7c0(S, kind)`, whose caller names the
+//! trigger ([`sync_end_trigger`]).
+//! - 128 `SyncEnd`: [`pack_sync_end`]; `b` = the caller's `.text` offset.
+//! - 129 `DesyncSeen`: this console found a peer's check value differing from
+//!   its own. `a` = ours (bits 0–31), the peer's station (32–39); `b` = the
+//!   peer's value (0–31), the frame (32–47). At most eight per session.
+//! - 130 `PeerAbort`: a peer's abort message arrived. `a` = the sender's station
+//!   (bits 0–7), the reason (8–23, 2 = desync); `b` = the local frame.
+//!
+//! Sites and registers are from the 2026-10-29 static study of the 13.0.5 image
+//! (`usb-desync-1029/re/RE-FINDINGS.md`, sections 3.3–3.6).
 
 /// The melee sequence's states: the base class's, then the online melee's.
 pub const NAMES: [&str; 22] = [
@@ -65,6 +83,62 @@ pub static SYNC_STATUS_GUARD: [u8; 64] = [
     0xc1, 0x02, 0x40, 0xf9, 0x34, 0xaf, 0x95, 0xd2, 0x74, 0x15, 0xa1, 0xf2, 0x74, 0x02, 0xc0, 0xf2,
     0xe0, 0x23, 0x00, 0x91, 0xe2, 0x03, 0x14, 0xaa, 0x4a, 0x02, 0x01, 0x94, 0xf3, 0x07, 0x40, 0xf9,
 ];
+
+/// `.text+0x16ce7c0`, the lockstep session-end function's entry
+/// (`sub sp, sp, #0xb0`): x0 = S, w1 = kind, x30 = the caller.
+pub const SYNC_END_OFFSET: usize = 0x16ce7c0;
+pub static SYNC_END_GUARD: [u8; 64] = [
+    0xff, 0xc3, 0x02, 0xd1, 0xef, 0x3b, 0x01, 0x6d, 0xed, 0x33, 0x02, 0x6d, 0xeb, 0x2b, 0x03, 0x6d,
+    0xe9, 0x23, 0x04, 0x6d, 0xfc, 0x6f, 0x05, 0xa9, 0xfa, 0x67, 0x06, 0xa9, 0xf8, 0x5f, 0x07, 0xa9,
+    0xf6, 0x57, 0x08, 0xa9, 0xf4, 0x4f, 0x09, 0xa9, 0xfd, 0x7b, 0x0a, 0xa9, 0xfd, 0x83, 0x02, 0x91,
+    0x28, 0x1c, 0x00, 0x12, 0xf3, 0x03, 0x00, 0xaa, 0x1f, 0x09, 0x00, 0x71, 0x61, 0x00, 0x00, 0x54,
+];
+/// `.text+0x16cf304`, `ldrb w8, [x0, #0x5f]`, reached only on a check-value
+/// mismatch: w8 = ours, w9 = the peer's, w1 = its station, x2 = our record.
+pub const DESYNC_OFFSET: usize = 0x16cf304;
+pub static DESYNC_GUARD: [u8; 64] = [
+    0x08, 0x7c, 0x41, 0x39, 0x08, 0x01, 0x00, 0x32, 0x08, 0x7c, 0x01, 0x39, 0xc0, 0x03, 0x5f, 0xd6,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0x43, 0x03, 0xd1,
+    0xe8, 0x33, 0x00, 0xfd, 0xfc, 0x6f, 0x07, 0xa9, 0xfa, 0x67, 0x08, 0xa9, 0xf8, 0x5f, 0x09, 0xa9,
+    0xf6, 0x57, 0x0a, 0xa9, 0xf4, 0x4f, 0x0b, 0xa9, 0xfd, 0x7b, 0x0c, 0xa9, 0xfd, 0x03, 0x03, 0x91,
+];
+/// `.text+0x16cc2c4`, `ldrb w1, [x19, #0x1]`, the control-message dispatcher's
+/// type-7 (abort) case: x19 = S, x20 = the message bytes.
+pub const PEER_ABORT_OFFSET: usize = 0x16cc2c4;
+pub static PEER_ABORT_GUARD: [u8; 64] = [
+    0x61, 0x06, 0x40, 0x39, 0x62, 0x0e, 0x40, 0x79, 0x23, 0x03, 0x80, 0x52, 0xe0, 0x03, 0x13, 0xaa,
+    0xe4, 0x03, 0x1f, 0x2a, 0x16, 0x06, 0x00, 0x94, 0xc0, 0x00, 0x00, 0x34, 0xe3, 0x03, 0x00, 0x2a,
+    0x62, 0x16, 0x40, 0xf9, 0x60, 0x32, 0x40, 0xb9, 0x21, 0x10, 0x80, 0x52, 0xd4, 0x06, 0x00, 0x94,
+    0x88, 0x12, 0x40, 0x78, 0x61, 0xb6, 0x40, 0x79, 0x7f, 0x9e, 0x00, 0x79, 0x7f, 0x42, 0x01, 0x79,
+];
+/// Mismatch rows kept per session; the compare runs for several frames.
+pub const DESYNC_ROWS: u64 = 8;
+
+/// What ended a lockstep session, from the caller of `.text+0x16ce7c0`.
+pub fn sync_end_trigger(caller: u64) -> &'static str {
+    match caller {
+        0x16d6b08 => "desync",
+        0x16cfc18 => "peer_silent",
+        0x16cfb8c => "session_timeout",
+        0x16cf4f4 => "station_lost_before_start",
+        0x16d7908 | 0x16d7edc | 0x16d9190 => "participant_missing_at_start",
+        0x16d5ec0 => "referee",
+        0x1563258 => "end_judge",
+        0x1569718 | 0x1568824 => "normal",
+        _ => "other",
+    }
+}
+
+/// Code 128's `a`: kind (bits 0–7), desync already seen (`S+0x5f` bit 0, bit
+/// 8), already ending (`S+0x63` non-zero, bit 9), the local station (16–23),
+/// the frame (32–47).
+pub fn pack_sync_end(kind: u32, desync_seen: bool, ending: bool, local: u8, frame: u16) -> u64 {
+    u64::from(kind & 0xff)
+        | u64::from(desync_seen) << 8
+        | u64::from(ending) << 9
+        | u64::from(local) << 16
+        | u64::from(frame) << 32
+}
 
 /// The game's Hash40.
 pub const fn hash40(name: &str) -> u64 {
@@ -144,5 +218,22 @@ mod tests {
     fn guards_start_with_the_hooked_instructions() {
         assert_eq!(&STATE_COMMAND_GUARD[..4], &[0x68, 0x9a, 0x00, 0xf9]);
         assert_eq!(&SYNC_STATUS_GUARD[..4], &[0x08, 0x1c, 0x00, 0x12]);
+        // sub sp, sp, #0xb0 / ldrb w8, [x0, #0x5f] / ldrb w1, [x19, #0x1]
+        assert_eq!(&SYNC_END_GUARD[..4], &[0xff, 0xc3, 0x02, 0xd1]);
+        assert_eq!(&DESYNC_GUARD[..4], &[0x08, 0x7c, 0x41, 0x39]);
+        assert_eq!(&PEER_ABORT_GUARD[..4], &[0x61, 0x06, 0x40, 0x39]);
+    }
+
+    #[test]
+    fn session_ends_name_their_trigger_and_pack() {
+        assert_eq!(sync_end_trigger(0x16d6b08), "desync");
+        assert_eq!(sync_end_trigger(0x16cfc18), "peer_silent");
+        assert_eq!(sync_end_trigger(0x1569718), "normal");
+        assert_eq!(sync_end_trigger(0x1234), "other");
+        let a = pack_sync_end(2, true, false, 1, 0x1a2b);
+        assert_eq!(a & 0xff, 2);
+        assert_eq!(a >> 8 & 0b11, 0b01);
+        assert_eq!(a >> 16 & 0xff, 1);
+        assert_eq!(a >> 32 & 0xffff, 0x1a2b);
     }
 }

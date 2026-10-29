@@ -252,6 +252,18 @@ pub enum Code {
     /// component's status byte; `b` = failed checks since the last
     /// wait-for-sync state began. One row per new status.
     SyncCheckFailed = 127,
+    /// The match lockstep session ended (0.8.2, `match_state`): `a` =
+    /// `match_state::pack_sync_end` (kind, desync seen, already ending, local
+    /// station, frame); `b` = the caller's `.text` offset, which names the
+    /// trigger (`match_state::sync_end_trigger`).
+    SyncEnd = 128,
+    /// This console found a peer's RNG check value differing from its own
+    /// (0.8.2): `a` = ours (bits 0–31) and the peer's station (32–39); `b` = the
+    /// peer's value (0–31) and the frame (32–47). At most eight per session.
+    DesyncSeen = 129,
+    /// A peer's abort message arrived (0.8.2): `a` = the sender's station
+    /// (bits 0–7) and the reason (8–23, 2 = desync); `b` = the local frame.
+    PeerAbort = 130,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -403,6 +415,9 @@ mod tests {
         assert_eq!(Code::RttWindow as u16, 125);
         assert_eq!(Code::MatchState as u16, 126);
         assert_eq!(Code::SyncCheckFailed as u16, 127);
+        assert_eq!(Code::SyncEnd as u16, 128);
+        assert_eq!(Code::DesyncSeen as u16, 129);
+        assert_eq!(Code::PeerAbort as u16, 130);
     }
     #[test]
     fn recursive_or_contended_logging_drops_instead_of_deadlocking() {

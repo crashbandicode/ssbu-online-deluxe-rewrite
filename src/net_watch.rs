@@ -99,6 +99,11 @@ pub struct Summary {
     sync_status: Option<u64>,
     /// The first leave/cleanup row: (accepted, name, ms since the last ping).
     first_end: Option<(bool, &'static str, u64)>,
+    /// The first lockstep session end that was not a normal one (else the
+    /// first): (trigger, kind).
+    sync_end: Option<(&'static str, u64)>,
+    desync_seen: u64,
+    peer_abort: Option<u64>,
     samples: u64,
     weighted: u64,
     min: Option<u64>,
@@ -151,6 +156,17 @@ impl Summary {
                 }
             }
             c if c == Code::SyncCheckFailed as u16 => self.sync_status = Some(a),
+            c if c == Code::SyncEnd as u16 => {
+                let trigger = crate::match_state::sync_end_trigger(b);
+                if self
+                    .sync_end
+                    .is_none_or(|(kept, _)| kept == "normal" && trigger != "normal")
+                {
+                    self.sync_end = Some((trigger, a & 0xff));
+                }
+            }
+            c if c == Code::DesyncSeen as u16 => self.desync_seen += 1,
+            c if c == Code::PeerAbort as u16 => self.peer_abort = Some(a >> 8 & 0xffff),
             _ => {}
         }
     }
@@ -167,6 +183,9 @@ impl Summary {
         let first_end = self
             .first_end
             .map_or("none".to_string(), |(_, name, ms)| format!("{name}@{ms}ms"));
+        let sync_end = self.sync_end.map_or("none".to_string(), |(trigger, kind)| {
+            format!("{trigger}/{kind}")
+        });
         let path: Vec<&str> = self
             .path
             .iter()
@@ -182,7 +201,7 @@ impl Summary {
             path.join(">")
         };
         format!(
-            "net rtt_samples={} rtt_min_ms={} rtt_mean_ms={} rtt_max_ms={} max_gap_ms={} gaps={} peer_left={} session_ended={} first_end={first_end} link_changes={} link_down_at_end={} silent_ms_at_last_window={} sync_check_failed={} states={path}\n",
+            "net rtt_samples={} rtt_min_ms={} rtt_mean_ms={} rtt_max_ms={} max_gap_ms={} gaps={} peer_left={} session_ended={} first_end={first_end} link_changes={} link_down_at_end={} silent_ms_at_last_window={} sync_check_failed={} sync_end={sync_end} desync_seen={} peer_abort={} states={path}\n",
             self.samples,
             ms(self.min),
             ms(self.weighted.checked_div(self.samples)),
@@ -195,6 +214,8 @@ impl Summary {
             self.link_down,
             ms(self.last_silent),
             ms(self.sync_status),
+            self.desync_seen,
+            ms(self.peer_abort),
         )
     }
 }
@@ -289,7 +310,18 @@ mod tests {
         );
         assert_eq!(
             summary.line(),
-            "net rtt_samples=16 rtt_min_ms=15 rtt_mean_ms=27 rtt_max_ms=50 max_gap_ms=2500 gaps=1 peer_left=2 session_ended=0 first_end=peer_left@2400ms link_changes=1 link_down_at_end=false silent_ms_at_last_window=2100 sync_check_failed=8 states=Melee>WaitForSyncWhenEnding>DisconnectSyncCommunication\n"
+            "net rtt_samples=16 rtt_min_ms=15 rtt_mean_ms=27 rtt_max_ms=50 max_gap_ms=2500 gaps=1 peer_left=2 session_ended=0 first_end=peer_left@2400ms link_changes=1 link_down_at_end=false silent_ms_at_last_window=2100 sync_check_failed=8 sync_end=none desync_seen=0 peer_abort=none states=Melee>WaitForSyncWhenEnding>DisconnectSyncCommunication\n"
+        );
+        // A desync end replaces a normal one; a later end does not replace it.
+        summary.row(Code::SyncEnd as u16, 1, 0x1569718);
+        summary.row(Code::DesyncSeen as u16, 0x1234, 0x5678);
+        summary.row(Code::SyncEnd as u16, 2, 0x16d6b08);
+        summary.row(Code::SyncEnd as u16, 1, 0x1569718);
+        summary.row(Code::PeerAbort as u16, 1 | 2 << 8, 900);
+        let line = summary.line();
+        assert!(
+            line.contains("sync_end=desync/2 desync_seen=1 peer_abort=2 "),
+            "{line}"
         );
         // A later accepted row does not replace an accepted first end.
         summary.row(Code::SessionEnded as u16, 1, 2_401);
@@ -300,6 +332,8 @@ mod tests {
         let empty = Summary::default().line();
         assert!(empty.contains("rtt_min_ms=none"));
         assert!(empty.contains("first_end=none"));
-        assert!(empty.ends_with("sync_check_failed=none states=none\n"));
+        assert!(empty.ends_with(
+            "sync_check_failed=none sync_end=none desync_seen=0 peer_abort=none states=none\n"
+        ));
     }
 }
