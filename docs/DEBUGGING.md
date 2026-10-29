@@ -170,6 +170,9 @@ data directory and flags.
 | 125 | Ping window (0.8.2), every 5 s while a ping arrived in the last 30 s: a bits 0–15 = pings, 16–31 = min ms, 32–47 = max ms, 48–63 = mean ms; b bits 0–31 = longest gap in the window (ms), 32–63 = ms since the newest ping at the window's end. Pings arrive about twice a second |
 | 126 | Melee-sequence state command (0.8.2, `match_state`), observed in the game's state-machine command processor (`.text+0x135b8bc`): a bits 0–7 = state id (`match_state::NAMES`; 14 = `StateDisconnectSyncCommunication`), 8–15 = command kind; b = the previous state's id (0xff if not a melee state). In the 2026-10-29 Eden runs only the disconnect state appeared (kind 3), also at the end of offline demo matches |
 | 127 | The game's sync-communication check failed (0.8.2): the wait-for-sync states call `.text+0x1502bd0`, which returns 1 while the link is up; on failure it stores the network component's status byte (`manager+0x58`) and the state queues `StateDisconnectSyncCommunication`. a = that status byte, b = failed checks since the wait began. Status 9 followed every online early end in the Eden runs |
+| 128 | The match lockstep session ended (0.8.2, at `.text+0x16ce7c0`): a bits 0–7 = kind (1 normal, 2 abort), bit 8 = a desync was already seen, bit 9 = already ending, 16–23 = this console's station, 32–47 = the frame; b = the caller's `.text` offset, which names the trigger: `0x16d6b08` desync, `0x16cfc18` peer silent past its timeout (20 s default), `0x16cfb8c` 31 s session timeout, `0x16d5ec0` referee, `0x1563258` end judge, `0x1569718`/`0x1568824` normal (`match_state::sync_end_trigger`) |
+| 129 | Desync seen (0.8.2, at `.text+0x16cf304`): the lockstep carries the XOR of all game-RNG words per frame, and a peer's value differed from this console's. a bits 0–31 = ours, 32–39 = the peer's station; b bits 0–31 = the peer's value, 32–47 = the frame. At most eight per 10 s. Any divergence that changes RNG draws shows here; one that does not (damage only) does not |
+| 130 | A peer's abort message arrived (0.8.2, the type-7 case at `.text+0x16cc2c4`): a bits 0–7 = the sender's station, 8–23 = the reason (2 = desync); b = the local frame. A console that has not compared the bad frame yet ends at once on it |
 
 Codes 73 `AutoContext` and 74 `AutoRequest`
 ([`auto_driver.rs`](../src/runtime/auto_driver.rs)), 78 `ResolutionReport`,
@@ -230,6 +233,7 @@ experiment folder `usb-desync-1029/eden/`) gave these signatures:
 | Deliberate desync on the other console (a KO only it saw) | `first_end=session_ended` with pings 0.4 s old, at the moment of the KO | "A connection error has occurred." |
 | The console that diverged (same run) | the same dialog; pings stop; ~9 s later `peer_left`/`session_ended` with ~9.3 s of silence, then code 127 status 9 | "A connection error has occurred." |
 | Desync in damage only (30% on one console) | nothing: the match ran to time and both results screens agreed | normal results |
+| KO desync, rerun with codes 128–130 | both consoles: code 129 at the same frame (1131) with the two check values mirrored, then code 128 kind 2 from `0x16d6b08` (desync) | "A connection error has occurred." |
 
 Reading: fresh pings at `first_end` mean a game decided to end the session
 (this console's when it is `session_ended`, the other's when it is an
@@ -238,7 +242,13 @@ stopped answering. In one run the console that ended up in the menus saw an
 accepted `peer_left` first while the other played on to its results screen, so a
 `peer_left` can also be the other game removing this console. In a desync the
 console that ended the session was the one that did not diverge, so leaving
-first is not proof of fault. A code 124
+first is not proof of fault. Codes 128–130 name a desync outright (and the
+frame), but both consoles see the same mismatch, so they do not say which one
+diverged; that needs the other console's log or knowing which side ran
+gameplay-changing code. A code 128 from `0x16cfc18` is the other console going
+silent; a 130 without a 129 is the other console reporting the desync first.
+In the game an aborted online match ends with result 10, "No contest"
+(`text+0x52e8b41`). A code 124
 change near the end shows this console's own link failing. Eden's LAN mode
 has no Nintendo match server, so an aborted match ends in a dialog and the
 menus; a console session may end on a results screen instead.
