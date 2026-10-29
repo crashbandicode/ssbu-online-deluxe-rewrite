@@ -19,10 +19,8 @@ mod imgui_stats;
 mod input;
 mod logging;
 mod match_log;
-mod match_state;
 mod memory;
 mod native_banner;
-mod net_watch;
 mod nvn;
 mod online;
 mod online_session;
@@ -312,8 +310,6 @@ pub fn main() {
         ("SCENE", online::install as fn()),
         ("BUFFER", hooks::install_latency as fn()),
         ("PIA", pia_rtt::install as fn()),
-        // How a match ended (0.8.2): state commands and the sync check, read-only.
-        ("STATE", match_state::install as fn()),
         // Game-aware Horizon-OC client (0.8.1): a thread and IPC only, no hook.
         // After PIA, whose samples are its only online evidence.
         ("HOC", hoc_client::install as fn()),

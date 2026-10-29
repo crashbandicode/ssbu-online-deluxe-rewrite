@@ -30,21 +30,13 @@ extern "C" {
     fn GetInternetConnectionStatus(out: *mut u8) -> u32;
 }
 
-/// The console's `nn::nifm::InternetConnectionStatus` read into a zeroed
-/// 12-byte object, and the call's result (0 while connected). A read-only
-/// status query; `net_watch` polls it every 500 ms.
-pub(super) fn internet_status() -> (u32, [u8; 12]) {
-    let mut raw = [0u8; 12];
-    let result = unsafe { GetInternetConnectionStatus(raw.as_mut_ptr()) };
-    (result, raw)
-}
-
 /// Manager wrapper `0x10860`: pass a zeroed status object and keep the low
 /// byte of the first word on success. Failure leaves that byte at 0. Values
 /// other than Wifi (1) and Ethernet (2), including the manager's emulated 3,
 /// stay 0. This byte is not a platform label.
 pub(super) fn refresh_local_facts() {
-    let (result, raw) = internet_status();
+    let mut raw = [0u8; 12];
+    let result = unsafe { GetInternetConnectionStatus(raw.as_mut_ptr()) };
     let byte = if result == 0 && matches!(raw[0], 1 | 2) {
         raw[0]
     } else {

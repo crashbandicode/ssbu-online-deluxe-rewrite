@@ -296,7 +296,6 @@ unsafe fn deluxe_rewrite_observe_rtt_sample(ctx: &InlineCtx) {
     if sample.ticks_per_ms != 0 {
         TICKS_PER_MS.store(sample.ticks_per_ms, Ordering::Relaxed);
     }
-    super::net_watch::sample(sample.remote, sample.local, sample.rtt_ms);
     let station = station_pick(crate::peer_transport::selection_snapshot());
     match with_session(|session, epoch| {
         session.accept(epoch, station, Some(sample.now_tick), |table| {
@@ -321,13 +320,11 @@ unsafe fn deluxe_rewrite_observe_station_left(ctx: &InlineCtx) {
     let protocol = ctx.registers[0].x();
     let remote = ctx.registers[1].w();
     let station = station_pick(crate::peer_transport::selection_snapshot());
-    let accepted = with_session(|session, epoch| {
+    match with_session(|session, epoch| {
         session.accept(epoch, station, None, |table| {
             table.station_left(protocol, remote)
         })
-    });
-    super::net_watch::left(remote, accepted == Some(true));
-    match accepted {
+    }) {
         Some(true) => retire_publication(|| crate::peer_transport::clear_station(remote)),
         Some(false) => {}
         None => lifecycle_missed(),
@@ -338,11 +335,9 @@ unsafe fn deluxe_rewrite_observe_station_left(ctx: &InlineCtx) {
 unsafe fn deluxe_rewrite_observe_session_end(ctx: &InlineCtx) {
     let protocol = ctx.registers[0].x();
     let station = station_pick(crate::peer_transport::selection_snapshot());
-    let accepted = with_session(|session, epoch| {
+    match with_session(|session, epoch| {
         session.accept(epoch, station, None, |table| table.session_end(protocol))
-    });
-    super::net_watch::session_ended(accepted == Some(true));
-    match accepted {
+    }) {
         Some(true) => retire_publication(crate::peer_transport::clear_session),
         Some(false) => {}
         None => lifecycle_missed(),

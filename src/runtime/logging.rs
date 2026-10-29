@@ -232,7 +232,6 @@ pub(super) fn start(version: &str) {
                 super::connection_transport::poll();
                 super::fighter_probe::poll();
                 iteration += 1;
-                super::net_watch::poll(iteration);
                 super::hang_trace::poll(iteration);
                 super::clock_probe::poll(iteration);
                 #[cfg(feature = "coverage")]

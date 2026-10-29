@@ -1,56 +1,5 @@
 # Validation record
 
-## Unreleased: who-ended-it telemetry (codes 121–130) — 2026-10-29
-
-Telemetry to tell this console's side from the other when an online match
-ends early. All of it is read-only.
-
-**Changes** (`698ca14`, `27d3ad8`, `5e6a697`):
-
-- `net_watch`: Pia station-left and session-cleanup rows with the ping age,
-  ping gaps, a 5 s ping window, and this console's `nifm` status on change.
-- `match_state`: the melee sequence's state commands (`.text+0x135b8bc`) and
-  the sync-communication check's failure status (`.text+0x1502c60`), both
-  guarded by 64 bytes.
-- The lockstep's own desync check, abort messages and session ends
-  (`.text+0x16cf304`, `.text+0x16cc2c4`, `.text+0x16ce7c0`), from a static
-  study of the 13.0.5 image: every input record carries the XOR of the
-  game-RNG words for its frame, peers compare it, and a mismatch aborts the
-  match with result 10, "No contest".
-- Stage-log footers gain `online_marked` and a `net` line with `first_end`,
-  `sync_end`, `desync_seen` and `peer_abort`.
-
-**Gates.** clippy `-D warnings` clean; `cargo build --no-default-features`;
-`cargo test` 319 passed (packing, the footer line, the guards, Hash40 against
-the game's own constants, the trigger table); the Skyline build had no
-warnings. Candidate `0.8.1-5e6a697e8e18-1793278764`, NRO
-`ceead1bea7f12f70007355b68d6a1f49247728849f0bf0c8d4f0d5a429708727`.
-
-**Eden LAN Online, Surface + Yoga (2026-10-29).** Telemetry build on one
-instance, the same build with an Eden-only probe on the other (never committed
-or shipped): with a flag file the probe either added 30% damage to entry 0 or
-moved it below the blast zone, on that instance only.
-
-- A full match with no probe stayed in sync (paired screenshots agree each
-  ~6 s) and reached results on both.
-- One instance at 150% emulation speed stayed in sync through attacks: the
-  timers agreed within hundredths; lockstep held the faster side back.
-- 30% damage on one instance only (seen on its HUD, 0% on the other) was not
-  detected: the match ran to time and both results screens agreed.
-- A KO on one instance only was caught at once: both showed "A connection
-  error has occurred." The console that did not diverge ended its session
-  first with fresh pings; the diverged one timed out ~9 s later.
-- Rerun with codes 128–130 (`ceead1be` / probe on the same commit): 64 ms
-  after the KO both consoles logged code 129 at frame 1131 with the check
-  values mirrored (`0x3f64634c` on the diverged one, `0xdbfd9659` on the
-  other) and code 128 kind 2 from the desync caller.
-- Disconnects for self-destructs and for inactivity gave the signatures in
-  `DEBUGGING.md` ("Who ended an online match early").
-- Not reproduced: the "No contest" results screen. Eden's LAN mode has no
-  Nintendo match server; aborted matches end in a dialog and the menus.
-
-Not run on the console yet.
-
 ## Unreleased: L+R+X only on the highlight; refresh-clock counters from boot — 2026-10-28
 
 The operator asked for two corrections to candidate `062bf65`:
