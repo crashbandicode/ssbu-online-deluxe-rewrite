@@ -1,5 +1,40 @@
 # Validation record
 
+## 0.9.0 — release assets, Eden check and card install — 2026-10-31
+
+Built from clean tag `v0.9.0` (`d6402b4`) with `tools/Build.ps1 -Package`.
+
+- Build ID: `0.9.0-d6402b44f96a-1793417324`.
+- NRO: **1,159,168 bytes**, SHA-256
+  `a068094b40f2a58423b3cc0954332014e6901475afbe8918aa1656d415dc0ca4`.
+- Manifest SHA-256:
+  `e88c85c50e18824c84519d4d37e5a61e162accbfd81dfbd036a8b3a855d5eab6`
+  (`runtime_tested=false`).
+- The [Forgejo release](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.9.0)
+  (release 638) carries both; each was downloaded without authentication and
+  matched.
+
+**Eden (2026-10-31 03:33–03:38Z).** This NRO next to the card's other 15
+plugins: start-up through `fighter_cut_in_ready`, the renderer
+`engine_status=Active` in Vanilla with 16,102 observed presents, a heartbeat
+every 5 s to the end, and no error rows. An offline 1v1 (Isabelle against a
+level-1 CPU on Small Battlefield) ran to the results and back to the character
+select, with its stage log `matches/000030-singles-15b.log`. No online play.
+
+**Card install (DBI, 03:53:36Z, `installed_verified`).** Installed at the
+operator's request.
+
+- Candidate `3ea3c49` (`a0a4c9a0…`) was replaced by `a068094b…`, which read
+  back identical.
+- The other plugins and the Deluxe, FX Control and Hekate configs read back
+  unchanged.
+- **Rollback:** copy `backups/pre-a068094b40f2a584.nro` (the `3ea3c49` build)
+  over the plugin.
+- Receipt: `switch-mtp-vcut-1031/deluxe/deployment.json` in the gsp-visualizer
+  work folder.
+
+Not run on the console yet.
+
 ## 0.9.0 — release source and host gates — 2026-10-31
 
 0.9.0 merges `fix/lobby-practice-window` (head `326236e`) into main. That
