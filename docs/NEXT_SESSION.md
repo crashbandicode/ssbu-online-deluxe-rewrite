@@ -1,5 +1,92 @@
 # Resume and test plan
 
+## One-boot checks: You-line controls, lobby window, 120 Hz — 2026-10-28
+
+Installed on the card on 2026-10-28: candidate
+`0.8.1-3ea3c490c9dc-1793217844` (NRO `a0a4c9a0…`, branch
+`fix/lobby-practice-window`), with `hoc_oc=online` restored in the config.
+L+R+X acts only on the highlighted row, and code 120 logs the refresh-clock
+counters every 5 s from boot
+([Validation](VALIDATION.md#unreleased-lrx-only-on-the-highlight-refresh-clock-counters-from-boot--2026-10-28)).
+It carries three changes
+([Validation](VALIDATION.md#unreleased-you-line-mode-focus-and-per-stage-logs--2026-10-28)):
+
+- the You-line mode focus;
+- per-stage logs under `matches/`;
+- the lobby fix and pacing diagnostics below.
+
+Everything here fits in one boot, and no flag file needs adding or removing.
+
+**You-line controls.**
+
+1. Open the window (L+R+Down) and select **You**. A light-blue frame sits on the
+   eye.
+2. ZR+Right moves it to the TV, then to the clock (with the Horizon-OC fork),
+   then back to the eye.
+3. L+R+X toggles the framed mode: Stealth (eye), Streamer (TV), OC (clock:
+   white = always; grey or green = online).
+4. ZR+X, ZR+Y and ZR+L3 do nothing anywhere, including in a match.
+5. On NetProfile, L+R+X still toggles Vanilla+ (or cycles manual console
+   LLUltra).
+6. On NetLatency, with the window hidden, or in a match with a row other than
+   You or NetProfile highlighted, L+R+X changes nothing.
+
+**120 Hz A/B on one boot.** Leave the dock at 120 Hz, the refresh-clock NRO
+and its `telemetry.flag` as they are. Between matches, change the profile in
+the window: NetProfile manual LessLag, manual Vanilla with Vanilla+ off (L+R+X
+on NetProfile), then Vanilla+ on. Note which matches tore.
+
+Each match's log in `matches/` records:
+
+- the profile it ran (`render_start` / `render_end`);
+- `present_spacing` and the pacing outliers;
+- the refresh-clock 120 Hz counters at both ends;
+- a code 120 row every 5 s with the refresh-clock VSync and game-tick counts.
+
+Code 120 runs from boot, so `events.log` also covers menus and lobbies.
+
+The earlier five-step plan below asked for relaunches to remove
+`telemetry.flag`; the per-stage logs make that unnecessary unless they show
+regular 1 s stalls. Only `observe-only.flag` (refresh-clock normalisation off)
+still needs a relaunch, and only if every profile tears.
+
+## Lobby practice window and 120 Hz tearing checks — 2026-10-28
+
+Candidate `0.8.1-ae69cce7e744-1793214821` (NRO `47fc0dc4…`, branch
+`fix/lobby-practice-window`) classifies waiting-room lobby practice as
+Training and adds the present-pacing diagnostics
+([Validation](VALIDATION.md#unreleased-lobby-practice-window--2026-10-28),
+[tearing analysis](VALIDATION.md#120-hz-tearing-report--logs-show-no-cause--2026-10-28)).
+It is superseded by the candidate above, which includes it.
+
+**Lobby window.** On the console:
+
+1. Enter a local-wireless lobby, then load a different practice stage. The
+   Player Info window should stay the vertical window at the right.
+2. Do the same in the Quickplay lobby.
+3. Play an online match. It should still show the two-line strip.
+
+In the retained `events.log`, each code 110 row has a code 116 row after it.
+Lobby stages should show bit 10 set and code 110 scene 1 (Training). Match
+stages should show bit 10 clear, with scene 2 or 3. If bit 9 is clear, the
+13.0.5 guard rejected the reads and nothing changed.
+
+**120 Hz tearing A/B.** Keep the dock at 120 Hz and the refresh-clock NRO
+installed, and change one thing per match:
+
+1. Remove `ultimate/ssbu-refresh-clock/telemetry.flag` and relaunch Smash, so
+   no status file is written once a second.
+2. Play one match on manual LessLag.
+3. Play one match on manual Vanilla with `vanilla_plus=false`.
+4. If both are clean, play one with Vanilla+ (`vanilla_plus=true`), the
+   profile of the earlier Quickplay matches.
+5. If Vanilla and LessLag both tear, add `observe-only.flag` (the
+   refresh-clock README) for one match before changing Deluxe.
+
+Note which matches tore. Then read back `events.log` (codes 117, 118, 119
+and the code 24 masks) and `renderer-status.txt` (`present_pace_outliers`,
+`present_reacquired_last`, `present_interval`).
+
 ## 0.8.1 Horizon-OC release check — 2026-10-28
 
 **Done.** The operator tested release `0.8.1-84da224d084f-1793155065` (NRO

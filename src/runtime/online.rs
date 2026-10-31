@@ -97,8 +97,16 @@ unsafe fn deluxe_rewrite_stage_setup(ctx: &InlineCtx) {
         return;
     }
     let stage_id = *(stage_addr as *const u32);
-    let status =
-        auto_policy::classify_stage(stage_id, is_training_mode(), get_fighter_entry_count());
+    // Waiting-room lobby practice counts as Training whatever stage it loads.
+    let mode = super::scene_mode::current();
+    let lobby = mode.is_some_and(|(initialized, melee, word)| {
+        auto_policy::is_waiting_practice(initialized, melee, word)
+    });
+    let status = auto_policy::classify_stage(
+        stage_id,
+        is_training_mode() || lobby,
+        get_fighter_entry_count(),
+    );
     // Reset on each stage entry, even if two consecutive stages classify alike.
     // A result from the previous match must never become this match's value.
     match status {
@@ -107,6 +115,13 @@ unsafe fn deluxe_rewrite_stage_setup(ctx: &InlineCtx) {
         SceneStatus::Inactive => super::end_auto_buffer_match(),
     }
     record(Code::StageLoaded, u64::from(stage_id), status as u64);
+    let (fields, word) = mode.map_or((0, 0), |(initialized, melee, word)| {
+        (
+            u64::from(melee) | u64::from(initialized) << 8 | 1 << 9,
+            u64::from(word),
+        )
+    });
+    record(Code::SceneMode, fields | u64::from(lobby) << 10, word);
     auto_driver::set_scene(None, Some(status), STAGE_SETUP as u64);
     super::capture::note_stage(status);
 }
@@ -129,6 +144,8 @@ pub(super) fn install() {
         record(Code::Compatibility, 3, STAGE_SETUP as u64);
         return;
     }
+    // A failed guard leaves lobby practice classified as before (bit 9 clear).
+    super::scene_mode::init();
     skyline::install_hooks!(
         deluxe_rewrite_main_menu,
         deluxe_rewrite_quickplay,

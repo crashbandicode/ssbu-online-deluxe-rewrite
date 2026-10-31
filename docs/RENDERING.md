@@ -92,7 +92,8 @@ Vanilla choice in menus, offline matches and Training is Vanilla+ too. The
 NetProfile row, the in-match strip's `Profile:` field and the native CSS
 banner's `You:` field read `Vanilla+` (manual), `Vanilla+*` (cleanup hold) and
 `Auto:Van+` (Auto); with the flag off they read `Vanilla`, `Vanilla*` and
-`Auto:Van`. **L+R+X** (neither ZL nor ZR held) toggles the flag live and saves
+`Auto:Van`. **L+R+X** with NetProfile highlighted (neither ZL nor ZR held; only
+there since 0.8.2) toggles the flag live and saves
 it ([Controls](CONTROLS.md)); `early_present=false` still disables every early
 present, Vanilla+ included. The peer exchange still announces Vanilla, because
 the ring shape is unchanged.
@@ -140,7 +141,7 @@ menu, the former UltraRes row is folded into **NetProfile** as one LLUltra
 stop labeled LLUltra (576p), LLUltra+ (720p) or LLUltra++ (1080p). Left or
 Right leaves that stop immediately and remembers the resolution; entering
 LLUltra again shows the saved level. While manual console LLUltra is selected,
-L+R+X cycles 576 → 720 → 1080 → 576 in place. Existing INI values and
+L+R+X with NetProfile highlighted cycles 576 → 720 → 1080 → 576 in place. Existing INI values and
 renderer modes are unchanged ([Controls](CONTROLS.md)). `1080` is the game's
 native level. Dynamic
 resolution still steps down from the chosen base (1080p → 720p, 720p → 576p,

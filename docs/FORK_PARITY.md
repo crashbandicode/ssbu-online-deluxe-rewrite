@@ -35,15 +35,19 @@ inventories below. Settings has You/Opp summaries and only NetLatency/NetProfile
 controls. You is the first selectable row and carries drawn Stealth-eye and
 Streamer-TV icons; with You selected, ZR+X/Y toggle the same saved booleans,
 once per new press. Other rows, other pages and the hidden window have no privacy
-shortcut; the hidden-window Streamer chord is retired.
+shortcut; the hidden-window Streamer chord is retired. **0.8.2** replaces ZR+X/Y
+(and 0.8.1's ZR+L3 for the Horizon-OC clock) with one You-row control:
+ZR+Left/Right moves a light-blue frame between the icons and L+R+X toggles the
+framed one. Neither the fork nor any earlier build of this rewrite has it.
 Stealth's session latch and reconnect requirement remain, with an amber eye,
-asterisk and notice. L+R+X still toggles Vanilla+, except while manual
-console LLUltra is selected, where that chord cycles the saved resolution in
-place and leaves Vanilla+ unchanged.
+asterisk and notice. L+R+X still toggles Vanilla+ (since 0.8.2 only with
+NetProfile highlighted), except while manual console LLUltra is selected,
+where that chord cycles the saved resolution in place and leaves Vanilla+
+unchanged.
 
 Console NetProfile keeps one LLUltra stop. The labels LLUltra (576p), LLUltra+
 (720p) and LLUltra++ (1080p) name the saved `ultra_resolution`. Left or Right
-leaves the stop and remembers the resolution; L+R+X cycles 576 → 720 → 1080 →
+leaves the stop and remembers the resolution; L+R+X on NetProfile cycles 576 → 720 → 1080 →
 576 while that manual console selection is current. Mode bytes, INI keys, Auto,
 cleanup holds, DRS/application hooks, peer wire bits/names and plugin ABI remain
 unchanged. A resolution-only chord publishes settings without selecting the
@@ -441,7 +445,7 @@ Native panes and streamer mode are live. `ui/native/mod.rs` `install()` is
 commented (`:381-382`); the menu hooks above still call
 `update_css_ui`, `update_local_online_ui`, and `update_online_arena_ui`.
 Streamer mode is L+R+ZL/ZR+Y (the rewrite accepted only L+R+ZR+Y in
-0.5.7–0.6.2; since 0.7.0 it uses ZR+Y on the Settings You row) and replaces latency/ping text with the LDN
+0.5.7–0.6.2; 0.7.0–0.8.1 used ZR+Y on the Settings You row, and since 0.8.2 L+R+X with the TV framed on You) and replaces latency/ping text with the LDN
 network count (`native/mod.rs:47-58`, `:221-228`). Station cycle is
 ZL+ZR+Left/Right or L+R+Left/Right (`:32-44`).
 
@@ -487,9 +491,9 @@ retained. Auto's target and the renderer's committed state are distinct.
 | Interface | Local nifm Wi-Fi/Ethernet/Unknown; selected peer's announced type or Unknown | No RTT-based or text-base-based physical-interface inference |
 | Stealth | Default On; suppress owned beacon and custom payload, retain receive; latched per connection, menu changes persist and show reconnect notice | Host-tested; Off interoperability and pending-On behavior observed on `410ac1f7`; fresh-On d9 suppressed its beacon with zero custom writes; saved Off stayed pending until reconnect |
 | Peer cycling | Bounded station selection using one identity snapshot for name/interface/settings/ping | 9e9 cycled two remote identities correctly in a three-station lobby; no three-station match completed |
-| Streamer | Since 0.7.0 ZR+Y on the Settings You row (a menu row plus the fork-style chord through 0.6.2); hides all remote rows and ping, persists to INI | d9 exact menu-saved INI reload and menu/chord privacy passed |
+| Streamer | Since 0.8.2 L+R+X with the TV framed on the Settings You row (ZR+Left/Right moves the frame); ZR+Y in 0.7.0–0.8.1, a menu row plus the fork-style chord through 0.6.2; hides all remote rows and ping, persists to INI | d9 exact menu-saved INI reload and menu/chord privacy passed |
 | Connection / match classification | Quickplay, Arena and Local stay distinct; fighter count classifies doubles; Training/result-stage rules retained | Stage/context guards required. Since 0.4.1 the latency mark changes Auto's effective connection without rewriting the stored one (`Scene::marked_online`); since 0.4.2 main-menu entry keeps a stored Quickplay and the diagnostics poll demotes an unmarked Singles/Doubles stage to Offline after five seconds (`offline_match_due`). **Deliberate difference, 0.8.1:** the mark used to survive until the connection became Offline, so after one marked Quickplay match the stale check never re-armed and a later offline match stayed Quickplay; now a Singles/Doubles stage entered after the shared online session ended (no Pia RTT sample for 15 s) drops the carried mark and proves itself again (`carried_mark_expired`, event 107 `a=3`). Back-to-back online matches keep it. Host-tested only |
-| Horizon-OC online-only profile (0.8.1) | No fork equivalent. **Added by this rewrite:** a client of the game-aware hoc-clk fork that lets Smash's saved Horizon-OC profile apply only during an online session (`hoc_oc=online`, ZR+L3, You-line clock mark). It sends no clock value and never reads or writes Horizon-OC's `config.ini`; outside a session Horizon-OC falls back to its own global profile or stock. No game hook: its own thread, sm and hoc:clk IPC, and Pia sample counters that already existed | Host-tested; operator-confirmed on console with candidate `788537d` (90 s hold), event log read back; the 0.8.1 15 s hold is host-tested only |
+| Horizon-OC online-only profile (0.8.1) | No fork equivalent. **Added by this rewrite:** a client of the game-aware hoc-clk fork that lets Smash's saved Horizon-OC profile apply only during an online session (`hoc_oc=online`, You-line clock mark toggled by ZR+L3 in 0.8.1 and by L+R+X with the clock framed since 0.8.2). It sends no clock value and never reads or writes Horizon-OC's `config.ini`; outside a session Horizon-OC falls back to its own global profile or stock. No game hook: its own thread, sm and hoc:clk IPC, and Pia sample counters that already existed | Host-tested; operator-confirmed on console with candidate `788537d` (90 s hold), event log read back; the 0.8.1 15 s hold is host-tested only |
 | Resolution and DRS | Committed profile plus explicit platform table; guarded resolution function/register/crop path | Console-policy Eden full-Gigaflare scaling and restoration passed for Less/Ultra/Doubles while that trigger existed; Vanilla stays off; b19 title fullscreen-crop reset fixed |
 | Cut-in scaler | Bounded visual resolution reports driven by the guarded fighter Main and cut-in sites | Two approximate callback-count gates passed; Luigi Up-B cut-in scaling/restoration passed |
 | Sephiroth Gigaflare scaler | **Parity deliberately dropped 2026-10-17.** The fork scales on the full-charge shot (`fighter/sephiroth.rs:40-60`); the rewrite carried it until then and removed it | Console measurement did not justify it: Vanilla and LessLag hold 60 through the move on the Switch (2026-10-15 redo), so the trigger only cost a `WorkModule` read per Sephiroth tick. Eden Gigaflare evidence above is history |

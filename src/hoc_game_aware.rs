@@ -501,7 +501,7 @@ impl Heartbeat {
 /// What the You-line mark and the Performance `Clock` fact show.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Indicator {
-    /// No fork: nothing is shown and ZR+L3 does nothing.
+    /// No fork: no clock, so OC is not a You focus stop.
     Hidden,
     /// Fork present, `Always`: Horizon-OC decides as it always has.
     Always,
@@ -522,6 +522,9 @@ pub enum MarkTone {
     Lit,
     Dim,
     Warn,
+    /// `hoc_oc=always` (0.8.2): the clock stays as the OC icon's off state, so
+    /// L+R+X on it can switch back to online.
+    Always,
 }
 
 pub const fn indicator(
@@ -553,19 +556,16 @@ impl Indicator {
         }
     }
 
-    /// The `OC` mark after the You-line privacy icons; `Online` mode only.
+    /// The OC clock after the You-line privacy icons, in either mode since
+    /// 0.8.2; it is the You focus stop that L+R+X toggles.
     pub const fn mark(self) -> Option<MarkTone> {
         match self {
-            Self::Hidden | Self::Always => None,
+            Self::Hidden => None,
+            Self::Always => Some(MarkTone::Always),
             Self::Applying => Some(MarkTone::Lit),
             Self::Idle => Some(MarkTone::Dim),
             Self::NoSignal | Self::Unavailable => Some(MarkTone::Warn),
         }
-    }
-
-    /// ZR+L3 changes the saved mode only while the fork answered.
-    pub const fn toggle_available(capability: Capability) -> bool {
-        matches!(capability, Capability::Present | Capability::Unavailable)
     }
 }
 
@@ -891,11 +891,11 @@ mod tests {
         assert_eq!(Indicator::Applying.mark(), Some(MarkTone::Lit));
         assert_eq!(Indicator::Idle.mark(), Some(MarkTone::Dim));
         assert_eq!(Indicator::NoSignal.mark(), Some(MarkTone::Warn));
-        assert_eq!(Indicator::Always.mark(), None);
+        // 0.8.2: Always keeps its clock, the OC icon's off state.
+        assert_eq!(Indicator::Always.mark(), Some(MarkTone::Always));
+        assert_eq!(Indicator::Hidden.mark(), None);
         assert_eq!(Indicator::Hidden.label(), None);
         assert_eq!(Indicator::Idle.label(), Some("OC online: idle"));
-        assert!(Indicator::toggle_available(Present));
-        assert!(!Indicator::toggle_available(Absent));
     }
 
     #[test]

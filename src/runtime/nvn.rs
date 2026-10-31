@@ -54,6 +54,103 @@ static ACQUIRE_TICK: AtomicU64 = AtomicU64::new(0);
 static TRACKED_ACQUIRES: AtomicU64 = AtomicU64::new(0);
 static TRACKED_PRESENTS: AtomicU64 = AtomicU64::new(0);
 static OUTSTANDING: AtomicI64 = AtomicI64::new(0);
+/// Last actual present of the tracked window (early or the game's own): tick
+/// and index, for the 0.8.2 pacing checks in `crate::present_pace`.
+static ACTUAL_TICK: AtomicU64 = AtomicU64::new(0);
+static ACTUAL_INDEX: AtomicI32 = AtomicI32::new(-1);
+static PACE_OUTLIERS: AtomicU64 = AtomicU64::new(0);
+static REACQUIRED: AtomicU64 = AtomicU64::new(0);
+static ACTUAL_PRESENTS: AtomicU64 = AtomicU64::new(0);
+/// Spacing histogram of actual presents (`match_log::spacing_bin`), for the
+/// per-stage logs.
+static SPACING: [AtomicU64; crate::match_log::SPACING_BINS] =
+    [const { AtomicU64::new(0) }; crate::match_log::SPACING_BINS];
+
+/// Cumulative present counters; a stage log writes the difference between
+/// its start and end (0.8.2).
+#[derive(Clone, Copy, Default)]
+pub(super) struct Pacing {
+    pub(super) actual: u64,
+    pub(super) early: u64,
+    pub(super) skips: u64,
+    pub(super) mismatches: u64,
+    pub(super) outliers: u64,
+    pub(super) reacquired: u64,
+    pub(super) spacing: [u64; crate::match_log::SPACING_BINS],
+}
+
+impl Pacing {
+    pub(super) fn since(self, start: Self) -> Self {
+        let mut spacing = self.spacing;
+        for (bin, before) in spacing.iter_mut().zip(start.spacing) {
+            *bin = bin.saturating_sub(before);
+        }
+        Self {
+            actual: self.actual.saturating_sub(start.actual),
+            early: self.early.saturating_sub(start.early),
+            skips: self.skips.saturating_sub(start.skips),
+            mismatches: self.mismatches.saturating_sub(start.mismatches),
+            outliers: self.outliers.saturating_sub(start.outliers),
+            reacquired: self.reacquired.saturating_sub(start.reacquired),
+            spacing,
+        }
+    }
+}
+
+pub(super) fn pacing() -> Pacing {
+    Pacing {
+        actual: ACTUAL_PRESENTS.load(Ordering::Relaxed),
+        early: EARLY_PRESENTS.load(Ordering::Relaxed),
+        skips: EARLY_SKIPS.load(Ordering::Relaxed),
+        mismatches: EARLY_MISMATCHES.load(Ordering::Relaxed),
+        outliers: PACE_OUTLIERS.load(Ordering::Relaxed),
+        reacquired: REACQUIRED.load(Ordering::Relaxed),
+        spacing: std::array::from_fn(|bin| SPACING[bin].load(Ordering::Relaxed)),
+    }
+}
+
+/// Active and allocated window textures and the present interval, as last
+/// read back (-1 unknown).
+pub(super) fn window_counts() -> (i32, i32, i32) {
+    (
+        ACTIVE.load(Ordering::Relaxed),
+        TOTAL.load(Ordering::Relaxed),
+        INTERVAL.load(Ordering::Relaxed),
+    )
+}
+/// Shared row budget of codes 117/118 (`present_pace::spend`).
+static PACE_BUDGET: AtomicU64 = AtomicU64::new(0);
+
+fn pace_row_allowed(tick: u64) -> bool {
+    match crate::present_pace::spend(PACE_BUDGET.load(Ordering::Relaxed), tick) {
+        Some(next) => {
+            PACE_BUDGET.store(next, Ordering::Relaxed);
+            true
+        }
+        None => false,
+    }
+}
+
+/// One actual present of the tracked window; `path` 1 early, 2 the game's.
+fn note_actual_present(index: i32, path: u64) {
+    let tick = unsafe { skyline::nn::os::GetSystemTick() as u64 };
+    let previous = ACTUAL_TICK.swap(tick, Ordering::Relaxed);
+    ACTUAL_INDEX.store(index, Ordering::Release);
+    ACTUAL_PRESENTS.fetch_add(1, Ordering::Relaxed);
+    if previous == 0 {
+        return;
+    }
+    let spacing = crate::present_pace::ticks_to_us(tick.saturating_sub(previous));
+    SPACING[crate::match_log::spacing_bin(spacing)].fetch_add(1, Ordering::Relaxed);
+    if crate::present_pace::pace_outlier(spacing) {
+        PACE_OUTLIERS.fetch_add(1, Ordering::Relaxed);
+        if pace_row_allowed(tick) {
+            let interval = u64::from(INTERVAL.load(Ordering::Relaxed) as u8);
+            let fields = u64::from(index as u8) | path << 8 | interval << 16;
+            super::record(super::Code::PresentPace, fields, spacing);
+        }
+    }
+}
 
 pub(super) fn present_serial() -> u64 {
     PRESENTS.load(Ordering::Relaxed)
@@ -116,7 +213,10 @@ unsafe fn readback(window: Ptr) {
             let f: unsafe extern "C" fn(Ptr) -> i32 = std::mem::transmute(address);
             f(window)
         };
-        value.store(n, Ordering::Relaxed);
+        let previous = value.swap(n, Ordering::Relaxed);
+        if std::ptr::eq(value, &INTERVAL) && previous != n {
+            super::record(super::Code::PresentInterval, n as u64, previous as u64);
+        }
     }
 }
 unsafe extern "C" fn window_initialize(window: Ptr, builder: *const c_void) -> u8 {
@@ -333,6 +433,7 @@ pub(super) unsafe fn present_at_flush() -> bool {
     let begin = super::api_trace::start();
     f(queue as Ptr, window, index);
     super::api_trace::end(begin, 1, index, 2);
+    note_actual_present(index, 1);
     EARLY_INDEX.store(index, Ordering::Release);
     EARLY_PRESENTS.fetch_add(1, Ordering::Relaxed);
     true
@@ -373,6 +474,9 @@ unsafe extern "C" fn queue_present(queue: Ptr, window: Ptr, index: i32) {
     } else {
         f(queue, window, index);
         super::api_trace::end(begin, 1, index, -1);
+        if tracked {
+            note_actual_present(index, 2);
+        }
     }
     if tracked {
         TRACKED_PRESENTS.fetch_add(1, Ordering::Relaxed);
@@ -434,6 +538,18 @@ unsafe extern "C" fn window_acquire(window: Ptr, sync: Ptr, index: *mut i32) {
         OUTSTANDING.fetch_add(1, Ordering::AcqRel);
         if !index.is_null() {
             PENDING_INDEX.store(*index, Ordering::Release);
+            if crate::present_pace::reacquired_last(ACTUAL_INDEX.load(Ordering::Acquire), *index) {
+                REACQUIRED.fetch_add(1, Ordering::Relaxed);
+                let tick = skyline::nn::os::GetSystemTick() as u64;
+                if pace_row_allowed(tick) {
+                    let since = tick.saturating_sub(ACTUAL_TICK.load(Ordering::Relaxed));
+                    super::record(
+                        super::Code::PresentReacquire,
+                        *index as u64,
+                        crate::present_pace::ticks_to_us(since),
+                    );
+                }
+            }
         }
     }
     if !index.is_null() {
@@ -480,10 +596,12 @@ pub(super) fn write_status() {
         );
         let _ = writeln!(
             file,
-            "early_presents={}\nearly_present_skips={}\nearly_present_mismatches={}",
+            "early_presents={}\nearly_present_skips={}\nearly_present_mismatches={}\npresent_pace_outliers={}\npresent_reacquired_last={}",
             EARLY_PRESENTS.load(Ordering::Relaxed),
             EARLY_SKIPS.load(Ordering::Relaxed),
-            EARLY_MISMATCHES.load(Ordering::Relaxed)
+            EARLY_MISMATCHES.load(Ordering::Relaxed),
+            PACE_OUTLIERS.load(Ordering::Relaxed),
+            REACQUIRED.load(Ordering::Relaxed)
         );
         super::imgui_stats::write_status(&mut file);
         let _ = write!(

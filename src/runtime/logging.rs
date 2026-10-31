@@ -200,6 +200,8 @@ pub(super) fn start(version: &str) {
     record(Code::Boot, plugin_start, text_base);
 
     let mut generation = CONFIG_GENERATION.load(Ordering::Acquire);
+    // The settings as loaded, then as last saved, so each save names its keys.
+    let mut saved = settings().serialize();
     startup_phase("diagnostic_thread_begin");
     // The Switch std default is a 2 MiB stack per thread, taken from the game
     // heap for the whole run. This thread formats log lines and streams CSV
@@ -213,6 +215,7 @@ pub(super) fn start(version: &str) {
             let mut iteration = 0u64;
             let mut error_reported = false;
             let mut capture = super::capture::Service::default();
+            let mut stages = super::match_log::MatchLog::default();
             loop {
                 // A running capture drains its rings twice per period so a
                 // match's row rate has twice the headroom of the 30 s capture.
@@ -235,6 +238,7 @@ pub(super) fn start(version: &str) {
                 super::coverage::poll(iteration);
                 if iteration.is_multiple_of(10) {
                     super::nvn::write_status();
+                    super::match_log::record_refresh_clock();
                     record(Code::Heartbeat, 0, iteration);
                     record(
                         Code::OverlayHealth,
@@ -252,6 +256,9 @@ pub(super) fn start(version: &str) {
                                 writeln!(file, "gap: ring overwritten after sequence {persisted}")?;
                             }
                             for event in snapshot.after(persisted) {
+                                // The per-stage logs (0.8.2); a replayed row
+                                // is skipped there by its sequence.
+                                stages.event(event);
                                 writeln!(
                                     file,
                                     "{} {} {} 0x{:x} 0x{:x}",
@@ -261,6 +268,7 @@ pub(super) fn start(version: &str) {
                             if snapshot.dropped != dropped {
                                 writeln!(file, "dropped_total={}", snapshot.dropped)?;
                             }
+                            stages.sync();
                             file.sync_data()
                         })();
                         match result {
@@ -289,10 +297,14 @@ pub(super) fn start(version: &str) {
                 super::plugin_export::flush_persistence();
                 let next_generation = CONFIG_GENERATION.load(Ordering::Acquire);
                 if next_generation != generation {
-                    match save_config(&settings()) {
+                    let config = settings();
+                    match save_config(&config) {
                         Ok(()) => {
                             generation = next_generation;
-                            record(Code::ConfigSaved, generation, 0);
+                            let text = config.serialize();
+                            let changed = crate::config::changed_keys(&saved, &text);
+                            record(Code::ConfigSaved, generation, changed);
+                            saved = text;
                         }
                         Err(error) if !error_reported => {
                             skyline::println!("[Deluxe] config save failed: {}", error);

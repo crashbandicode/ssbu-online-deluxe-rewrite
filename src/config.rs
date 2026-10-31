@@ -157,8 +157,9 @@ pub struct Config {
     /// `always` (default, and a missing key) is Horizon-OC's own behavior;
     /// `online` holds the profile back outside an online session through the
     /// game-aware hoc-clk fork. Written only when `online`, so a file that
-    /// never chose it still loads in a build without the key. ZR+L3 on
-    /// Settings toggles it while the fork answers.
+    /// never chose it still loads in a build without the key. L+R+X on the
+    /// You line's OC clock toggles it while the fork answers (0.8.2; ZR+L3
+    /// in 0.8.1).
     pub hoc_oc: OcMode,
 }
 
@@ -390,6 +391,52 @@ fn parse_count<T: TryFrom<u32>>(value: &str, max: u32, message: &str) -> Result<
         .ok_or_else(|| message.to_owned())
 }
 
+/// The fixed slot of each current key: duplicate detection in [`parse`] and
+/// the bit in [`changed_keys`].
+fn key_slot(key: &str) -> Option<usize> {
+    Some(match key {
+        "version" => 0,
+        "input_buffer" => 1,
+        "render_mode" => 2,
+        "auto_profile" => 3,
+        "platform" => 4,
+        "stealth" => 5,
+        "streamer" => 6,
+        "drs_moves" => 7,
+        "drs_adaptive" => 8,
+        "drs_adaptive_threshold_ms" => 9,
+        "drs_adaptive_trigger_frames" => 10,
+        "drs_adaptive_release_frames" => 11,
+        "ultra_resolution" => 12,
+        "hide_pages" => 13,
+        "perf_view" => 14,
+        "early_present" => 15,
+        "dispatcher_backoff" => 16,
+        "vanilla_plus" => 17,
+        "hints" => 18,
+        "hoc_oc" => 19,
+        _ => return None,
+    })
+}
+
+/// Bit `slot` for every key whose `key=value` line differs between two
+/// serialized configs, including a line only one of them has (0.8.2). Code 24
+/// carries it, so a log says which setting a save changed.
+pub fn changed_keys(previous: &str, next: &str) -> u64 {
+    fn lines(text: &str) -> Vec<(&str, &str)> {
+        text.lines()
+            .filter_map(|line| line.split_once('='))
+            .collect()
+    }
+    let (before, after) = (lines(previous), lines(next));
+    before
+        .iter()
+        .filter(|line| !after.contains(line))
+        .chain(after.iter().filter(|line| !before.contains(line)))
+        .filter_map(|(key, _)| key_slot(key))
+        .fold(0, |mask, slot| mask | 1 << slot)
+}
+
 pub fn parse(text: &str) -> Result<Config, String> {
     let mut config = Config::default();
     let mut seen = [false; 20];
@@ -413,28 +460,8 @@ pub fn parse(text: &str) -> Result<Config, String> {
         ) {
             continue;
         }
-        let slot = match key {
-            "version" => 0,
-            "input_buffer" => 1,
-            "render_mode" => 2,
-            "auto_profile" => 3,
-            "platform" => 4,
-            "stealth" => 5,
-            "streamer" => 6,
-            "drs_moves" => 7,
-            "drs_adaptive" => 8,
-            "drs_adaptive_threshold_ms" => 9,
-            "drs_adaptive_trigger_frames" => 10,
-            "drs_adaptive_release_frames" => 11,
-            "ultra_resolution" => 12,
-            "hide_pages" => 13,
-            "perf_view" => 14,
-            "early_present" => 15,
-            "dispatcher_backoff" => 16,
-            "vanilla_plus" => 17,
-            "hints" => 18,
-            "hoc_oc" => 19,
-            _ => return Err(error(&format!("unknown key '{key}'"))),
+        let Some(slot) = key_slot(key) else {
+            return Err(error(&format!("unknown key '{key}'")));
         };
         if seen[slot] {
             return Err(error(&format!("duplicate key '{key}'")));
@@ -749,6 +776,27 @@ mod tests {
             parse("version=1\nhoc_oc=online\nhoc_oc=always").unwrap_err(),
             "line 3: duplicate key 'hoc_oc'"
         );
+    }
+
+    #[test]
+    fn changed_keys_names_each_setting_a_save_changed() {
+        let base = Config {
+            hoc_oc: OcMode::Online,
+            ..Config::default()
+        };
+        let text = base.serialize();
+        assert_eq!(changed_keys(&text, &text), 0);
+        let vanilla_plus = Config {
+            vanilla_plus: !base.vanilla_plus,
+            ..base
+        };
+        assert_eq!(changed_keys(&text, &vanilla_plus.serialize()), 1 << 17);
+        // Back to always drops the hoc_oc line; that still counts.
+        let always = Config {
+            hoc_oc: OcMode::Always,
+            ..vanilla_plus
+        };
+        assert_eq!(changed_keys(&text, &always.serialize()), 1 << 17 | 1 << 19);
     }
 
     #[test]

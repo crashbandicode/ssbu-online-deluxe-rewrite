@@ -18,6 +18,7 @@ mod imgui;
 mod imgui_stats;
 mod input;
 mod logging;
+mod match_log;
 mod memory;
 mod native_banner;
 mod nvn;
@@ -31,6 +32,7 @@ mod render_ultra;
 mod renderer;
 mod resolution;
 mod response_probe;
+mod scene_mode;
 mod ui;
 
 use crate::{
@@ -67,7 +69,7 @@ static VANILLA_PLUS: AtomicBool = AtomicBool::new(true);
 /// `hints` (0.6.0): the chord hint line under the Settings and Window tables.
 static HINTS: AtomicBool = AtomicBool::new(true);
 /// `hoc_oc` (0.8.1): `OcMode` as u8. The game-aware client thread reads it
-/// every pass; ZR+L3 on Settings flips it.
+/// every pass; L+R+X on the You line's OC clock flips it (0.8.2).
 static HOC_OC: AtomicU8 = AtomicU8::new(0);
 static DRS_MOVES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 static DRS_ADAPTIVE: AtomicBool = AtomicBool::new(false);

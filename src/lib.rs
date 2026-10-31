@@ -13,6 +13,7 @@ pub mod hoc_game_aware;
 pub mod hook_chain;
 pub mod hud_place;
 mod imgui_host;
+pub mod match_log;
 pub mod menu;
 pub mod native_banner;
 pub mod online_session;
@@ -22,6 +23,8 @@ mod peer_transport;
 mod pia_rtt;
 pub mod plugin_api;
 pub mod policy;
+pub mod present_pace;
+pub mod refresh_clock_status;
 pub mod ui_safety;
 
 pub mod build_info {

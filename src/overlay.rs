@@ -1,19 +1,19 @@
 //! Scene-independent controller UX and bounded frame statistics.
 use crate::{
     config::{Config, HiddenPages},
-    menu::{Action, Menu, NativePads},
+    menu::{Action, Menu, NativePads, YouIcon},
 };
 
 pub(crate) const L: u64 = 1 << 6;
 pub(crate) const R: u64 = 1 << 7;
 const ZL: u64 = 1 << 8;
 const ZR: u64 = 1 << 9;
-/// L+R+X toggles Vanilla+, or cycles manual console LLUltra in place.
-/// You-selected ZR+X toggles Stealth.
+/// L+R+X toggles only the highlighted row's value (0.8.2): the focused
+/// You-line mode on You, Vanilla+ or the manual console LLUltra resolution on
+/// NetProfile, nothing elsewhere or with the window hidden. The ZR+X, ZR+Y
+/// and ZR+L3 mode chords were retired in 0.8.2 after an accidental in-match
+/// ZR+L3.
 const X: u64 = 1 << 2;
-const Y: u64 = 1 << 3;
-/// Left stick press. ZR+L3 on Settings toggles `hoc_oc` (0.8.1).
-const STICK_L: u64 = 1 << 4;
 const PLUS_MINUS: u64 = (1 << 10) | (1 << 11);
 pub(crate) const LEFT: u64 = 1 << 12;
 pub(crate) const UP: u64 = 1 << 13;
@@ -143,10 +143,14 @@ pub struct Overlay {
     /// not ZL, because ZL + D-pad Left/Right in Training swaps which fighter
     /// the player controls. Up/Down still move the selection.
     pub edit_hold: bool,
-    /// The game-aware Horizon-OC fork answered (0.8.1); the runtime sets it
-    /// every draw. ZR+L3 changes `hoc_oc` only then, so stock Horizon-OC
-    /// cannot be given a setting it would ignore.
+    /// The You line shows the Horizon-OC clock, that is the game-aware fork
+    /// answered (0.8.1); the runtime sets it every draw. OC is a focus stop
+    /// and L+R+X changes `hoc_oc` only then, so stock Horizon-OC cannot be
+    /// given a setting it would ignore.
     pub oc_available: bool,
+    /// The You-line mode icon L+R+X toggles (0.8.2); ZR+Left/Right on the You
+    /// row moves it. Drawn light blue; not saved.
+    pub you_focus: YouIcon,
     previous_buttons: u64,
     latch: CommandLatch,
 }
@@ -208,46 +212,37 @@ impl Overlay {
         let pressed = buttons & !self.previous_buttons;
         self.previous_buttons = buttons;
         let shoulders = buttons & (L | R) == L | R;
-        // Privacy belongs to the highlighted You row on Settings. Consume each
-        // face-button edge even elsewhere, so entering the row cannot replay a
-        // held press. ZL+ZR remains neither edit hold.
-        if self.view == View::Settings
-            && self.menu.selected == crate::menu::ROW_YOU
-            && edit_modifier(buttons)
-        {
-            let stealth = pressed & X != 0;
-            let streamer = pressed & Y != 0;
-            config.stealth ^= stealth;
-            config.streamer ^= streamer;
-            if stealth || streamer {
-                return true;
-            }
-        }
-        // ZR+L3 anywhere on Settings flips Always/Online (0.8.1). The OC mark
-        // on the You line shows the result. A held press is not a new edge.
-        if self.view == View::Settings
-            && self.oc_available
-            && edit_modifier(buttons)
-            && pressed & STICK_L != 0
-        {
-            config.hoc_oc = config.hoc_oc.toggled();
-            return true;
-        }
-        // L+R+X with neither trigger held. A manual console LLUltra selection
-        // cycles its saved resolution forward in place (576 → 720 → 1080 →
-        // 576) and leaves the mode, Auto and Vanilla+ unchanged. Every other
-        // selection, including Auto and emulator LLUltra, flips Vanilla+.
-        // Either result is saved. The ZR+X privacy edit above is independent
-        // and still requires the You row. A held chord, or X pressed before
-        // the shoulders, is not a new edge.
+        // L+R+X with neither trigger held toggles only what is highlighted
+        // (0.8.2): the framed mode on You, the profile's Vanilla+ or LLUltra
+        // resolution on NetProfile, and nothing on any other row, page or with
+        // the window hidden. A held chord, or X pressed before the shoulders,
+        // is not a new edge; neither is a selection that moves onto a row
+        // while it is held. Every result is saved.
         if shoulders && buttons & (ZL | ZR) == 0 && pressed & X != 0 {
-            let cycle_ultra = !config.auto_profile
-                && config.render_mode == crate::config::RenderMode::LessLagUltra
-                && config.platform == crate::config::Platform::Console;
-            if cycle_ultra {
-                config.ultra_resolution = config.ultra_resolution.cycle(1);
-            } else {
-                config.vanilla_plus = !config.vanilla_plus;
+            let row = (self.view == View::Settings && self.menu.open).then_some(self.menu.selected);
+            match row {
+                // An OC focus without the clock is shown, and acts, as Stealth.
+                Some(crate::menu::ROW_YOU) => match self.you_focus.shown(self.oc_available) {
+                    YouIcon::Stealth => config.stealth = !config.stealth,
+                    YouIcon::Streamer => config.streamer = !config.streamer,
+                    YouIcon::Oc => config.hoc_oc = config.hoc_oc.toggled(),
+                },
+                // A manual console LLUltra selection cycles its saved
+                // resolution forward in place (576 → 720 → 1080 → 576) and
+                // leaves the mode, Auto and Vanilla+ unchanged. Every other
+                // selection, including Auto and emulator LLUltra, flips
+                // Vanilla+.
+                Some(crate::menu::ROW_NET_PROFILE) => {
+                    let cycle_ultra = !config.auto_profile
+                        && config.render_mode == crate::config::RenderMode::LessLagUltra
+                        && config.platform == crate::config::Platform::Console;
+                    if cycle_ultra {
+                        config.ultra_resolution = config.ultra_resolution.cycle(1);
+                    } else {
+                        config.vanilla_plus = !config.vanilla_plus;
+                    }
+                }
+                _ => return false,
             }
             return true;
         }
@@ -372,6 +367,15 @@ impl Overlay {
             if self.edit_hold && !edit_modifier(buttons) {
                 return false;
             }
+            // The You row has no value: Left/Right move the mode focus (0.8.2).
+            if self.view == View::Settings && self.menu.selected == crate::menu::ROW_YOU {
+                let direction = if pressed & LEFT != 0 { -1 } else { 1 };
+                self.you_focus = self
+                    .you_focus
+                    .shown(self.oc_available)
+                    .step(direction, self.oc_available);
+                return false;
+            }
             if pressed & LEFT != 0 {
                 Action::Left
             } else {
@@ -448,7 +452,10 @@ mod tests {
             (View::Settings, crate::menu::ROW_YOU)
         );
         ui.poll(0, &mut config);
-        assert!(!ui.poll(RIGHT, &mut config), "You has no Left/Right edit");
+        // You has no value: Right moves the mode focus and saves nothing.
+        assert!(!ui.poll(RIGHT, &mut config));
+        assert_eq!(ui.you_focus, YouIcon::Streamer);
+        assert_eq!(config, Config::default());
         ui.poll(DOWN, &mut config);
         assert_eq!(ui.menu.selected, crate::menu::ROW_NET_LATENCY);
         ui.poll(0, &mut config);
@@ -461,9 +468,10 @@ mod tests {
         ui.poll(DOWN, &mut config);
         ui.poll(0, &mut config);
         assert_eq!(ui.menu.selected, crate::menu::ROW_YOU);
-        assert!(ui.poll(ZR | X, &mut config));
-        assert!(!config.stealth);
-        assert!(!ui.poll(ZR | X, &mut config));
+        // L+R+X toggles the focused mode (Streamer) once per press.
+        assert!(ui.poll(L | R | X, &mut config));
+        assert!(config.streamer);
+        assert!(!ui.poll(L | R | X, &mut config));
         ui.poll(L | R | DOWN, &mut config);
         assert_eq!(ui.view, View::Performance);
         assert!(!ui.poll(RIGHT, &mut config));
@@ -501,7 +509,9 @@ mod tests {
         assert_eq!(ui.view, View::Hidden);
         assert!(!ui.menu.open);
         assert_eq!(config.input_buffer, 0);
-        assert!(!config.stealth);
+        // The You-row L+R+X toggled the focused Streamer, not Stealth.
+        assert!(config.streamer);
+        assert_eq!(config.stealth, Config::default().stealth);
     }
     #[test]
     fn both_shortcuts_and_debug_modifier_preserve_settings() {
@@ -1059,9 +1069,14 @@ mod tests {
         assert_eq!(f.average(), Some(110.5));
     }
 
+    /// Face Y and the left-stick press: buttons of the retired 0.8.1 chords.
+    const Y: u64 = 1 << 3;
+    const STICK_L: u64 = 1 << 4;
+
     #[test]
-    fn privacy_shortcuts_require_settings_you_selection_and_fire_once_per_face_press() {
+    fn player_modes_change_only_by_lrx_on_the_you_row() {
         let _gate = crate::peer_transport::global_gate();
+        let base = Config::default();
         for view in [
             View::Hidden,
             View::Settings,
@@ -1078,71 +1093,111 @@ mod tests {
                         open: matches!(view, View::Settings | View::Window),
                         selected,
                     },
+                    oc_available: true,
                     ..Overlay::default()
                 };
-                let mut config = Config::default();
-                let enabled = view == View::Settings && selected == crate::menu::ROW_YOU;
-                for buttons in [X, Y, ZL | X, ZL | Y, ZL | ZR | X, ZL | ZR | Y] {
+                let mut config = base.clone();
+                // 0.8.2: ZR+X, ZR+Y and ZR+L3 are retired everywhere.
+                for buttons in [X, Y, ZR | X, ZR | Y, ZR | STICK_L, ZL | X, ZL | ZR | X] {
                     assert!(!ui.poll(buttons, &mut config));
                     ui.poll(0, &mut config);
-                    assert_eq!(config, Config::default());
+                    assert_eq!(config, base);
                 }
-                assert_eq!(ui.poll(ZR | X, &mut config), enabled);
-                assert_eq!(config.stealth, !enabled);
-                assert!(!ui.poll(ZR | X, &mut config));
-                assert_eq!(config.stealth, !enabled);
-                assert_eq!(ui.poll(ZR | X | Y, &mut config), enabled);
-                assert_eq!(config.streamer, enabled);
-                assert!(!ui.poll(ZR | X | Y, &mut config));
-                ui.poll(ZR, &mut config);
-                assert_eq!(ui.poll(ZR | X | Y, &mut config), enabled);
-                assert_eq!(config, Config::default());
-                // Pressing a trigger after an already-held face button is not
-                // a fresh action; opening a window must not replay a held press.
-                ui.poll(0, &mut config);
-                assert!(!ui.poll(X | Y, &mut config));
-                assert!(!ui.poll(ZR | X | Y, &mut config));
-                assert_eq!(config, Config::default());
+                // L+R+X toggles only the highlighted row: the framed mode on
+                // You, Vanilla+ on NetProfile, nothing anywhere else.
+                let on_you = view == View::Settings && selected == crate::menu::ROW_YOU;
+                let on_profile = view == View::Settings && selected == crate::menu::ROW_NET_PROFILE;
+                assert_eq!(ui.poll(L | R | X, &mut config), on_you || on_profile);
+                assert_eq!(config.stealth, base.stealth != on_you);
+                assert_eq!(config.vanilla_plus, base.vanilla_plus != on_profile);
+                assert_eq!(config.hoc_oc, base.hoc_oc);
+                // A held chord is one edge.
+                assert!(!ui.poll(L | R | X, &mut config));
             }
         }
     }
 
+    /// The Settings page with NetProfile highlighted, where L+R+X acts on the
+    /// profile (0.8.2).
+    fn on_profile() -> Overlay {
+        Overlay {
+            view: View::Settings,
+            menu: Menu {
+                open: true,
+                selected: crate::menu::ROW_NET_PROFILE,
+            },
+            ..Overlay::default()
+        }
+    }
+
     #[test]
-    fn navigating_to_you_does_not_replay_held_privacy_buttons() {
+    fn a_held_lrx_is_not_replayed_when_the_selection_reaches_you() {
         let _gate = crate::peer_transport::global_gate();
         crate::peer_transport::clear_session();
+        let mut ui = on_profile();
+        let mut config = Config::default();
+        // On NetProfile the chord flips Vanilla+.
+        assert!(ui.poll(L | R | X, &mut config));
+        let flipped = config.clone();
+        assert_eq!(flipped.vanilla_plus, !Config::default().vanilla_plus);
+        // Moving up to NetLatency, then You, with the chord held is not a new
+        // press on either row.
+        assert!(!ui.poll(L | R | X | UP, &mut config));
+        assert_eq!(ui.menu.selected, crate::menu::ROW_NET_LATENCY);
+        ui.poll(L | R | X, &mut config);
+        assert!(!ui.poll(L | R | X | UP, &mut config));
+        assert_eq!(ui.menu.selected, crate::menu::ROW_YOU);
+        assert!(!ui.poll(L | R | X, &mut config));
+        assert_eq!(config, flipped);
+        // A fresh X toggles the focused mode (Stealth) and nothing else.
+        ui.poll(L | R, &mut config);
+        assert!(ui.poll(L | R | X, &mut config));
+        assert_eq!(config.stealth, !flipped.stealth);
+        assert_eq!(config.vanilla_plus, flipped.vanilla_plus);
+    }
+
+    #[test]
+    fn zr_left_right_walks_the_you_focus_without_saving() {
+        let _gate = crate::peer_transport::global_gate();
         let mut ui = Overlay {
             view: View::Settings,
             menu: Menu {
                 open: true,
-                selected: crate::menu::ROW_NET_LATENCY,
+                selected: crate::menu::ROW_YOU,
             },
+            edit_hold: true,
             ..Overlay::default()
         };
         let mut config = Config::default();
-        assert!(!ui.poll(ZR | X | Y, &mut config));
-        assert!(!ui.poll(ZR | X | Y | UP, &mut config));
-        assert_eq!(ui.menu.selected, crate::menu::ROW_YOU);
-        assert!(!ui.poll(ZR | X | Y, &mut config));
-        assert_eq!(config, Config::default());
+        // In a scene with the edit hold a plain Right does nothing.
+        assert!(!ui.poll(RIGHT, &mut config));
+        assert_eq!(ui.you_focus, YouIcon::Stealth);
+        ui.poll(0, &mut config);
+        assert!(!ui.poll(ZR | RIGHT, &mut config));
+        assert_eq!(ui.you_focus, YouIcon::Streamer);
         ui.poll(ZR, &mut config);
-        assert!(ui.poll(ZR | X | Y, &mut config));
-        assert!(!config.stealth);
-        assert!(config.streamer);
-        let toggled = config.clone();
-        assert!(!ui.poll(ZR | X | Y | DOWN, &mut config));
-        assert_eq!(ui.menu.selected, crate::menu::ROW_NET_LATENCY);
-        assert!(!ui.poll(ZR | X | Y | UP, &mut config));
-        assert_eq!(ui.menu.selected, crate::menu::ROW_YOU);
-        assert!(!ui.poll(ZR | X | Y, &mut config));
-        assert_eq!(config, toggled);
+        // Without the clock OC is skipped.
+        assert!(!ui.poll(ZR | RIGHT, &mut config));
+        assert_eq!(ui.you_focus, YouIcon::Stealth);
+        ui.oc_available = true;
+        ui.poll(ZR, &mut config);
+        assert!(!ui.poll(ZR | LEFT, &mut config));
+        assert_eq!(ui.you_focus, YouIcon::Oc);
+        assert_eq!(config, Config::default());
+        ui.poll(0, &mut config);
+        assert!(ui.poll(L | R | X, &mut config));
+        assert_eq!(config.hoc_oc, crate::config::OcMode::Online);
     }
 
     #[test]
     fn shoulder_x_toggles_vanilla_plus_once_per_press_without_a_trigger() {
         let _gate = crate::peer_transport::global_gate();
-        let mut ui = Overlay::default();
+        // With the window hidden the chord does nothing (0.8.2).
+        let mut hidden = Overlay::default();
         let mut config = Config::default();
+        assert!(!hidden.poll(L | R | X, &mut config));
+        assert_eq!(config, Config::default());
+        let mut ui = on_profile();
         assert!(config.vanilla_plus);
         // One edge per press: holding the chord does not flip it again.
         assert!(ui.poll(L | R | X, &mut config));
@@ -1158,7 +1213,7 @@ mod tests {
         assert!(!ui.poll(X, &mut config));
         assert!(!ui.poll(L | X, &mut config));
         assert_eq!(config, before);
-        assert_eq!(ui.view, View::Hidden);
+        assert_eq!(ui.view, View::Settings);
     }
 
     #[test]
@@ -1171,7 +1226,7 @@ mod tests {
         ];
         let labels = ["LLUltra", "LLUltra+", "LLUltra++"];
         for start in 0..3 {
-            let mut ui = Overlay::default();
+            let mut ui = on_profile();
             let mut config = Config {
                 platform: crate::config::Platform::Console,
                 auto_profile: false,
@@ -1246,7 +1301,7 @@ mod tests {
                 crate::config::UltraResolution::P720,
                 crate::config::UltraResolution::P1080,
             ] {
-                let mut ui = Overlay::default();
+                let mut ui = on_profile();
                 let mut config = Config {
                     platform,
                     auto_profile: auto,
@@ -1285,7 +1340,7 @@ mod tests {
             streamer: false,
             ..Config::default()
         };
-        let mut ui = Overlay::default();
+        let mut ui = on_profile();
         let mut config = base.clone();
         assert!(!ui.poll(L | R | ZL | X, &mut config));
         ui.poll(0, &mut config);
@@ -1304,7 +1359,7 @@ mod tests {
         assert!(config.vanilla_plus);
         assert!(config.stealth);
 
-        let mut ui = Overlay::default();
+        let mut ui = on_profile();
         let mut emulator = Config {
             platform: crate::config::Platform::Emulator,
             auto_profile: false,
@@ -1336,11 +1391,13 @@ mod tests {
             ..Overlay::default()
         };
         let mut config = base.clone();
-        assert!(!ui.poll(X | Y, &mut config));
-        assert!(!ui.poll(ZR | X | Y, &mut config));
+        // On You (0.8.2) the chord toggles the focused mode, not the LLUltra
+        // resolution; X pressed before the shoulders is not an edge.
+        assert!(!ui.poll(X, &mut config));
+        assert!(!ui.poll(L | R | X, &mut config));
         assert_eq!(config, base);
         ui.poll(0, &mut config);
-        assert!(ui.poll(ZR | X, &mut config));
+        assert!(ui.poll(L | R | X, &mut config));
         assert!(!config.stealth);
         assert!(!config.streamer);
         assert_eq!(
@@ -1349,39 +1406,32 @@ mod tests {
         );
         assert!(config.vanilla_plus);
         ui.poll(0, &mut config);
-        assert!(ui.poll(ZR | Y, &mut config));
+        assert!(!ui.poll(ZR | RIGHT, &mut config));
+        assert_eq!(ui.you_focus, YouIcon::Streamer);
+        ui.poll(0, &mut config);
+        assert!(ui.poll(L | R | X, &mut config));
         assert!(config.streamer);
         assert!(!config.stealth);
-        assert_eq!(
-            config.ultra_resolution,
-            crate::config::UltraResolution::P720
-        );
+        // A held trigger makes it neither.
         ui.poll(0, &mut config);
-        assert!(ui.poll(L | R | ZR | X, &mut config));
-        assert!(config.stealth);
+        assert!(!ui.poll(L | R | ZR | X, &mut config));
         assert!(config.streamer);
-        assert!(config.vanilla_plus);
         assert_eq!(
             config.ultra_resolution,
             crate::config::UltraResolution::P720
         );
+        // Another row: the LLUltra resolution cycles again.
+        ui.menu.selected = crate::menu::ROW_NET_PROFILE;
         ui.poll(0, &mut config);
         assert!(ui.poll(L | R | X, &mut config));
         assert_eq!(
             config.ultra_resolution,
             crate::config::UltraResolution::P1080
         );
-        assert!(config.stealth);
+        assert!(!config.stealth);
         assert!(config.streamer);
         assert!(config.vanilla_plus);
         assert!(!config.auto_profile);
-        ui.menu.selected = crate::menu::ROW_NET_PROFILE;
-        ui.poll(0, &mut config);
-        let frozen = config.clone();
-        assert!(!ui.poll(ZR | X, &mut config));
-        ui.poll(0, &mut config);
-        assert!(!ui.poll(L | R | ZR | Y, &mut config));
-        assert_eq!(config, frozen);
     }
 
     #[test]
@@ -1541,39 +1591,38 @@ mod tests {
     }
 
     #[test]
-    fn zr_l3_toggles_hoc_oc_on_settings_only_while_the_fork_answers() {
+    fn the_oc_icon_toggles_hoc_oc_only_while_its_clock_shows() {
         use crate::config::OcMode;
-        let mut ui = Overlay::default();
+        let mut ui = Overlay {
+            view: View::Settings,
+            menu: Menu {
+                open: true,
+                selected: crate::menu::ROW_YOU,
+            },
+            you_focus: YouIcon::Oc,
+            ..Overlay::default()
+        };
         let mut config = Config::default();
-        ui.view = View::Settings;
-        ui.menu.open = true;
-        ui.menu.selected = crate::menu::ROW_NET_PROFILE;
-        // Stock Horizon-OC: the press is ignored.
-        assert!(!ui.poll(ZR | STICK_L, &mut config));
+        // Stock Horizon-OC shows no clock: an OC focus acts as Stealth.
+        assert!(ui.poll(L | R | X, &mut config));
         assert_eq!(config.hoc_oc, OcMode::Always);
+        assert_eq!(config.stealth, !Config::default().stealth);
         ui.poll(0, &mut config);
         ui.oc_available = true;
-        // L3 alone and ZL+ZR+L3 are not the chord.
-        assert!(!ui.poll(STICK_L, &mut config));
-        ui.poll(0, &mut config);
-        assert!(!ui.poll(ZL | ZR | STICK_L, &mut config));
-        ui.poll(0, &mut config);
-        assert_eq!(config.hoc_oc, OcMode::Always);
-        // Any Settings row; a held press does not repeat.
-        assert!(ui.poll(ZR | STICK_L, &mut config));
+        assert!(ui.poll(L | R | X, &mut config));
         assert_eq!(config.hoc_oc, OcMode::Online);
-        assert!(!ui.poll(ZR | STICK_L, &mut config));
-        assert_eq!(config.hoc_oc, OcMode::Online);
-        ui.poll(ZR, &mut config);
-        assert!(ui.poll(ZR | STICK_L, &mut config));
+        // A held press does not repeat; a fresh one flips back.
+        assert!(!ui.poll(L | R | X, &mut config));
+        ui.poll(L | R, &mut config);
+        assert!(ui.poll(L | R | X, &mut config));
         assert_eq!(config.hoc_oc, OcMode::Always);
-        // Other views leave it alone.
-        ui.poll(0, &mut config);
-        ui.view = View::Performance;
-        assert!(!ui.poll(ZR | STICK_L, &mut config));
-        ui.view = View::Hidden;
-        ui.poll(0, &mut config);
-        assert!(!ui.poll(ZR | STICK_L, &mut config));
+        // The retired ZR+L3 does nothing on any view (the 2026-10-28
+        // accidental in-match toggles).
+        for view in [View::Settings, View::Performance, View::Hidden] {
+            ui.view = view;
+            ui.poll(0, &mut config);
+            assert!(!ui.poll(ZR | STICK_L, &mut config));
+        }
         assert_eq!(config.hoc_oc, OcMode::Always);
     }
 }

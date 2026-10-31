@@ -1,5 +1,251 @@
 # Validation record
 
+## Unreleased: L+R+X only on the highlight; refresh-clock counters from boot — 2026-10-28
+
+The operator asked for two corrections to candidate `062bf65`:
+
+- L+R+X must toggle only what is highlighted.
+- The 120 Hz plugin's diagnostics should be observed from the start of a
+  session, so the data exists without a restart.
+
+**Changes.**
+
+| Commit | Change |
+| --- | --- |
+| `866d8b2` | L+R+X acts on the framed mode with You highlighted, and on Vanilla+ (or the manual console LLUltra resolution) with NetProfile highlighted. It does nothing on any other row, page, or with the window hidden; `062bf65` flipped Vanilla+ from all of those. The hint line names the rule. |
+| `791f22b` | Every 5 s from boot the diagnostics thread reads the refresh-clock `status.txt` and records code 120: interval VSync events and game ticks, refresh, swap interval, normalizing / valid / observe-only bits, mode transitions and docked target, plus the interval's system ticks. The rows reach `events.log` and the running stage log. Deluxe only reads the file. |
+
+The refresh-clock plugin was not changed. Its `telemetry.flag` was already on
+the card, so its status file updates every second from launch.
+
+**Gates.**
+
+- `cargo clippy --all-targets -- -D warnings` is clean.
+- `cargo build --no-default-features` succeeds.
+- `cargo test`: 311 passed, including a parse of the 2026-10-28 card status
+  file.
+- The Skyline build had no warnings.
+
+**Card install (DBI, 2026-10-28 20:05:15Z, `installed_verified`).** Installed
+at the operator's request.
+
+- Build `0.8.1-3ea3c490c9dc-1793217844`, NRO SHA-256
+  `a0a4c9a04409bea8a6225995c9c31ccbd9f275a3a8e991e22e3357a37406b79b`
+  (1,474,560 bytes).
+- It replaced candidate `062bf65` (`0e58e76a…`). The config `20de5c13…`
+  (`hoc_oc=online`), the hoc-clk fork, the FX Control and Horizon-OC configs
+  and the other plugins were unchanged.
+- The refresh-clock folder holds `status.txt` and `telemetry.flag`.
+- **Rollback:** copy `backups/pre-highlight-deluxe-1028.nro` over the plugin.
+- Receipt: `usb-highlight-1028/deployment.json`.
+
+Not run yet on the console.
+
+## Unreleased: You-line mode focus and per-stage logs — 2026-10-28
+
+**Why.**
+
+- The 2026-10-28 log showed ZR+L3 switching `hoc_oc` three times during
+  online Singles matches. The operator confirmed none were intended.
+- The operator asked to consolidate the You-line shortcuts:
+  - ZR+D-pad Left/Right picks a mode icon, highlighted in light blue;
+  - L+R+X toggles it;
+  - L+R+Down keeps opening the window and stepping pages.
+- The operator also asked for one log per match, and for everything the 120 Hz
+  checks need to be logged up front, so the A/B fits on one boot.
+
+**Controls (`a49ec48`).**
+
+- The per-mode chords are retired: ZR+X Stealth, ZR+Y Streamer, ZR+L3 OC.
+- On the Settings You row, ZR+Left/Right moves the focus
+  (`menu::YouIcon`): Stealth → Streamer → OC, wrapping. OC is a stop only
+  while the clock shows.
+- `runtime/ui.rs` draws the focus as a light-blue rounded frame,
+  `LIGHT_BLUE` rgb(0.45, 0.78, 1.0).
+- L+R+X (no trigger held) toggles the framed mode. On other rows, and with
+  the window hidden, L+R+X keeps the Vanilla+ / LLUltra-resolution behaviour.
+- The clock now stays in `hoc_oc=always`, drawn white with a hub
+  (`MarkTone::Always`), so it can be switched back.
+- The hint line names the single chord.
+- The strip's width allowance counts the clock.
+- Host tests cover the focus walk, OC skipping, held-press edges, the retired
+  chords on every view and row, and the OC toggle only while the clock shows.
+
+**Per-stage logs (`8d965ba`).** `matches/NNNNNN-<scene>-<stage>.log` for
+every Training, Singles or Doubles stage, described in
+[DEBUGGING.md](DEBUGGING.md).
+
+- Header: settings, render profile, textures and present interval, clock, and
+  the refresh-clock status.
+- Body: the stage's events.
+- Footer: present counts, a present-spacing histogram, pacing outliers,
+  reacquires, the end render state, and the refresh-clock status again.
+- `matches/index.txt` keeps 60; no directory listing is used.
+- A replayed events batch is skipped by sequence.
+
+**Gates.**
+
+- `cargo clippy --all-targets -- -D warnings` is clean.
+- `cargo build --no-default-features` succeeds.
+- `cargo test`: 309 passed.
+- The Skyline build compiled the runtime with no warnings.
+
+**Card install (DBI, 2026-10-28 19:53:16Z, `installed_verified`).** Installed
+at the operator's request.
+
+- Build `0.8.1-062bf65b0227-1793217135`, NRO SHA-256
+  `0e58e76a35ac3f46a625754903f46f180dbade5a2f532999b5ad52d387adda05`
+  (1,474,560 bytes), from package `DELUXE-build-lobby/0e58e76a35ac3f46`.
+  `runtime_tested=false`.
+- It replaced release 0.8.1 `0c16374b…`, which read back identical before the
+  write.
+- Unchanged on read-back: the other plugins, the hoc-clk fork `c4c28125…`, and
+  the FX Control and Horizon-OC configs.
+- **Rollback:** copy `ultimate/ssbu_online_deluxe_rewrite/backups/pre-lobby-deluxe-1028.nro`
+  over the plugin.
+- Config write: since the in-match switches to `always` were accidental,
+  `hoc_oc=online` was appended to the card's `config.ini`.
+  - `c720724e…` (416 bytes) became `20de5c13…` (430 bytes), read back
+    verified. That is the same file as the earlier `hide_pages` write:
+    `vanilla_plus=false`, `hoc_oc=online`.
+  - The original is saved as `backups/pre-hoc-online-1028.ini`.
+- Receipts: `usb-lobby-1028/deployment.json` and `usb-lobby-1028/hoc1.json`.
+
+**Not tested.** No Eden or console run yet. The light-blue frame, white clock,
+per-stage files, lobby window and pacing events have not been seen running.
+The console checks are in
+[next checks](NEXT_SESSION.md#one-boot-checks-you-line-controls-lobby-window-120-hz--2026-10-28).
+
+## 120 Hz tearing report — logs show no cause — 2026-10-28
+
+The operator saw what looked like tearing while playing at 120 Hz (SaltyNX
+and FPSLocker, docked 120 Hz, 60 FPS target, interval 2) with the
+refresh-clock plugin `0.0.2-dev`.
+
+**Evidence.**
+
+- Read over DBI, with nothing written (`usb-logs-1028/read1.json`): this
+  session's `events.log`, `renderer-status.txt`, 15 `CAPTURE_MATCH` /
+  `CAPTURE_CSS` capture pairs, and refresh-clock `status.txt`.
+- A read-only research worker analysed them (report
+  `usb-logs-1028/TEARING-ANALYSIS.md`). Its present statistics were rechecked
+  independently on three captures (`usb-logs-1028/check_presents.py`).
+
+**What the logs show.** The quoted values were confirmed by the independent
+recheck.
+
+- Profiles:
+  - The Quickplay and local-wireless matches ran Vanilla+ (three images; boot
+    settings had `vanilla_plus: true`).
+  - The later matches ran manual LessLag (two images), with Horizon-OC
+    applied in most of them.
+- 69,892 actual presents across 14 captures.
+  - Median spacing 16.67 ms in every capture. In the long LessLag Singles,
+    p99 was 16.84 ms and 16.88 ms.
+  - Gaps under 12 ms were 0.21%, clustered at character-select motion and
+    stage exits.
+- No acquire returned the image presented last.
+- Every early present had its duplicate skipped; `early_present_mismatches=0`.
+- The texture-sync wait still ran on LessLag (median 7.86 ms, none over
+  16.67 ms).
+- refresh-clock was normalising as designed: 124 VSync events to 62 game
+  ticks in 1.03 s, with refresh 120, interval 2 and target 60. Its only hook
+  is the VSync-count worker; it never presents or picks a buffer.
+- The once-per-second `telemetry.flag` status write shows no periodic stall
+  in the captures.
+
+**Conclusion.**
+
+- The CPU-side present sequence was regular in both Vanilla+ and LessLag.
+- The captures record API calls, not scanout. A tear inside the display mode
+  or on screen would leave this trace unchanged, so the report is neither
+  confirmed nor explained.
+- Also not established: which save turned `vanilla_plus` off (code 24 did
+  not name keys) and the present interval during each capture.
+
+**Diagnostics added** (candidate `ae69cce`, see [DEBUGGING.md](DEBUGGING.md)):
+
+| Code | Records |
+| --- | --- |
+| 117 | Present spacing outside 14–19 ms |
+| 118 | An acquire of the image presented last |
+| 119 | Present-interval changes |
+| 24 | Each save's changed keys (b is now a mask) |
+
+Codes 117 and 118 are rate limited; `renderer-status.txt` adds exact
+`present_pace_outliers` and `present_reacquired_last` totals.
+
+**Gates.**
+
+- Clippy clean.
+- `--no-default-features` build succeeds.
+- `cargo test`: 302 passed.
+- The Skyline build has no warnings: package
+  `DELUXE-build-lobby/47fc0dc468b8bffc`, build
+  `0.8.1-ae69cce7e744-1793214821`, NRO `47fc0dc4…`.
+- The first diagnostics commit failed the Skyline build (an unsafe call in
+  runtime code that host builds do not compile); `ae69cce` fixed it.
+
+The console A/B plan is in
+[next checks](NEXT_SESSION.md#lobby-practice-window-and-120-hz-tearing-checks--2026-10-28).
+
+## Unreleased: lobby practice window — 2026-10-28
+
+The operator reported that the Player Info window became the in-match strip
+in the local-wireless lobby, and in the Quickplay lobby after loading a
+different stage. The card's `events.log` for release `0.8.1-84da224d084f`
+(read over DBI, nothing written; receipt `usb-logs-1028/read1.json`) shows
+the cause.
+
+| Time | Connection (code 73) | Stage (code 110) | Classified |
+| --- | --- | --- | --- |
+| 68277.9 s | Quickplay | `0x0` | Training (Training-mode bit set) |
+| 68530.4 s | Local | `0x0` | Doubles |
+| 68659.5 s | Local | `0x3` | Doubles |
+| 68917.4 s | Offline (lobby, see below) | `0x3` | Doubles |
+| 69155.0 s / 69166.4 s | Offline (lobby) | `0xe`, `0x1a` | Doubles |
+| 69445.9 s | Offline (lobby) | `0x1a` | Doubles |
+
+- **Cause.** Stage setup classified Training only from the game's
+  Training-mode bit or the default waiting-room stage 311 (`0x137`).
+  - Lobby practice can load any stage with more than two fighters, and its
+    Training-mode bit was clear.
+  - Those stages fell through to the fighter count and became Doubles.
+  - The UI draws the strip for a ready Singles or Doubles scene
+    (`menu::menu_shape`).
+- **Fix (`dfa1608`).** Stage setup also reads the game's scene-mode values
+  that the operator's Training Modpack fork and smash-gamepad-overlay v0.1.3
+  use for the waiting room: initialized, melee `0x0d`, and mode `0x02010000`
+  (local) or `0x0701xxxx` (online).
+  - The reads are read-only and armed only when
+    `app::smashball::is_training_mode` matches 13.0.5 byte for byte.
+  - The fork's source notes that the game's practice-scene setup selects
+    melee `0x0d` and the normal match setup never does.
+  - Lobby practice then classifies as Training. That gives the window and,
+    under Auto, the Training profile.
+  - New code 116 records the raw values at every stage load.
+- **Gates.**
+  - `cargo clippy --all-targets -- -D warnings` is clean.
+  - `cargo build --no-default-features` succeeds.
+  - `cargo test`: 298 passed, including four new predicate and
+    classification tests.
+  - Skyline package `DELUXE-build-lobby/e7ae1fa0d5c48fa3`: build
+    `0.8.1-dfa1608b3f73-1793213529`, NRO `e7ae1fa0…`, 1,462,272 bytes,
+    `runtime_tested=false`.
+  - Superseded by `0.8.1-ae69cce7e744-1793214821` (NRO `47fc0dc4…`), the
+    same fix plus the diagnostics in the entry above.
+- **Not tested.** No console or Eden run of the candidate yet; see
+  [next checks](NEXT_SESSION.md#lobby-practice-window-and-120-hz-tearing-checks--2026-10-28).
+- **Other observations from the same log.**
+  - After the local-wireless visit, Deluxe never saw the second Quickplay
+    entry, so the connection stayed Offline in that lobby. The online
+    latency hook marked each match online at its start (code 30, source
+    `0x16ccab8`). This is unchanged and not yet explained.
+  - ZR+L3 switched `hoc_oc` three times, each during an online Singles match:
+    to always at 69077.4 s, back to online at 69118.9 s, and to always at
+    69221.0 s. The saved config therefore omits `hoc_oc` (always is the
+    default), and the profile now applies offline too.
+
 ## 0.8.1 — console rematches — 2026-10-28
 
 The operator tested rematches on the console with the same release and card,

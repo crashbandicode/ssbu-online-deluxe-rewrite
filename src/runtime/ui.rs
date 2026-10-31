@@ -2,8 +2,8 @@
 use super::{cells, imgui::*, input, overlay_host, publish, record, settings, Code};
 use crate::hoc_game_aware::{Indicator, MarkTone};
 use crate::menu::{
-    hint_line, mark_editing, net_profile_value, opp_line, perf_footer, strip_line,
-    strip_segments, you_line, Cell, ProfileAction, Row, MARK_SLOT,
+    mark_editing, net_profile_value, opp_line, perf_footer, strip_line, strip_segments, you_line,
+    Cell, ProfileAction, Row, YouIcon, HINT_LINE, MARK_SLOT,
 };
 use crate::overlay::{FrameTimes, Overlay, View};
 use crate::pia_rtt::PresentedPing;
@@ -128,15 +128,44 @@ const YELLOW: Vec4 = rgb(0.95, 0.85, 0.25);
 const RED: Vec4 = rgb(0.95, 0.35, 0.35);
 /// Timing line without samples.
 const GREY: Vec4 = rgb(0.70, 0.70, 0.70);
+/// Frame around the You-line mode icon that L+R+X toggles (0.8.2).
+const LIGHT_BLUE: Vec4 = rgb(0.45, 0.78, 1.0);
 
 #[derive(Clone, Copy)]
 struct Privacy {
     stealth: bool,
     streamer: bool,
     reconnect: bool,
-    /// The game-aware Horizon-OC clock after the privacy icons (0.8.1);
-    /// `hoc_oc=online` with the fork answering only.
+    /// The game-aware Horizon-OC clock after the privacy icons (0.8.1), in
+    /// either mode while the fork answers (0.8.2).
     oc: Option<MarkTone>,
+    /// The framed icon while the You row is selected (0.8.2).
+    focus: Option<YouIcon>,
+}
+
+/// Light-blue frame around one icon cell, `from` to `to` in font units from
+/// `origin`, on the current window's draw list.
+unsafe fn focus_frame(origin: Vec2, from: (f32, f32), to: (f32, f32)) {
+    let size = igGetFontSize();
+    let list = igGetWindowDrawList();
+    if list.is_null() {
+        return;
+    }
+    ImDrawList_AddRect(
+        list,
+        Vec2 {
+            x: origin.x + from.0 * size,
+            y: origin.y + from.1 * size,
+        },
+        Vec2 {
+            x: origin.x + to.0 * size,
+            y: origin.y + to.1 * size,
+        },
+        igGetColorU32_Vec4(LIGHT_BLUE),
+        size * 0.15,
+        0,
+        size * 0.09,
+    );
 }
 
 /// What the game-aware gate shows for `config` right now (0.8.1).
@@ -152,9 +181,10 @@ fn oc_indicator(config: &crate::config::Config) -> Indicator {
 /// Clock mark (0.8.1), drawn like the privacy icons and one text line tall:
 /// green with a hub while Smash's saved Horizon-OC profile is applied, grey
 /// while Horizon-OC's own fallback holds, yellow without Pia evidence or with
-/// the fork not answering. Quarter arcs and lines only, the primitives the
-/// embedded and the borrowed ImGui both provide.
-unsafe fn oc_clock(tone: MarkTone) {
+/// the fork not answering, and (0.8.2) white with a hub for `hoc_oc=always`,
+/// where the profile applies everywhere. Quarter arcs and lines only, the
+/// primitives the embedded and the borrowed ImGui both provide.
+unsafe fn oc_clock(tone: MarkTone, focused: bool) {
     let size = igGetFontSize();
     let origin = igGetCursorScreenPos();
     let list = igGetWindowDrawList();
@@ -162,15 +192,19 @@ unsafe fn oc_clock(tone: MarkTone) {
     if list.is_null() {
         return;
     }
+    if focused {
+        focus_frame(origin, (-0.12, -0.12), (1.12, 1.12));
+    }
     let point = |x: f32, y: f32| Vec2 {
         x: origin.x + x * size,
         y: origin.y + y * size,
     };
-    let color = igGetColorU32_Vec4(match tone {
-        MarkTone::Lit => GREEN,
-        MarkTone::Dim => GREY,
-        MarkTone::Warn => YELLOW,
-    });
+    let color = match tone {
+        MarkTone::Lit => igGetColorU32_Vec4(GREEN),
+        MarkTone::Dim => igGetColorU32_Vec4(GREY),
+        MarkTone::Warn => igGetColorU32_Vec4(YELLOW),
+        MarkTone::Always => igGetColorU32_Col(TEXT, 1.0),
+    };
     let stroke = size * 0.085;
     for (from, corner, to) in [
         ((0.5, 0.05), (0.95, 0.05), (0.95, 0.5)),
@@ -190,7 +224,7 @@ unsafe fn oc_clock(tone: MarkTone) {
     }
     ImDrawList_AddLine(list, point(0.5, 0.5), point(0.5, 0.22), color, stroke);
     ImDrawList_AddLine(list, point(0.5, 0.5), point(0.72, 0.5), color, stroke);
-    if tone == MarkTone::Lit {
+    if matches!(tone, MarkTone::Lit | MarkTone::Always) {
         ImDrawList_AddCircleFilled(list, point(0.5, 0.5), size * 0.1, color, 8);
     }
 }
@@ -212,6 +246,11 @@ unsafe fn privacy_icons(privacy: Privacy) {
         x: origin.x + x * size,
         y: origin.y + y * size,
     };
+    match privacy.focus {
+        Some(YouIcon::Stealth) => focus_frame(origin, (-0.12, -0.12), (1.12, 1.12)),
+        Some(YouIcon::Streamer) => focus_frame(origin, (1.33, -0.12), (2.57, 1.12)),
+        _ => {}
+    }
     let stroke = size * 0.085;
     let eye = if privacy.reconnect {
         igGetColorU32_Vec4(YELLOW)
@@ -277,7 +316,7 @@ unsafe fn privacy_icons(privacy: Privacy) {
     }
     if let Some(tone) = privacy.oc {
         igSameLine(0.0, size * 0.3);
-        oc_clock(tone);
+        oc_clock(tone, privacy.focus == Some(YouIcon::Oc));
     }
 }
 
@@ -641,9 +680,8 @@ unsafe fn footer(frames: &FrameTimes, config: &crate::config::Config, perf: bool
         paint_text("* Stealth changes after reconnect", Some(YELLOW));
     }
     if config.hints {
-        let oc = Indicator::toggle_available(super::hoc_client::capability());
         igPushTextWrapPos(0.0);
-        paint_text(hint_line(oc), Some(GREY));
+        paint_text(HINT_LINE, Some(GREY));
         igPopTextWrapPos();
     }
 }
@@ -908,8 +946,9 @@ unsafe fn poll(ui: &mut UiState, sample: input::Sample) -> Frame {
     // swaps the controlled fighter in Training). Up/Down still move the
     // selection. Until 0.5.5 the hold applied only while a fight was live.
     ui.controls.edit_hold = true;
-    // ZR+L3 (0.8.1) changes `hoc_oc` only while the game-aware fork answers.
-    ui.controls.oc_available = Indicator::toggle_available(super::hoc_client::capability());
+    // The OC icon is a You focus stop, and L+R+X can change `hoc_oc`, only
+    // while its clock shows: the game-aware fork answered (0.8.2).
+    ui.controls.oc_available = oc_indicator(&config).mark().is_some();
     if ui.controls.poll_native(buttons, &mut config, native) {
         match crate::menu::profile_action(&saved, &config) {
             ProfileAction::EnableAuto => {
@@ -984,12 +1023,17 @@ unsafe fn poll(ui: &mut UiState, sample: input::Sample) -> Frame {
         show_remote,
         ping,
     };
+    let oc = oc_indicator(&config).mark();
+    let you_selected = view == View::Settings
+        && ui.controls.menu.open
+        && ui.controls.menu.selected == crate::menu::ROW_YOU;
     let privacy = Privacy {
         stealth: config.stealth,
         streamer: config.streamer,
         reconnect: crate::peer_transport::latched_stealth()
             .is_some_and(|latched| latched != config.stealth),
-        oc: oc_indicator(&config).mark(),
+        oc,
+        focus: you_selected.then(|| ui.controls.you_focus.shown(oc.is_some())),
     };
     Frame {
         config,
@@ -1235,8 +1279,14 @@ unsafe fn draw_window(ui: &UiState, view: View, frame: &Frame) {
             };
             if view == View::Settings {
                 // Conservative text-width allowance for the You label and
-                // two one-em icons, including the optional reconnect marker.
-                first = format!(">You: [ ] [ ] *   {first}");
+                // two one-em icons, including the optional reconnect marker,
+                // plus the OC clock while it shows (both modes since 0.8.2).
+                let clock = if frame.privacy.oc.is_some() {
+                    "[ ] "
+                } else {
+                    ""
+                };
+                first = format!(">You: [ ] [ ] {clock}*   {first}");
             }
             crate::menu::compact_font_size(&first, second, configured, scale.x, scale.y)
         });
