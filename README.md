@@ -14,10 +14,11 @@ overclocking.
 
 ![The Player Info Settings window: the You row with eye and TV icons, NetLatency and NetProfile](docs/media/settings-window.png)
 
-**[0.8.1 — download NRO and manifest](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.8.1)**
-adds an online-only mode for the game-aware Horizon-OC fork: Smash's saved
-overclock profile applies only while you are connected to another player, and
-stops 15 s after the last one leaves. [Status and version history](docs/STATUS.md).
+**[0.9.0 — download NRO and manifest](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.9.0)**
+puts the player modes on the You line (ZR+Left/Right picks Stealth, Streamer
+or the overclock clock, L+R+X toggles it), treats waiting-room practice as
+Training, and uses about 300 KiB less memory. 0.8.1 added the online-only
+Horizon-OC mode. [Status and version history](docs/STATUS.md).
 
 > **Install only this NRO.** It replaces the original Online Deluxe fork,
 > SsbuSync and the PIA manager, so remove all three. If SsbuSync is still
@@ -51,7 +52,7 @@ and, with the game-aware Horizon-OC fork, a clock.
 3. Press **L+R+X** to toggle the framed one.
 
 The eye closes and the TV turns green when they are on. This works in the
-window and in the match strip. ZR+X, ZR+Y and ZR+L3 were removed in 0.8.2;
+window and in the match strip. ZR+X, ZR+Y and ZR+L3 were removed in 0.9.0;
 ZR+L3 had been triggering by accident in online matches.
 
 ![0.7.0–0.8.1: ZR+X closing the Stealth eye and ZR+Y turning the Streamer TV green, then both switched off again](docs/media/privacy-shortcuts.gif)
@@ -73,7 +74,7 @@ one reconnects. Toggle the mode with L+R+X on the framed clock.
 These three clips are from Eden with the test-only
 [hoc-standin](tools/hoc-standin/README.md) answering for Horizon-OC, offline,
 so the clock stays grey; no clock was changed. The two You-row clips show the
-retired 0.8.1 chords and have not been re-recorded for 0.8.2.
+retired 0.8.1 chords and have not been re-recorded for 0.9.0.
 
 ### A compact strip in matches
 

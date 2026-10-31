@@ -522,7 +522,7 @@ pub enum MarkTone {
     Lit,
     Dim,
     Warn,
-    /// `hoc_oc=always` (0.8.2): the clock stays as the OC icon's off state, so
+    /// `hoc_oc=always` (0.9.0): the clock stays as the OC icon's off state, so
     /// L+R+X on it can switch back to online.
     Always,
 }
@@ -557,7 +557,7 @@ impl Indicator {
     }
 
     /// The OC clock after the You-line privacy icons, in either mode since
-    /// 0.8.2; it is the You focus stop that L+R+X toggles.
+    /// 0.9.0; it is the You focus stop that L+R+X toggles.
     pub const fn mark(self) -> Option<MarkTone> {
         match self {
             Self::Hidden => None,
@@ -891,7 +891,7 @@ mod tests {
         assert_eq!(Indicator::Applying.mark(), Some(MarkTone::Lit));
         assert_eq!(Indicator::Idle.mark(), Some(MarkTone::Dim));
         assert_eq!(Indicator::NoSignal.mark(), Some(MarkTone::Warn));
-        // 0.8.2: Always keeps its clock, the OC icon's off state.
+        // 0.9.0: Always keeps its clock, the OC icon's off state.
         assert_eq!(Indicator::Always.mark(), Some(MarkTone::Always));
         assert_eq!(Indicator::Hidden.mark(), None);
         assert_eq!(Indicator::Hidden.label(), None);

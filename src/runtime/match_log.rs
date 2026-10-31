@@ -1,4 +1,4 @@
-//! One log per stage under `matches/` (0.8.2), so a session of many matches
+//! One log per stage under `matches/` (0.9.0), so a session of many matches
 //! needs no manual rotation. Each holds the settings, render and 120 Hz state
 //! at stage entry, every `events.log` row while the stage runs, and a
 //! present-pacing summary at its end. `crate::match_log` names the files and
@@ -113,7 +113,7 @@ impl MatchLog {
     }
 }
 
-/// Code 120 (0.8.2): the refresh-clock plugin's 120 Hz counters, called every
+/// Code 120 (0.9.0): the refresh-clock plugin's 120 Hz counters, called every
 /// 5 s from boot. The row reaches `events.log` and, during a stage, its log, so
 /// the 120 Hz data needs no relaunch or flag change. Nothing is recorded while
 /// the file is absent or mid-rewrite.

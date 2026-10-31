@@ -8,10 +8,10 @@ pub(crate) const L: u64 = 1 << 6;
 pub(crate) const R: u64 = 1 << 7;
 const ZL: u64 = 1 << 8;
 const ZR: u64 = 1 << 9;
-/// L+R+X toggles only the highlighted row's value (0.8.2): the focused
+/// L+R+X toggles only the highlighted row's value (0.9.0): the focused
 /// You-line mode on You, Vanilla+ or the manual console LLUltra resolution on
 /// NetProfile, nothing elsewhere or with the window hidden. The ZR+X, ZR+Y
-/// and ZR+L3 mode chords were retired in 0.8.2 after an accidental in-match
+/// and ZR+L3 mode chords were retired in 0.9.0 after an accidental in-match
 /// ZR+L3.
 const X: u64 = 1 << 2;
 const PLUS_MINUS: u64 = (1 << 10) | (1 << 11);
@@ -148,7 +148,7 @@ pub struct Overlay {
     /// and L+R+X changes `hoc_oc` only then, so stock Horizon-OC cannot be
     /// given a setting it would ignore.
     pub oc_available: bool,
-    /// The You-line mode icon L+R+X toggles (0.8.2); ZR+Left/Right on the You
+    /// The You-line mode icon L+R+X toggles (0.9.0); ZR+Left/Right on the You
     /// row moves it. Drawn light blue; not saved.
     pub you_focus: YouIcon,
     previous_buttons: u64,
@@ -213,7 +213,7 @@ impl Overlay {
         self.previous_buttons = buttons;
         let shoulders = buttons & (L | R) == L | R;
         // L+R+X with neither trigger held toggles only what is highlighted
-        // (0.8.2): the framed mode on You, the profile's Vanilla+ or LLUltra
+        // (0.9.0): the framed mode on You, the profile's Vanilla+ or LLUltra
         // resolution on NetProfile, and nothing on any other row, page or with
         // the window hidden. A held chord, or X pressed before the shoulders,
         // is not a new edge; neither is a selection that moves onto a row
@@ -367,7 +367,7 @@ impl Overlay {
             if self.edit_hold && !edit_modifier(buttons) {
                 return false;
             }
-            // The You row has no value: Left/Right move the mode focus (0.8.2).
+            // The You row has no value: Left/Right move the mode focus (0.9.0).
             if self.view == View::Settings && self.menu.selected == crate::menu::ROW_YOU {
                 let direction = if pressed & LEFT != 0 { -1 } else { 1 };
                 self.you_focus = self
@@ -1097,7 +1097,7 @@ mod tests {
                     ..Overlay::default()
                 };
                 let mut config = base.clone();
-                // 0.8.2: ZR+X, ZR+Y and ZR+L3 are retired everywhere.
+                // 0.9.0: ZR+X, ZR+Y and ZR+L3 are retired everywhere.
                 for buttons in [X, Y, ZR | X, ZR | Y, ZR | STICK_L, ZL | X, ZL | ZR | X] {
                     assert!(!ui.poll(buttons, &mut config));
                     ui.poll(0, &mut config);
@@ -1118,7 +1118,7 @@ mod tests {
     }
 
     /// The Settings page with NetProfile highlighted, where L+R+X acts on the
-    /// profile (0.8.2).
+    /// profile (0.9.0).
     fn on_profile() -> Overlay {
         Overlay {
             view: View::Settings,
@@ -1192,7 +1192,7 @@ mod tests {
     #[test]
     fn shoulder_x_toggles_vanilla_plus_once_per_press_without_a_trigger() {
         let _gate = crate::peer_transport::global_gate();
-        // With the window hidden the chord does nothing (0.8.2).
+        // With the window hidden the chord does nothing (0.9.0).
         let mut hidden = Overlay::default();
         let mut config = Config::default();
         assert!(!hidden.poll(L | R | X, &mut config));
@@ -1391,7 +1391,7 @@ mod tests {
             ..Overlay::default()
         };
         let mut config = base.clone();
-        // On You (0.8.2) the chord toggles the focused mode, not the LLUltra
+        // On You (0.9.0) the chord toggles the focused mode, not the LLUltra
         // resolution; X pressed before the shoulders is not an edge.
         assert!(!ui.poll(X, &mut config));
         assert!(!ui.poll(L | R | X, &mut config));

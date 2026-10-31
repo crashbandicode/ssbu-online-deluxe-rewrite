@@ -168,7 +168,7 @@ pub fn classify_stage(stage_id: u32, training: bool, fighter_count: i32) -> Scen
     }
 }
 
-/// Lobby practice in a local-wireless or online waiting room (0.8.2). The
+/// Lobby practice in a local-wireless or online waiting room (0.9.0). The
 /// game's shared practice-scene setup selects melee mode `0x0d`, which the
 /// normal match setup never does; the mode word must also be the
 /// local-wireless room (`0x02010000`) or the online family (`0x0701xxxx`, top

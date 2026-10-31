@@ -1,5 +1,29 @@
 # Validation record
 
+## 0.9.0 — release source and host gates — 2026-10-31
+
+0.9.0 merges `fix/lobby-practice-window` (head `326236e`) into main. That
+head reverts the branch's 10-29 telemetry, so the merged `src/`, `build.rs`
+and `sdk/` are identical to `3ea3c49`, the candidate on the card since
+2026-10-28 (entry below). The three "Unreleased" entries below are part of
+0.9.0. Its working label 0.8.2 in the docs and source comments became 0.9.0
+(comment text only).
+
+**Build change.** `crate-type = ["cdylib"]`: as a cdylib and an rlib the
+library got no LTO from Cargo, so `lto = "thin"` never applied.
+`tests/plugin_sdk_roundtrip.rs` includes `src/plugin_api.rs` by path instead
+of linking the rlib. Resident size (NRO header `.text` + `.rodata` + `.data`
++ `.bss`): 1,515,520 → 1,200,128 bytes against the `3ea3c49` card build; the
+40 exported symbols are unchanged.
+
+**Gates (merged tree).** 311 unit and 21 integration tests; clippy with
+warnings denied, host and Skyline; the no-default-features build; the Skyline
+release build. `cargo fmt --check` lists six files whose formatting predates
+this release.
+
+Release assets, the Eden check and the card install follow in their own
+entries.
+
 ## Unreleased: L+R+X only on the highlight; refresh-clock counters from boot — 2026-10-28
 
 The operator asked for two corrections to candidate `062bf65`:

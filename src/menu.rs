@@ -7,13 +7,13 @@ use crate::config::{Config, Platform, RenderMode};
 /// selector and two controls. The player modes belong to You. Console LLUltra is
 /// one NetProfile stop; L+R+X with NetProfile highlighted cycles its saved
 /// resolution in place (and otherwise flips Vanilla+). L+R+X acts only on the
-/// highlighted row (0.8.2). The remaining rows configure the Window Options page.
+/// highlighted row (0.9.0). The remaining rows configure the Window Options page.
 ///
-/// The `You` summary line (0.8.2): ZR+Left/Right moves the light-blue focus
+/// The `You` summary line (0.9.0): ZR+Left/Right moves the light-blue focus
 /// between its mode icons and L+R+X toggles the focused one ([`YouIcon`]).
 pub const ROW_YOU: usize = 0;
 
-/// The player-mode icons on the You line (0.8.2), left to right: Stealth
+/// The player-mode icons on the You line (0.9.0), left to right: Stealth
 /// (incognito), Streamer and the Horizon-OC clock. OC is a stop only while
 /// its clock shows (the game-aware fork answered).
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -437,7 +437,7 @@ pub(crate) fn perf_footer(mean_ms: Option<f32>, resolution: &str, drs: bool) -> 
 
 /// The dim hint line under the Settings and Window tables (0.6.0, `hints`).
 /// It wraps to the window width; every chord it names is in CONTROLS.md.
-/// Since 0.8.2 the player modes are You-line icons ([`YouIcon`]), so the
+/// Since 0.9.0 the player modes are You-line icons ([`YouIcon`]), so the
 /// line names one chord for them instead of one per mode.
 pub const HINT_LINE: &str =
     "ZR+Left/Right edits or picks a You icon   L+R+X toggles the highlight (You icon, or Vanilla+/LLUltra on NetProfile)   L+R+Down next page";
@@ -1224,7 +1224,7 @@ mod tests {
         assert!(HINT_LINE.contains("L+R+X"));
         assert!(HINT_LINE.contains("Vanilla+/LLUltra"));
         assert!(HINT_LINE.contains("L+R+Down"));
-        // 0.8.2: the per-mode chords are gone.
+        // 0.9.0: the per-mode chords are gone.
         for retired in ["ZR+X", "ZR+Y", "L3"] {
             assert!(!HINT_LINE.contains(retired), "{retired}");
         }

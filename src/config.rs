@@ -158,7 +158,7 @@ pub struct Config {
     /// `online` holds the profile back outside an online session through the
     /// game-aware hoc-clk fork. Written only when `online`, so a file that
     /// never chose it still loads in a build without the key. L+R+X on the
-    /// You line's OC clock toggles it while the fork answers (0.8.2; ZR+L3
+    /// You line's OC clock toggles it while the fork answers (0.9.0; ZR+L3
     /// in 0.8.1).
     pub hoc_oc: OcMode,
 }
@@ -420,7 +420,7 @@ fn key_slot(key: &str) -> Option<usize> {
 }
 
 /// Bit `slot` for every key whose `key=value` line differs between two
-/// serialized configs, including a line only one of them has (0.8.2). Code 24
+/// serialized configs, including a line only one of them has (0.9.0). Code 24
 /// carries it, so a log says which setting a save changed.
 pub fn changed_keys(previous: &str, next: &str) -> u64 {
     fn lines(text: &str) -> Vec<(&str, &str)> {

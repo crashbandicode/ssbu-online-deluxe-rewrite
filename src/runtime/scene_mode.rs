@@ -1,4 +1,4 @@
-//! Read-only waiting-room observation (0.8.2). Lobby practice in the
+//! Read-only waiting-room observation (0.9.0). Lobby practice in the
 //! local-wireless and online waiting rooms can load any stage with extra
 //! fighters, so stage setup also reads the scene-mode values that the
 //! operator's Training Modpack fork and smash-gamepad-overlay v0.1.3 use to

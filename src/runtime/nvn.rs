@@ -55,7 +55,7 @@ static TRACKED_ACQUIRES: AtomicU64 = AtomicU64::new(0);
 static TRACKED_PRESENTS: AtomicU64 = AtomicU64::new(0);
 static OUTSTANDING: AtomicI64 = AtomicI64::new(0);
 /// Last actual present of the tracked window (early or the game's own): tick
-/// and index, for the 0.8.2 pacing checks in `crate::present_pace`.
+/// and index, for the 0.9.0 pacing checks in `crate::present_pace`.
 static ACTUAL_TICK: AtomicU64 = AtomicU64::new(0);
 static ACTUAL_INDEX: AtomicI32 = AtomicI32::new(-1);
 static PACE_OUTLIERS: AtomicU64 = AtomicU64::new(0);
@@ -67,7 +67,7 @@ static SPACING: [AtomicU64; crate::match_log::SPACING_BINS] =
     [const { AtomicU64::new(0) }; crate::match_log::SPACING_BINS];
 
 /// Cumulative present counters; a stage log writes the difference between
-/// its start and end (0.8.2).
+/// its start and end (0.9.0).
 #[derive(Clone, Copy, Default)]
 pub(super) struct Pacing {
     pub(super) actual: u64,

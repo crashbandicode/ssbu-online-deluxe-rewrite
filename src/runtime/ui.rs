@@ -128,7 +128,7 @@ const YELLOW: Vec4 = rgb(0.95, 0.85, 0.25);
 const RED: Vec4 = rgb(0.95, 0.35, 0.35);
 /// Timing line without samples.
 const GREY: Vec4 = rgb(0.70, 0.70, 0.70);
-/// Frame around the You-line mode icon that L+R+X toggles (0.8.2).
+/// Frame around the You-line mode icon that L+R+X toggles (0.9.0).
 const LIGHT_BLUE: Vec4 = rgb(0.45, 0.78, 1.0);
 
 #[derive(Clone, Copy)]
@@ -137,9 +137,9 @@ struct Privacy {
     streamer: bool,
     reconnect: bool,
     /// The game-aware Horizon-OC clock after the privacy icons (0.8.1), in
-    /// either mode while the fork answers (0.8.2).
+    /// either mode while the fork answers (0.9.0).
     oc: Option<MarkTone>,
-    /// The framed icon while the You row is selected (0.8.2).
+    /// The framed icon while the You row is selected (0.9.0).
     focus: Option<YouIcon>,
 }
 
@@ -181,7 +181,7 @@ fn oc_indicator(config: &crate::config::Config) -> Indicator {
 /// Clock mark (0.8.1), drawn like the privacy icons and one text line tall:
 /// green with a hub while Smash's saved Horizon-OC profile is applied, grey
 /// while Horizon-OC's own fallback holds, yellow without Pia evidence or with
-/// the fork not answering, and (0.8.2) white with a hub for `hoc_oc=always`,
+/// the fork not answering, and (0.9.0) white with a hub for `hoc_oc=always`,
 /// where the profile applies everywhere. Quarter arcs and lines only, the
 /// primitives the embedded and the borrowed ImGui both provide.
 unsafe fn oc_clock(tone: MarkTone, focused: bool) {
@@ -947,7 +947,7 @@ unsafe fn poll(ui: &mut UiState, sample: input::Sample) -> Frame {
     // selection. Until 0.5.5 the hold applied only while a fight was live.
     ui.controls.edit_hold = true;
     // The OC icon is a You focus stop, and L+R+X can change `hoc_oc`, only
-    // while its clock shows: the game-aware fork answered (0.8.2).
+    // while its clock shows: the game-aware fork answered (0.9.0).
     ui.controls.oc_available = oc_indicator(&config).mark().is_some();
     if ui.controls.poll_native(buttons, &mut config, native) {
         match crate::menu::profile_action(&saved, &config) {
@@ -1280,7 +1280,7 @@ unsafe fn draw_window(ui: &UiState, view: View, frame: &Frame) {
             if view == View::Settings {
                 // Conservative text-width allowance for the You label and
                 // two one-em icons, including the optional reconnect marker,
-                // plus the OC clock while it shows (both modes since 0.8.2).
+                // plus the OC clock while it shows (both modes since 0.9.0).
                 let clock = if frame.privacy.oc.is_some() {
                     "[ ] "
                 } else {

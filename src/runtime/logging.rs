@@ -256,7 +256,7 @@ pub(super) fn start(version: &str) {
                                 writeln!(file, "gap: ring overwritten after sequence {persisted}")?;
                             }
                             for event in snapshot.after(persisted) {
-                                // The per-stage logs (0.8.2); a replayed row
+                                // The per-stage logs (0.9.0); a replayed row
                                 // is skipped there by its sequence.
                                 stages.event(event);
                                 writeln!(

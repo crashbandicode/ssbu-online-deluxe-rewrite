@@ -1,4 +1,4 @@
-//! One log per stage (0.8.2): names, the index that bounds how many are kept,
+//! One log per stage (0.9.0): names, the index that bounds how many are kept,
 //! and the present-spacing summary written when the stage ends. The runtime
 //! (`runtime/match_log.rs`) does the file work; this part is host-tested.
 use crate::auto_policy::SceneStatus;

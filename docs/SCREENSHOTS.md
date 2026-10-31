@@ -37,11 +37,11 @@ navigation cannot change a setting.
 Inputs also reach the game: in this Training clip ZR shields and Up/Down taunt
 behind the window. The grey clock after the privacy icons and `ZR+L3 OC` in the
 hint line are there because the Horizon-OC stand-in is loaded (see below); the
-clip is from 0.8.1, and the 0.8.2 hint line no longer names ZR+L3.
+clip is from 0.8.1, and the 0.9.0 hint line no longer names ZR+L3.
 
 ## Stealth, Streamer and OC
 
-The player modes are icons on the You row. Since 0.8.2 one control serves all
+The player modes are icons on the You row. Since 0.9.0 one control serves all
 of them:
 
 1. Select **You**, the first Settings row.
@@ -52,7 +52,7 @@ of them:
 
 ![0.8.1: ZR+X and ZR+Y toggling the You-row privacy icons](media/privacy-shortcuts.gif)
 
-This offline clip is from 0.8.1, which used ZR+X / ZR+Y (retired in 0.8.2); it
+This offline clip is from 0.8.1, which used ZR+X / ZR+Y (retired in 0.9.0); it
 has not been re-recorded. It shows the saved icon states only. It does not test
 network suppression or reconnect behavior.
 
@@ -64,7 +64,7 @@ third player mode.
 - Frame it and press **L+R+X** to switch `hoc_oc` between `online` and `always`.
 - In `online` mode the clock is grey while the saved profile is held back
   (offline here) and green while it is applied.
-- In `always` it is white with a hub (0.8.2; 0.8.1 removed it).
+- In `always` it is white with a hub (0.9.0; 0.8.1 removed it).
 
 ![0.8.1: switching the Horizon-OC mode with ZR+L3](media/oc-indicator.gif)
 

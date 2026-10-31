@@ -1,4 +1,4 @@
-//! The refresh-clock plugin's `status.txt` (0.8.2): its 120 Hz counters,
+//! The refresh-clock plugin's `status.txt` (0.9.0): its 120 Hz counters,
 //! parsed and packed into event code 120 so `events.log` and every stage log
 //! carry them from boot, every 5 s, without a relaunch. Deluxe only reads the
 //! file; the plugin rewrites it once a second while its `telemetry.flag`

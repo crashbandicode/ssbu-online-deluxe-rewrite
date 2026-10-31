@@ -1,4 +1,4 @@
-//! Present pacing diagnostics (0.8.2), added after the 2026-10-28 report of
+//! Present pacing diagnostics (0.9.0), added after the 2026-10-28 report of
 //! tearing at 120 Hz. That session's captures showed one present every
 //! 16.67 ms and no acquire of the image just presented, but captures run only
 //! with `CAPTURE_MATCH` and record CPU-side calls, not scanout. These checks

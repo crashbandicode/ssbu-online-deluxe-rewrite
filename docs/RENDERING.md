@@ -93,7 +93,7 @@ NetProfile row, the in-match strip's `Profile:` field and the native CSS
 banner's `You:` field read `Vanilla+` (manual), `Vanilla+*` (cleanup hold) and
 `Auto:Van+` (Auto); with the flag off they read `Vanilla`, `Vanilla*` and
 `Auto:Van`. **L+R+X** with NetProfile highlighted (neither ZL nor ZR held; only
-there since 0.8.2) toggles the flag live and saves
+there since 0.9.0) toggles the flag live and saves
 it ([Controls](CONTROLS.md)); `early_present=false` still disables every early
 present, Vanilla+ included. The peer exchange still announces Vanilla, because
 the ring shape is unchanged.
