@@ -6,7 +6,12 @@ use core::ffi::c_char;
 use deluxe_plugin_sdk::{
     abi, register_with, AtomicOptions, OptionSpec, PluginSpec, RegisterError, RowLayout, Tone,
 };
-use ssbu_online_deluxe_rewrite::plugin_api::{
+
+#[path = "../src/plugin_api.rs"]
+#[allow(dead_code)]
+mod plugin_api;
+
+use plugin_api::{
     has_shared_rows, move_selection, page_plugins, rows_for, selectable, PageRow, Registry,
     RequestStatus, RowKind,
 };
@@ -170,7 +175,7 @@ fn sdk_registration_reaches_the_host_registry_and_edits_round_trip() {
         ("quality", "1")
     );
     assert_eq!(
-        ssbu_online_deluxe_rewrite::plugin_api::apply_ini_assignment(
+        plugin_api::apply_ini_assignment(
             "version=1\nrecord_enabled=off\n",
             &writes[0].key,
             &writes[0].value

@@ -9,7 +9,9 @@ build = "build.rs"
 titleid = "01006A800016E000"
 
 [lib]
-crate-type = ["cdylib", "rlib"]
+# cdylib only: Cargo skips LTO for a library that is also an rlib. The
+# integration test includes `src/plugin_api.rs` by path instead.
+crate-type = ["cdylib"]
 
 [features]
 default = []
@@ -36,8 +38,9 @@ panic = "abort"
 [profile.release]
 panic = "abort"
 # "s" since 0.3.5: .text 1590896 -> 1399936 B (-12%) with no .bss change; "z"
-# would save another 93 KB but trims loop codegen in hooked paths. Fat LTO
-# measured identical to thin with codegen-units = 1.
+# would save another 93 KB but trims loop codegen in hooked paths. These
+# numbers, and fat LTO measuring identical to thin, date from when the rlib
+# crate type kept LTO off.
 opt-level = "s"
 debug = 2
 strip = false
