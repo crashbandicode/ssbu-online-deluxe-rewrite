@@ -1,5 +1,41 @@
 # Validation record
 
+## 0.10.1 — release assets, Eden checks and card install — 2026-11-01
+
+Built from clean tag `v0.10.1` (`03e9d42`) with `tools/Build.ps1 -Package`;
+the NRO is byte-identical to the build tested in Eden below.
+
+- Build ID: `0.10.1-03e9d42ad2ef-1793545262`.
+- NRO: **1,167,360 bytes**, SHA-256
+  `a8dcda242b890f09f3fdb2bd767dda2b85dbb1cd519f8e95c8fb6b57e41a5a59`.
+- Manifest SHA-256:
+  `5bb8eb11ecbad53c80a4223772f8cd799cea0c633d96a749ae6e98d631e6692f`
+  (`runtime_tested=false`).
+- The [Forgejo release](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.10.1)
+  (release 645) carries the NRO, the manifest and `SHA256SUMS.txt`; each was
+  downloaded without authentication and matched.
+
+**Eden (2026-11-01), the card's 16 plugins with this NRO and ssbu-cpu-pilot
+0.2.1, the card's `config.ini`.**
+
+- Window Options showed `Stages + Counterpick` whole, the values aligned.
+- In Training with the CPU Pilot page open, two L+R+X presses stepped the
+  P1 row `CPU (L3)` → `CPU (L4)` → `CPU (L5)`; the pilot's diag build logged
+  exactly two steps, so the row request and P1's pad never both counted.
+- On the main menu, with no battle running, L+R+X on the P1 row stepped it
+  `CPU (L3)` → `CPU (L4)` → `CPU (L5)` through this release's request alone.
+
+**Card install (DBI MTP on the Surface, 15:19Z, `installed_verified`).**
+Installed at the operator's request.
+
+- `a070b1a7…` (0.10.0) was replaced by `a8dcda24…`, which read back
+  identical; the other plugins and the protected configs (Deluxe
+  `config.ini` `4d48afce…`) read back unchanged.
+- **Rollback:** copy `backups/pre-a8dcda242b890f09.nro` (the 0.10.0 build)
+  over the plugin.
+
+Not run on the console yet.
+
 ## 0.10.1 — label column and L+R+X on plugin rows: source and host gates — 2026-11-01
 
 Two changes after the 0.10.0 card install.
