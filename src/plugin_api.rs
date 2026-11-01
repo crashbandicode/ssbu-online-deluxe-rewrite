@@ -541,6 +541,31 @@ impl Registry {
         Some(result)
     }
 
+    /// L+R+X on an option row (0.10.1): asks the plugin for the choice it
+    /// already shows. A plugin may use that as the row's second action
+    /// (ssbu-cpu-pilot steps the CPU level); for any other plugin it moves
+    /// nothing. Nothing is persisted and nothing is left pending; a row with a
+    /// pending request is left alone.
+    pub fn activate(&self, plugin_index: usize, option: usize) -> Option<StepResult> {
+        let plugin = self.snapshot().get(plugin_index)?.clone();
+        if !plugin.options.get(option)?.editable()
+            || self.pending_for(plugin_index, option).is_some()
+        {
+            return None;
+        }
+        let current = plugin.current(option)?;
+        let result = StepResult {
+            plugin: plugin_index,
+            option,
+            requested: current,
+            status: plugin.request(option, current),
+        };
+        if let Ok(mut last) = self.last_step.lock() {
+            *last = Some(result);
+        }
+        Some(result)
+    }
+
     /// The most recent step since the previous call, for diagnostics.
     pub fn take_last_step(&self) -> Option<StepResult> {
         self.last_step.lock().ok()?.take()
@@ -1500,6 +1525,42 @@ mod tests {
     }
 
     static DEFER_GATE: Mutex<()> = Mutex::new(());
+
+    static ACTIVATE: FakePlugin = FakePlugin::new([1, 2, 0, 0], abi::REQUEST_APPLIED);
+
+    #[test]
+    fn activate_asks_for_the_current_choice_once_and_writes_nothing() {
+        let registry = Registry::new();
+        assert_eq!(register_fake(&registry, "act", "Act", DEMO, &ACTIVATE), 0);
+        let step = registry.activate(0, 1).unwrap();
+        assert_eq!(
+            (step.option, step.requested, step.status),
+            (1, 2, RequestStatus::Applied)
+        );
+        assert_eq!(registry.take_last_step(), Some(step));
+        assert_eq!(*ACTIVATE.requests.lock().unwrap(), [(1, 2)]);
+        // The single-choice status row and unknown rows or plugins ask nothing.
+        assert_eq!(registry.activate(0, 2), None);
+        assert_eq!(registry.activate(0, 9), None);
+        assert_eq!(registry.activate(4, 0), None);
+        assert_eq!(ACTIVATE.requests.lock().unwrap().len(), 1);
+        assert!(registry.take_writes().is_empty());
+    }
+
+    #[test]
+    fn activate_leaves_a_row_with_a_pending_request_alone() {
+        let _gate = DEFER_GATE.lock().unwrap();
+        let registry = deferring_registry();
+        let step = registry.step(0, 0, 1).unwrap();
+        assert_eq!(step.status, RequestStatus::Pending);
+        assert_eq!(registry.activate(0, 0), None);
+        // The other row has nothing pending: asked for its current choice.
+        let step = registry.activate(0, 1).unwrap();
+        assert_eq!((step.option, step.requested), (1, 0));
+        assert_eq!(*DEFER.requests.lock().unwrap(), [(0, 1), (1, 0)]);
+        registry.reconcile_pending();
+        assert!(registry.take_writes().is_empty());
+    }
 
     #[test]
     fn pending_then_applied_by_the_plugin_writes_the_applied_value_once() {

@@ -159,6 +159,17 @@ pub fn pane_width(shape: MenuShape, view: InfoView) -> f32 {
     }
 }
 
+/// Width of a vertical table's label column (0.10.1). It fits `label`, the
+/// widest label as drawn, and never goes below the view's design width `min`;
+/// it also leaves `value`, the widest value, its room in `avail`, the table's
+/// width. When both cannot fit, the value keeps its room and the label clips
+/// as before; when even `min` leaves no room, `min` holds. Window Options
+/// clipped a long own-page label ("Stages + Counterpick") at the old fixed
+/// width.
+pub fn label_column_width(min: f32, label: f32, value: f32, avail: f32) -> f32 {
+    label.max(min).min((avail - value).max(min))
+}
+
 /// Only ordinary ready-match views use the borderless, no-title strip. Debug
 /// remains the explicit full-detail view.
 pub fn compact_strip(shape: MenuShape, view: InfoView) -> bool {
@@ -820,6 +831,20 @@ impl Menu {
 mod tests {
     use super::*;
     use crate::config::UltraResolution;
+
+    #[test]
+    fn label_column_fits_the_widest_label_and_keeps_the_value_room() {
+        // Window Options at 1280x720: design width 73, table 253, values ~50.
+        assert_eq!(label_column_width(73.0, 140.0, 50.0, 253.0), 140.0);
+        // Never narrower than the design width.
+        assert_eq!(label_column_width(73.0, 40.0, 50.0, 253.0), 73.0);
+        // Too long for both: the value keeps its room, the label clips.
+        assert_eq!(label_column_width(73.0, 240.0, 50.0, 253.0), 203.0);
+        // A wrapping value wider than the table (Settings' Opp line): the
+        // design width holds, as before 0.10.1.
+        assert_eq!(label_column_width(110.0, 60.0, 900.0, 253.0), 110.0);
+        assert_eq!(label_column_width(110.0, 300.0, 900.0, 253.0), 110.0);
+    }
 
     #[test]
     fn you_focus_walks_the_shown_icons_both_ways() {

@@ -1,5 +1,28 @@
 # Validation record
 
+## 0.10.1 — label column and L+R+X on plugin rows: source and host gates — 2026-11-01
+
+Two changes after the 0.10.0 card install.
+
+- **Label column.** Every vertical table sizes its label column to its longest
+  label, measured with the selection mark, never below the view's design width,
+  and never so wide that the longest value loses its room
+  (`menu::label_column_width`). On the card, 0.10.0 drew Window Options'
+  `Stages + Counterpick` row as `Stages + Count`. Settings keeps its width: its
+  wrapping `Opp` value is wider than the table.
+- **L+R+X on a plugin row.** On the Plugins page or an own page, with a value
+  row selected and neither trigger held, L+R+X calls `request` with the choice
+  `current` returns, once per press (`Registry::activate`). Nothing is
+  persisted, a row with a pending request is skipped, and the ABI is unchanged.
+  ssbu-cpu-pilot 0.2.1 uses it to step the CPU level on its P1 row; for any
+  other plugin it requests the value it already has.
+
+**Gates.** 319 unit and 23 integration tests (new: the width rule; `activate`
+asking once and writing nothing, and skipping a pending row; the overlay asking
+once per held press, not with the window hidden or a trigger held, and never
+touching `Config`); clippy with warnings denied, host and Skyline; the
+no-default-features build.
+
 ## 0.10.0 — release assets, Eden checks and card install — 2026-11-01
 
 Built from clean tag `v0.10.0` (`89e9b47`) with `tools/Build.ps1 -Package`;

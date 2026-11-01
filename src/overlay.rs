@@ -235,11 +235,26 @@ impl Overlay {
         let shoulders = buttons & (L | R) == L | R;
         // L+R+X with neither trigger held toggles only what is highlighted
         // (0.9.0): the framed mode on You, the profile's Vanilla+ or LLUltra
-        // resolution on NetProfile, and nothing on any other row, page or with
-        // the window hidden. A held chord, or X pressed before the shoulders,
-        // is not a new edge; neither is a selection that moves onto a row
-        // while it is held. Every result is saved.
+        // resolution on NetProfile, a plugin option row's second action
+        // (0.10.1, `Registry::activate`), and nothing on any other row, page
+        // or with the window hidden. A held chord, or X pressed before the
+        // shoulders, is not a new edge; neither is a selection that moves onto
+        // a row while it is held. Every Settings result is saved; plugin rows
+        // never touch `Config`.
         if shoulders && buttons & (ZL | ZR) == 0 && pressed & X != 0 {
+            if matches!(self.view, View::Plugins | View::PluginPage) {
+                let page = (self.view == View::PluginPage).then_some(self.page);
+                let snapshot = plugins.snapshot();
+                let rows = crate::plugin_api::rows_for(&snapshot, page);
+                self.plugin_row =
+                    crate::plugin_api::move_selection(&snapshot, &rows, self.plugin_row, 0);
+                if let Some(crate::plugin_api::PageRow::Option { plugin, option }) =
+                    rows.get(self.plugin_row)
+                {
+                    plugins.activate(*plugin, *option);
+                }
+                return false;
+            }
             let row = (self.view == View::Settings && self.menu.open).then_some(self.menu.selected);
             match row {
                 // An OC focus without the clock is shown, and acts, as Stealth.
@@ -1102,6 +1117,62 @@ mod tests {
             [0, 0, 0, 0],
             deluxe_plugin_abi::REQUEST_APPLIED,
         );
+
+    static LRX_STATE: crate::plugin_api::testing::FakePlugin =
+        crate::plugin_api::testing::FakePlugin::new(
+            [2, 1, 0, 0],
+            deluxe_plugin_abi::REQUEST_APPLIED,
+        );
+
+    #[test]
+    fn lrx_on_a_plugin_row_asks_once_per_press_for_its_current_choice() {
+        let _gate = crate::peer_transport::global_gate();
+        crate::peer_transport::clear_session();
+        let registry = crate::plugin_api::Registry::new();
+        let mut ui = Overlay::default();
+        let mut config = Config::default();
+        let none = crate::menu::NativePads::off();
+        assert_eq!(
+            crate::plugin_api::testing::register_fake(
+                &registry,
+                "pilot",
+                "Pilot",
+                &[
+                    ("p1", "P1", &["Player", "CPU (L1)", "CPU (L2)"]),
+                    ("auto", "Auto", &["Off", "On"]),
+                ],
+                &LRX_STATE,
+            ),
+            0
+        );
+        let requests = || LRX_STATE.requests.lock().unwrap().clone();
+        // Window hidden: nothing.
+        assert!(!ui.poll_with(L | R | X, &mut config, none, &registry));
+        ui.poll_with(0, &mut config, none, &registry);
+        assert!(requests().is_empty());
+        for _ in 0..2 {
+            ui.poll_with(L | R | DOWN, &mut config, none, &registry);
+            ui.poll_with(0, &mut config, none, &registry);
+        }
+        assert_eq!(ui.view, View::Plugins);
+        // The selected P1 row: its current choice, once while held.
+        assert!(!ui.poll_with(L | R | X, &mut config, none, &registry));
+        ui.poll_with(L | R | X, &mut config, none, &registry);
+        assert_eq!(requests(), [(0, 2)]);
+        ui.poll_with(0, &mut config, none, &registry);
+        // A trigger held is not the chord.
+        ui.poll_with(ZL | L | R | X, &mut config, none, &registry);
+        ui.poll_with(0, &mut config, none, &registry);
+        ui.poll_with(ZR | L | R | X, &mut config, none, &registry);
+        ui.poll_with(0, &mut config, none, &registry);
+        assert_eq!(requests().len(), 1);
+        // The next row: its own current choice.
+        ui.poll_with(DOWN, &mut config, none, &registry);
+        ui.poll_with(0, &mut config, none, &registry);
+        ui.poll_with(L | R | X, &mut config, none, &registry);
+        assert_eq!(requests(), [(0, 2), (1, 1)]);
+        assert_eq!(config, Config::default(), "plugin rows never touch Config");
+    }
 
     #[test]
     fn plugins_page_navigates_rows_and_requests_without_touching_config() {

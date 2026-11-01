@@ -172,7 +172,9 @@ Keep labels short. The strip is narrow and labels are limited to 24 bytes.
   The host never assumes the change succeeded: it re-reads `current` on the next
   frame and shows that. For `REQUEST_PENDING`, have `current` keep returning the
   active choice until your change really applies; the host presents the request
-  as Pending.
+  as Pending. Since Deluxe 0.10.1, L+R+X on a value row requests the choice
+  `current` already returns (once per press, nothing persisted): a plugin may
+  use it as the row's second action; otherwise it changes nothing.
 * **Register errors.** `REGISTER_ERR_NULL` (-1), `_ABI` (-2), `_INVALID` (-3,
   a string, count or id charset outside the limits), `_FULL` (-4), `_DUPLICATE`
   (-5, id already registered), `_CALLBACKS` (-6, a callback is null).

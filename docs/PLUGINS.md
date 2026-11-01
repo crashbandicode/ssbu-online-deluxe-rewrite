@@ -105,6 +105,13 @@ reports it), `Rejected` or `Unavailable` to refuse. A read-only option (or one
 with a single choice) is a status row; give its choices tones to show
 `Ready` / `Degraded` / `Failed` in green, yellow and red.
 
+**L+R+X on a value row** (Deluxe 0.10.1) calls `request` with the choice
+`current` already returns, once per press. A plugin that wants a second
+action on a row can treat that as it (ssbu-cpu-pilot 0.2.1 steps the CPU level
+on its P1 row); for any other plugin it is the request of the value it already
+has and changes nothing. The host saves nothing for it and skips a row that is
+waiting on a pending change. Older hosts never send it.
+
 A status row is passive: Left/Right do nothing and `request` is never called.
 Since 0.8.0 Up/Down also skip it (only an editable value row
 holds the cursor, so a page with no editable row highlights nothing).

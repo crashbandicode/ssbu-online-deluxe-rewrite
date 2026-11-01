@@ -13,7 +13,7 @@ pub(super) struct CellDraw<'a> {
     pub color: Option<Vec4>,
 }
 
-unsafe fn text_width(value: &str) -> f32 {
+pub(super) unsafe fn text_width(value: &str) -> f32 {
     let end = value.as_ptr().add(value.len());
     igCalcTextSize(value.as_ptr().cast(), end.cast(), false, -1.0).x
 }

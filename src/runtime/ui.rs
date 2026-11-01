@@ -834,6 +834,32 @@ unsafe fn draw_table(
     colors: Option<&[Option<Vec4>]>,
     privacy: Option<Privacy>,
 ) {
+    // The label column fits its widest label (0.10.1), measured with the
+    // selection mark on every row so the width does not move with the
+    // selection; see `crate::menu::label_column_width`. One font size of
+    // allowance covers the cell padding on both sides of each column.
+    let pad = igGetFontSize();
+    let widest = |text: &dyn Fn(&Row) -> String| {
+        rows.iter()
+            .filter(|row| row.cells.is_empty())
+            .map(|row| cells::text_width(&text(row)))
+            .fold(0.0_f32, f32::max)
+    };
+    let label_width = crate::menu::label_column_width(
+        label_width,
+        widest(&|row| {
+            let indent = if row.value.is_empty() { "" } else { indent };
+            format!("> {indent}{}", row.label)
+        }) + pad,
+        widest(&|row| {
+            format!(
+                "{}{}",
+                row.value,
+                if row.pending { " (pending)" } else { "" }
+            )
+        }) + pad,
+        igGetContentRegionAvail().x,
+    );
     // A status-cell row ends the two-column table, draws its own table, and the
     // rows after it continue in a new two-column table with a distinct ImGui id.
     let mut parts = 0usize;

@@ -37,7 +37,8 @@ fork's room-ID path, but still needs an NSO test. See [native display](NATIVE_DI
 | ZL + Left / Right or Up / Down on an online character select or arena pane, window closed | Edit the input buffer or the profile on the native status (since 0.4.1 the D-pad alone only moves the hand) |
 | L+R + X with **You** selected on Settings (neither ZL nor ZR held) | 0.9.0: toggle the framed player mode and save it. **Stealth**: the eye closes when enabled and opens when disabled; a session-latched change is amber with `*` and a reconnect notice. **Streamer**: the TV has a green filled screen when enabled and a grey outline when disabled. **OC** (only while the game-aware Horizon-OC fork answers, when the clock shows): switch `hoc_oc` between **online** (Smash's saved profile applies only while connected to another player, internet or local wireless, and for 15 s after the last player disconnects) and **always** (Horizon-OC applies it whenever Smash runs, as it always has). Works in the table (`> You`) and the match strip (`>You:`). A new X press is required: holding X does not repeat, and an X already held when the selection reaches You does not fire. ZR+X, ZR+Y and ZR+L3 (0.7.0–0.8.1) do nothing since 0.9.0 |
 | L+R + X with **NetProfile** selected on Settings (neither ZL nor ZR held) | With manual console LLUltra selected, cycle 576p → 720p → 1080p → 576p in place (LLUltra → LLUltra+ → LLUltra++ → LLUltra), saving `ultra_resolution`. For Auto, the emulator and every other profile, toggle and save Vanilla+ instead (0.5.6). A new X press is required; holding X does not repeat. See [Rendering profiles](RENDERING.md#vanilla-056) |
-| L+R + X anywhere else | 0.9.0: nothing. L+R+X toggles only what is highlighted, so on NetLatency, the Opp line, other pages or with the window hidden it changes no setting. Until the first 0.9.0 candidate it flipped Vanilla+ from any of these |
+| L+R + X with a plugin row selected, on the Plugins page or a plugin's own page (neither ZL nor ZR held) | 0.10.1: asks the plugin for the value the row already shows, once per press. The plugin decides what that does: ssbu-cpu-pilot 0.2.1 steps the CPU level on its P1 row (`CPU (L1)` … `CPU (L9)`); every other plugin changes nothing. Deluxe saves nothing for it, and a row waiting on a pending change is left alone |
+| L+R + X anywhere else | 0.9.0: nothing. L+R+X toggles only what is highlighted, so on NetLatency, the Opp line, Performance, Window Options or with the window hidden it changes no setting. Until the first 0.9.0 candidate it flipped Vanilla+ from any of these |
 | L+R + Plus or Minus | Open the debug view; again to hide it. ZL+ZR stopped being a window chord in 0.5.3, so a trigger chord during play cannot open the window |
 | L+R + Up in the Debug view | Start a 30 s timing capture (see [Captures](CAPTURES.md)) |
 | L+R + Left in the Debug view | Coverage build only: write a `manual-NNN.profraw` snapshot (see [Coverage build](DEBUGGING.md#coverage-build-052)) |
@@ -254,7 +255,8 @@ instead, except while manual console LLUltra is selected: that same chord then
 cycles LLUltra → LLUltra+ → LLUltra++ → LLUltra and leaves Vanilla+ unchanged.
 Since 0.9.0 L+R+X toggles only what is highlighted: the framed player mode
 with **You** selected, Vanilla+ (or the LLUltra resolution) with **NetProfile**
-selected, and nothing elsewhere or with the window hidden. ZL+X still does
-nothing, and ZR+X (the 0.7.0–0.8.1 Stealth shortcut) does nothing.
+selected, a plugin row's second action on a plugin page (0.10.1), and nothing
+elsewhere or with the window hidden. ZL+X still does nothing, and ZR+X (the
+0.7.0–0.8.1 Stealth shortcut) does nothing.
 See [Rendering profiles](RENDERING.md#fps)
 and [Vanilla+](RENDERING.md#vanilla-056).

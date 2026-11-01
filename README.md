@@ -14,7 +14,7 @@ overclocking.
 
 ![The Player Info Settings window: the You row with eye and TV icons, NetLatency and NetProfile](docs/media/settings-window.png)
 
-**[0.10.0 — download NRO and manifest](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.10.0)**
+**[0.10.1 — download NRO and manifest](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.10.1)**
 lets Window Options show or hide each plugin's own page on its own (one row
 per page, such as FX Control or CPU Pilot). 0.9.0 put the player modes on the
 You line (ZR+Left/Right picks Stealth, Streamer or the overclock clock, L+R+X

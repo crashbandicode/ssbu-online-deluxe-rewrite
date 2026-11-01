@@ -222,7 +222,9 @@ pub trait PluginHandler: Send + Sync + 'static {
     /// Index of the option's current choice, or `None` for `CHOICE_UNAVAILABLE`.
     fn current(&self, option: usize) -> Option<usize>;
     /// Asked to move `option` to `choice`. The host re-reads [`Self::current`]
-    /// on the next frame and never assumes the change succeeded.
+    /// on the next frame and never assumes the change succeeded. Since Deluxe
+    /// 0.10.1, L+R+X on the row asks for the choice `current` already returns:
+    /// a plugin may treat that as the row's second action.
     fn request(&self, option: usize, choice: usize) -> RequestStatus;
 }
 
