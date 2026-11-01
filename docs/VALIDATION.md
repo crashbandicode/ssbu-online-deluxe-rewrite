@@ -1,5 +1,22 @@
 # Validation record
 
+## 0.10.0 — own pages one by one: source and host gates — 2026-11-01
+
+Window Options has one Shown / Hidden row per own page, titled with the
+plugin's label, in place of the single OwnPages row. The rows write
+`hide_plugin_pages` (plugin ids); the cycle skips each listed page. A file
+with `hide_pages=…,own_pages,…` keeps every own page hidden until one row is
+edited, which replaces that entry with one id per registered own page. The
+list stays out of the settings that game hooks read: `settings()` leaves it
+empty, and only the window, the config writer and `publish` take its lock
+(`settings_with_pages`).
+
+**Gates.** 315 unit and 21 integration tests (four new: the key's parse,
+order and errors; the Window rows and the migration; the cycle with hidden
+own pages; a Window edit through `poll_with` with two registered own pages);
+clippy with warnings denied, host and Skyline; the no-default-features build.
+`cargo fmt --check` lists the same six files as 0.9.0.
+
 ## 0.9.0 — release assets, Eden check and card install — 2026-10-31
 
 Built from clean tag `v0.9.0` (`d6402b4`) with `tools/Build.ps1 -Package`.

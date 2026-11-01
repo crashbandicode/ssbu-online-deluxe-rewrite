@@ -29,7 +29,7 @@ fork's room-ID path, but still needs an NSO test. See [native display](NATIVE_DI
 
 | Control | Action |
 | --- | --- |
-| L+R + Down | Cycle settings → (plugins) → (own plugin pages) → performance → window options → hidden. The Window Options page rows PluginsPage, OwnPages and PerfPage (or `hide_pages` in the INI, 0.5.3; the rows moved from Settings to the Window Options page in 0.6.0) take pages out of the cycle, e.g. settings → FX Control → window options → hidden; Settings and Window Options are always in it. See [Configuration](CONFIGURATION.md) |
+| L+R + Down | Cycle settings → (plugins) → (own plugin pages) → performance → window options → hidden. The Window Options page rows PluginsPage, one row per own page (0.10.0; titled with the plugin's label, replacing the single OwnPages row) and PerfPage (or `hide_pages` and `hide_plugin_pages` in the INI; the rows moved from Settings to the Window Options page in 0.6.0) take pages out of the cycle, e.g. settings → CPU Pilot → window options → hidden with FX Control hidden; Settings and Window Options are always in it. See [Configuration](CONFIGURATION.md) |
 | Up / Down | Move the selection; it wraps within the page. **Settings**: You (the first row, carrying the player-mode icons), the Opp line (only while the peer shows), NetLatency, NetProfile. You has no value: ZR + Left/Right moves the light-blue frame between its icons and L+R + X toggles the framed one (0.9.0). There are no separate Stealth, Streamer or OC rows. **Window Options**: PluginsPage / OwnPages / PerfPage (Shown or Hidden), PerfView (Graph or Number) and Hints (Shown or Hidden). On a plugin page, the plugin's rows |
 | Left / Right (window open) | Does not change a value since 0.5.6; the window ignores a plain press in every scene (until 0.5.5 it changed values in menus and on the character select). Use ZR + Left / Right below |
 | ZR + Left / Right | Change the selected value on any Settings row, Window Options row or plugin row; on the Opp line (Settings) it cycles the selected remote station, what the Peer row did before 0.6.0. On **You** (0.9.0) it moves the light-blue frame Stealth → Streamer → OC (the clock only while it shows), wrapping, and saves nothing. The hold is required in **every scene since 0.5.6** (menus, character select, Training and matches); in 0.5.3–0.5.5 it applied only while a fight was live (Training, Singles, Doubles). A plain Left/Right is ignored, so a menu D-pad press, a taunt or a stray press cannot change a setting (operator rule, 2026-10-18); Up/Down still move the selection. Since 0.6.0 the selected row's value reads `< value >` (for example `< Auto >`) while ZR is held and is plain text without it, on Settings, Window Options and in the match strip. ZR rather than ZL because ZL + D-pad Left/Right in Training swaps the controlled fighter. Window closed, the ZL-gated native pane edits below are unchanged |
@@ -149,13 +149,22 @@ fork, `ZR+L3 OC`. The hint line is on by default; `hints=false` in the INI or th
 
 The last page of the L+R+Down cycle, titled **Window Options** since 0.6.1 (0.6.0
 titled it just **Window**) and always in the cycle.
-Its rows are **PluginsPage**, **OwnPages** and **PerfPage** (Shown / Hidden;
-they toggle `hide_pages` live, as the same rows did on Settings before 0.6.0),
+Its rows are **PluginsPage**, one row per own page and **PerfPage** (Shown /
+Hidden; they toggle `hide_pages` and `hide_plugin_pages` live, as the page rows
+did on Settings before 0.6.0),
 **PerfView** (Graph / Number; since 0.6.0 it affects the Performance and Debug
 pages only, because Settings has the one-line footer) and **Hints** (Shown /
 Hidden, the `hints` key). The same hint line is under the table (no performance
 footer). ZR + Left/Right edits, Up/Down move the selection and it wraps within
 the page.
+
+**Own pages one by one (0.10.0).** Each plugin with its own page (FX Control,
+CPU Pilot) has a row titled with its label, in the cycle's order, between
+PluginsPage and PerfPage; there is none while no plugin has an own page. Until
+0.9.0 one **OwnPages** row showed or hid all of them. A file that still says
+`hide_pages=…,own_pages,…` shows every own-page row as Hidden; editing one row
+replaces that entry with one `hide_plugin_pages` id per own page, so only the
+edited page changes.
 
 ## In-match strip (0.6.0)
 
@@ -163,7 +172,8 @@ In a ready Singles or Doubles match the window is the compact two-line strip.
 Line 1 of the Settings strip is `You:` (`>You:` while You is selected) with the
 player-mode icons (and the light-blue frame while You is selected), then `Net`
 and `Profile`; the `PlugPg`, `OwnPg`, `PerfPg` and `PerfView` fields moved to the
-Window Options page's strip, which shows them plus `Hints`. Line 2 is
+Window Options page's strip, which shows them plus `Hints` (since 0.10.0 one
+field per own page, under its plugin label, instead of `OwnPg`). Line 2 is
 `>Opp:<name> | <profile> | <buffer> | <ping> | <interface>` (when the peer
 shows) followed by the timing line `FPS:.. FT:.. AVG:.. [####------]`. The old
 `Peer:`, `IF:`, `Ping:`, `PeerNet:` and `PeerProfile:` fields are gone. The

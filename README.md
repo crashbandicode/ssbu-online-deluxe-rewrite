@@ -14,11 +14,12 @@ overclocking.
 
 ![The Player Info Settings window: the You row with eye and TV icons, NetLatency and NetProfile](docs/media/settings-window.png)
 
-**[0.9.0 — download NRO and manifest](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.9.0)**
-puts the player modes on the You line (ZR+Left/Right picks Stealth, Streamer
-or the overclock clock, L+R+X toggles it), treats waiting-room practice as
-Training, and uses about 300 KiB less memory. 0.8.1 added the online-only
-Horizon-OC mode. [Status and version history](docs/STATUS.md).
+**[0.10.0 — download NRO and manifest](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.10.0)**
+lets Window Options show or hide each plugin's own page on its own (one row
+per page, such as FX Control or CPU Pilot). 0.9.0 put the player modes on the
+You line (ZR+Left/Right picks Stealth, Streamer or the overclock clock, L+R+X
+toggles it), treated waiting-room practice as Training and used about 300 KiB
+less memory. [Status and version history](docs/STATUS.md).
 
 > **Install only this NRO.** It replaces the original Online Deluxe fork,
 > SsbuSync and the PIA manager, so remove all three. If SsbuSync is still

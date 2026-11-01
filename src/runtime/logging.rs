@@ -1,4 +1,4 @@
-use super::{publish, record, settings, Code, CONFIG_GENERATION, DATA_DIR, RECORDER};
+use super::{publish, record, settings_with_pages, Code, CONFIG_GENERATION, DATA_DIR, RECORDER};
 use crate::{
     build_info,
     config::{self, Config},
@@ -201,7 +201,7 @@ pub(super) fn start(version: &str) {
 
     let mut generation = CONFIG_GENERATION.load(Ordering::Acquire);
     // The settings as loaded, then as last saved, so each save names its keys.
-    let mut saved = settings().serialize();
+    let mut saved = settings_with_pages().serialize();
     startup_phase("diagnostic_thread_begin");
     // The Switch std default is a 2 MiB stack per thread, taken from the game
     // heap for the whole run. This thread formats log lines and streams CSV
@@ -297,7 +297,7 @@ pub(super) fn start(version: &str) {
                 super::plugin_export::flush_persistence();
                 let next_generation = CONFIG_GENERATION.load(Ordering::Acquire);
                 if next_generation != generation {
-                    let config = settings();
+                    let config = settings_with_pages();
                     match save_config(&config) {
                         Ok(()) => {
                             generation = next_generation;

@@ -123,9 +123,14 @@ pub struct Config {
     pub ultra_resolution: UltraResolution,
     /// 0.5.3: window pages the chord cycle skips (`hide_pages`), so a
     /// measurement session reaches a plugin's own page in one tap. Default
-    /// none. The Settings rows PluginsPage / OwnPages / PerfPage toggle them
-    /// live; Settings itself is always in the cycle.
+    /// none. The Window Options rows toggle them live; Settings itself is
+    /// always in the cycle.
     pub hide_pages: HiddenPages,
+    /// 0.10.0: own pages hidden one by one (`hide_plugin_pages`), by plugin
+    /// id. Each own page has its own Window Options row; see
+    /// [`Config::own_page_hidden`]. The runtime keeps it out of the settings
+    /// game hooks read, so it is the empty set there.
+    pub plugin_pages: PluginPages,
     /// 0.5.3: how the window shows frame time (`perf_view`): the plot, or a
     /// number only (less draw work while measuring). Default graph.
     pub perf_view: PerfView,
@@ -170,9 +175,71 @@ pub struct Config {
 pub struct HiddenPages {
     /// The shared Plugins page.
     pub plugins: bool,
-    /// Every plugin's own page (FX Control).
+    /// Every plugin's own page at once. Since 0.10.0 no row sets it: a file
+    /// that has it keeps every own page hidden until one own page's row is
+    /// edited, which replaces it with one `hide_plugin_pages` id per page.
     pub own_pages: bool,
     pub performance: bool,
+}
+
+/// Own pages left out of the window cycle one by one (`hide_plugin_pages`,
+/// 0.10.0): a comma list of plugin ids, sorted and without duplicates. An id
+/// whose plugin is not installed is kept, so the page stays hidden when the
+/// plugin returns.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PluginPages(Vec<String>);
+
+impl PluginPages {
+    pub const EMPTY: Self = Self(Vec::new());
+
+    pub fn contains(&self, id: &str) -> bool {
+        self.0.binary_search_by(|entry| entry.as_str().cmp(id)).is_ok()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// A plugin whose id is `none` cannot be listed: the key would read as
+    /// the empty list.
+    fn insert(&mut self, id: &str) {
+        if id == "none" {
+            return;
+        }
+        if let Err(at) = self.0.binary_search_by(|entry| entry.as_str().cmp(id)) {
+            self.0.insert(at, id.to_owned());
+        }
+    }
+
+    fn remove(&mut self, id: &str) {
+        if let Ok(at) = self.0.binary_search_by(|entry| entry.as_str().cmp(id)) {
+            self.0.remove(at);
+        }
+    }
+
+    /// `none` or a comma list of plugin ids (the plugin API's id rule), each
+    /// at most once.
+    fn parse(value: &str) -> Option<Self> {
+        let mut pages = Self::EMPTY;
+        if value == "none" {
+            return Some(pages);
+        }
+        for id in value.split(',').map(str::trim) {
+            if id == "none" || !deluxe_plugin_abi::valid_id(id.as_bytes()) || pages.contains(id) {
+                return None;
+            }
+            pages.insert(id);
+        }
+        Some(pages)
+    }
+
+    pub fn key(&self) -> String {
+        if self.0.is_empty() {
+            "none".to_owned()
+        } else {
+            self.0.join(",")
+        }
+    }
 }
 
 impl HiddenPages {
@@ -369,6 +436,7 @@ impl Default for Config {
             drs_adaptive: AdaptiveSettings::default(),
             ultra_resolution: UltraResolution::P576,
             hide_pages: HiddenPages::NONE,
+            plugin_pages: PluginPages::EMPTY,
             perf_view: PerfView::Graph,
             early_present: true,
             dispatcher_backoff: true,
@@ -415,6 +483,7 @@ fn key_slot(key: &str) -> Option<usize> {
         "vanilla_plus" => 17,
         "hints" => 18,
         "hoc_oc" => 19,
+        "hide_plugin_pages" => 20,
         _ => return None,
     })
 }
@@ -439,7 +508,7 @@ pub fn changed_keys(previous: &str, next: &str) -> u64 {
 
 pub fn parse(text: &str) -> Result<Config, String> {
     let mut config = Config::default();
-    let mut seen = [false; 20];
+    let mut seen = [false; 21];
     for (index, raw) in text.lines().enumerate() {
         let line = raw.split('#').next().unwrap_or_default().trim();
         if line.is_empty() {
@@ -552,6 +621,11 @@ pub fn parse(text: &str) -> Result<Config, String> {
                     error("hide_pages must be none or a comma list of plugins, own_pages, performance")
                 })?;
             }
+            "hide_plugin_pages" => {
+                config.plugin_pages = PluginPages::parse(value).ok_or_else(|| {
+                    error("hide_plugin_pages must be none or a comma list of distinct plugin ids")
+                })?;
+            }
             "perf_view" => {
                 config.perf_view = PerfView::parse(value)
                     .ok_or_else(|| error("perf_view must be graph or number"))?;
@@ -652,6 +726,12 @@ pub fn serialize(config: &Config) -> String {
         OcMode::Always => String::new(),
         mode => format!("hoc_oc={}\n", mode.key()),
     };
+    // Written only while an own page is hidden by id, for the same reason.
+    let plugin_pages = if config.plugin_pages.is_empty() {
+        String::new()
+    } else {
+        format!("hide_plugin_pages={}\n", config.plugin_pages.key())
+    };
     let mut text = format!(
         "# Online Deluxe settings\nversion=1\ninput_buffer={input_buffer}\nrender_mode={}\nauto_profile={auto_profile}\nplatform={}\nstealth={stealth}\nstreamer={streamer}\ndrs_moves={}\ndrs_adaptive={drs_adaptive}\ndrs_adaptive_threshold_ms={}\ndrs_adaptive_trigger_frames={}\ndrs_adaptive_release_frames={}\nultra_resolution={}\nhide_pages={}\nperf_view={}\nearly_present={early_present}\ndispatcher_backoff={dispatcher_backoff}\nvanilla_plus={vanilla_plus}\nhints={hints}\n",
         config.render_mode.key(),
@@ -665,12 +745,37 @@ pub fn serialize(config: &Config) -> String {
         config.perf_view.key(),
     );
     text.push_str(&hoc_oc);
+    text.push_str(&plugin_pages);
     text
 }
 
 impl Config {
     pub fn serialize(&self) -> String {
         serialize(self)
+    }
+
+    /// Whether plugin `id`'s own page is out of the window cycle: by its id
+    /// in `hide_plugin_pages`, or by the all-pages `own_pages` entry of
+    /// `hide_pages` that a file from before 0.10.0 may carry.
+    pub fn own_page_hidden(&self, id: &str) -> bool {
+        self.hide_pages.own_pages || self.plugin_pages.contains(id)
+    }
+
+    /// Shows or hides plugin `id`'s own page (its Window Options row). A set
+    /// `own_pages` entry first becomes one id per own page in `registered`,
+    /// so the other pages keep the state their rows showed.
+    pub fn toggle_own_page(&mut self, id: &str, registered: &[&str]) {
+        if self.hide_pages.own_pages {
+            self.hide_pages.own_pages = false;
+            for other in registered {
+                self.plugin_pages.insert(other);
+            }
+        }
+        if self.plugin_pages.contains(id) {
+            self.plugin_pages.remove(id);
+        } else {
+            self.plugin_pages.insert(id);
+        }
     }
 }
 
@@ -736,6 +841,7 @@ mod tests {
                 drs_adaptive: AdaptiveSettings::default(),
                 ultra_resolution: UltraResolution::P576,
                 hide_pages: HiddenPages::NONE,
+                plugin_pages: PluginPages::EMPTY,
                 perf_view: PerfView::Graph,
                 early_present: true,
                 dispatcher_backoff: true,
@@ -896,6 +1002,62 @@ mod tests {
         assert!(parse("version=1\nhide_pages=none\nhide_pages=plugins").is_err());
         assert_eq!(page_label(true), "Hidden");
         assert_eq!(page_label(false), "Shown");
+    }
+
+    #[test]
+    fn hide_plugin_pages_is_sorted_written_only_when_set_and_rejects_bad_ids() {
+        // 0.10.0. The default file is unchanged, so an older build still loads it.
+        let defaults = parse("version=1").unwrap();
+        assert!(defaults.plugin_pages.is_empty());
+        assert!(!defaults.serialize().contains("hide_plugin_pages"));
+        assert_eq!(parse("version=1\nhide_plugin_pages=none").unwrap(), defaults);
+        let config = parse("version=1\nhide_plugin_pages=ssbu_cpu_pilot, fx_control").unwrap();
+        assert_eq!(config.plugin_pages.key(), "fx_control,ssbu_cpu_pilot");
+        assert!(config.own_page_hidden("fx_control") && config.own_page_hidden("ssbu_cpu_pilot"));
+        assert!(!config.own_page_hidden("record"));
+        assert!(config
+            .serialize()
+            .ends_with("\nhints=true\nhide_plugin_pages=fx_control,ssbu_cpu_pilot\n"));
+        assert_eq!(parse(&config.serialize()).unwrap(), config);
+        // After hoc_oc, which is also written only when set.
+        let both = Config {
+            hoc_oc: OcMode::Online,
+            ..config.clone()
+        };
+        assert!(both
+            .serialize()
+            .ends_with("\nhoc_oc=online\nhide_plugin_pages=fx_control,ssbu_cpu_pilot\n"));
+        assert_eq!(parse(&both.serialize()).unwrap(), both);
+        assert_eq!(
+            changed_keys(&defaults.serialize(), &config.serialize()),
+            1 << 20
+        );
+        for bad in [
+            "",
+            "fx_control,fx_control",
+            "fx_control,",
+            "fx control",
+            "fx_control,none",
+            &"a".repeat(deluxe_plugin_abi::MAX_ID_LEN + 1),
+        ] {
+            assert!(
+                parse(&format!("version=1\nhide_plugin_pages={bad}")).is_err(),
+                "{bad:?} accepted"
+            );
+        }
+        assert!(parse("version=1\nhide_plugin_pages=a\nhide_plugin_pages=b").is_err());
+        // The all-pages entry hides every own page; a toggle replaces it.
+        let mut legacy = parse("version=1\nhide_pages=plugins,own_pages,performance").unwrap();
+        assert!(legacy.own_page_hidden("anything"));
+        legacy.toggle_own_page("ssbu_cpu_pilot", &["fx_control", "ssbu_cpu_pilot"]);
+        assert_eq!(legacy.hide_pages.key(), "plugins,performance");
+        assert_eq!(legacy.plugin_pages.key(), "fx_control");
+        legacy.toggle_own_page("ssbu_cpu_pilot", &["fx_control", "ssbu_cpu_pilot"]);
+        assert_eq!(legacy.plugin_pages.key(), "fx_control,ssbu_cpu_pilot");
+        // An id that is not registered now is kept.
+        let mut kept = parse("version=1\nhide_plugin_pages=gone").unwrap();
+        kept.toggle_own_page("fx_control", &["fx_control"]);
+        assert_eq!(kept.plugin_pages.key(), "fx_control,gone");
     }
 
     #[test]

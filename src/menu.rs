@@ -51,9 +51,12 @@ pub const ROW_PEER: usize = 1;
 pub const ROW_NET_LATENCY: usize = 2;
 pub const ROW_NET_PROFILE: usize = 3;
 /// Window pages in the chord cycle (`hide_pages`, 0.5.3): the shared Plugins
-/// page, every plugin's own page, Performance. Settings and Window have no
-/// row: they are always in the cycle.
+/// page, the own pages, Performance. Settings and Window have no row: they
+/// are always in the cycle.
 pub const ROW_PAGE_PLUGINS: usize = 4;
+/// One row per own page (0.10.0), titled with its plugin's label, in the
+/// window cycle's order; [`Menu::own_row`] says which. Absent while no plugin
+/// has an own page.
 pub const ROW_PAGE_OWN: usize = 5;
 pub const ROW_PAGE_PERF: usize = 6;
 /// Frame time on the Performance and Debug pages as the plot or a number
@@ -63,17 +66,20 @@ pub const ROW_PERF_VIEW: usize = 7;
 pub const ROW_HINTS: usize = 8;
 pub const ROW_COUNT: usize = 9;
 
-/// Which editable rows exist. `window` selects the Window Options page.
+/// Which editable rows exist. `window` selects the Window Options page;
+/// `own_pages` counts its own-page rows.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RowGate {
     pub peers_connected: bool,
     pub window: bool,
+    pub own_pages: usize,
 }
 
-pub fn row_gate(peers_connected: bool, window: bool) -> RowGate {
+pub fn row_gate(peers_connected: bool, window: bool, own_pages: usize) -> RowGate {
     RowGate {
         peers_connected,
         window,
+        own_pages,
     }
 }
 
@@ -81,7 +87,8 @@ pub fn row_visible(row: usize, gate: RowGate) -> bool {
     match row {
         ROW_PEER => !gate.window && gate.peers_connected,
         ROW_YOU | ROW_NET_LATENCY | ROW_NET_PROFILE => !gate.window,
-        ROW_PAGE_PLUGINS | ROW_PAGE_OWN | ROW_PAGE_PERF | ROW_PERF_VIEW | ROW_HINTS => gate.window,
+        ROW_PAGE_OWN => gate.window && gate.own_pages > 0,
+        ROW_PAGE_PLUGINS | ROW_PAGE_PERF | ROW_PERF_VIEW | ROW_HINTS => gate.window,
         _ => false,
     }
 }
@@ -651,6 +658,9 @@ pub enum Action {
 pub struct Menu {
     pub open: bool,
     pub selected: usize,
+    /// The own-page row selected while `selected` is [`ROW_PAGE_OWN`]
+    /// (0.10.0): an index into the own pages, in cycle order.
+    pub own_row: usize,
 }
 
 /// Steps to the next visible row. Hidden Opp and the other page's rows are
@@ -684,20 +694,70 @@ impl Menu {
         config: &mut Config,
         peers_connected: bool,
     ) -> bool {
-        self.handle_rows(action, config, row_gate(peers_connected, false))
+        self.handle_rows(action, config, row_gate(peers_connected, false, 0), &[])
     }
 
-    /// Window page (0.6.0): the page toggles, PerfView and Hints.
-    pub fn handle_window(&mut self, action: Action, config: &mut Config) -> bool {
-        self.handle_rows(action, config, row_gate(false, true))
+    /// Window page (0.6.0): the page toggles, PerfView and Hints. `own_pages`
+    /// are the plugin ids of the own pages, in cycle order (0.10.0).
+    pub fn handle_window(
+        &mut self,
+        action: Action,
+        config: &mut Config,
+        own_pages: &[&str],
+    ) -> bool {
+        self.handle_rows(
+            action,
+            config,
+            row_gate(false, true, own_pages.len()),
+            own_pages,
+        )
     }
 
-    pub fn handle_rows(&mut self, action: Action, config: &mut Config, gate: RowGate) -> bool {
+    /// The selected own-page row, kept within `gate.own_pages`.
+    pub fn own_row(&self, gate: RowGate) -> usize {
+        self.own_row.min(gate.own_pages.saturating_sub(1))
+    }
+
+    /// Up/Down: through the own-page rows one by one, then to the next
+    /// visible row; entering the own-page rows from below lands on the last.
+    pub fn step(&mut self, direction: i8, gate: RowGate) {
+        if self.selected == ROW_PAGE_OWN && row_visible(ROW_PAGE_OWN, gate) {
+            let row = self.own_row(gate);
+            if direction > 0 && row + 1 < gate.own_pages {
+                self.own_row = row + 1;
+                return;
+            }
+            if direction < 0 && row > 0 {
+                self.own_row = row - 1;
+                return;
+            }
+        }
+        self.selected = move_row(self.selected, direction, gate);
+        if self.selected == ROW_PAGE_OWN {
+            self.own_row = if direction < 0 {
+                gate.own_pages.saturating_sub(1)
+            } else {
+                0
+            };
+        }
+    }
+
+    /// One action on the page `gate` describes. `own_pages` are the own
+    /// pages' plugin ids in cycle order (the Window page's own-page rows);
+    /// Settings passes none.
+    pub fn handle_rows(
+        &mut self,
+        action: Action,
+        config: &mut Config,
+        gate: RowGate,
+        own_pages: &[&str],
+    ) -> bool {
         match action {
             Action::Toggle => {
                 self.open = !self.open;
                 if self.open {
                     self.selected = first_row(gate);
+                    self.own_row = 0;
                 }
                 return false;
             }
@@ -707,17 +767,17 @@ impl Menu {
             }
             _ if !self.open => return false,
             Action::Up => {
-                self.selected = move_row(self.selected, -1, gate);
+                self.step(-1, gate);
                 return false;
             }
             Action::Down => {
-                self.selected = move_row(self.selected, 1, gate);
+                self.step(1, gate);
                 return false;
             }
             Action::Left | Action::Right => {}
         }
         if !row_visible(self.selected, gate) {
-            self.selected = move_row(self.selected, 1, gate);
+            self.step(1, gate);
             return false;
         }
         let direction: i8 = if action == Action::Left { -1 } else { 1 };
@@ -732,10 +792,13 @@ impl Menu {
                 config.hide_pages.plugins = !config.hide_pages.plugins;
                 true
             }
-            ROW_PAGE_OWN => {
-                config.hide_pages.own_pages = !config.hide_pages.own_pages;
-                true
-            }
+            ROW_PAGE_OWN => match own_pages.get(self.own_row(gate)) {
+                Some(id) => {
+                    config.toggle_own_page(id, own_pages);
+                    true
+                }
+                None => false,
+            },
             ROW_PAGE_PERF => {
                 config.hide_pages.performance = !config.hide_pages.performance;
                 true
@@ -784,6 +847,7 @@ mod tests {
         let mut menu = Menu {
             open: false,
             selected: ROW_NET_PROFILE,
+            own_row: 0,
         };
         let mut config = Config::default();
         assert!(!menu.handle(Action::Right, &mut config));
@@ -816,6 +880,7 @@ mod tests {
         let mut menu = Menu {
             open: true,
             selected: ROW_YOU,
+            own_row: 0,
         };
         let mut config = Config {
             platform: Platform::Emulator,
@@ -852,6 +917,7 @@ mod tests {
         let mut menu = Menu {
             open: true,
             selected: ROW_NET_PROFILE,
+            own_row: 0,
         };
         let mut config = Config::default();
         assert!(config.auto_profile);
@@ -1107,11 +1173,12 @@ mod tests {
         let mut menu = Menu {
             open: true,
             selected: ROW_PAGE_PLUGINS,
+            own_row: 0,
         };
         let mut config = Config::default();
         for platform in [Platform::Console, Platform::Emulator] {
-            let window = row_gate(true, true);
-            let settings = row_gate(true, false);
+            let window = row_gate(true, true, 2);
+            let settings = row_gate(true, false, 2);
             for row in [
                 ROW_PAGE_PLUGINS,
                 ROW_PAGE_OWN,
@@ -1133,54 +1200,118 @@ mod tests {
             );
             assert_eq!(first_row(window), ROW_PAGE_PLUGINS);
         }
+        // Without an own page there is no own-page row.
+        assert!(!row_visible(ROW_PAGE_OWN, row_gate(true, true, 0)));
         // The Settings handler never reaches a Window row: the selection is
         // moved onto the page instead and nothing changes.
         assert!(!menu.handle(Action::Right, &mut config));
         assert_eq!(config, Config::default());
         assert_eq!(menu.selected, ROW_YOU);
+        let pages = ["fx_control", "ssbu_cpu_pilot"];
         menu.selected = ROW_PAGE_PLUGINS;
-        assert!(menu.handle_window(Action::Right, &mut config));
+        assert!(menu.handle_window(Action::Right, &mut config, &pages));
         assert!(config.hide_pages.plugins);
-        assert!(menu.handle_window(Action::Left, &mut config));
+        assert!(menu.handle_window(Action::Left, &mut config, &pages));
         assert_eq!(config.hide_pages, HiddenPages::NONE);
-        menu.handle_window(Action::Down, &mut config);
-        assert_eq!(menu.selected, ROW_PAGE_OWN);
-        assert!(menu.handle_window(Action::Right, &mut config));
-        assert!(config.hide_pages.own_pages);
-        menu.handle_window(Action::Down, &mut config);
+        // 0.10.0: one row per own page, each hiding only its own page.
+        menu.handle_window(Action::Down, &mut config, &pages);
+        assert_eq!((menu.selected, menu.own_row), (ROW_PAGE_OWN, 0));
+        assert!(menu.handle_window(Action::Right, &mut config, &pages));
+        assert!(config.own_page_hidden("fx_control"));
+        assert!(!config.own_page_hidden("ssbu_cpu_pilot"));
+        menu.handle_window(Action::Down, &mut config, &pages);
+        assert_eq!((menu.selected, menu.own_row), (ROW_PAGE_OWN, 1));
+        assert!(menu.handle_window(Action::Right, &mut config, &pages));
+        assert!(config.own_page_hidden("ssbu_cpu_pilot"));
+        assert!(menu.handle_window(Action::Left, &mut config, &pages));
+        assert!(!config.own_page_hidden("ssbu_cpu_pilot"));
+        assert!(config.own_page_hidden("fx_control"));
+        assert!(
+            !config.hide_pages.own_pages,
+            "no row sets the all-pages entry"
+        );
+        menu.handle_window(Action::Down, &mut config, &pages);
         assert_eq!(menu.selected, ROW_PAGE_PERF);
-        assert!(menu.handle_window(Action::Right, &mut config));
+        // Up from PerfPage lands on the last own-page row, then the first.
+        menu.handle_window(Action::Up, &mut config, &pages);
+        assert_eq!((menu.selected, menu.own_row), (ROW_PAGE_OWN, 1));
+        menu.handle_window(Action::Up, &mut config, &pages);
+        assert_eq!((menu.selected, menu.own_row), (ROW_PAGE_OWN, 0));
+        menu.handle_window(Action::Up, &mut config, &pages);
+        assert_eq!(menu.selected, ROW_PAGE_PLUGINS);
+        menu.handle_window(Action::Down, &mut config, &pages);
+        menu.handle_window(Action::Down, &mut config, &pages);
+        menu.handle_window(Action::Down, &mut config, &pages);
+        assert_eq!(menu.selected, ROW_PAGE_PERF);
+        assert!(menu.handle_window(Action::Right, &mut config, &pages));
         assert_eq!(
             config.hide_pages,
             HiddenPages {
                 plugins: false,
-                own_pages: true,
+                own_pages: false,
                 performance: true
             }
         );
-        menu.handle_window(Action::Down, &mut config);
+        menu.handle_window(Action::Down, &mut config, &pages);
         assert_eq!(menu.selected, ROW_PERF_VIEW);
         assert_eq!(config.perf_view, PerfView::Graph);
-        assert!(menu.handle_window(Action::Right, &mut config));
+        assert!(menu.handle_window(Action::Right, &mut config, &pages));
         assert_eq!(config.perf_view, PerfView::Number);
-        assert!(menu.handle_window(Action::Left, &mut config));
+        assert!(menu.handle_window(Action::Left, &mut config, &pages));
         assert_eq!(config.perf_view, PerfView::Graph);
-        menu.handle_window(Action::Down, &mut config);
+        menu.handle_window(Action::Down, &mut config, &pages);
         assert_eq!(menu.selected, ROW_HINTS);
         assert!(config.hints);
-        assert!(menu.handle_window(Action::Right, &mut config));
+        assert!(menu.handle_window(Action::Right, &mut config, &pages));
         assert!(!config.hints);
-        assert!(menu.handle_window(Action::Left, &mut config));
+        assert!(menu.handle_window(Action::Left, &mut config, &pages));
         assert!(config.hints);
         // The page wraps onto itself, never into the Settings rows.
-        menu.handle_window(Action::Down, &mut config);
+        menu.handle_window(Action::Down, &mut config, &pages);
         assert_eq!(menu.selected, ROW_PAGE_PLUGINS);
-        menu.handle_window(Action::Up, &mut config);
+        menu.handle_window(Action::Up, &mut config, &pages);
         assert_eq!(menu.selected, ROW_HINTS);
+        // Without own pages, PluginsPage steps straight to PerfPage.
+        menu.selected = ROW_PAGE_PLUGINS;
+        menu.handle_window(Action::Down, &mut config, &[]);
+        assert_eq!(menu.selected, ROW_PAGE_PERF);
         // Closed, nothing edits.
         menu.open = false;
-        assert!(!menu.handle_window(Action::Right, &mut config));
+        assert!(!menu.handle_window(Action::Right, &mut config, &pages));
         assert!(config.hints);
+    }
+
+    #[test]
+    fn an_own_page_row_replaces_the_all_pages_entry_with_one_id_per_page() {
+        // A file from before 0.10.0 hid every own page at once.
+        let mut config = Config {
+            hide_pages: crate::config::HiddenPages {
+                own_pages: true,
+                ..crate::config::HiddenPages::NONE
+            },
+            ..Config::default()
+        };
+        let pages = ["fx_control", "ssbu_cpu_pilot"];
+        assert!(pages.iter().all(|id| config.own_page_hidden(id)));
+        let mut menu = Menu {
+            open: true,
+            selected: ROW_PAGE_OWN,
+            own_row: 1,
+        };
+        // Showing the CPU Pilot page keeps FX Control hidden, by its id.
+        assert!(menu.handle_window(Action::Right, &mut config, &pages));
+        assert!(!config.hide_pages.own_pages);
+        assert!(config.own_page_hidden("fx_control"));
+        assert!(!config.own_page_hidden("ssbu_cpu_pilot"));
+        assert!(config
+            .serialize()
+            .ends_with("hide_pages=none\nperf_view=graph\nearly_present=true\ndispatcher_backoff=true\nvanilla_plus=true\nhints=true\nhide_plugin_pages=fx_control\n"));
+        // A page that registers later starts shown.
+        assert!(!config.own_page_hidden("later_plugin"));
+        // An own_row past the end (a page count that shrank) edits the last.
+        menu.own_row = 9;
+        assert!(menu.handle_window(Action::Right, &mut config, &pages));
+        assert!(config.own_page_hidden("ssbu_cpu_pilot"));
     }
 
     #[test]
@@ -1371,13 +1502,13 @@ mod tests {
             Some(MATCH_BG_ALPHA)
         );
         assert_eq!(match_window_alpha(MenuShape::Vertical), None);
-        assert!(row_visible(ROW_YOU, row_gate(false, false)));
-        assert!(row_visible(ROW_YOU, row_gate(true, false)));
-        assert!(!row_visible(ROW_YOU, row_gate(true, true)));
-        assert!(row_visible(ROW_NET_LATENCY, row_gate(false, false)));
-        assert!(!row_visible(ROW_PEER, row_gate(false, false)));
-        assert!(row_visible(ROW_PEER, row_gate(true, false)));
-        assert!(!row_visible(ROW_PEER, row_gate(true, true)));
+        assert!(row_visible(ROW_YOU, row_gate(false, false, 0)));
+        assert!(row_visible(ROW_YOU, row_gate(true, false, 2)));
+        assert!(!row_visible(ROW_YOU, row_gate(true, true, 2)));
+        assert!(row_visible(ROW_NET_LATENCY, row_gate(false, false, 0)));
+        assert!(!row_visible(ROW_PEER, row_gate(false, false, 0)));
+        assert!(row_visible(ROW_PEER, row_gate(true, false, 2)));
+        assert!(!row_visible(ROW_PEER, row_gate(true, true, 2)));
     }
 
     #[test]

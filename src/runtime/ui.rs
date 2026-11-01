@@ -1,5 +1,5 @@
 //! Fork-style global Player Info window. This window does not write panes.
-use super::{cells, imgui::*, input, overlay_host, publish, record, settings, Code};
+use super::{cells, imgui::*, input, overlay_host, publish, record, settings_with_pages, Code};
 use crate::hoc_game_aware::{Indicator, MarkTone};
 use crate::menu::{
     mark_editing, net_profile_value, opp_line, perf_footer, strip_line, strip_segments, you_line,
@@ -539,6 +539,14 @@ struct Frame {
     peers: PeerFacts,
     editing: bool,
     privacy: Privacy,
+    /// The Window page's own-page rows; empty on every other view.
+    own_pages: Vec<OwnPageRow>,
+}
+
+/// One own page on the Window page (0.10.0).
+struct OwnPageRow {
+    label: String,
+    hidden: bool,
 }
 
 /// The strip's short label for a Settings or Window row; the `You` / `Opp`
@@ -549,7 +557,6 @@ fn short_label(label: &str) -> Option<&'static str> {
         "NetLatency" => "Net",
         "NetProfile" => "Profile",
         "PluginsPage" => "PlugPg",
-        "OwnPages" => "OwnPg",
         "PerfPage" => "PerfPg",
         "PerfView" => "PerfView",
         "Hints" => "Hints",
@@ -627,19 +634,28 @@ fn settings_rows(
     (rows, colors, facts)
 }
 
-/// The Window page (0.6.0): the three page toggles, PerfView and Hints, the
-/// rows that configure the window itself and until 0.5.7 sat at the bottom
-/// of Settings.
-fn window_rows(config: &crate::config::Config, selected: usize, editing: bool) -> Vec<Row> {
+/// The Window page (0.6.0): the page toggles, PerfView and Hints, the rows
+/// that configure the window itself and until 0.5.7 sat at the bottom of
+/// Settings. Since 0.10.0 each own page has its own row, titled with its
+/// plugin's label, between PluginsPage and PerfPage.
+fn window_rows(frame: &Frame, menu: &crate::menu::Menu) -> Vec<Row> {
     use crate::menu::{ROW_HINTS, ROW_PAGE_OWN, ROW_PAGE_PERF, ROW_PAGE_PLUGINS, ROW_PERF_VIEW};
+    let (config, selected) = (&frame.config, menu.selected);
     let (page, hide) = (crate::config::page_label, &config.hide_pages);
-    let mut rows = vec![
+    let own_row = menu.own_row.min(frame.own_pages.len().saturating_sub(1));
+    let mut rows = vec![entry(
+        "PluginsPage",
+        page(hide.plugins),
+        selected == ROW_PAGE_PLUGINS,
+    )];
+    rows.extend(frame.own_pages.iter().enumerate().map(|(index, own)| {
         entry(
-            "PluginsPage",
-            page(hide.plugins),
-            selected == ROW_PAGE_PLUGINS,
-        ),
-        entry("OwnPages", page(hide.own_pages), selected == ROW_PAGE_OWN),
+            &own.label,
+            page(own.hidden),
+            selected == ROW_PAGE_OWN && index == own_row,
+        )
+    }));
+    rows.extend([
         entry(
             "PerfPage",
             page(hide.performance),
@@ -651,8 +667,8 @@ fn window_rows(config: &crate::config::Config, selected: usize, editing: bool) -
             selected == ROW_PERF_VIEW,
         ),
         entry("Hints", page(!config.hints), selected == ROW_HINTS),
-    ];
-    mark_editing(&mut rows, editing);
+    ]);
+    mark_editing(&mut rows, frame.editing);
     rows
 }
 
@@ -924,7 +940,7 @@ unsafe fn draw_strip((rows, plain, color, second): &Strip, privacy: Option<(Priv
 /// reconcile and the chord records of one draw. Returns what the window shows.
 unsafe fn poll(ui: &mut UiState, sample: input::Sample) -> Frame {
     let buttons = sample.buttons;
-    let mut config = settings();
+    let mut config = settings_with_pages();
     let saved = config.clone();
     let previous_view = ui.controls.view;
     let command_edge = ui.controls.command_edge(buttons);
@@ -989,12 +1005,17 @@ unsafe fn poll(ui: &mut UiState, sample: input::Sample) -> Frame {
     let live = super::pia_rtt::station_live(frame.selection);
     let show_remote =
         crate::peer_transport::opponent_column_visible(config.streamer, frame.selection, live);
+    let own_pages = if view == View::Window {
+        own_page_rows(&config)
+    } else {
+        Vec::new()
+    };
     if matches!(view, View::Settings | View::Window) {
         // The `Opp` line is a stop only while it shows (0.6.0: Streamer hides
         // it, so it is skipped then too).
-        let gate = crate::menu::row_gate(show_remote, view == View::Window);
+        let gate = crate::menu::row_gate(show_remote, view == View::Window, own_pages.len());
         if !crate::menu::row_visible(ui.controls.menu.selected, gate) {
-            ui.controls.menu.selected = crate::menu::move_row(ui.controls.menu.selected, 1, gate);
+            ui.controls.menu.step(1, gate);
         }
     }
     let identity = if show_remote {
@@ -1041,7 +1062,21 @@ unsafe fn poll(ui: &mut UiState, sample: input::Sample) -> Frame {
         peers,
         editing: crate::overlay::edit_modifier(buttons),
         privacy,
+        own_pages,
     }
+}
+
+/// The Window page's own-page rows (0.10.0): each own page's plugin label
+/// and whether it is out of the cycle, in cycle order.
+fn own_page_rows(config: &crate::config::Config) -> Vec<OwnPageRow> {
+    let snapshot = crate::plugin_api::REGISTRY.snapshot();
+    crate::plugin_api::page_plugins(&snapshot)
+        .into_iter()
+        .map(|index| OwnPageRow {
+            label: snapshot[index].label.clone(),
+            hidden: config.own_page_hidden(&snapshot[index].id),
+        })
+        .collect()
 }
 
 unsafe extern "C" fn draw() {
@@ -1113,9 +1148,12 @@ fn strip_lines(
             )
         }
         (View::Window, _) => {
-            let rows = window_rows(&frame.config, selected, frame.editing);
+            // An own page's row keeps its plugin label (0.10.0).
+            let rows = window_rows(frame, &ui.controls.menu);
             (
-                rows.iter().filter_map(short).collect(),
+                rows.iter()
+                    .map(|row| short(row).unwrap_or_else(|| row.clone()))
+                    .collect(),
                 String::new(),
                 None,
                 timing,
@@ -1170,7 +1208,7 @@ unsafe fn draw_tables(
             return footer(&ui.frames, &frame.config, true, frame.privacy.reconnect);
         }
         (View::Window, _) => {
-            let rows = window_rows(&frame.config, selected, frame.editing);
+            let rows = window_rows(frame, &ui.controls.menu);
             draw_table(b"deluxe_window\0", 110.0 * scale.x, &rows, "", None, None);
             return footer(&ui.frames, &frame.config, false, false);
         }

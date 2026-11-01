@@ -57,6 +57,11 @@ static STREAMER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::
 static ULTRA_RES: AtomicU8 = AtomicU8::new(0);
 /// `hide_pages` (0.5.3) as bits: 1 plugins, 2 own pages, 4 performance.
 static HIDE_PAGES: AtomicU8 = AtomicU8::new(0);
+/// `hide_plugin_pages` (0.10.0). Only the window and the config writer read
+/// it ([`settings_with_pages`]), so [`settings`], which game hooks call,
+/// takes no lock and allocates nothing for it.
+static PLUGIN_PAGES: std::sync::Mutex<crate::config::PluginPages> =
+    std::sync::Mutex::new(crate::config::PluginPages::EMPTY);
 /// `perf_view` (0.5.3): true = number, false = graph.
 static PERF_NUMBER: AtomicBool = AtomicBool::new(false);
 /// `early_present` (0.5.3): present at the flush in the render-opts profiles.
@@ -115,6 +120,21 @@ pub(super) fn saved_render_mode() -> crate::config::RenderMode {
     crate::config::RenderMode::from_byte(RENDER_MODE.load(Ordering::Acquire))
 }
 
+/// The whole configuration, `hide_plugin_pages` included: for the window,
+/// the config writer and [`publish`].
+pub(super) fn settings_with_pages() -> Config {
+    let plugin_pages = PLUGIN_PAGES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone();
+    Config {
+        plugin_pages,
+        ..settings()
+    }
+}
+
+/// The configuration without `hide_plugin_pages` (always empty here), from
+/// atomics only. Never pass it to [`publish`].
 pub(super) fn settings() -> Config {
     Config {
         input_buffer: INPUT_BUFFER.load(Ordering::Acquire),
@@ -140,6 +160,7 @@ pub(super) fn settings() -> Config {
                 performance: bits & 4 != 0,
             }
         },
+        plugin_pages: crate::config::PluginPages::EMPTY,
         perf_view: if PERF_NUMBER.load(Ordering::Acquire) {
             crate::config::PerfView::Number
         } else {
@@ -196,7 +217,12 @@ pub(super) fn stealth() -> bool {
     STEALTH.load(Ordering::Acquire)
 }
 
+/// Makes `config` current and due for saving. It must be whole: a parse
+/// result or [`settings_with_pages`], never [`settings`].
 pub(super) fn publish(config: &Config) {
+    *PLUGIN_PAGES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = config.plugin_pages.clone();
     let mode_changed = saved_render_mode() != config.render_mode;
     let auto_changed = AUTO_PROFILE.load(Ordering::Acquire) != config.auto_profile;
     let previous_buffer = INPUT_BUFFER.swap(config.input_buffer, Ordering::AcqRel);

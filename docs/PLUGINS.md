@@ -76,7 +76,10 @@ That is the whole integration. On the shared Plugins page each plugin's rows
 sit under a group row carrying its label (the strip shows the label, then the
 option labels). A plugin with many rows (one per fighter, say) sets
 `own_page: true` and gets its own page in the window cycle, titled with its
-label and visited after the shared Plugins page; up to 64 options fit.
+label and visited after the shared Plugins page; up to 64 options fit. Since
+Deluxe 0.10.0 the player can take each own page out of the cycle on its own,
+with a Shown / Hidden row titled with the plugin's label on Window Options
+(saved by plugin id in `hide_plugin_pages`); the plugin needs no change.
 `OptionSpec::header(id, label)` is a title row that Up/Down skip, for
 grouping a long page. The SDK sends descriptor version 4 only; hosts from
 Deluxe 0.5.3 through the released 0.7.0 accept versions 2, 3 and 4 under the
