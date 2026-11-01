@@ -1,5 +1,50 @@
 # Validation record
 
+## 0.10.0 — release assets, Eden checks and card install — 2026-11-01
+
+Built from clean tag `v0.10.0` (`89e9b47`) with `tools/Build.ps1 -Package`;
+the NRO is byte-identical to the build tested in Eden below.
+
+- Build ID: `0.10.0-89e9b473db22-1793530551`.
+- NRO: **1,167,360 bytes**, SHA-256
+  `a070b1a7a766c7da1d542362eb60bb9d72103b3d065b08485a3fd9d19618795c`.
+- Manifest SHA-256:
+  `8d227188cbeb34795cbf146e0bb5e02b1e1f59ffaf1c20630dbbf3834318014e`
+  (`runtime_tested=false`).
+- The [Forgejo release](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.10.0)
+  (release 643) carries the NRO, the manifest and `SHA256SUMS.txt`; each was
+  downloaded without authentication and matched.
+
+**Eden (2026-11-01), with ssbu-cpu-pilot 0.2.0 builds.**
+
+- **The card's 16 plugins** with this NRO and the card's `config.ini`
+  (`hide_pages=plugins,own_pages,performance`): Window Options listed one
+  Hidden row per own page, `Stages + Counterpick` (id `stages_counterpick`)
+  and `CPU Pilot`, and no OwnPages row. CPU Pilot → Shown wrote
+  `hide_pages=plugins,performance` and `hide_plugin_pages=stages_counterpick`,
+  and the cycle became Settings → CPU Pilot → Window Options.
+- **A test plugin with two own pages:** each page shown and hidden on its own,
+  hidden pages left out of the cycle, Up/Down wrapping through the new rows,
+  and the list kept after a restart (`loaded config`).
+- **The card set again with the pilot's release build and the new INI:** the
+  cycle and the rows as above. Long labels are clipped by the row's label
+  column (`Stages + Count…`).
+
+**Card install (hekate UMS on the Surface, 13:57Z, `installed_verified`).**
+Installed at the operator's request.
+
+- `a068094b…` (0.9.0) was replaced by `a070b1a7…`, which read back identical;
+  the other plugins and the protected configs read back unchanged.
+- At 14:18Z, after ssbu-cpu-pilot 0.2.0 was installed, the card's
+  `config.ini` was changed in exactly two lines to show the CPU Pilot page:
+  `hide_pages=plugins,performance` and
+  `hide_plugin_pages=stages_counterpick` (`0accab9f…` → `4d48afce…`). After a
+  remount, every plugin and that file read back as installed.
+- **Rollback:** copy `backups/pre-a070b1a7a766c7da.nro` (the 0.9.0 build) over
+  the plugin, and `backups/pre-4d48afcee2912e99-config.ini` over `config.ini`.
+
+Not run on the console yet.
+
 ## 0.10.0 — own pages one by one: source and host gates — 2026-11-01
 
 Window Options has one Shown / Hidden row per own page, titled with the
