@@ -155,7 +155,11 @@ pub enum Code {
     /// (`b` = hook address). `a=2`: a Singles/Doubles stage ran the deadline
     /// under Quickplay without the online-latency hook and was demoted to
     /// Offline (`b` = ticks since the stage load); the matching `AutoContext`
-    /// row carries source `0x0ff11e`.
+    /// row carries source `0x0ff11e`. `a=3`: a match stage entered after the
+    /// shared online session ended dropped an earlier match's latency mark.
+    /// `a=4` (0.10.2): a stage load whose scene words name an online
+    /// Quickplay or Elite stage promoted an Offline connection to Quickplay
+    /// (`b` = the mode word).
     SceneHold = 107,
     /// 0.5.2 dynamic-resolution experiment trigger edge. `a`: source in bits
     /// 0..7 (1 = move table, 2 = adaptive), catalog move index in bits 8..15

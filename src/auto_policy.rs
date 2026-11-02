@@ -179,6 +179,23 @@ pub const fn is_waiting_practice(initialized: bool, melee: u8, mode: u32) -> boo
     initialized && melee == 0x0d && (mode == 0x0201_0000 || mode & 0x7fff_0000 == 0x0701_0000)
 }
 
+/// Online Quickplay stage (0.10.2), Elite Smash included, read from the game's
+/// own scene words at the stage load. The menu hooks do not see every entry
+/// to Quickplay: on the console (2026-11-02) Elite Smash reached its waiting
+/// room and six battles without `0x22da160` or `0x22da090` firing, and in
+/// Eden's two-host LAN Online neither fired across four searches, so those
+/// stages were classified Offline. The mode word must be in the online family
+/// (`0x0701xxxx`, top bit ignored: Quickplay `0x07010101` in Eden, Elite
+/// `0x07010400` on the console) and the melee byte one the online flow sets:
+/// `0x0d` (the waiting room's practice), `0x0e` (the Eden Quickplay battle)
+/// or `0x10` (the console Elite battle). Both words must agree, so an online
+/// mode word alone (one left over from an earlier session) does not promote a
+/// stage whose melee byte names another mode: local Smash `0x00`, Training
+/// `0x20`, a local-wireless battle `0x01`.
+pub const fn is_online_stage(initialized: bool, melee: u8, mode: u32) -> bool {
+    initialized && mode & 0x7fff_0000 == 0x0701_0000 && matches!(melee, 0x0d | 0x0e | 0x10)
+}
+
 /// CSS reflects the live Training-mode bit, not the stage that led to it.
 pub fn classify_css(training_mode: bool) -> SceneStatus {
     if training_mode {
@@ -618,6 +635,36 @@ mod tests {
             u32::MAX,
         ] {
             assert!(!is_waiting_practice(true, 0x0d, mode));
+        }
+    }
+
+    #[test]
+    fn elite_and_quickplay_stages_are_online_from_the_scene_words() {
+        // Console 2026-11-02, Elite Smash: the waiting room's practice
+        // (`a=0x70d`) and the battle (`a=0x310`), both mode 0x07010400.
+        assert!(is_online_stage(true, 0x0d, 0x0701_0400));
+        assert!(is_online_stage(true, 0x10, 0x0701_0400));
+        // Eden's Quickplay battle, and the online word with its top bit set.
+        assert!(is_online_stage(true, 0x0e, 0x0701_0101));
+        assert!(is_online_stage(true, 0x10, 0x8701_0400));
+        assert!(!is_online_stage(false, 0x10, 0x0701_0400));
+    }
+
+    #[test]
+    fn offline_stages_are_never_online_whatever_the_mode_word_says() {
+        // Local Smash, Training and a local-wireless battle, each with its own
+        // mode word and with an online word left from an earlier session.
+        for melee in [0x00, 0x20, 0x01] {
+            for mode in [0x0201_0000, 0x0404_0000, 0x0701_0400, 0x0701_0101] {
+                assert!(!is_online_stage(true, melee, mode), "{melee:#x} {mode:#x}");
+            }
+        }
+        // The local-wireless waiting room is lobby practice, not online.
+        assert!(!is_online_stage(true, 0x0d, 0x0201_0000));
+        assert!(is_waiting_practice(true, 0x0d, 0x0201_0000));
+        // Other families with an online melee byte.
+        for mode in [0, 0x0201_0000, 0x0700_0000, 0x0702_0000, u32::MAX] {
+            assert!(!is_online_stage(true, 0x10, mode), "{mode:#x}");
         }
     }
 

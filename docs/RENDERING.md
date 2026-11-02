@@ -58,7 +58,11 @@ matchmaking passes through the main menu and starts the match from there
 (0.4.2). A Quickplay that reaches a Singles/Doubles stage without the game's
 online-latency hook firing within five seconds is demoted to Offline. A match
 the online-latency hook reaches while the scene hooks still say Offline counts
-as online for Auto (0.4.1). Event log code 107 records both decisions; see
+as online for Auto (0.4.1). Since 0.10.2 a stage load whose scene words name
+online Quickplay or Elite Smash (`auto_policy::is_online_stage`) makes an
+Offline connection Quickplay, because the menu hooks miss some entries:
+Elite Smash on the console reached its waiting room and every battle with the
+connection still Offline. Event log code 107 records these decisions; see
 [Debugging](DEBUGGING.md).
 
 ## Present at the flush (0.4.0)

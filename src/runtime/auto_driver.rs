@@ -79,6 +79,21 @@ pub(crate) fn note_main_menu(source: u64) {
     }
 }
 
+/// Stage load whose scene words name an online Quickplay stage, Elite Smash
+/// included ([`auto_policy::is_online_stage`], 0.10.2). The menu hooks missed
+/// that entry when the connection is still Offline: it becomes Quickplay, so
+/// the waiting room and the match are online from their stage load instead of
+/// from the latency hook three seconds into the first match. Local and Arena
+/// are kept. Code 107 `a=4`, `b` = the mode word. The caller runs this before
+/// the stage opens its match buffer, because a connection change clears it.
+pub(crate) fn note_online_stage(mode: u32, source: u64) {
+    if !ready() || connection() != Connection::Offline {
+        return;
+    }
+    record(Code::SceneHold, 4, u64::from(mode));
+    set_scene(Some(Connection::Quickplay), None, source);
+}
+
 /// Diagnostics thread, every 500 ms: a Singles/Doubles stage that has run
 /// five seconds under a menu-set Quickplay without the online-latency hook is
 /// an offline match; demote the connection so Auto stops treating it as

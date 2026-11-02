@@ -1,5 +1,34 @@
 # Validation record
 
+## 0.10.2 — Elite Smash classified online: source and host gates — 2026-11-02
+
+The card's event log from the operator's Elite Smash session with 0.10.1
+(`a8dcda24…`, read over DBI on 2026-11-02) had no row from either Quickplay
+hook (`0x22da160`, `0x22da090`). Every stage load ran with the connection
+Offline: the waiting room's practice (code 116 `a=0x70d`, mode `0x7010400`;
+code 73 `a=0x10100`) and six battles (`a=0x310`, mode `0x7010400`; code 73
+`a=0x10200`, offline/singles). Only the first battle reached the latency mark
+(code 30 `a=1`, 2.7 s after its stage load); the later ones kept that mark.
+With an Offline connection the code places the window on the left in Elite's
+menus, does not allow the native banner there, and has Auto treat the first
+battle as offline until the mark (Auto was off in the card's settings).
+
+Stage setup now reads the same scene words it already logged: when the mode
+word is in the online family (`0x0701xxxx`, top bit ignored) and the melee
+byte is `0x0d` (waiting-room practice), `0x0e` (Eden's Quickplay battle) or
+`0x10` (the console's Elite battle), an Offline connection becomes Quickplay
+before the match buffer opens (`auto_policy::is_online_stage`,
+`auto_driver::note_online_stage`, event 107 `a=4` with the mode word). Local
+and Arena are kept. An online mode word with another melee byte (local Smash
+`0x00`, Training `0x20`, a local-wireless battle `0x01`) changes nothing. No
+hook, address or write was added; the reads are 0.9.0's guarded scene-mode
+reads.
+
+**Gates.** 321 unit and 23 integration tests (new: the console's Elite words
+and Eden's Quickplay word are online; local Smash, Training and local-wireless
+words are not, with or without an online mode word left behind); clippy with
+warnings denied, host and Skyline; the no-default-features build.
+
 ## 0.10.1 — release assets, Eden checks and card install — 2026-11-01
 
 Built from clean tag `v0.10.1` (`03e9d42`) with `tools/Build.ps1 -Package`;

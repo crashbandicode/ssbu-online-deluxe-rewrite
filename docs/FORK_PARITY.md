@@ -435,7 +435,13 @@ Match class (`net/mod.rs`, all installed at `:374-390`):
   `effective_connection`). Since 0.4.2 main-menu entry keeps a stored
   Quickplay, and the only write to the stored connection outside the scene
   hooks is the demotion of an unmarked Singles/Doubles stage to Offline five
-  seconds after its load (`offline_match_due`).
+  seconds after its load (`offline_match_due`). **Deliberate difference,
+  0.10.2:** stage setup makes an Offline connection Quickplay when the game's
+  scene words name an online Quickplay or Elite stage (mode `0x0701xxxx` with
+  melee `0x0d`, `0x0e` or `0x10`; `auto_policy::is_online_stage`, code 107
+  `a=4`). Unlike the fork's fallback this is read from the game, not assumed,
+  and it covers the waiting room too: on the console (2026-11-02) Elite Smash
+  ran its waiting room and six battles without either Quickplay hook firing.
 - LDN host forces the CSS pane count to 2 once (`0x1a26200`, `:155-166`).
 - LDN initialize/scan hooks only count networks (`net/ldn/mod.rs:41-42`).
 - CSS `0x1a12f60` writes the native banner when online and the 300-frame

@@ -4,6 +4,8 @@
 //! matchmaking passes through the main menu and the match starts from there,
 //! see `auto_policy::main_menu_connection`); a Quickplay that turns out stale
 //! is demoted five seconds into a match without the online-latency hook.
+//! A stage whose scene words name online Quickplay or Elite Smash promotes an
+//! Offline connection the menu hooks left behind (0.10.2).
 //! An unreadable stage context is ignored.
 use super::{auto_driver, hooks::preflight, record, Code};
 use crate::auto_policy::{self, Connection, SceneStatus};
@@ -107,6 +109,13 @@ unsafe fn deluxe_rewrite_stage_setup(ctx: &InlineCtx) {
         is_training_mode() || lobby,
         get_fighter_entry_count(),
     );
+    // An online stage the menu hooks missed (Elite Smash on the console) is
+    // Quickplay. Before the match buffer opens: a connection change clears it.
+    if let Some((true, melee, word)) = mode {
+        if auto_policy::is_online_stage(true, melee, word) {
+            auto_driver::note_online_stage(word, STAGE_SETUP as u64);
+        }
+    }
     // Reset on each stage entry, even if two consecutive stages classify alike.
     // A result from the previous match must never become this match's value.
     match status {
