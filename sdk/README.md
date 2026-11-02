@@ -1,7 +1,7 @@
 # Online Deluxe plugin API
 
-License: this directory is not covered by the repository's AGPL-3.0 `LICENSE` (see the root README, "License");
-its license is set separately by its author.
+License: MIT ([LICENSE](LICENSE)). This directory is not covered by the repository's AGPL-3.0 `LICENSE` (see the
+root README, "License").
 
 A separately built Skyline NRO can add rows to the Online Deluxe menu without
 shipping any UI code. The plugin describes its options, the host draws them and

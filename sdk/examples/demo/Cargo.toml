@@ -2,6 +2,7 @@
 name = "deluxe-plugin-demo"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
 publish = false
 description = "Minimal separate-NRO consumer of the Online Deluxe plugin API"
 

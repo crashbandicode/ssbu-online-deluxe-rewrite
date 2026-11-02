@@ -259,8 +259,8 @@ This repository is licensed under the GNU Affero General Public License v3.0 ([L
 license as upstream [saad-script/ssbu-online-deluxe](https://github.com/saad-script/ssbu-online-deluxe).
 
 **Exception:** the plugin SDK in [`sdk/`](sdk/README.md) (`deluxe-plugin-abi`, `deluxe-plugin-sdk` and the demo
-plugin) is original work, is not derived from upstream, and is **not** covered by `LICENSE`. Its license is set
-separately by its author.
+plugin) is original work, is not derived from upstream, and is **not** covered by `LICENSE`. It is licensed under
+the MIT License ([sdk/LICENSE](sdk/LICENSE)).
 
 [firmware]: https://en-americas-support.nintendo.com/app/answers/detail/a_id/22525/~/nintendo-switch-system-updates-and-change-history#current
 [atmosphere]: https://github.com/Atmosphere-NX/Atmosphere/releases/tag/1.12.1

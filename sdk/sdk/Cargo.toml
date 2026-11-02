@@ -2,6 +2,7 @@
 name = "deluxe-plugin-sdk"
 version = "5.0.0"
 edition = "2021"
+license = "MIT"
 publish = false
 description = "Rust consumer SDK for the Online Deluxe plugin registration ABI"
 
