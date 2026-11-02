@@ -258,9 +258,15 @@ Toolchain, native dependency and release steps: [Build](docs/BUILD.md).
 This repository is licensed under the GNU Affero General Public License v3.0 ([LICENSE](LICENSE)), the same
 license as upstream [saad-script/ssbu-online-deluxe](https://github.com/saad-script/ssbu-online-deluxe).
 
-**Exception:** the plugin SDK in [`sdk/`](sdk/README.md) (`deluxe-plugin-abi`, `deluxe-plugin-sdk` and the demo
-plugin) is original work, is not derived from upstream, and is **not** covered by `LICENSE`. It is licensed under
-the MIT License ([sdk/LICENSE](sdk/LICENSE)).
+Exceptions, **not** covered by `LICENSE`:
+
+- **`sdk/`:** the plugin SDK in [`sdk/`](sdk/README.md) (`deluxe-plugin-abi`, `deluxe-plugin-sdk` and the demo
+  plugin) is original work and is not derived from upstream. It is licensed under the MIT License
+  ([sdk/LICENSE](sdk/LICENSE)).
+- **`patches/imgui-smash/`:** these files modify, and build, the C++ library of
+  [Coolsonickirby/imgui-smash](https://github.com/Coolsonickirby/imgui-smash) (`bb47b205`). They keep
+  imgui-smash's license, the GNU GPL v2 ([patches/imgui-smash/LICENSE](patches/imgui-smash/LICENSE), copied
+  verbatim from `imgui-smash/LICENSE` at `bb47b205`).
 
 [firmware]: https://en-americas-support.nintendo.com/app/answers/detail/a_id/22525/~/nintendo-switch-system-updates-and-change-history#current
 [atmosphere]: https://github.com/Atmosphere-NX/Atmosphere/releases/tag/1.12.1
