@@ -1,5 +1,34 @@
 # Validation record
 
+## 0.10.2 — release assets and card install — 2026-11-02
+
+Built again from a clean clone of tag `v0.10.2` (`73488c1`); the NRO is
+byte-identical to the build tested in Eden below.
+
+- Build ID: `0.10.2-73488c198fec-1793631019`.
+- NRO: **1,167,360 bytes**, SHA-256
+  `bc8a64283285b7627ec836e1ba5826de553447dfe3a84620464269644cd450df`.
+- Manifest SHA-256:
+  `719362ea3bebe3bf9821c56ca3fe385cad03528d5e34498dcd2318ad3651867f`
+  (`runtime_tested=false`).
+- The [Forgejo release](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.10.2)
+  (release 648) carries the NRO, the manifest and `SHA256SUMS.txt`; each was
+  downloaded without authentication and matched.
+
+**Card install (hekate UMS on the Surface, 17:15Z, `installed_verified`, then
+`verified_in_place`).** Installed at the operator's request.
+
+- `a8dcda24…` (0.10.1) was replaced by `bc8a6428…`, which read back
+  identical; the other 15 plugins and the protected configs (Deluxe
+  `config.ini` `985a091d…`) read back unchanged. A second read in place
+  matched, with the card's mount unchanged.
+- **Rollback:** copy `backups/pre-bc8a64283285b762.nro` (the 0.10.1 build)
+  over the plugin.
+- Right after this, memory_guard 0.1.0 (a separate plugin) was added to the
+  card, which now holds 17 plugins.
+
+Not run on the console yet.
+
 ## 0.10.2 — Eden checks — 2026-11-02
 
 Build `0.10.2-73488c198fec-1793631019` from clean `73488c1`
