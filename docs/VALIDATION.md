@@ -1,5 +1,48 @@
 # Validation record
 
+## 0.10.2 — Eden checks — 2026-11-02
+
+Build `0.10.2-73488c198fec-1793631019` from clean `73488c1`
+(`release/deluxe-build.ps1`, build time pinned to the commit): NRO
+**1,167,360 bytes**, SHA-256
+`bc8a64283285b7627ec836e1ba5826de553447dfe3a84620464269644cd450df`.
+
+**d01, LAN Online Quickplay on two hosts.** The Surface ran this NRO, the
+Yoga ran 0.10.1 (`a8dcda24…`, the card's build); both had ssbu-desync-detector
+`95e7def9…`, the tile cursor and the card's `config.ini` (`985a091d…`), with
+1-stock rules.
+
+- Neither Quickplay menu hook fired on either host.
+- On the Surface, the waiting room's practice stage logged `107 a=4
+  b=0x7010101` ahead of its stage rows, then code 73 `0x10103`
+  (quickplay/training). The battle logged `0x10203` (quickplay/singles) and
+  the results stage `0x10003`.
+- The Yoga's 0.10.1 logged `0x10100`, `0x10200` and `0x10000` at the same
+  three stages. It became online only through the latency mark (code 30
+  `a=1`) after the battle's stage load.
+- Both recorded the battle's Auto buffer count (code 113 `a=3`).
+- Detectors on both: `sync_end trigger=normal kind=1 frame=516 …
+  desync_seen=0`.
+- Both Eden logs had no `Unmapped` line and no panic, abort or crash. Both
+  profiles were restored to their baselines (`RESTORE-d01.json` passed).
+
+**h04, the card's 16 plugins on the Ally.** This NRO replaced 0.10.1, with
+pilot 0.2.2 (`ed8f308f…`) and the card's config files.
+
+- Deluxe logged its header `0.10.2-73488c198fec-1793631019` and its scene
+  tracker line.
+- Training was reached through Games & More. The Quickplay menu hook fired
+  there as before (`quickplay/training`), and no code 107 `a=4` was logged:
+  Training's melee byte is `0x20`.
+- On the CPU Pilot page, P1's HUD read `CPU Lv1` and P1 fought; switching back
+  restored the player's tag.
+- `eden_log.txt` had no `Unmapped` line; its one panic/abort/crash match is a
+  setting name.
+
+**Not run:** Elite Smash, because Eden has no Elite queue (the Elite words
+come from the console log below). Also not run: a match whose first stage is
+the battle itself, with no waiting room, and a local-wireless room.
+
 ## 0.10.2 — Elite Smash classified online: source and host gates — 2026-11-02
 
 The card's event log from the operator's Elite Smash session with 0.10.1
@@ -8,7 +51,7 @@ hook (`0x22da160`, `0x22da090`). Every stage load ran with the connection
 Offline: the waiting room's practice (code 116 `a=0x70d`, mode `0x7010400`;
 code 73 `a=0x10100`) and six battles (`a=0x310`, mode `0x7010400`; code 73
 `a=0x10200`, offline/singles). Only the first battle reached the latency mark
-(code 30 `a=1`, 2.7 s after its stage load); the later ones kept that mark.
+(code 30 `a=1`, after its stage load); the later ones kept that mark.
 With an Offline connection the code places the window on the left in Elite's
 menus, does not allow the native banner there, and has Auto treat the first
 battle as offline until the mark (Auto was off in the card's settings).
