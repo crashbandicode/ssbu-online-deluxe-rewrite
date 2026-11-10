@@ -1,6 +1,100 @@
 # Validation record
 
-## 0.10.3 — Unicode opponent names: Eden checks — 2026-11-10
+## 0.10.3 — static and dynamic glyph sets: Eden checks — 2026-11-10
+
+Build `0.10.3-bc22c803cdb9-1794313664` from `bc22c80`: NRO **1,183,744
+bytes**, SHA-256
+`9cb4f8ff70f472c9b61acf2a4aac370fd66eeff8fe2a1bf73bacc42def6c7069`.
+Its resident size is 1,224,704 bytes; 0.10.2's is 1,208,320. The diagnostic
+build `0.10.3-bc22c803cdb9-1794313690` (`--features diag`, NRO `317eef8b…`)
+runs only in Eden.
+
+**Run `dun-x2`: LAN Online Quickplay on the XPS** (TLS off, 1x, volume 0).
+Instance a ran 0.10.2 (`effbaa0`) and b ran 0.10.3, both with
+ssbu-desync-detector `92fbcf84…` and the tile cursor `b8313ca2…`. Both
+profiles were renamed `Æsir テスト`. The rows are in `eden/unicode-label/`.
+
+- **The label.** b's Opp line read `Opp: Æsir テスト`, a's read
+  `Opp: ?sir ???`. A trace on `ImFontBaked::FindGlyph` followed 1,000 draws of
+  each of Æ, テ, ス and ト. On b every draw returned the character's own
+  glyph, and the fallback glyph was never loaded. On a every draw returned
+  the fallback.
+- **Fonts on b during the match** (`renderer-status.txt`): 6 shared fonts;
+  321 static glyphs. The dynamic set was U+30B9 U+30C6 U+30C8 (テ ス ト) and
+  nothing else, with 3 dynamic loads, 0 rebuilds, 0 refusals and 0 misplaced
+  calls. The atlas was 512x256 Alpha8: 262,144 bytes of texture (ImGui
+  pixels plus the NVN pool), and the per-codepoint index was 94,910 bytes.
+- **Fonts on b after the match**, with the label off screen: 1 rebuild,
+  dynamic set `none`, index 16,560 bytes.
+- **The match.** `sync_end frame=7542 desync_seen=0` on both, and Rematch
+  No on both.
+- Neither instance reported an unmapped access, and neither console log had a
+  `panic`, `abort`, `crash` or `Unmapped` line.
+
+**Run `dun-x3`: a name change, same host.** Instance a ran 0.10.3. Instance
+b ran the diagnostic build, whose label feed (`diag.txt`) showed three names
+in turn, 16 s each. At each name, the hook read `renderer-status.txt` and
+traced `FindGlyph` for 2.5 s:
+
+| Name shown | Glyphs drawn (all their own) | Dynamic set read | Rebuilds |
+| --- | --- | --- | --- |
+| Æsir テスト | Æ テ ス ト | read after the feed had moved on (the next name's set) | — |
+| 日本語のなまえ | all 7 | exactly its 7 characters (テ ス ト dropped) | 1 |
+| 강철무사 | all 4 | exactly its 4 (the 7 dropped) | 2 |
+| Ølstue Ærø | Ø Æ ø (static set) | none (the 4 dropped) | 3 |
+| Æsir テスト | Æ テ ス ト | exactly テ ス ト | 3 |
+
+- The texture stayed 262,144 bytes throughout. The index was 336,134 bytes
+  while the Hangul and the kanji were both still held, during the second
+  between the name change and the rebuild; it was 89,234 bytes at the end.
+- The hook read the first name's status late, so it failed its row and the
+  run stopped before the match ended. The fixed hook reads the status first.
+- Neither console log had a `panic`, `abort`, `crash` or `Unmapped` line.
+
+## 0.10.3 — static and dynamic glyph sets: source and host gates — 2026-11-10
+
+The first 0.10.3 build (`6732f29`, below) kept every glyph it ever drew, up
+to 512, and then drew `?`. It was installed on the card and reverted the same
+day, and never released. This build pins imgui-smash `unicode-shared-font`
+`bec80ec` (`docs/IMGUI_DEPENDENCY.md`):
+
+- **Static set.** ASCII, Latin-1 Supplement and Latin Extended-A are
+  rasterized once at start-up and never dropped.
+- **Dynamic set.** Every other character is rasterized when drawn.
+  Measuring text loads advances only.
+- **Drops between frames.** Between frames, the host reads the last
+  frame's draw data. When a glyph that was drawn has gone 60 frames without
+  a draw, it drops the dynamic glyphs and repacks into a new texture through
+  the texture requests. What is still on screen loads again in the next
+  frame.
+- **Crash bound.** Only the fill guard limits the atlas, at half of
+  1024x1024.
+
+Deluxe reads font stats version 2 (`imgui_font_static_glyphs`,
+`_dynamic_glyphs`, `_rebuilds`, `_texture_bytes`, `_index_bytes`,
+`imgui_font_dynamic_set`). The cargo feature `diag` builds the Eden-only
+label feed (event 121); it is absent from the shipped NRO.
+
+**Gates.**
+- 329 unit and 23 integration tests. New: the version-2 stats lines, the
+  dynamic-set line, and the feed's parser and schedule.
+- `tools/test_prepare_imgui.py`.
+- clippy with warnings denied, host and Skyline, with and without `diag`.
+- The no-default-features build.
+- The Skyline release builds, plain and `--features diag`.
+
+The fork's six host tests pass. font_setup_test runs the host's frame loop
+and checks:
+- the static set, built once;
+- the dynamic set equals the text on screen;
+- rebuilds happen only when that text changes;
+- glyphs that left the screen are dropped;
+- no rebuild runs inside a frame, and no draw uses a destroyed or retired
+  texture;
+- memory stays bounded over 200 names;
+- the seeded overfill still aborts without the fill guard.
+
+## 0.10.3 (first build, `6732f29`: installed and reverted, never released) — Unicode opponent names: Eden checks — 2026-11-10
 
 Build `0.10.3-6732f296c413-1794271958` from `6732f29` (branch
 `fix/opponent-label-unicode`): NRO **1,175,552 bytes**, SHA-256
@@ -45,7 +139,7 @@ The rows, hooks and segments are in `eden/unicode-label/`.
   Rules. The rows close the window again and restore the focus before they
   navigate.
 
-## 0.10.3 — Unicode opponent names: source and host gates — 2026-11-10
+## 0.10.3 (first build, `6732f29`) — Unicode opponent names: source and host gates — 2026-11-10
 
 The name reached the label intact. The overlay drew it with JetBrains
 Mono's ASCII subset (95 glyphs, no U+FFFD), in an atlas the NVN backend

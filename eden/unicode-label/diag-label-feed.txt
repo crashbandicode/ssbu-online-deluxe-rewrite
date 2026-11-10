@@ -1,0 +1,2 @@
+label_feed=日本語のなまえ|강철무사|Ølstue Ærø
+label_feed_seconds=20

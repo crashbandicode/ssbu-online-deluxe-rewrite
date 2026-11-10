@@ -1,0 +1,177 @@
+{
+  "owner": "OpenCode deluxe-unicode-names",
+  "label": "dun3-base",
+  "host": "xps",
+  "hostname": "ubuntu-xps",
+  "ledger": "/tmp/deluxe-surface-1007/OWNER-COORDINATION.md",
+  "ledger_ssh": "memento-claw-yoga-ubuntu",
+  "display_helper": {
+    "path": "/home/intpa/eden-nso-autolan/live-tools/display-rootful.ps1",
+    "sha256": "a930b7a6dcb6c7401afb8bbbb2c918ee9b09219a1cd64b4af862938c094e2cff"
+  },
+  "work_root": "/home/intpa/eden-runs/dun3-base/work",
+  "state_dir": "/home/intpa/eden-runs/dun3-base/state",
+  "pair_authorized": true,
+  "defer_load": true,
+  "runner": {
+    "path": "/home/intpa/deluxe-unicode-names-work/playbook/tools/eden-runner/runner.py",
+    "sha256": "e008a79013750ac63023cca306debafa3c6b372e610eafa52fabc1bd3144c05c"
+  },
+  "runtime": 2700,
+  "socket_cap": 90,
+  "load_cap": 180,
+  "stop_cap": 30,
+  "force_cap": 30,
+  "authorization": "deluxe-unicode-names (Deluxe opponent label Unicode, 0.10.3 rework: operator via primary 11:50Z/11:58Z 11-10): one Quickplay pair, TLS off, in a slot integration names; a Deluxe 0.10.3 bc22c80, b Deluxe 0.10.3 bc22c80 diag build with the label feed; detector + tile cursor on both. Volume 0, no Switch SD.",
+  "instances": [
+    {
+      "key": "a",
+      "display": ":131",
+      "source": "/home/intpa/trainingrooms-eden-lead-astra4/profiles/y",
+      "app": {
+        "path": "/home/intpa/Applications/Eden-GIF/20261104-1961a200485e-unmapped-stop-0c7f89f711d6/Eden.AppImage",
+        "sha256": "0c7f89f711d6df37df2243928a92e789aaee319c81d0647a0b8e5b2df9975476"
+      },
+      "game": "/home/intpa/Games/Roms/Switch/Super Smash Bros. Ultimate [01006A800016E000]+[v13.0.3+ 9DLC][US](nsw2u.com).xci",
+      "plugins": [
+        {
+          "path": "/home/intpa/deluxe-unicode-names-work/eden/inputs/libssbu_desync_detector.nro",
+          "sha256": "92fbcf849c196dd7e6e00b737eb6544b8ae09f56c153f0db7257b47fa64a3f1f"
+        },
+        {
+          "path": "/home/intpa/deluxe-unicode-names-work/eden/inputs/libssbu_tile_cursor.nro",
+          "sha256": "b8313ca2e66a52f1bcfc4afc764df1b7cdc5aee7e194bdea671cea02746934bc"
+        },
+        {
+          "path": "/home/intpa/deluxe-unicode-names-work/builds/after-bc22c80/libssbu_online_deluxe_rewrite.nro",
+          "sha256": "9cb4f8ff70f472c9b61acf2a4aac370fd66eeff8fe2a1bf73bacc42def6c7069"
+        }
+      ],
+      "files": [
+        {
+          "path": "/home/intpa/deluxe-unicode-names-work/eden/inputs/profiles-aesir.dat",
+          "sha256": "2d311dde0c3b0052f6e9acffbdf939f41ebf75ca805825e20beb8fbd39b8424a",
+          "to": "user/nand/system/save/8000000000000010/su/avators/profiles.dat"
+        },
+        {
+          "path": "/home/intpa/deluxe-unicode-names-work/eden/inputs/deluxe-config.ini",
+          "sha256": "5f597d1738efdbb7cb3ef8290e3068651c5b381868a1ec7d9a09ef606a94f63e",
+          "to": "user/sdmc/ultimate/ssbu_online_deluxe_rewrite/config.ini"
+        }
+      ],
+      "sources": {
+        "detector_log": "user/sdmc/ultimate/ssbu-desync-detector/events.log",
+        "tile_log": "user/sdmc/ultimate/ssbu-tile-cursor/events.log",
+        "deluxe_install": "user/sdmc/ultimate/ssbu_online_deluxe_rewrite/install.log",
+        "deluxe_status": "user/sdmc/ultimate/ssbu_online_deluxe_rewrite/renderer-status.txt",
+        "deluxe_events": "user/sdmc/ultimate/ssbu_online_deluxe_rewrite/events.log"
+      },
+      "trace": {
+        "unmapped_access": "log",
+        "symbols": [
+          {
+            "module": "libssbu_online_deluxe_rewrite.nro",
+            "elf": "/home/intpa/deluxe-unicode-names-work/builds/after-bc22c80/libssbu_online_deluxe_rewrite.elf"
+          }
+        ],
+        "points": [
+          {
+            "target": "main+0x23191bc",
+            "registers": [
+              "x8",
+              "x9"
+            ],
+            "captures": [
+              {
+                "expression": "x20+0x174",
+                "type": "u32"
+              }
+            ]
+          }
+        ]
+      },
+      "eden_settings": {
+        "core.resolution_setup": 3
+      }
+    },
+    {
+      "key": "b",
+      "display": ":132",
+      "source": "/home/intpa/trainingrooms-eden-lead-astra4/profiles/y",
+      "app": {
+        "path": "/home/intpa/Applications/Eden-GIF/20261104-1961a200485e-unmapped-stop-0c7f89f711d6/Eden.AppImage",
+        "sha256": "0c7f89f711d6df37df2243928a92e789aaee319c81d0647a0b8e5b2df9975476"
+      },
+      "game": "/home/intpa/Games/Roms/Switch/Super Smash Bros. Ultimate [01006A800016E000]+[v13.0.3+ 9DLC][US](nsw2u.com).xci",
+      "plugins": [
+        {
+          "path": "/home/intpa/deluxe-unicode-names-work/eden/inputs/libssbu_desync_detector.nro",
+          "sha256": "92fbcf849c196dd7e6e00b737eb6544b8ae09f56c153f0db7257b47fa64a3f1f"
+        },
+        {
+          "path": "/home/intpa/deluxe-unicode-names-work/eden/inputs/libssbu_tile_cursor.nro",
+          "sha256": "b8313ca2e66a52f1bcfc4afc764df1b7cdc5aee7e194bdea671cea02746934bc"
+        },
+        {
+          "path": "/home/intpa/deluxe-unicode-names-work/builds/diag-bc22c80/libssbu_online_deluxe_rewrite.nro",
+          "sha256": "317eef8b20f44d9b39b78e377eccbf5f4b613535057635fa8a3ce1b9858534d8"
+        }
+      ],
+      "files": [
+        {
+          "path": "/home/intpa/deluxe-unicode-names-work/eden/inputs/profiles-aesir.dat",
+          "sha256": "2d311dde0c3b0052f6e9acffbdf939f41ebf75ca805825e20beb8fbd39b8424a",
+          "to": "user/nand/system/save/8000000000000010/su/avators/profiles.dat"
+        },
+        {
+          "path": "/home/intpa/deluxe-unicode-names-work/eden/inputs/deluxe-config.ini",
+          "sha256": "5f597d1738efdbb7cb3ef8290e3068651c5b381868a1ec7d9a09ef606a94f63e",
+          "to": "user/sdmc/ultimate/ssbu_online_deluxe_rewrite/config.ini"
+        },
+        {
+          "path": "/home/intpa/deluxe-unicode-names-work/eden/inputs/diag-label-feed.txt",
+          "sha256": "918d12eacabf3626c231a967ba9d724aab8a1b574f590aec0550475acea6d585",
+          "to": "user/sdmc/ultimate/ssbu_online_deluxe_rewrite/diag.txt"
+        }
+      ],
+      "sources": {
+        "detector_log": "user/sdmc/ultimate/ssbu-desync-detector/events.log",
+        "tile_log": "user/sdmc/ultimate/ssbu-tile-cursor/events.log",
+        "deluxe_install": "user/sdmc/ultimate/ssbu_online_deluxe_rewrite/install.log",
+        "deluxe_status": "user/sdmc/ultimate/ssbu_online_deluxe_rewrite/renderer-status.txt",
+        "deluxe_events": "user/sdmc/ultimate/ssbu_online_deluxe_rewrite/events.log"
+      },
+      "trace": {
+        "unmapped_access": "log",
+        "symbols": [
+          {
+            "module": "libssbu_online_deluxe_rewrite.nro",
+            "elf": "/home/intpa/deluxe-unicode-names-work/builds/diag-bc22c80/libssbu_online_deluxe_rewrite.elf"
+          }
+        ],
+        "points": [
+          {
+            "target": "main+0x23191bc",
+            "registers": [
+              "x8",
+              "x9"
+            ],
+            "captures": [
+              {
+                "expression": "x20+0x174",
+                "type": "u32"
+              }
+            ]
+          }
+        ]
+      },
+      "eden_settings": {
+        "core.resolution_setup": 3
+      }
+    }
+  ],
+  "rows": {
+    "path": "/home/intpa/deluxe-unicode-names-work/eden/rows-dun3/rows.json",
+    "sha256": "0154fb2f0cb09f519b68352bff4be037c968cd7d63d57a55eceaef36e7c9006b"
+  }
+}

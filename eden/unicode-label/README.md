@@ -1,22 +1,36 @@
 # Eden rows: Unicode opponent label (0.10.3)
 
-The rows, hooks, segments and references of Eden run `dun-x1` (XPS, 2026-11-10), as the runner
-(`tools/eden-runner/runner.py` of the playbook `87b3de0`) played them; the record is in
-`docs/VALIDATION.md` ("0.10.3 — Unicode opponent names — Eden checks").
+The rows, hooks, segments and generators of the Eden runs recorded in `docs/VALIDATION.md`. The runner is
+`tools/eden-runner/runner.py` of the playbook `87b3de0`.
 
-- One Quickplay pair, LAN Online with TLS off, 1x render, volume 0. Instance a runs 0.10.2 (`effbaa0`), instance b
-  0.10.3; both have ssbu-desync-detector and the tile cursor. Both profiles are named `Æsir テスト`
-  (`make/nickname.py` rewrites `profiles.dat`), so each Opp label shows that name.
+| Run | Rows | Pair |
+| --- | --- | --- |
+| `dun-x1` | `rows.json` | a 0.10.2, b the first 0.10.3 (`6732f29`, glyph budget; never released) |
+| `dun-x2` | `dun2/rows.json` | a 0.10.2, b 0.10.3 (`bc22c80`, static and dynamic glyph sets) |
+| `dun-x3`, `dun-x4` | `dun3/rows.json` | a 0.10.3, b the 0.10.3 diagnostic build with the label feed (`diag-label-feed.txt` as `diag.txt`) |
+
+- Every pair is LAN Online Quickplay with TLS off, 1x render and volume 0. Both profiles are named `Æsir テスト`
+  (`make/nickname.py` rewrites `profiles.dat`), and the detector and the tile cursor run on both.
 - `steps.py` is quickplay-cancel-fix's navigation, copied unchanged (sha256 in `provenance.json`).
-  `deluxe_steps.py` holds this run's hooks: `qcf` (that navigation with a half-size image compare, because its
-  references were taken at 0.5x), `open_window`, `hide_window`, `to_solo`, `arm_label_trace` and `label_glyphs`
-  (a guest trace on `ImFontBaked::FindGlyph`: for each of Æ テ ス ト, did the draw return the fallback glyph),
-  and `font_stats` (the `imgui_font_*` lines of `renderer-status.txt`).
+- `deluxe_steps.py` holds this project's hooks:
+  - `qcf`: that navigation, with a half-size image compare, because its references were taken at 0.5x.
+  - `open_window`, `to_solo`.
+  - `arm_label_trace`, `label_glyphs`: a guest trace on `ImFontBaked::FindGlyph`, giving the glyph each character
+    drew.
+  - `font_stats`, `font_sample`: the `imgui_font_*` lines and `imgui_font_dynamic_set` of `renderer-status.txt`.
+  - `hold_active`: holds with input on both instances, because Quickplay drops a player who is idle for about 30 s.
+  - `follow_feed`: for each name the label feed shows (event 121), it checks the dynamic set, the glyphs drawn and
+    the rebuild count.
+- The file is the latest version; `dun-x1` and `dun-x2` ran earlier versions of the same hooks, kept in their run
+  folders.
 - `segments/open-deluxe` (L+R+Down in one frame) and `segments/dpad-up` are authored; the other segments come from
-  quickplay-cancel-fix. `make/` holds the generators (`make_rows.py`, then `make_rows_json.py`; `make_config.py`
-  writes the base config for `eden_test.py new --from`).
+  quickplay-cancel-fix.
+- `make/` holds the generators:
+  - `make_rows.py` and `make_rows_json.py` (`dun-x1`);
+  - `make_rows2.py` and `make_config2.py` (`dun-x2` to `dun-x4`);
+  - `config-base-*.json` are the base configs passed to `eden_test.py new --from`.
 - The reference screenshots (`refs/`) are game screens and stay out of this repository (AGENTS.md: no Nintendo
   assets). `make/make_rows.py` copies them from quickplay-cancel-fix's rows and crops the `*-roi.png` ones;
-  `provenance.json` and `rows.json` pin each by sha256.
-- `rows.json` is the final one. Row `m1-label` (the label checks, the GIFs and its match) ran once in `dun-x1` and is
-  left out of it; `make/make_rows_json.py` keeps its definition and says why.
+  `provenance.json` and each `rows.json` pin them by sha256.
+- `rows.json` (`dun-x1`) leaves out row `m1-label`. It ran once in `dun-x1`, and `make/make_rows_json.py` keeps its
+  definition and says why.

@@ -1,0 +1,574 @@
+{
+ "game_id": "01006A800016E000",
+ "start": "frontend-ready",
+ "about": "Deluxe 0.10.3 (static/dynamic glyph sets), the label pair: a runs 0.10.2 (effbaa0), b 0.10.3 (bc22c80); both profiles are named \"Æsir テスト\"; detector and tile cursor on both. Navigation is quickplay-cancel-fix's steps.py (sha256 db917b88a6e2d73662ab02edae499f0531fa0d7a72ad4253371941554d6b1bbf) through deluxe_steps.qcf; the Deluxe window opens only in the match (L+R+Down in menus also moves the menu focus).",
+ "scope": "Deluxe 0.10.3 static/dynamic glyph sets: the Opp label, imgui_font_* and the dynamic set, one match to sync_end on both, Rematch No.",
+ "setup": [
+  {
+   "state": "two Eden frontends up, games not loaded (defer_load)",
+   "via": "fixture",
+   "ref": "pair config: profiles.dat \"Æsir テスト\" and Deluxe config.ini on both (instances[].files)"
+  },
+  {
+   "state": "both at the Quickplay menu",
+   "via": "segment",
+   "ref": "segments to-online, to-quickplay after hook steps.py:to_main (qcf-srm02)"
+  },
+  {
+   "state": "b searching alone, a matched with b",
+   "via": "hook",
+   "ref": "steps.py reach_css_tile, ready_and_wait_searching, ready_and_wait_session"
+  },
+  {
+   "state": "Deluxe windows open in the match",
+   "via": "segment",
+   "ref": "segment open-deluxe (L+R+Down)"
+  }
+ ],
+ "on_failure": "stop",
+ "segments": {
+  "to-online": {
+   "file": "segments/to-online.edenmacro.json",
+   "sha256": "d52590537267a9aa817e3d7e8969fde0d70e38ca93cf36a5ca616ba8d4678858",
+   "cap": 60
+  },
+  "to-quickplay": {
+   "file": "segments/to-quickplay.edenmacro.json",
+   "sha256": "4db24aee967ca0721918af0291deb53cbefdc07ce4485cf8d423401a5bc63acc",
+   "cap": 40
+  },
+  "pick": {
+   "file": "segments/pick.edenmacro.json",
+   "sha256": "aa7177b16f3c04163c79e3faac2cc3f5ba6ea52ab569c5a0d2d6c5e5acf7ca02",
+   "cap": 20
+  },
+  "tile-up": {
+   "file": "segments/tile-up.edenmacro.json",
+   "sha256": "281878f3b0c24b0a8703890518e1579cdc5aa1946320754da05605fbebe954eb",
+   "cap": 20
+  },
+  "to-css": {
+   "file": "segments/to-css.edenmacro.json",
+   "sha256": "df589d123449a453b70525e393591b2a95249bc8d55470402985236df774a4d5",
+   "cap": 60
+  },
+  "ready": {
+   "file": "segments/ready.edenmacro.json",
+   "sha256": "a66184f087ac3841bbecd7198f2adbc20ffab73d18c1ba2a84edecc4027c7ede",
+   "cap": 20
+  },
+  "open-deluxe": {
+   "file": "segments/open-deluxe.edenmacro.json",
+   "sha256": "b8e281835025f76eaf3c010e33032f1f5479203e5f4edd5a658b210b7b2fa4a0",
+   "cap": 20
+  },
+  "dpad-up": {
+   "file": "segments/dpad-up.edenmacro.json",
+   "sha256": "83708ed609d78985ce499fffdf0c2992766da3244e63659391ea9ac8691dba8c",
+   "cap": 20
+  }
+ },
+ "gates": {
+  "loaded": {
+   "library": "loaded"
+  },
+  "installed": {
+   "kind": "log",
+   "source": "detector_log",
+   "whole_file": true,
+   "cap": 120,
+   "pattern": "plugin=ssbu-desync-detector/\\S+ [^\\n]*heap_allocations=0"
+  },
+  "deluxe-installed": {
+   "kind": "log",
+   "source": "deluxe_install",
+   "whole_file": true,
+   "cap": 120,
+   "pattern": "overlay_host_ready"
+  },
+  "main": {
+   "kind": "image",
+   "reference": "refs/main.png",
+   "sha256": "902628cebd8620847be44e41a826046740f495ca0dfa7e78d8482c43c0da1bdc",
+   "roi": [
+    150,
+    265,
+    450,
+    335
+   ],
+   "tolerance": 8,
+   "cap": 30,
+   "reference_is_roi": true,
+   "frame": [
+    1280,
+    674
+   ],
+   "scale": "fit"
+  },
+  "online-menu": {
+   "kind": "image",
+   "reference": "refs/online-menu-roi.png",
+   "sha256": "34a845b1c6b6d087e85ca87b3da3e3c6c5250a4804e5913142392244439bc641",
+   "roi": [
+    40,
+    5,
+    300,
+    45
+   ],
+   "tolerance": 8,
+   "cap": 40,
+   "reference_is_roi": true,
+   "frame": [
+    1280,
+    674
+   ],
+   "scale": "fit"
+  },
+  "quickplay-menu": {
+   "kind": "image",
+   "reference": "refs/quickplay-menu-roi.png",
+   "sha256": "901ebd27ee19bcd2d8d84e0192e6b20160f489e8d471562394fa185862f83f29",
+   "roi": [
+    40,
+    5,
+    300,
+    45
+   ],
+   "tolerance": 8,
+   "cap": 40,
+   "reference_is_roi": true,
+   "frame": [
+    1280,
+    674
+   ],
+   "scale": "fit"
+  },
+  "css-tile": {
+   "kind": "log",
+   "source": "tile_log",
+   "pattern": "settled screen=css at=(\\d+) hovered=\\1\\b",
+   "cap": 40
+  },
+  "ready-banner-any": {
+   "kind": "image",
+   "reference": "refs/ready-banner-roi.png",
+   "sha256": "18b0c2ae137dca481cbcf5149b2864b3addc96356e2c5c38a82326051801ecef",
+   "roi": [
+    200,
+    110,
+    600,
+    240
+   ],
+   "tolerance": 40,
+   "cap": 30,
+   "reference_is_roi": true,
+   "frame": [
+    1280,
+    674
+   ],
+   "scale": "fit"
+  }
+ },
+ "rows": [
+  {
+   "id": "q00-load",
+   "start": "frontend-ready",
+   "end": "loaded",
+   "budget_min": 4,
+   "steps": [
+    {
+     "call": "game.load",
+     "on": "a",
+     "params": {
+      "path": "@game"
+     },
+     "job_cap": 180
+    },
+    {
+     "call": "game.load",
+     "on": "b",
+     "params": {
+      "path": "@game"
+     },
+     "job_cap": 180
+    },
+    {
+     "gate": "loaded",
+     "on": "a"
+    },
+    {
+     "gate": "loaded",
+     "on": "b"
+    },
+    {
+     "gate": "installed",
+     "on": "a"
+    },
+    {
+     "gate": "installed",
+     "on": "b"
+    },
+    {
+     "gate": "deluxe-installed",
+     "on": "a"
+    },
+    {
+     "gate": "deluxe-installed",
+     "on": "b"
+    },
+    {
+     "reason": "other plugins finish booting",
+     "wait_ms": 15000
+    },
+    {
+     "shot": "boot",
+     "on": "a"
+    },
+    {
+     "shot": "boot",
+     "on": "b"
+    }
+   ]
+  },
+  {
+   "id": "q01-main",
+   "start": "loaded",
+   "end": "main",
+   "budget_min": 4,
+   "steps": [
+    {
+     "run": "deluxe_steps.py:qcf",
+     "on": "a",
+     "check": true,
+     "args": {
+      "fn": "to_main"
+     }
+    },
+    {
+     "run": "deluxe_steps.py:qcf",
+     "on": "b",
+     "check": true,
+     "args": {
+      "fn": "to_main"
+     }
+    },
+    {
+     "gate": "main",
+     "on": "a"
+    },
+    {
+     "gate": "main",
+     "on": "b"
+    }
+   ]
+  },
+  {
+   "id": "q02-online",
+   "start": "main",
+   "end": "online-menu",
+   "budget_min": 3,
+   "steps": [
+    {
+     "on": "a",
+     "gate": "main"
+    },
+    {
+     "on": "a",
+     "play": "to-online"
+    },
+    {
+     "on": "a",
+     "gate": "online-menu"
+    },
+    {
+     "on": "b",
+     "gate": "main"
+    },
+    {
+     "on": "b",
+     "play": "to-online"
+    },
+    {
+     "on": "b",
+     "gate": "online-menu"
+    }
+   ]
+  },
+  {
+   "id": "q03-quickplay",
+   "start": "online-menu",
+   "end": "quickplay-menu",
+   "budget_min": 3,
+   "steps": [
+    {
+     "on": "a",
+     "gate": "online-menu"
+    },
+    {
+     "on": "a",
+     "play": "to-quickplay"
+    },
+    {
+     "on": "a",
+     "gate": "quickplay-menu"
+    },
+    {
+     "on": "b",
+     "gate": "online-menu"
+    },
+    {
+     "on": "b",
+     "play": "to-quickplay"
+    },
+    {
+     "on": "b",
+     "gate": "quickplay-menu"
+    }
+   ]
+  },
+  {
+   "id": "r01-b-waits",
+   "start": "quickplay-menu",
+   "end": "b-searching",
+   "budget_min": 4,
+   "steps": [
+    {
+     "run": "deluxe_steps.py:qcf",
+     "on": "b",
+     "check": true,
+     "args": {
+      "fn": "reach_css_tile"
+     }
+    },
+    {
+     "gate": "css-tile",
+     "on": "b"
+    },
+    {
+     "play": "pick",
+     "on": "b"
+    },
+    {
+     "gate": "ready-banner-any",
+     "on": "b"
+    },
+    {
+     "run": "deluxe_steps.py:qcf",
+     "on": "b",
+     "check": true,
+     "args": {
+      "fn": "ready_and_wait_searching",
+      "tag": "w1"
+     }
+    }
+   ]
+  },
+  {
+   "id": "m1-label",
+   "start": "b-searching",
+   "end": "match-over",
+   "budget_min": 12,
+   "evidence": [
+    "a (0.10.2): Æ テ ス ト draw the fallback glyph",
+    "b (0.10.3): Æ テ ス ト draw their own glyphs; the dynamic set holds テ ス ト",
+    "both detectors: sync_end desync_seen=0"
+   ],
+   "steps": [
+    {
+     "run": "deluxe_steps.py:qcf",
+     "on": "a",
+     "check": true,
+     "args": {
+      "fn": "reach_css_tile"
+     }
+    },
+    {
+     "gate": "css-tile",
+     "on": "a"
+    },
+    {
+     "play": "pick",
+     "on": "a"
+    },
+    {
+     "gate": "ready-banner-any",
+     "on": "a"
+    },
+    {
+     "run": "deluxe_steps.py:arm_label_trace",
+     "on": "a"
+    },
+    {
+     "run": "deluxe_steps.py:arm_label_trace",
+     "on": "b"
+    },
+    {
+     "run": "deluxe_steps.py:qcf",
+     "on": "a",
+     "check": true,
+     "args": {
+      "fn": "ready_and_wait_session",
+      "tag": "m1",
+      "cap_s": 150
+     }
+    },
+    {
+     "run": "deluxe_steps.py:open_window",
+     "on": "b",
+     "check": true,
+     "args": {
+      "tag": "open-match"
+     }
+    },
+    {
+     "run": "deluxe_steps.py:open_window",
+     "on": "a",
+     "check": true,
+     "args": {
+      "tag": "open-match"
+     }
+    },
+    {
+     "on": "b",
+     "gif": {
+      "name": "label-after",
+      "preset": "docs",
+      "length": 8,
+      "steps": [
+       {
+        "run": "deluxe_steps.py:hold_active",
+        "on": "b",
+        "args": {
+         "seconds": 7
+        }
+       }
+      ]
+     }
+    },
+    {
+     "on": "a",
+     "gif": {
+      "name": "label-before",
+      "preset": "docs",
+      "length": 8,
+      "steps": [
+       {
+        "run": "deluxe_steps.py:hold_active",
+        "on": "a",
+        "args": {
+         "seconds": 7
+        }
+       }
+      ]
+     }
+    },
+    {
+     "run": "deluxe_steps.py:label_glyphs",
+     "on": "b",
+     "check": true,
+     "args": {
+      "expect": "own",
+      "active": true
+     }
+    },
+    {
+     "run": "deluxe_steps.py:label_glyphs",
+     "on": "a",
+     "check": true,
+     "args": {
+      "expect": "fallback",
+      "active": true
+     }
+    },
+    {
+     "run": "deluxe_steps.py:font_sample",
+     "on": "b",
+     "check": true,
+     "args": {
+      "tag": "in-match",
+      "contains": "Æsir テスト"
+     }
+    },
+    {
+     "run": "deluxe_steps.py:qcf",
+     "on": "a",
+     "check": true,
+     "args": {
+      "fn": "battle",
+      "tag": "m1"
+     }
+    },
+    {
+     "run": "deluxe_steps.py:qcf",
+     "on": "a",
+     "check": true,
+     "args": {
+      "fn": "rematch_answers",
+      "tag": "m1",
+      "answers": {
+       "a": "no",
+       "b": "no"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "f1-fonts",
+   "start": "match-over",
+   "end": "match-over",
+   "budget_min": 1,
+   "steps": [
+    {
+     "run": "deluxe_steps.py:font_sample",
+     "on": "b",
+     "check": true,
+     "args": {
+      "tag": "after-match",
+      "active": false
+     }
+    },
+    {
+     "run": "deluxe_steps.py:font_stats",
+     "on": "a",
+     "check": true,
+     "args": {
+      "expect_shared": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "z-a",
+   "start": "match-over",
+   "end": "match-over",
+   "budget_min": 1,
+   "steps": [
+    {
+     "run": "deluxe_steps.py:qcf",
+     "on": "a",
+     "check": true,
+     "args": {
+      "fn": "z_instance"
+     }
+    }
+   ]
+  },
+  {
+   "id": "z-b",
+   "start": "match-over",
+   "end": "match-over",
+   "budget_min": 1,
+   "steps": [
+    {
+     "run": "deluxe_steps.py:qcf",
+     "on": "b",
+     "check": true,
+     "args": {
+      "fn": "z_instance"
+     }
+    }
+   ]
+  }
+ ]
+}
