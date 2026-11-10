@@ -59,7 +59,7 @@ and heap cost falls from 5 MiB to 640 KiB; geometry buffers stay demand-grown
 | `c185303` | Draw-slot budgets 32 KiB + 32 KiB command (one 64 KiB pool page) and 8 KiB + 8 KiB control per slot, defined in `command_memory_reserve.hpp` with a host test on the NX constants; CMake accepts `IMGUI_SMASH_RESERVE_{COMMAND,CONTROL}_BUDGET` overrides |
 | `77cdab7` | Companion crate pinned to archive `09b296a0` |
 
-### Fork branch `unicode-shared-font` (2026-11-10)
+### Fork branch `unicode-shared-font` (2026-11-10, 0.10.3)
 
 Names with characters outside ASCII (`Æsir`, kana, kanji) drew `?` in the
 overlay: the only font was JetBrains Mono's ASCII subset (95 glyphs, no U+FFFD),
