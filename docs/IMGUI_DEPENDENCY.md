@@ -120,10 +120,11 @@ modes. With the host fixture font, `stats().indexBytes` is:
 | The kana label | 88,266 B | 18,452 B |
 | Hangul and kanji together | 324,738 B | 26,300 B |
 
-`CalcTextSize` of one label costs 14–27% more with the paged index on the host
-(x86-64, -O2; the paired median over five runs): from 56–109 ns to 78–140 ns
-per call. The archive was built twice, byte for byte. `renderer-status.txt`
-adds `imgui_font_index=<dense|paged> pages=<n>`.
+`CalcTextSize` of one label costs 11–27% more with the paged index on the host
+(x86-64, -O2; dense and paged alternating in one process, the median of five
+runs): the kana label 81.7 → 93.3 ns per call, the Korean name 73.6 → 83.4 ns.
+The archive was built twice, byte for byte. `renderer-status.txt` adds
+`imgui_font_index=<dense|paged> pages=<n>`.
 
 None of the disable macros changes a struct in `imgui.h` or `imgui_internal.h`
 (nor does the paged-index patch: its bit and flag use spare space, checked by

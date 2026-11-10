@@ -334,7 +334,40 @@ def _sleep_active(ctx, seconds):
     while time.monotonic() < end:
         ctx.check_stop()
         _keep_active(ctx)
+        _sample_index(ctx)
         time.sleep(0.1)
+
+
+def _runner_state(ctx, name):
+    """A dict that outlives one step. The runner loads this file afresh for every step (runner.py: a new module per
+    `run`), so module globals do not carry from one step to the next; the runner object does. dun-x7 kept the feed's
+    state in a module global, and the step after follow_feed found it empty."""
+    store = ctx.runner.__dict__.setdefault('_deluxe_steps_state', {})
+    return store.setdefault(name, {})
+
+
+# 0.10.4: the index-bytes trace. While follow_feed runs, every rewrite of the instance's renderer-status.txt (every
+# 5 s) adds a sample: seconds since the feed began, the index mode and pages, index bytes, rebuilds, dynamic glyphs.
+def _sample_index(ctx):
+    trace = _runner_state(ctx, 'index_trace')
+    if not trace:
+        return
+    try:
+        mtime = Path(trace['path']).stat().st_mtime
+    except OSError:
+        return
+    if mtime == trace.get('mtime'):
+        return
+    trace['mtime'] = mtime
+    lines = _font_lines(trace['path'])
+    if 'imgui_font_index_bytes' not in lines:
+        return
+    trace['samples'].append({'t': round(time.monotonic() - trace['began'], 1),
+                             'index': lines.get('imgui_font_index', ''),
+                             'index_bytes': int(lines.get('imgui_font_index_bytes', '0') or 0),
+                             'rebuilds': int(lines.get('imgui_font_rebuilds', '0') or 0),
+                             'dynamic_glyphs': int(lines.get('imgui_font_dynamic_glyphs', '0') or 0),
+                             'dynamic_set': lines.get('imgui_font_dynamic_set', '')})
 
 
 def hold_active(ctx, seconds=7.0):
@@ -381,9 +414,10 @@ def _hex(codepoints):
     return [f'U+{c:04X}' for c in codepoints]
 
 
-def font_sample(ctx, tag, contains=None, absent=None, min_rebuilds=None, active=True):
+def font_sample(ctx, tag, contains=None, absent=None, min_rebuilds=None, active=True, index_mode=None):
     """A fresh renderer-status.txt: the imgui_font_* lines and the dynamic set. `contains`/`absent` are texts whose
-    non-static characters must / must not be in the dynamic set; `min_rebuilds` the least rebuild count."""
+    non-static characters must / must not be in the dynamic set; `min_rebuilds` the least rebuild count; `index_mode`
+    ("paged"/"dense", 0.10.4) what imgui_font_index must say (0.10.3 has no such line: pass None)."""
     path, lines = _fresh_status(ctx, time.time(), active=active)
     fonts = {k: v for k, v in lines.items() if k.startswith('imgui_font')}
     dynamic = _dynamic_set(lines)
@@ -399,6 +433,8 @@ def font_sample(ctx, tag, contains=None, absent=None, min_rebuilds=None, active=
         problems.append(f'fewer than {min_rebuilds} rebuilds')
     if int(fonts.get('imgui_font_misplaced', '0') or 0) != 0:
         problems.append('a rebuild was requested inside a frame')
+    if index_mode is not None and not fonts.get('imgui_font_index', '').startswith(index_mode):
+        problems.append(f'index is {fonts.get("imgui_font_index")!r}, not {index_mode}')
     if problems:
         raise RuntimeError(f'{ctx.on}: {problems}; {fonts}')
     return out
@@ -418,18 +454,30 @@ def _feed_events(path, start):
     return out
 
 
-def follow_feed(ctx, own, names, settle_s=3.0, trace_s=2.0, cap_s=180):
+def follow_feed(ctx, own, names, settle_s=3.0, trace_s=2.0, cap_s=180, until_phase=None, index_mode=None):
     """The diag build's label feed on this instance. For each name it shows (code 121 in events.log), after
     `settle_s` (the old name's grace of 60 frames and the rebuild): first a fresh renderer-status.txt (the dynamic
     set; marked late if the feed moved on before it was read), then a frame and a FindGlyph trace (the glyph each
     non-ASCII character drew). Checks per name: every non-ASCII character drew its own glyph; the dynamic set is the
     name's non-static characters plus what else the window draws (measured on the first name); the previous name's
-    characters left it with a rebuild counted. dun-x3 read the status last and late; this order is dun-x4's."""
+    characters left it with a rebuild counted. dun-x3 read the status last and late; this order is dun-x4's.
+
+    0.10.4: `index_mode` ("paged"/"dense") is required of every status read (imgui_font_index), and the index-bytes
+    trace (_sample_index) samples every status rewrite. With `until_phase` the call returns once that phase is checked
+    and the next call resumes (so a gif step can wrap one name change); the call without it checks the whole feed."""
     events = ctx.instance.get('deluxe_events')
     shown = [own] + list(names)
-    phases, seen, extra, problems = [], [], None, []
+    state = _runner_state(ctx, 'feed').setdefault(ctx.on, {'phases': [], 'seen': [], 'seen_at': {}, 'extra': None,
+                                                           'problems': [], 'began': time.monotonic()})
+    index_trace = _runner_state(ctx, 'index_trace')
+    if not index_trace:
+        index_trace.update({'path': ctx.instance.get('deluxe_status'), 'began': state['began'], 'samples': []})
+    phases, seen, problems = state['phases'], state['seen'], state['problems']
+    extra = state['extra']
     began = time.monotonic()
     while time.monotonic() - began < cap_s:
+        if until_phase is not None and len(phases) > until_phase:
+            break
         ctx.check_stop()
         rows = _feed_events(events, 0)
         fresh = rows[len(seen):]
@@ -440,6 +488,7 @@ def follow_feed(ctx, own, names, settle_s=3.0, trace_s=2.0, cap_s=180):
             continue
         for k, (index, dyn_count) in enumerate(fresh):
             seen.append((index, dyn_count))
+            state['seen_at'][len(seen) - 1] = time.monotonic()
             name = shown[index] if index < len(shown) else f'?{index}'
             phase = {'phase': len(seen) - 1, 'index': index, 'name': name, 'event_dynamic_count': dyn_count}
             if k < len(fresh) - 1:
@@ -475,7 +524,10 @@ def follow_feed(ctx, own, names, settle_s=3.0, trace_s=2.0, cap_s=180):
                           'rebuilds': int(lines.get('imgui_font_rebuilds', '0') or 0),
                           'texture_bytes': int(lines.get('imgui_font_texture_bytes', '0') or 0),
                           'index_bytes': int(lines.get('imgui_font_index_bytes', '0') or 0),
+                          'index_mode': lines.get('imgui_font_index', ''),
                           'static_glyphs': int(lines.get('imgui_font_static_glyphs', '0') or 0)})
+            if index_mode is not None and not phase['index_mode'].startswith(index_mode):
+                problems.append(f'phase {phase["phase"]} {name!r}: index {phase["index_mode"]!r}, not {index_mode}')
             missing = sorted(wanted_chars - set(counts))
             fallback = {c: v for c, v in counts.items() if v['fallback']}
             if missing:
@@ -496,13 +548,53 @@ def follow_feed(ctx, own, names, settle_s=3.0, trace_s=2.0, cap_s=180):
                 if before and phase['rebuilds'] <= previous['rebuilds']:
                     problems.append(f'phase {phase["phase"]} {name!r}: no rebuild after {previous["name"]!r} left')
             phases.append(phase)
+            state['extra'] = extra
+            if until_phase is not None and len(phases) > until_phase:
+                break
         if seen and seen[-1][0] == 0 and len(seen) > len(names):
             break
+    if until_phase is not None:
+        if len(phases) <= until_phase:
+            raise RuntimeError(f'{ctx.on}: phase {until_phase} not reached within {cap_s} s')
+        return {'phases': len(phases), 'until_phase': until_phase}
+    _sample_index(ctx)
     out = _save(ctx, f'feed-{ctx.on}', {'own': own, 'names': names, 'extra': _hex(sorted(extra or [])),
                                          'phases': phases, 'problems': problems,
-                                         'seconds': round(time.monotonic() - began, 1)})
+                                         'index_trace': list(index_trace.get('samples', [])),
+                                         'seconds': round(time.monotonic() - state['began'], 1)})
+    index_trace.clear()
     if len(phases) < len(names) + 2:
         problems.append(f'only {len(phases)} phases seen')
     if problems:
         raise RuntimeError(f'{ctx.on}: {problems}')
     return {'phases': len(phases), 'extra': _hex(sorted(extra or []))}
+
+
+def feed_wait(ctx, phase, after_s):
+    """Holds, both fighters moving, until `after_s` seconds after follow_feed first saw feed phase `phase` (so a GIF
+    that follows starts a few seconds before the next name)."""
+    at = (_runner_state(ctx, 'feed').get(ctx.on) or {}).get('seen_at', {}).get(phase)
+    if at is None:
+        raise RuntimeError(f'{ctx.on}: feed phase {phase} not seen yet')
+    remaining = at + after_s - time.monotonic()
+    if remaining > 0:
+        _sleep_active(ctx, remaining)
+    return {'waited_s': round(max(0.0, remaining), 1)}
+
+
+def feed_switch(ctx, index, hold_s=5.0, cap_s=30.0):
+    """Waits for the feed's next name to be `index` (event 121), then holds `hold_s`: a GIF wrapping this step shows
+    the label changing to it. follow_feed's next call checks that name."""
+    events = ctx.instance.get('deluxe_events')
+    seen = len((_runner_state(ctx, 'feed').get(ctx.on) or {}).get('seen', []))
+    began = time.monotonic()
+    while time.monotonic() - began < cap_s:
+        rows = _feed_events(events, 0)
+        if len(rows) > seen:
+            if rows[seen][0] != index:
+                raise RuntimeError(f'{ctx.on}: the feed showed name {rows[seen][0]}, not {index}')
+            waited = round(time.monotonic() - began, 1)
+            _sleep_active(ctx, hold_s)
+            return {'switched_after_s': waited, 'held_s': hold_s}
+        _sleep_active(ctx, 0.1)
+    raise RuntimeError(f'{ctx.on}: feed name {index} not shown within {cap_s} s')

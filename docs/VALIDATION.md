@@ -1,5 +1,112 @@
 # Validation record
 
+## 0.10.4 — paged codepoint index: Eden checks — 2026-11-10
+
+LAN Online Quickplay pairs on the Surface: TLS off (`lan_online_tls=false`),
+1x, volume 0, ssbu-desync-detector `92fbcf84…` and the tile cursor
+`b8313ca2…` on both, both profiles named `Æsir テスト`. The rows are in
+`eden/unicode-label/` (`dun4/`, `dun5/`).
+
+**Run `dun-x6`: a ran 0.10.3 (`bc22c80`, the card's build), b ran 0.10.4.**
+All 9 rows passed.
+- **The labels.** Both read `Opp: Æsir テスト`. A `FindGlyph` trace saw
+  396 (a) and 433 (b) draws of each of Æ, テ, ス and ト, every one the
+  character's own glyph.
+- **Fonts in the match.** Both had the dynamic set U+30B9 U+30C6 U+30C8,
+  321 static glyphs and 262,144 bytes of texture. The glyph table plus index
+  was 94,910 bytes on a (dense) and 25,096 on b (`imgui_font_index=paged
+  pages=3`).
+- **After the match.** One rebuild each, dynamic set `none`; 16,560 bytes on a
+  and 17,840 on b (2 pages).
+- **The match.** `sync_end frame=7542 desync_seen=0` on both, and Rematch No
+  on both.
+- No unmapped access, and no `panic`, `abort`, `crash` or `Unmapped` line in
+  either console log.
+
+**Run `dun-x8`: a ran 0.10.4, b the 0.10.4 diagnostic build with the label
+feed** (20 s per name). All 9 rows passed. `dun-x7`, the first try, stopped
+at its second step: the test hook kept the feed's state in a module global,
+and the runner loads the hook file afresh for every step. The state now
+lives on the runner object; an offline simulation of the split steps passed
+before the rerun.
+
+| Name shown on b | Glyphs drawn (all their own) | Dynamic set | Rebuilds | 0.10.4 bytes | 0.10.3 bytes (`dun-x5`) |
+| --- | --- | --- | --- | --- | --- |
+| Æsir テスト | Æ テ ス ト | テ ス ト | 0 | 25,096 (3 pages) | 94,910 |
+| 日本語のなまえ | all 7 | exactly its 7 | 1 | 24,292 (6 pages) | 227,486 |
+| 강철무사 | all 4 | exactly its 4 | 2 | 24,336 (6 pages) | 328,918 |
+| Ølstue Ærø | Ø Æ ø (static set) | none | 3 | 17,884 (2 pages) | 16,604 |
+| Æsir テスト | Æ テ ス ト | テ ス ト | 3 | 19,420 (3 pages) | 89,234 |
+
+- The bytes are the glyph table plus the codepoint index. The texture stayed
+  262,144 bytes, and every reading said `imgui_font_index=paged`.
+- **The index-bytes trace** (each `renderer-status.txt` rewrite over 80 s,
+  19 samples) stayed between 17,884 and 25,096 bytes through all five names.
+- **a's label.** Own glyphs in all 1,000 draws of each of Æ, テ, ス and ト;
+  index paged, 25,096 bytes.
+- **The match.** `sync_end trigger=normal frame=7521 desync_seen=0` on both,
+  and Rematch No on both. No unmapped access, and no `panic`, `abort`,
+  `crash` or `Unmapped` line in either console log.
+- **The evidence GIF** `label-ja-ko.gif` (640x360, 8.9 s, 5 fps, 3,689,328
+  bytes, the full frame) records b's window as the label changes from
+  日本語のなまえ to 강철무사. At 640 wide the label's text is about 6 px tall
+  and can't be read in the GIF. The per-name screenshots (1280x720) show
+  each name legibly.
+
+## 0.10.4 — paged codepoint index: source and host gates — 2026-11-10
+
+Build `0.10.4-21c0009d228c-1794336309` from `21c0009`: NRO **1,183,744
+bytes**, SHA-256
+`70a2931e2c76869d8163b0bc4997ebe592e86af254220811a6c9467a05337b36`,
+resident 1,224,704 bytes (as 0.10.3). The diagnostic build
+`0.10.4-21c0009d228c-1794336334` (`--features diag`, NRO `3d753b9e…`) runs only
+in Eden.
+
+It pins imgui-smash `sparse-codepoint-index` `9405a49`
+(`docs/IMGUI_DEPENDENCY.md`). Dear ImGui indexed the overlay font's glyphs
+with an entry per codepoint up to the highest one loaded, 6 bytes each: on
+the console, 16,560 bytes with Latin text, 94,910 with the kana label and
+336,134 with a Hangul and a kanji name (each including the glyph table).
+
+- **The patch.** The fork's patch to Dear ImGui keeps the index in
+  256-codepoint pages where glyphs exist. Every use of the index goes through
+  two accessors and one setter.
+- **Opt-in.** Deluxe turns it on for the embedded host only. On the external
+  host Deluxe draws in the standalone NRO's context, which stays dense.
+- **Status lines.** `renderer-status.txt` reads font stats version 3 and adds
+  `imgui_font_index=<dense|paged> pages=<n>`.
+
+**Gates.**
+- 330 unit and 23 integration tests. New: the version-3 stats lines with the
+  index mode.
+- `tools/test_prepare_imgui.py`.
+- clippy with warnings denied, host and Skyline, with and without `diag`.
+- The no-default-features build.
+- The Skyline release builds, plain and `--features diag`.
+
+**The fork's host tests (7) pass.**
+- **`paged_index_test`** builds the unpatched and the patched Dear ImGui. Three
+  runs give identical dumps of 8,550 lines: unpatched dense, patched dense and
+  patched paged (the index's own bytes are compared only between the dense
+  runs).
+  - **What is dumped:** every codepoint's entry; each character's glyph, box,
+    UVs and advance; text sizes and word wraps; RenderText's vertices; the
+    password font; glyph discard and reload; the struct layouts.
+  - **The corpus:** ASCII, Latin-1, Latin Extended-A, kana, kanji, Hangul,
+    Cyrillic, missing scripts, U+E000, U+FFFF and astral codepoints.
+- **`font_setup_test`** runs every overlay test with each index. After 400
+  frames of name changes the two answer identically for all 65,536
+  codepoints. The glyph table plus index, with the host's fixture font:
+
+  | Text on screen | Dense | Paged |
+  | --- | --- | --- |
+  | Latin only | 16,248 B | 16,916 B |
+  | The kana label | 88,266 B | 18,452 B |
+  | Hangul and kanji together | 324,738 B | 26,300 B |
+
+- **`CalcTextSize` per label** costs 11–27% more with the paged index on the
+  host (x86-64; dense and paged in alternating rounds of one process).
+
 ## 0.10.3 — static and dynamic glyph sets: Eden checks — 2026-11-10
 
 Build `0.10.3-bc22c803cdb9-1794313664` from `bc22c80`: NRO **1,183,744
