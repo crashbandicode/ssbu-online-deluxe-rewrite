@@ -7,7 +7,7 @@ The rows, hooks, segments and generators of the Eden runs recorded in `docs/VALI
 | --- | --- | --- |
 | `dun-x1` | `rows.json` | a 0.10.2, b the first 0.10.3 (`6732f29`, glyph budget; never released) |
 | `dun-x2` | `dun2/rows.json` | a 0.10.2, b 0.10.3 (`bc22c80`, static and dynamic glyph sets) |
-| `dun-x3`, `dun-x4` | `dun3/rows.json` | a 0.10.3, b the 0.10.3 diagnostic build with the label feed (`diag-label-feed.txt` as `diag.txt`) |
+| `dun-x3`, `dun-x5` | `dun3/rows.json` | a 0.10.3, b the 0.10.3 diagnostic build with the label feed (`diag-label-feed.txt` as `diag.txt`; 16 s per name in `dun-x3`, 20 s in `dun-x5`) |
 
 - Every pair is LAN Online Quickplay with TLS off, 1x render and volume 0. Both profiles are named `Æsir テスト`
   (`make/nickname.py` rewrites `profiles.dat`), and the detector and the tile cursor run on both.
@@ -27,7 +27,7 @@ The rows, hooks, segments and generators of the Eden runs recorded in `docs/VALI
   quickplay-cancel-fix.
 - `make/` holds the generators:
   - `make_rows.py` and `make_rows_json.py` (`dun-x1`);
-  - `make_rows2.py` and `make_config2.py` (`dun-x2` to `dun-x4`);
+  - `make_rows2.py` and `make_config2.py` (`dun-x2` to `dun-x5`);
   - `config-base-*.json` are the base configs passed to `eden_test.py new --from`.
 - The reference screenshots (`refs/`) are game screens and stay out of this repository (AGENTS.md: no Nintendo
   assets). `make/make_rows.py` copies them from quickplay-cancel-fix's rows and crops the `*-roi.png` ones;

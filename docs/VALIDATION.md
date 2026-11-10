@@ -51,6 +51,26 @@ traced `FindGlyph` for 2.5 s:
   run stopped before the match ended. The fixed hook reads the status first.
 - Neither console log had a `panic`, `abort`, `crash` or `Unmapped` line.
 
+**Run `dun-x5`: the name change again, with the fixed hook** (20 s per
+name; `dun-x4` was refused at Up while another session held the XPS). All 9
+rows passed. Every reading came while its name was on screen:
+
+| Name shown | Glyphs drawn (all their own) | Dynamic set | Rebuilds | Index bytes |
+| --- | --- | --- | --- | --- |
+| Æsir テスト | Æ テ ス ト | テ ス ト | 0 | 94,910 |
+| 日本語のなまえ | all 7 | exactly its 7 | 1 | 227,486 |
+| 강철무사 | all 4 | exactly its 4 | 2 | 328,918 |
+| Ølstue Ærø | Ø Æ ø (static set) | none | 3 | 16,604 |
+| Æsir テスト | Æ テ ス ト | テ ス ト | 3 | 89,234 |
+
+- The window drew no other character outside the static set. The texture
+  stayed 262,144 bytes.
+- a (0.10.3) drew its own glyph in all 1,000 draws of each of Æ, テ, ス and
+  ト, and its dynamic set was テ ス ト.
+- `sync_end frame=7542 desync_seen=0` on both, and Rematch No on both.
+- Neither instance reported an unmapped access, and neither console log had a
+  `panic`, `abort`, `crash` or `Unmapped` line.
+
 ## 0.10.3 — static and dynamic glyph sets: source and host gates — 2026-11-10
 
 The first 0.10.3 build (`6732f29`, below) kept every glyph it ever drew, up
