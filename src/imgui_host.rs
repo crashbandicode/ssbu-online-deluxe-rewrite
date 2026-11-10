@@ -111,9 +111,9 @@ pub fn select_imgui_host(
     }
 }
 
-/// `ImguiSmashFontStats` version 2 from the pinned archive
+/// `ImguiSmashFontStats` version 3 from the pinned archive
 /// (`include/imgui_smash_font_stats.h`): the overlay's fonts, its static and
-/// dynamic glyph sets, rebuilds and memory.
+/// dynamic glyph sets, rebuilds, memory, and whether the glyph index is paged.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct FontStats {
@@ -129,6 +129,8 @@ pub struct FontStats {
     pub atlas_height: u32,
     pub atlas_bytes_per_pixel: u32,
     pub textures_live: u32,
+    pub index_paged: u32,
+    pub index_pages: u32,
     pub dynamic_loads: u64,
     pub refusals: u64,
     pub rebuilds: u64,
@@ -141,8 +143,8 @@ pub struct FontStats {
     pub destroys: u64,
 }
 
-pub const FONT_STATS_VERSION: u32 = 2;
-const _: () = assert!(std::mem::size_of::<FontStats>() == 128);
+pub const FONT_STATS_VERSION: u32 = 3;
+const _: () = assert!(std::mem::size_of::<FontStats>() == 136);
 
 /// `renderer-status.txt` lines for the font stats. A getter that wrote nothing,
 /// or another layout, gives one `unread` line.
@@ -172,6 +174,7 @@ pub fn font_status_lines(stats: &FontStats, wrote: bool) -> String {
          imgui_font_pixel_bytes={}\n\
          imgui_font_pool_bytes={}\n\
          imgui_font_index_bytes={}\n\
+         imgui_font_index={} pages={}\n\
          imgui_font_creates={}\n\
          imgui_font_updates={}\n\
          imgui_font_destroys={}",
@@ -193,6 +196,12 @@ pub fn font_status_lines(stats: &FontStats, wrote: bool) -> String {
         stats.pixel_bytes,
         stats.pool_bytes,
         stats.index_bytes,
+        if stats.index_paged != 0 {
+            "paged"
+        } else {
+            "dense"
+        },
+        stats.index_pages,
         stats.creates,
         stats.updates,
         stats.destroys,
@@ -232,7 +241,7 @@ mod tests {
     fn font_stats_lines_report_both_glyph_sets_rebuilds_and_bytes() {
         let stats = FontStats {
             version: FONT_STATS_VERSION,
-            size: 128,
+            size: 136,
             shared_sources: 6,
             fallback_char: 0x3F,
             static_glyphs: 320,
@@ -259,7 +268,7 @@ mod tests {
         assert!(lines.contains("\nimgui_font_rebuilds=2\nimgui_font_misplaced=0\n"));
         assert!(lines.contains("\nimgui_font_atlas=512x128 bpp=1\n"));
         assert!(lines.contains("\nimgui_font_texture_bytes=131072\nimgui_font_pixel_bytes=65536\n"));
-        assert!(lines.contains("\nimgui_font_index_bytes=88266\n"));
+        assert!(lines.contains("\nimgui_font_index_bytes=88266\nimgui_font_index=dense pages=0\n"));
         assert!(lines.ends_with("imgui_font_updates=9\nimgui_font_destroys=2"));
         // Version 1 (the archive before the static and dynamic sets) is not read.
         let v1 = FontStats {
@@ -272,6 +281,30 @@ mod tests {
             "imgui_font_stats=unread version=1 size=88"
         );
         assert!(font_status_lines(&stats, false).starts_with("imgui_font_stats=unread"));
+    }
+
+    #[test]
+    fn font_stats_lines_report_the_paged_index_and_its_pages() {
+        let stats = FontStats {
+            version: FONT_STATS_VERSION,
+            size: 136,
+            index_paged: 1,
+            index_pages: 3,
+            index_bytes: 18_452,
+            ..FontStats::default()
+        };
+        let lines = font_status_lines(&stats, true);
+        assert!(lines.contains("\nimgui_font_index_bytes=18452\nimgui_font_index=paged pages=3\n"));
+        // Version 2 (0.10.3's archive, 128 bytes, no index mode) is not read.
+        let v2 = FontStats {
+            version: 2,
+            size: 128,
+            ..stats
+        };
+        assert_eq!(
+            font_status_lines(&v2, true),
+            "imgui_font_stats=unread version=2 size=128"
+        );
     }
 
     #[test]

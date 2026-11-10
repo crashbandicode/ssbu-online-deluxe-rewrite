@@ -1,8 +1,8 @@
 {
   "status": "ready",
-  "sha256": "3141ede99c1c4edea759556f8cd706c3a8d77702820375d2dd9f5a97040eddf8",
-  "size": 14753490,
-  "note": "Built from the Forgejo fork's unicode-shared-font branch (deluxe plus text beyond ASCII: the NVN backend honours ImGui's texture requests; the system shared fonts are merged after JetBrains Mono's ASCII subset; a static set of ASCII, Latin-1 Supplement and Latin Extended-A is rasterized once, and the dynamic set holds only the other characters on screen, dropped between frames once they leave it; Alpha8 atlas 512x128 growing to at most 1024x1024). Two clean builds produced this archive byte for byte. Member mtime, uid, and gid are zero. Previous pins: 666401152c6e624cebcd7896c5ef198f6c8b8f0daae21519585b48cd309a9dbc, 14545660 bytes (fork 966835c, glyph budget; never released); 09b296a0f5c67641d229bb4a6d8b170f75281368da3957d666af424476bc2731, 13851844 bytes (fork deluxe c185303, 0.3.9-0.10.2); 8a06be16dbfd50d10bac81ee5bdd2ffa9cd3472773151cc45f1c2101541f8f7c, 13851556 bytes (fork 7f0e47c, 0.3.8); 6c9591cc9f140ca6ce2efee2cdcaa0d8278b43319ea497b3f2434ce19d09ccca, 17181302 bytes (upstream bb47b205 + renderer-bb47.patch, 0.3.0-0.3.7).",
+  "sha256": "26ea2c3b8f401b710d0827efe10cb4059de091757b9254dd832b5e5e0a84d58d",
+  "size": 14788410,
+  "note": "Built from the Forgejo fork's sparse-codepoint-index branch (unicode-shared-font plus a paged per-codepoint glyph index: the fork's CMake applies imgui-smash/patches/imgui/0001-paged-codepoint-index.patch to a copy of the Dear ImGui submodule; imgui_smash_font_use_paged_index, called by Deluxe before imgui_smash_init, keeps the overlay fonts' index in 256-codepoint pages where glyphs exist; font stats version 3). unicode-shared-font: the NVN backend honours ImGui's texture requests; the system shared fonts are merged after JetBrains Mono's ASCII subset; a static set of ASCII, Latin-1 Supplement and Latin Extended-A is rasterized once, and the dynamic set holds only the other characters on screen, dropped between frames once they leave it; Alpha8 atlas 512x128 growing to at most 1024x1024. Two clean builds produced this archive byte for byte. Member mtime, uid, and gid are zero. Previous pins: 3141ede99c1c4edea759556f8cd706c3a8d77702820375d2dd9f5a97040eddf8, 14753490 bytes (fork unicode-shared-font bec80ec, 0.10.3); 666401152c6e624cebcd7896c5ef198f6c8b8f0daae21519585b48cd309a9dbc, 14545660 bytes (fork 966835c, glyph budget; never released); 09b296a0f5c67641d229bb4a6d8b170f75281368da3957d666af424476bc2731, 13851844 bytes (fork deluxe c185303, 0.3.9-0.10.2); 8a06be16dbfd50d10bac81ee5bdd2ffa9cd3472773151cc45f1c2101541f8f7c, 13851556 bytes (fork 7f0e47c, 0.3.8); 6c9591cc9f140ca6ce2efee2cdcaa0d8278b43319ea497b3f2434ce19d09ccca, 17181302 bytes (upstream bb47b205 + renderer-bb47.patch, 0.3.0-0.3.7).",
   "deterministic_archive": {
     "cmake": "3.31.6",
     "observed_link_rule": "aarch64-none-elf-gcc-ar qcD <archive> <objects>; aarch64-none-elf-gcc-ranlib -D <archive>",
@@ -13,13 +13,20 @@
   },
   "source": {
     "repo": "https://git.syntaxbyexample.com/intpa/imgui-smash",
-    "branch": "unicode-shared-font",
-    "commit": "bec80ecd9be3d598c45b4b9a5722048789108203",
+    "branch": "sparse-codepoint-index",
+    "commit": "9405a494982d6eb091b334d08c5bc67fd6336b74",
     "upstream_repo": "https://github.com/Coolsonickirby/imgui-smash",
     "upstream_commit": "bb47b205ed0be2fb864269ee2d37fc886b81221e",
     "submodule_repo": "https://github.com/ocornut/imgui",
     "submodule_path": "imgui-smash/extern/imgui",
     "submodule_commit": "2b415e642b002f4312ac02f6bfa955960f8bd3b6",
+    "fork_imgui_patches": [
+      {
+        "path": "imgui-smash/patches/imgui/0001-paged-codepoint-index.patch",
+        "sha256": "09e7b2fd4222e5ce654da98c041f86668cb1a4d86ba3e878802a328e380c9be2",
+        "applied_by": "imgui-smash/CMakeLists.txt (git apply to <build>/imgui-patched)"
+      }
+    ],
     "license": "GPL-2.0 text is imgui-smash/LICENSE in the fork tree",
     "patch": null,
     "patch_sha256": null,

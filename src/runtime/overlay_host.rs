@@ -62,6 +62,7 @@ extern "C" {
     fn imgui_smash_add_on_draw_frame(render: ProcDrawFunc);
     fn imgui_smash_context_setup(callback: InitFunc);
     fn imgui_smash_set_logger(callback: LoggerFunc);
+    fn imgui_smash_font_use_paged_index(enabled: i32) -> i32;
     fn igGetMainViewport() -> *const ViewportHead;
     fn nvnBootstrapLoader(name: *const c_char) -> *const c_void;
 }
@@ -528,6 +529,11 @@ pub(super) fn install(draw: unsafe extern "C" fn()) -> bool {
             logging::startup_phase("overlay_host_bootstrap_hooked");
             unsafe {
                 imgui_smash_set_logger(backend_logger);
+                // 0.10.4: the overlay's fonts index their glyphs in 256-codepoint
+                // pages, not one array up to the highest codepoint. Only in this
+                // embedded context, which no other module draws on; a standalone
+                // host keeps the dense index older plugins read.
+                imgui_smash_font_use_paged_index(1);
                 imgui_smash_context_setup(on_context_setup);
                 imgui_smash_init(Some(on_backend_ready), None);
                 imgui_smash_add_on_draw_frame(draw);

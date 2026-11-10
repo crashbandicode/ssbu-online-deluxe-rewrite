@@ -17,14 +17,15 @@ memory trims below. The compiled archive stays in the ignored
 
 | Item | Value |
 |---|---|
-| Static archive | `libimgui_smash.a`, 14,753,490 bytes |
-| SHA-256 | `3141ede99c1c4edea759556f8cd706c3a8d77702820375d2dd9f5a97040eddf8` |
-| Source | `https://git.syntaxbyexample.com/intpa/imgui-smash`, branch `unicode-shared-font`, commit `bec80ecd9be3d598c45b4b9a5722048789108203` |
+| Static archive | `libimgui_smash.a`, 14,788,410 bytes |
+| SHA-256 | `26ea2c3b8f401b710d0827efe10cb4059de091757b9254dd832b5e5e0a84d58d` |
+| Source | `https://git.syntaxbyexample.com/intpa/imgui-smash`, branch `sparse-codepoint-index`, commit `9405a494982d6eb091b334d08c5bc67fd6336b74` |
 | Upstream | `Coolsonickirby/imgui-smash` at `bb47b205ed0be2fb864269ee2d37fc886b81221e` (fork `main`) |
-| ImGui submodule | `2b415e642b002f4312ac02f6bfa955960f8bd3b6` (unchanged) |
+| ImGui submodule | `2b415e642b002f4312ac02f6bfa955960f8bd3b6` (unchanged in the tree; the fork's CMake applies `imgui-smash/patches/imgui/0001-paged-codepoint-index.patch`, `09e7b2fd…`, to a copy) |
 | Historical patch | `patches/imgui-smash/renderer-bb47.patch` (`4e138e35…`), now fork commit `ae77450`; no longer applied by the tool |
 
-Previous pins: archive `666401152c6e624cebcd7896c5ef198f6c8b8f0daae21519585b48cd309a9dbc`,
+Previous pins: 0.10.3 archive `3141ede99c1c4edea759556f8cd706c3a8d77702820375d2dd9f5a97040eddf8`,
+14,753,490 bytes (fork `unicode-shared-font` `bec80ec`); archive `666401152c6e624cebcd7896c5ef198f6c8b8f0daae21519585b48cd309a9dbc`,
 14,545,660 bytes (fork `966835c`, the glyph budget; in a 0.10.3 build that was
 never released); 0.3.9–0.10.2 archive `09b296a0f5c67641d229bb4a6d8b170f75281368da3957d666af424476bc2731`,
 13,851,844 bytes (fork `deluxe` `c185303`); 0.3.8 archive `8a06be16dbfd50d10bac81ee5bdd2ffa9cd3472773151cc45f1c2101541f8f7c`,
@@ -87,8 +88,46 @@ rootless Podman running the same pinned devkitA64 image and
 `imgui_font_dynamic_set`. The external host (a standalone `libimgui_smash.nro`)
 keeps its own backend and font until it is rebuilt from this branch.
 
-None of the disable macros changes a struct in `imgui.h` or `imgui_internal.h`,
-so contexts stay compatible across old and new builds and the external-host
+### Fork branch `sparse-codepoint-index` (2026-11-10, 0.10.4)
+
+From `unicode-shared-font` `bec80ec`. Dear ImGui's per-codepoint index (two
+arrays with an entry per codepoint up to the highest one loaded, 6 bytes each)
+was the one font cost that grew with the language: on the console 16,560 bytes
+with Latin text, 94,910 with the kana label, 336,134 with a Hangul and a kanji
+name (each figure includes the glyph table).
+
+| Commit | Change |
+|---|---|
+| `9405a49` | `patches/imgui/0001-paged-codepoint-index.patch` against the submodule, applied by CMake to a copy in the build tree (the submodule stays upstream). It adds `ImFontAtlasFlags_PagedCodepointIndex`: a bake created with it keeps the index in 256-codepoint pages, allocated where a codepoint is indexed (a 512-byte page map plus 1.5 KiB per page). `ImFontBaked::IndexPaged` is a spare bit beside `LoadNoRenderOnLayout`, so no struct changes size or offset. Every direct use of the index goes through `IndexGetAdvanceX`/`IndexGetLookup` or `ImFontAtlasBakedSetIndex`. `imgui_smash_font_use_paged_index(1)` before `imgui_smash_init` turns it on for the overlay's fonts; it is off by default. Font stats version 3 adds `indexPaged` and `indexPages`. |
+
+Deluxe 0.10.4 calls `imgui_smash_font_use_paged_index(1)` on the embedded host
+only. On the external host Deluxe draws in the standalone NRO's context, whose
+bakes that NRO creates and other plugins read with an unpatched Dear ImGui;
+that context stays dense, and Deluxe's patched code reads dense bakes as before.
+
+The fork's host test `paged_index_test` builds the unpatched and the patched
+Dear ImGui. It requires identical answers from the unpatched index, the patched
+dense index and the patched paged index over a corpus (ASCII, Latin-1,
+Latin Extended-A, kana, kanji, Hangul, Cyrillic, missing scripts, U+E000,
+U+FFFF, astral codepoints) in 8,550 dumped lines: every codepoint's entry,
+glyphs, advances, text sizes, word wraps, RenderText's vertices, the password
+font and the struct layouts. `font_setup_test` runs every overlay test in both
+modes. With the host fixture font, `stats().indexBytes` is:
+
+| Text on screen | Dense | Paged |
+|---|---|---|
+| Latin only | 16,248 B | 16,916 B |
+| The kana label | 88,266 B | 18,452 B |
+| Hangul and kanji together | 324,738 B | 26,300 B |
+
+`CalcTextSize` of one label costs 14–27% more with the paged index on the host
+(x86-64, -O2; the paired median over five runs): from 56–109 ns to 78–140 ns
+per call. The archive was built twice, byte for byte. `renderer-status.txt`
+adds `imgui_font_index=<dense|paged> pages=<n>`.
+
+None of the disable macros changes a struct in `imgui.h` or `imgui_internal.h`
+(nor does the paged-index patch: its bit and flag use spare space, checked by
+`paged_index_test`), so contexts stay compatible across old and new builds and the external-host
 checks below still hold (`1.92.7 WIP (19263)` tag, `imgui_setup_context_export`
 and `imgui_smash_add_on_draw_frame_wrapper` in text at the same addresses,
 `text_offset == 0`, identical export set). Standalone companion built from
