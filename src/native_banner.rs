@@ -465,6 +465,19 @@ mod tests {
     }
 
     #[test]
+    fn unicode_names_reach_the_banner_text_and_the_setter_unchanged() {
+        let lines = [remote("Æsir テスト日本", "LessLag", "4", "12ms")];
+        let (text, shown) = status_text(None, "Auto:Van", "Auto", &lines);
+        assert_eq!(shown, 1);
+        assert!(text.ends_with("\nÆsir テスト日本: LessLag | 4 (12ms)"));
+        assert_eq!(setter_utf8(&text).as_deref(), Some(text.as_str()));
+        // A name over the 40-byte field is cut on a character boundary.
+        let long = "テ".repeat(14);
+        let (cut, _) = status_text(None, "P", "L", &[remote(&long, "", "", "")]);
+        assert!(cut.contains(&format!("\n{}: ", "テ".repeat(13))));
+    }
+
+    #[test]
     fn telemetry_writes_css_font_and_arena_keeps_its_font_and_moves() {
         let original = saved("Online", Some(-40.0));
         let (telemetry, _) = status_text(None, "LessLag", "0", &[]);

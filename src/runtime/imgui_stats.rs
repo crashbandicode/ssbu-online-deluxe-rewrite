@@ -36,6 +36,7 @@ const _: () = assert!(std::mem::size_of::<FrameGuardStats>() == 24);
 extern "C" {
     fn imgui_smash_draw_stats(out: *mut DrawStats) -> i32;
     fn imgui_smash_frame_guard_stats(out: *mut FrameGuardStats) -> i32;
+    fn imgui_smash_font_stats(out: *mut crate::imgui_host::FontStats) -> i32;
 }
 
 pub(super) fn write_status(out: &mut impl Write) {
@@ -73,4 +74,7 @@ pub(super) fn write_status(out: &mut impl Write) {
         draw.max_command_bytes,
         draw.max_control_bytes,
     );
+    let mut fonts = crate::imgui_host::FontStats::default();
+    let wrote = unsafe { imgui_smash_font_stats(&mut fonts) } != 0;
+    let _ = writeln!(out, "{}", crate::imgui_host::font_status_lines(&fonts, wrote));
 }

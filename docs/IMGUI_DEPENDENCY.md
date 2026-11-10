@@ -17,14 +17,15 @@ memory trims below. The compiled archive stays in the ignored
 
 | Item | Value |
 |---|---|
-| Static archive | `libimgui_smash.a`, 13,851,844 bytes |
-| SHA-256 | `09b296a0f5c67641d229bb4a6d8b170f75281368da3957d666af424476bc2731` |
-| Source | `https://git.syntaxbyexample.com/intpa/imgui-smash`, branch `deluxe`, commit `c18530357a07f6fb6690c93c24eb7e2329478a3f` |
+| Static archive | `libimgui_smash.a`, 14,545,660 bytes |
+| SHA-256 | `666401152c6e624cebcd7896c5ef198f6c8b8f0daae21519585b48cd309a9dbc` |
+| Source | `https://git.syntaxbyexample.com/intpa/imgui-smash`, branch `unicode-shared-font`, commit `966835c269698dd2fc3f28e159af1ffc31dc3824` |
 | Upstream | `Coolsonickirby/imgui-smash` at `bb47b205ed0be2fb864269ee2d37fc886b81221e` (fork `main`) |
 | ImGui submodule | `2b415e642b002f4312ac02f6bfa955960f8bd3b6` (unchanged) |
 | Historical patch | `patches/imgui-smash/renderer-bb47.patch` (`4e138e35…`), now fork commit `ae77450`; no longer applied by the tool |
 
-Previous pins: 0.3.8 archive `8a06be16dbfd50d10bac81ee5bdd2ffa9cd3472773151cc45f1c2101541f8f7c`,
+Previous pins: 0.3.9–0.10.2 archive `09b296a0f5c67641d229bb4a6d8b170f75281368da3957d666af424476bc2731`,
+13,851,844 bytes (fork `deluxe` `c185303`); 0.3.8 archive `8a06be16dbfd50d10bac81ee5bdd2ffa9cd3472773151cc45f1c2101541f8f7c`,
 13,851,556 bytes (fork `7f0e47c`); 0.3.0–0.3.7 archive
 `6c9591cc9f140ca6ce2efee2cdcaa0d8278b43319ea497b3f2434ce19d09ccca`,
 17,181,302 bytes, built from upstream `bb47b205` plus the local patch.
@@ -57,6 +58,26 @@ and heap cost falls from 5 MiB to 640 KiB; geometry buffers stay demand-grown
 | `384b095`, `7f0e47c` | Companion crate pinned to archive `8a06be16`; archive linked `kind = "static"` with `ImGui::GetCurrentContext` so `cimgui.o` stays out of the standalone |
 | `c185303` | Draw-slot budgets 32 KiB + 32 KiB command (one 64 KiB pool page) and 8 KiB + 8 KiB control per slot, defined in `command_memory_reserve.hpp` with a host test on the NX constants; CMake accepts `IMGUI_SMASH_RESERVE_{COMMAND,CONTROL}_BUDGET` overrides |
 | `77cdab7` | Companion crate pinned to archive `09b296a0` |
+
+### Fork branch `unicode-shared-font` (2026-11-10)
+
+Names with characters outside ASCII (`Æsir`, kana, kanji) drew `?` in the
+overlay: the only font was JetBrains Mono's ASCII subset (95 glyphs, no U+FFFD),
+and the backend uploaded the atlas once, so ImGui locked it and drew its
+fallback glyph for anything else.
+
+| Commit | Change |
+|---|---|
+| `966835c` | The NVN backend honours ImGui's texture requests (`ImGuiBackendFlags_RendererHasTextures`): one memory pool and descriptor (257..355) per texture, uploads of the changed rectangles, a texture and descriptor cache invalidation in the next recording, and destruction only after every earlier draw-slot submission has signalled. The system shared fonts (`nn::pl`) are merged after JetBrains Mono's ASCII subset, read in place from the system's read-only shared memory. Alpha8 atlas, 512x128 to start, at most 1024x1024; at most 512 shared-font glyphs, none once packing would pass half the largest atlas. `imgui_smash_font_stats` reports fonts, glyphs and atlas bytes. Host tests: `imgui-smash/host-tests/run.py`. |
+
+ASCII keeps its glyphs and advances (host test against the legacy atlas). The
+label's atlas is 512x128 Alpha8, 64 KiB of ImGui pixels plus a 64 KiB pool,
+against 256 KiB plus 256 KiB for the legacy RGBA32 atlas. The archive was built
+twice from `966835c`, byte for byte, with rootless Podman running the same
+pinned devkitA64 image and `prepare_imgui.py`'s own commands; the same route
+rebuilt the previous pin `09b296a0` exactly. `renderer-status.txt` adds
+`imgui_font_*` lines. The external host (a standalone `libimgui_smash.nro`)
+keeps its own backend and font until it is rebuilt from this branch.
 
 None of the disable macros changes a struct in `imgui.h` or `imgui_internal.h`,
 so contexts stay compatible across old and new builds and the external-host

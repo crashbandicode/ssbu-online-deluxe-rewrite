@@ -747,44 +747,58 @@ fn note_rtt(table: &mut Table, incoming_byte: u8, body: &[u8]) {
 }
 
 /// First location entry of a subtype-2 body: tag 1 is UTF-8, tag 2 is UTF-16
-/// LE up to 20 units. Anything else, or an undecodable name, is empty.
+/// LE up to 20 units. An undecodable byte sequence or unpaired surrogate
+/// becomes U+FFFD for that character and the rest is kept; a name longer than
+/// the buffer is cut on a character boundary. Any other tag is empty.
 fn first_player_name(body: &[u8]) -> ([u8; NAME_CAP], u8) {
-    let mut out = [0u8; NAME_CAP];
+    let mut name = NameBuf {
+        bytes: [0u8; NAME_CAP],
+        len: 0,
+        full: false,
+    };
     let entry = body.get(BEACON_HEADER..BEACON_HEADER + LOCATION_STRIDE);
     let Some(entry) = entry.filter(|_| body[0] == 2 && body[0x38] != 0) else {
-        return (out, 0);
+        return (name.bytes, 0);
     };
     let window = &entry[ENTRY_NAME..ENTRY_NAME + ENTRY_NAME_LEN];
-    let mut len = 0usize;
     match entry[ENTRY_TAG] {
         1 => {
             let end = window.iter().position(|b| *b == 0).unwrap_or(window.len());
-            if let Ok(text) = std::str::from_utf8(&window[..end]) {
-                out[..text.len()].copy_from_slice(text.as_bytes());
-                len = text.len();
+            for chunk in window[..end].utf8_chunks() {
+                chunk.valid().chars().for_each(|ch| name.push(ch));
+                if !chunk.invalid().is_empty() {
+                    name.push(char::REPLACEMENT_CHARACTER);
+                }
             }
         }
         2 => {
-            for pair in window.as_chunks::<2>().0.iter().take(20) {
-                let unit = u16::from_le_bytes(*pair);
-                if unit == 0 {
-                    break;
-                }
-                let mut encoded = [0u8; 4];
-                let Some(ch) = char::from_u32(u32::from(unit)) else {
-                    return ([0; NAME_CAP], 0);
-                };
-                let raw = ch.encode_utf8(&mut encoded).as_bytes();
-                if len + raw.len() > NAME_CAP {
-                    return ([0; NAME_CAP], 0);
-                }
-                out[len..len + raw.len()].copy_from_slice(raw);
-                len += raw.len();
+            let units = window.as_chunks::<2>().0.iter().take(20);
+            let units = units.map(|pair| u16::from_le_bytes(*pair)).take_while(|unit| *unit != 0);
+            for decoded in char::decode_utf16(units) {
+                name.push(decoded.unwrap_or(char::REPLACEMENT_CHARACTER));
             }
         }
         _ => {}
     }
-    (out, len as u8)
+    (name.bytes, name.len as u8)
+}
+
+/// UTF-8 name bytes that stop at the first character that does not fit.
+struct NameBuf {
+    bytes: [u8; NAME_CAP],
+    len: usize,
+    full: bool,
+}
+
+impl NameBuf {
+    fn push(&mut self, ch: char) {
+        let width = ch.len_utf8();
+        self.full |= self.len + width > NAME_CAP;
+        if !self.full {
+            ch.encode_utf8(&mut self.bytes[self.len..self.len + width]);
+            self.len += width;
+        }
+    }
 }
 
 /// Plans the packet edits under the gate and applies them once.
@@ -966,6 +980,26 @@ mod tests {
         response(b"Samus", true, 2)
     }
 
+    /// The same body with a tag-2 (UTF-16 LE) name of `units`.
+    fn response_utf16(units: &[u16]) -> Vec<u8> {
+        let mut body = response(b"", true, 2);
+        body[BEACON_HEADER + ENTRY_TAG] = 2;
+        for (index, unit) in units.iter().enumerate() {
+            let at = BEACON_HEADER + ENTRY_NAME + 2 * index;
+            body[at..at + 2].copy_from_slice(&unit.to_le_bytes());
+        }
+        body
+    }
+
+    /// The label the overlay and the banner read after `body` confirms Ann.
+    fn label_after(body: &[u8]) -> Option<String> {
+        reset(&[]);
+        station(0, 0, &request(1, 0x10, 0x20));
+        station(ANN, 0x10, body);
+        let peer = current();
+        name(&peer).filter(|_| peer.known).map(str::to_owned)
+    }
+
     fn rtt_reply(latency: u8, bits: u16) -> Vec<u8> {
         let mut body = vec![0, 0, 0, 1, 3, latency, bits as u8, (bits >> 8) as u8];
         body.extend_from_slice(&[0u8; 8]);
@@ -1122,6 +1156,50 @@ mod tests {
         assert_eq!(name(&peer), Some("Ridley"));
         assert_eq!((peer.settings, peer.latency), ("", Unknown));
         assert_eq!(table(|table| table.peers.iter().flatten().count()), 1);
+    }
+
+    #[test]
+    fn latin_and_japanese_names_reach_the_label_byte_exact_in_both_wire_encodings() {
+        let _gate = global_gate();
+        let names = ["Æsir テスト日本", "Æsir テスト", "æ", "Ø", "é", "ÆØÅæøå", "日本語のなまえ"];
+        for text in names {
+            let units: Vec<u16> = text.encode_utf16().collect();
+            let utf16 = label_after(&response_utf16(&units));
+            assert_eq!(utf16.as_deref(), Some(text), "tag 2: {text}");
+            let utf8 = label_after(&response(text.as_bytes(), true, 2));
+            assert_eq!(utf8.as_deref(), Some(text), "tag 1: {text}");
+        }
+        // Twenty UTF-16 units of kanji are 60 UTF-8 bytes, inside NAME_CAP.
+        let twenty = "本".repeat(20);
+        let units: Vec<u16> = twenty.encode_utf16().collect();
+        let label = label_after(&response_utf16(&units));
+        assert_eq!(label.as_deref(), Some(twenty.as_str()));
+    }
+
+    #[test]
+    fn one_undecodable_character_costs_that_character_not_the_name() {
+        let _gate = global_gate();
+        // A supplementary character arrives as a surrogate pair.
+        let pair: Vec<u16> = "Aki\u{1F3AE}".encode_utf16().collect();
+        let label = label_after(&response_utf16(&pair));
+        assert_eq!(label.as_deref(), Some("Aki\u{1F3AE}"));
+        // An unpaired surrogate becomes one replacement character.
+        let lone = label_after(&response_utf16(&[0x41, 0xD800, 0x42]));
+        assert_eq!(lone.as_deref(), Some("A\u{FFFD}B"));
+        let trailing = label_after(&response_utf16(&[0x41, 0xDC00]));
+        assert_eq!(trailing.as_deref(), Some("A\u{FFFD}"));
+        // A UTF-8 name whose last character is cut by the 40-byte window.
+        let mut cut = "テ".repeat(13).into_bytes();
+        cut.push(0xE3);
+        assert_eq!(cut.len(), ENTRY_NAME_LEN);
+        let label = label_after(&response(&cut, true, 2));
+        assert_eq!(label, Some(format!("{}\u{FFFD}", "テ".repeat(13))));
+        // One invalid byte inside a UTF-8 name.
+        let bad = label_after(&response(b"A\xffB", true, 2));
+        assert_eq!(bad.as_deref(), Some("A\u{FFFD}B"));
+        // Forty invalid bytes would need 120: the label stops at the last whole character that fits.
+        let junk = label_after(&response(&[0xff; ENTRY_NAME_LEN], true, 2));
+        assert_eq!(junk, Some("\u{FFFD}".repeat(NAME_CAP / 3)));
     }
 
     #[test]

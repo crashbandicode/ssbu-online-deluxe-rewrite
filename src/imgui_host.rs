@@ -111,9 +111,109 @@ pub fn select_imgui_host(
     }
 }
 
+/// `ImguiSmashFontStats` version 1 from the pinned archive
+/// (`include/imgui_smash_font_stats.h`): the overlay's fonts, glyphs and atlas memory.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct FontStats {
+    pub version: u32,
+    pub size: u32,
+    pub shared_sources: u32,
+    pub rejected_sources: u32,
+    pub glyphs_admitted: u32,
+    pub glyph_refusals: u32,
+    pub fallback_char: u32,
+    pub atlas_width: u32,
+    pub atlas_height: u32,
+    pub atlas_bytes_per_pixel: u32,
+    pub textures_live: u32,
+    pub reserved: u32,
+    pub pixel_bytes: u64,
+    pub pool_bytes: u64,
+    pub creates: u64,
+    pub updates: u64,
+    pub destroys: u64,
+}
+
+pub const FONT_STATS_VERSION: u32 = 1;
+const _: () = assert!(std::mem::size_of::<FontStats>() == 88);
+
+/// `renderer-status.txt` lines for the font stats. A getter that wrote nothing,
+/// or another layout, gives one `unavailable` line.
+pub fn font_status_lines(stats: &FontStats, wrote: bool) -> String {
+    let layout = stats.version == FONT_STATS_VERSION
+        && stats.size as usize == std::mem::size_of::<FontStats>();
+    if !wrote || !layout {
+        return format!(
+            "imgui_font_stats=unavailable version={} size={}",
+            stats.version, stats.size
+        );
+    }
+    format!(
+        "imgui_font_shared={}\n\
+         imgui_font_rejected={}\n\
+         imgui_font_fallback=U+{:04X}\n\
+         imgui_font_glyphs={}\n\
+         imgui_font_refusals={}\n\
+         imgui_font_atlas={}x{} bpp={}\n\
+         imgui_font_textures={}\n\
+         imgui_font_pixel_bytes={}\n\
+         imgui_font_pool_bytes={}\n\
+         imgui_font_creates={}\n\
+         imgui_font_updates={}\n\
+         imgui_font_destroys={}",
+        stats.shared_sources,
+        stats.rejected_sources,
+        stats.fallback_char,
+        stats.glyphs_admitted,
+        stats.glyph_refusals,
+        stats.atlas_width,
+        stats.atlas_height,
+        stats.atlas_bytes_per_pixel,
+        stats.textures_live,
+        stats.pixel_bytes,
+        stats.pool_bytes,
+        stats.creates,
+        stats.updates,
+        stats.destroys,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn font_stats_lines_report_shared_fonts_glyphs_and_atlas_bytes() {
+        let stats = FontStats {
+            version: FONT_STATS_VERSION,
+            size: 88,
+            shared_sources: 6,
+            fallback_char: 0xFFFD,
+            glyphs_admitted: 11,
+            atlas_width: 512,
+            atlas_height: 128,
+            atlas_bytes_per_pixel: 1,
+            textures_live: 1,
+            pixel_bytes: 65_536,
+            pool_bytes: 65_536,
+            creates: 1,
+            updates: 9,
+            ..FontStats::default()
+        };
+        let lines = font_status_lines(&stats, true);
+        assert!(lines.starts_with("imgui_font_shared=6\nimgui_font_rejected=0\n"));
+        assert!(lines.contains("\nimgui_font_fallback=U+FFFD\nimgui_font_glyphs=11\n"));
+        assert!(lines.contains("\nimgui_font_atlas=512x128 bpp=1\n"));
+        assert!(lines.contains("\nimgui_font_pixel_bytes=65536\nimgui_font_pool_bytes=65536\n"));
+        assert!(lines.ends_with("imgui_font_updates=9\nimgui_font_destroys=0"));
+        let other = FontStats { size: 72, ..stats };
+        assert_eq!(
+            font_status_lines(&other, true),
+            "imgui_font_stats=unavailable version=1 size=72"
+        );
+        assert!(font_status_lines(&stats, false).starts_with("imgui_font_stats=unavailable"));
+    }
 
     #[test]
     fn absent_host_stays_embedded() {

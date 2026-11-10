@@ -17,10 +17,10 @@ TOOL = CANDIDATE / "tools" / "prepare_imgui.py"
 PATCH = CANDIDATE / "patches" / "imgui-smash" / "renderer-bb47.patch"
 # The historical patch stays in the tree for provenance; the pin no longer applies it.
 EXPECTED_PATCH = "4e138e351334732670ca250c859e44b53e1fa54eb59e447f2385281063b2871d"
-EXPECTED_ARCHIVE = "09b296a0f5c67641d229bb4a6d8b170f75281368da3957d666af424476bc2731"
-EXPECTED_SIZE = 13851844
+EXPECTED_ARCHIVE = "666401152c6e624cebcd7896c5ef198f6c8b8f0daae21519585b48cd309a9dbc"
+EXPECTED_SIZE = 14545660
 EXPECTED_REPO = "https://git.syntaxbyexample.com/intpa/imgui-smash"
-EXPECTED_COMMIT = "c18530357a07f6fb6690c93c24eb7e2329478a3f"
+EXPECTED_COMMIT = "966835c269698dd2fc3f28e159af1ffc31dc3824"
 
 
 def sha256_of(path: Path) -> str:
@@ -40,15 +40,8 @@ def load_tool():
     return module
 
 
-def main() -> int:
-    digest = sha256_of(PATCH)
-    if digest != EXPECTED_PATCH:
-        raise SystemExit(f"patch digest mismatch {digest}")
-    text = TOOL.read_text(encoding="utf-8")
-    for banned in ("renderer-ready/", "source-integration", "/home/intpa", "/tmp", "1000:1000"):
-        if banned in text:
-            raise SystemExit(f"tool depends on {banned}")
-    module = load_tool()
+def pin_names_the_fork_archive(module) -> dict:
+    """The pin is the fork commit's archive, applies no patch, and clones that commit."""
     pin = module.load_pin()
     if pin["status"] != "ready" or pin["sha256"] != EXPECTED_ARCHIVE or pin["size"] != EXPECTED_SIZE:
         raise SystemExit("pin is not the clean archive")
@@ -62,6 +55,19 @@ def main() -> int:
         raise SystemExit("clone command lost the fork URL")
     if EXPECTED_COMMIT not in joined or "submodule update --init" not in joined:
         raise SystemExit("clone command lost the pinned checkout")
+    return pin
+
+
+def main() -> int:
+    digest = sha256_of(PATCH)
+    if digest != EXPECTED_PATCH:
+        raise SystemExit(f"patch digest mismatch {digest}")
+    text = TOOL.read_text(encoding="utf-8")
+    for banned in ("renderer-ready/", "source-integration", "/home/intpa", "/tmp", "1000:1000"):
+        if banned in text:
+            raise SystemExit(f"tool depends on {banned}")
+    module = load_tool()
+    pin = pin_names_the_fork_archive(module)
     with tempfile.TemporaryDirectory() as temporary:
         sample = Path(temporary) / "sample.a"
         sample.write_bytes(b"not-an-archive")
