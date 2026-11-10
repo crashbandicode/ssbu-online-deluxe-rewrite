@@ -111,8 +111,9 @@ pub fn select_imgui_host(
     }
 }
 
-/// `ImguiSmashFontStats` version 1 from the pinned archive
-/// (`include/imgui_smash_font_stats.h`): the overlay's fonts, glyphs and atlas memory.
+/// `ImguiSmashFontStats` version 2 from the pinned archive
+/// (`include/imgui_smash_font_stats.h`): the overlay's fonts, its static and
+/// dynamic glyph sets, rebuilds and memory.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct FontStats {
@@ -120,14 +121,19 @@ pub struct FontStats {
     pub size: u32,
     pub shared_sources: u32,
     pub rejected_sources: u32,
-    pub glyphs_admitted: u32,
-    pub glyph_refusals: u32,
     pub fallback_char: u32,
+    pub static_glyphs: u32,
+    pub dynamic_glyphs: u32,
+    pub dynamic_visible: u32,
     pub atlas_width: u32,
     pub atlas_height: u32,
     pub atlas_bytes_per_pixel: u32,
     pub textures_live: u32,
-    pub reserved: u32,
+    pub dynamic_loads: u64,
+    pub refusals: u64,
+    pub rebuilds: u64,
+    pub misplaced: u64,
+    pub index_bytes: u64,
     pub pixel_bytes: u64,
     pub pool_bytes: u64,
     pub creates: u64,
@@ -135,17 +141,17 @@ pub struct FontStats {
     pub destroys: u64,
 }
 
-pub const FONT_STATS_VERSION: u32 = 1;
-const _: () = assert!(std::mem::size_of::<FontStats>() == 88);
+pub const FONT_STATS_VERSION: u32 = 2;
+const _: () = assert!(std::mem::size_of::<FontStats>() == 128);
 
 /// `renderer-status.txt` lines for the font stats. A getter that wrote nothing,
-/// or another layout, gives one `unavailable` line.
+/// or another layout, gives one `unread` line.
 pub fn font_status_lines(stats: &FontStats, wrote: bool) -> String {
     let layout = stats.version == FONT_STATS_VERSION
         && stats.size as usize == std::mem::size_of::<FontStats>();
     if !wrote || !layout {
         return format!(
-            "imgui_font_stats=unavailable version={} size={}",
+            "imgui_font_stats=unread version={} size={}",
             stats.version, stats.size
         );
     }
@@ -153,30 +159,69 @@ pub fn font_status_lines(stats: &FontStats, wrote: bool) -> String {
         "imgui_font_shared={}\n\
          imgui_font_rejected={}\n\
          imgui_font_fallback=U+{:04X}\n\
-         imgui_font_glyphs={}\n\
+         imgui_font_static_glyphs={}\n\
+         imgui_font_dynamic_glyphs={}\n\
+         imgui_font_dynamic_visible={}\n\
+         imgui_font_dynamic_loads={}\n\
          imgui_font_refusals={}\n\
+         imgui_font_rebuilds={}\n\
+         imgui_font_misplaced={}\n\
          imgui_font_atlas={}x{} bpp={}\n\
          imgui_font_textures={}\n\
+         imgui_font_texture_bytes={}\n\
          imgui_font_pixel_bytes={}\n\
          imgui_font_pool_bytes={}\n\
+         imgui_font_index_bytes={}\n\
          imgui_font_creates={}\n\
          imgui_font_updates={}\n\
          imgui_font_destroys={}",
         stats.shared_sources,
         stats.rejected_sources,
         stats.fallback_char,
-        stats.glyphs_admitted,
-        stats.glyph_refusals,
+        stats.static_glyphs,
+        stats.dynamic_glyphs,
+        stats.dynamic_visible,
+        stats.dynamic_loads,
+        stats.refusals,
+        stats.rebuilds,
+        stats.misplaced,
         stats.atlas_width,
         stats.atlas_height,
         stats.atlas_bytes_per_pixel,
         stats.textures_live,
+        stats.pixel_bytes + stats.pool_bytes,
         stats.pixel_bytes,
         stats.pool_bytes,
+        stats.index_bytes,
         stats.creates,
         stats.updates,
         stats.destroys,
     )
+}
+
+/// The `imgui_font_dynamic_set` line: the dynamic codepoints in the atlas
+/// (`codepoints`, of `total`; -1 while the archive was changing it).
+pub fn font_dynamic_line(codepoints: &[u32], total: i32) -> String {
+    let mut line = String::from("imgui_font_dynamic_set=");
+    if total < 0 {
+        line.push_str("changing");
+        return line;
+    }
+    if total == 0 {
+        line.push_str("none");
+        return line;
+    }
+    let shown = codepoints.len().min(total as usize);
+    for (i, codepoint) in codepoints[..shown].iter().enumerate() {
+        if i > 0 {
+            line.push(' ');
+        }
+        line.push_str(&format!("U+{codepoint:04X}"));
+    }
+    if total as usize > shown {
+        line.push_str(&format!(" +{}", total as usize - shown));
+    }
+    line
 }
 
 #[cfg(test)]
@@ -184,35 +229,66 @@ mod tests {
     use super::*;
 
     #[test]
-    fn font_stats_lines_report_shared_fonts_glyphs_and_atlas_bytes() {
+    fn font_stats_lines_report_both_glyph_sets_rebuilds_and_bytes() {
         let stats = FontStats {
             version: FONT_STATS_VERSION,
-            size: 88,
+            size: 128,
             shared_sources: 6,
-            fallback_char: 0xFFFD,
-            glyphs_admitted: 11,
+            fallback_char: 0x3F,
+            static_glyphs: 320,
+            dynamic_glyphs: 3,
+            dynamic_visible: 3,
+            dynamic_loads: 11,
+            rebuilds: 2,
             atlas_width: 512,
             atlas_height: 128,
             atlas_bytes_per_pixel: 1,
             textures_live: 1,
+            index_bytes: 88_266,
             pixel_bytes: 65_536,
             pool_bytes: 65_536,
-            creates: 1,
+            creates: 3,
             updates: 9,
+            destroys: 2,
             ..FontStats::default()
         };
         let lines = font_status_lines(&stats, true);
         assert!(lines.starts_with("imgui_font_shared=6\nimgui_font_rejected=0\n"));
-        assert!(lines.contains("\nimgui_font_fallback=U+FFFD\nimgui_font_glyphs=11\n"));
+        assert!(lines.contains("\nimgui_font_fallback=U+003F\nimgui_font_static_glyphs=320\n"));
+        assert!(lines.contains("\nimgui_font_dynamic_glyphs=3\nimgui_font_dynamic_visible=3\n"));
+        assert!(lines.contains("\nimgui_font_rebuilds=2\nimgui_font_misplaced=0\n"));
         assert!(lines.contains("\nimgui_font_atlas=512x128 bpp=1\n"));
-        assert!(lines.contains("\nimgui_font_pixel_bytes=65536\nimgui_font_pool_bytes=65536\n"));
-        assert!(lines.ends_with("imgui_font_updates=9\nimgui_font_destroys=0"));
-        let other = FontStats { size: 72, ..stats };
+        assert!(lines.contains("\nimgui_font_texture_bytes=131072\nimgui_font_pixel_bytes=65536\n"));
+        assert!(lines.contains("\nimgui_font_index_bytes=88266\n"));
+        assert!(lines.ends_with("imgui_font_updates=9\nimgui_font_destroys=2"));
+        // Version 1 (the archive before the static and dynamic sets) is not read.
+        let v1 = FontStats {
+            version: 1,
+            size: 88,
+            ..stats
+        };
         assert_eq!(
-            font_status_lines(&other, true),
-            "imgui_font_stats=unavailable version=1 size=72"
+            font_status_lines(&v1, true),
+            "imgui_font_stats=unread version=1 size=88"
         );
-        assert!(font_status_lines(&stats, false).starts_with("imgui_font_stats=unavailable"));
+        assert!(font_status_lines(&stats, false).starts_with("imgui_font_stats=unread"));
+    }
+
+    #[test]
+    fn font_dynamic_line_lists_the_codepoints_in_the_atlas() {
+        assert_eq!(
+            font_dynamic_line(&[0x30B9, 0x30C6, 0x30C8], 3),
+            "imgui_font_dynamic_set=U+30B9 U+30C6 U+30C8"
+        );
+        assert_eq!(font_dynamic_line(&[], 0), "imgui_font_dynamic_set=none");
+        assert_eq!(
+            font_dynamic_line(&[], -1),
+            "imgui_font_dynamic_set=changing"
+        );
+        assert_eq!(
+            font_dynamic_line(&[0x4E00, 0x4E01], 70),
+            "imgui_font_dynamic_set=U+4E00 U+4E01 +68"
+        );
     }
 
     #[test]

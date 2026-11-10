@@ -13,6 +13,8 @@ pub mod hoc_game_aware;
 pub mod hook_chain;
 pub mod hud_place;
 mod imgui_host;
+#[cfg(any(test, feature = "diag"))]
+pub mod label_feed;
 pub mod match_log;
 pub mod menu;
 pub mod native_banner;

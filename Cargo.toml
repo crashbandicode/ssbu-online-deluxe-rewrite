@@ -19,6 +19,10 @@ default = []
 # profiles of this crate to the card. Built with -C instrument-coverage through
 # tools/coverage/config.toml; never part of the product NRO.
 coverage = []
+# Eden diagnostic build (cargo skyline build --release --features diag), kept
+# in its own folder: reads sd:/ultimate/ssbu_online_deluxe_rewrite/diag.txt for
+# Eden-only switches (the label feed, src/label_feed.rs). Never the product NRO.
+diag = []
 
 [dependencies]
 # Plugin registration ABI shared with separately built NROs (sdk/abi).

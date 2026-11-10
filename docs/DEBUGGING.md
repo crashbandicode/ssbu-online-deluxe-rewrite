@@ -160,6 +160,7 @@ data directory and flags.
 | 118 | Present reacquire (0.9.0): a tracked acquire returned the index presented last, which could draw into an image still on screen. a = index, b = µs since that present. Assumes the present comes before the next acquire, as the 2026-10-28 captures show for Vanilla+ and LessLag; total in `present_reacquired_last` |
 | 119 | Present interval changed (0.9.0): the window's present-interval readback (every 60 presents) changed. a = new, b = previous (`0xffffffffffffffff` before the first readback). 2 is expected at 120 Hz with a 60 FPS target |
 | 120 | Refresh-clock 120 Hz counters (0.9.0, `refresh_clock_status`), every 5 s from boot while `ultimate/ssbu-refresh-clock/status.txt` parses. Deluxe only reads it. a bits 0–15 = VSync events in the plugin's last telemetry interval, 16–31 = game ticks in it, 32–39 = refresh (Hz), 40–43 = swap interval, 44 = normalizing, 45 = interval valid, 46 = observe-only, 48–55 = mode transitions, 56–63 = docked FPS target; b = the interval's system ticks. VSync rate = events × 19,200,000 / b (about 120 at 120 Hz) and the tick rate likewise (about 60 while normalizing). The interval fields are 0 unless the plugin's `telemetry.flag` existed when Smash started. The rows also land in the running stage log |
+| 121 | Diagnostic build only (`--features diag`, 0.10.3): the label feed changed the name the opponent label shows. a = the name (0 the opponent's own, 1.. the fed names in order); b = its distinct characters outside the overlay's static glyph set, i.e. the dynamic glyphs it needs. See [Diagnostic build](#diagnostic-build-0103) |
 
 Codes 73 `AutoContext` and 74 `AutoRequest`
 ([`auto_driver.rs`](../src/runtime/auto_driver.rs)), 78 `ResolutionReport`,
@@ -355,6 +356,25 @@ together), `functions.csv` and an HTML tree. The numbers are evidence for a
 review next to the source, never a removal list: zero coverage means the
 scenarios did not reach the code, which for the NSO paths (Quickplay, Arena)
 is true of every emulator session.
+
+## Diagnostic build (0.10.3)
+
+`cargo skyline build --release --features diag` builds the Eden-only variant,
+kept in its own folder and never shipped. At boot it reads
+`sd:/ultimate/ssbu_online_deluxe_rewrite/diag.txt`. Its one switch so far is
+the label feed:
+
+```text
+label_feed=日本語のなまえ|강철무사|Ølstue Ærø
+label_feed_seconds=12
+```
+
+From the first frame the opponent label shows a live opponent, the label
+shows the opponent's own name for 12 s, then each fed name for 12 s, then the
+opponent's own name for good. Each change is event code 121. Eden uses it to
+watch the overlay's dynamic glyph set (`imgui_font_dynamic_set` in
+`renderer-status.txt`) follow the text on screen: the old name's glyphs
+dropped, the new name's drawn. A shipped NRO contains no `diag.txt` reference.
 
 ## Eden test lifecycle on this Ubuntu host
 

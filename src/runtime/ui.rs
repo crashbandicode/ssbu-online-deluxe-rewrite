@@ -582,6 +582,10 @@ fn settings_rows(
     let peer = &peers.frame.peer;
     let name = crate::peer_transport::name_label(&peer.name, peer.name_len);
     let peer_name = name.filter(|_| peer.known).unwrap_or("Unavailable");
+    #[cfg(feature = "diag")]
+    let fed = super::diag_feed::label(peer_name, peer.known && peers.show_remote);
+    #[cfg(feature = "diag")]
+    let peer_name = fed.as_str();
     let remote_latency = crate::peer_transport::remote_latency_label(peer.latency);
     let announced = peer.known && !peer.settings.is_empty();
     let peer_settings = if announced { peer.settings } else { "---" };

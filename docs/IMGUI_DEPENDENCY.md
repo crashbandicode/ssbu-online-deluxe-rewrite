@@ -17,14 +17,16 @@ memory trims below. The compiled archive stays in the ignored
 
 | Item | Value |
 |---|---|
-| Static archive | `libimgui_smash.a`, 14,545,660 bytes |
-| SHA-256 | `666401152c6e624cebcd7896c5ef198f6c8b8f0daae21519585b48cd309a9dbc` |
-| Source | `https://git.syntaxbyexample.com/intpa/imgui-smash`, branch `unicode-shared-font`, commit `966835c269698dd2fc3f28e159af1ffc31dc3824` |
+| Static archive | `libimgui_smash.a`, 14,753,490 bytes |
+| SHA-256 | `3141ede99c1c4edea759556f8cd706c3a8d77702820375d2dd9f5a97040eddf8` |
+| Source | `https://git.syntaxbyexample.com/intpa/imgui-smash`, branch `unicode-shared-font`, commit `bec80ecd9be3d598c45b4b9a5722048789108203` |
 | Upstream | `Coolsonickirby/imgui-smash` at `bb47b205ed0be2fb864269ee2d37fc886b81221e` (fork `main`) |
 | ImGui submodule | `2b415e642b002f4312ac02f6bfa955960f8bd3b6` (unchanged) |
 | Historical patch | `patches/imgui-smash/renderer-bb47.patch` (`4e138e35…`), now fork commit `ae77450`; no longer applied by the tool |
 
-Previous pins: 0.3.9–0.10.2 archive `09b296a0f5c67641d229bb4a6d8b170f75281368da3957d666af424476bc2731`,
+Previous pins: archive `666401152c6e624cebcd7896c5ef198f6c8b8f0daae21519585b48cd309a9dbc`,
+14,545,660 bytes (fork `966835c`, the glyph budget; in a 0.10.3 build that was
+never released); 0.3.9–0.10.2 archive `09b296a0f5c67641d229bb4a6d8b170f75281368da3957d666af424476bc2731`,
 13,851,844 bytes (fork `deluxe` `c185303`); 0.3.8 archive `8a06be16dbfd50d10bac81ee5bdd2ffa9cd3472773151cc45f1c2101541f8f7c`,
 13,851,556 bytes (fork `7f0e47c`); 0.3.0–0.3.7 archive
 `6c9591cc9f140ca6ce2efee2cdcaa0d8278b43319ea497b3f2434ce19d09ccca`,
@@ -69,14 +71,20 @@ fallback glyph for anything else.
 | Commit | Change |
 |---|---|
 | `966835c` | The NVN backend honours ImGui's texture requests (`ImGuiBackendFlags_RendererHasTextures`): one memory pool and descriptor (257..355) per texture, uploads of the changed rectangles, a texture and descriptor cache invalidation in the next recording, and destruction only after every earlier draw-slot submission has signalled. The system shared fonts (`nn::pl`) are merged after JetBrains Mono's ASCII subset, read in place from the system's read-only shared memory. Alpha8 atlas, 512x128 to start, at most 1024x1024; at most 512 shared-font glyphs, none once packing would pass half the largest atlas. `imgui_smash_font_stats` reports fonts, glyphs and atlas bytes. Host tests: `imgui-smash/host-tests/run.py`. |
+| `bec80ec` | The glyph budget is replaced by two sets. The static set (ASCII, Latin-1 Supplement, Latin Extended-A) is rasterized once at start-up. The dynamic set holds only the other characters of the text on screen. Between frames (`procDraw`, before `ImGui::NewFrame`), the host reads the last frame's draw data; once a dynamic glyph that was on screen has gone 60 frames without a draw, it drops every dynamic glyph and repacks the atlas into a new texture through the texture requests, and what is still on screen loads again in the next frame. Measuring text loads advances only. The fill guard stays. Stats version 2 counts static and dynamic glyphs, rebuilds, texture and index bytes; `imgui_smash_font_dynamic_set` lists the dynamic set. |
 
-ASCII keeps its glyphs and advances (host test against the legacy atlas). The
-label's atlas is 512x128 Alpha8, 64 KiB of ImGui pixels plus a 64 KiB pool,
-against 256 KiB plus 256 KiB for the legacy RGBA32 atlas. The archive was built
-twice from `966835c`, byte for byte, with rootless Podman running the same
-pinned devkitA64 image and `prepare_imgui.py`'s own commands; the same route
-rebuilt the previous pin `09b296a0` exactly. `renderer-status.txt` adds
-`imgui_font_*` lines. The external host (a standalone `libimgui_smash.nro`)
+ASCII keeps its glyphs and advances (host test against the legacy atlas). With
+the static set and the opponent label, the atlas is 512x128 Alpha8: 64 KiB of
+ImGui pixels plus a 64 KiB pool, against 256 KiB plus 256 KiB for the legacy
+RGBA32 atlas. Characters outside the static set cost atlas space only while on
+screen. ImGui's per-codepoint index (6 bytes per codepoint up to the highest
+one loaded) follows the same rule: about 2 KiB with European names, about 75
+KiB with a kana name, about 330 KiB with a Hangul name, released at the rebuild
+after the name leaves. Both archives were built twice, byte for byte, with
+rootless Podman running the same pinned devkitA64 image and
+`prepare_imgui.py`'s own commands; the same route rebuilt the previous pin
+`09b296a0` exactly. `renderer-status.txt` adds `imgui_font_*` lines and
+`imgui_font_dynamic_set`. The external host (a standalone `libimgui_smash.nro`)
 keeps its own backend and font until it is rebuilt from this branch.
 
 None of the disable macros changes a struct in `imgui.h` or `imgui_internal.h`,

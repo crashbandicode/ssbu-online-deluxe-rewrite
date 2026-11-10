@@ -37,6 +37,7 @@ extern "C" {
     fn imgui_smash_draw_stats(out: *mut DrawStats) -> i32;
     fn imgui_smash_frame_guard_stats(out: *mut FrameGuardStats) -> i32;
     fn imgui_smash_font_stats(out: *mut crate::imgui_host::FontStats) -> i32;
+    fn imgui_smash_font_dynamic_set(out: *mut u32, cap: u32) -> i32;
 }
 
 pub(super) fn write_status(out: &mut impl Write) {
@@ -77,4 +78,12 @@ pub(super) fn write_status(out: &mut impl Write) {
     let mut fonts = crate::imgui_host::FontStats::default();
     let wrote = unsafe { imgui_smash_font_stats(&mut fonts) } != 0;
     let _ = writeln!(out, "{}", crate::imgui_host::font_status_lines(&fonts, wrote));
+    let mut set = [0u32; 64];
+    let total = unsafe { imgui_smash_font_dynamic_set(set.as_mut_ptr(), set.len() as u32) };
+    let shown = (total.max(0) as usize).min(set.len());
+    let _ = writeln!(
+        out,
+        "{}",
+        crate::imgui_host::font_dynamic_line(&set[..shown], total)
+    );
 }

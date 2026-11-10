@@ -8,6 +8,8 @@ mod connection_transport;
 #[cfg(feature = "coverage")]
 mod coverage;
 mod css_capture;
+#[cfg(feature = "diag")]
+mod diag_feed;
 mod dispatcher_backoff;
 mod fighter_main;
 mod fighter_probe;
@@ -307,6 +309,8 @@ pub fn main() {
     let version = display_version();
     logging::startup_phase("version_query_complete");
     logging::start(&version);
+    #[cfg(feature = "diag")]
+    diag_feed::load();
     if version != "13.0.5" {
         record(Code::UnsupportedVersion, 0, 0);
         skyline::println!(

@@ -228,6 +228,10 @@ pub enum Code {
     /// swap interval, normalizing / valid / observe-only bits, transitions,
     /// docked target); `b` = the interval's system ticks.
     RefreshClock = 120,
+    /// Diagnostic build only (0.10.3): the label feed's name changed. `a` =
+    /// the name shown (0 the opponent's own, 1.. the fed names in order),
+    /// `b` = its distinct characters outside the overlay's static glyph set.
+    LabelFeed = 121,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -372,6 +376,7 @@ mod tests {
         assert_eq!(Code::PresentReacquire as u16, 118);
         assert_eq!(Code::PresentInterval as u16, 119);
         assert_eq!(Code::RefreshClock as u16, 120);
+        assert_eq!(Code::LabelFeed as u16, 121);
     }
     #[test]
     fn recursive_or_contended_logging_drops_instead_of_deadlocking() {
