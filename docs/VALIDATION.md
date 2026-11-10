@@ -1,5 +1,77 @@
 # Validation record
 
+## 0.10.3 — Unicode opponent names: Eden checks — 2026-11-10
+
+Build `0.10.3-6732f296c413-1794271958` from `6732f29` (branch
+`fix/opponent-label-unicode`): NRO **1,175,552 bytes**, SHA-256
+`f25f13902ce4b3f34c407535413ceaa810621bf1da628eb313d9f5222466b8d0`. The build
+before the fix is `0.10.2-effbaa046665-1794271323` from `effbaa0`: NRO
+1,167,360 bytes, `4163a8d0fa9b0e83b84e74041bb88ebf7f91dfafb42502f920b2b0351a2996c4`.
+Resident size (`.text` + `.rodata` + `.data` + `.bss`) is 1,208,320 bytes
+before and 1,216,512 after.
+
+**Run `dun-x1`, one LAN Online Quickplay pair on the XPS** (TLS off, 1x
+render, volume 0). Instance a ran the build before the fix and b ran 0.10.3,
+both with ssbu-desync-detector `92fbcf84…` and the tile cursor `b8313ca2…`.
+Both profiles were renamed `Æsir テスト`, so each Opp line shows that name.
+The rows, hooks and segments are in `eden/unicode-label/`.
+
+- **The label.** After the match started, the Opp line of the match strip
+  read `Opp: Æsir テスト | 20ms | Unknown` on b and `Opp: ?sir ??? | 20ms |
+  Unknown` on a. A guest trace on `ImFontBaked::FindGlyph` (the lookup
+  `ImFont::RenderText` makes for each character) checked each draw of
+  Æ, テ, ス and ト. On b, all 920 draws of each character returned that
+  character's own glyph. In all 3,680 traced calls, the font had not loaded
+  its fallback glyph (index -1). On
+  a, all 1,000 draws of each returned the fallback glyph `?`. Both labels
+  were recorded as 1280x720 GIFs of 7.0 s.
+- **Fonts on b** (`renderer-status.txt`): 6 system shared fonts merged and
+  0 rejected; 5 shared-font glyphs rasterized and 0 refused; one 512x128
+  Alpha8 atlas texture, using 65,536 bytes of ImGui pixels and a 65,536-byte
+  pool; 1 create, 70 updates and 0 destroys. The fallback stayed `?`
+  (U+003F), because no font Eden served has U+FFFD. a writes no font lines.
+- **First match (m1).** b was dropped for inactivity while the GIFs were
+  recorded (no input for about 35 s), so the game cancelled the match and
+  neither detector logged `sync_end`.
+- **Second match (m2).** It was played with input throughout. a was matched
+  57 s after Ready. Under the profile's Quickplay rules (Time 2:00), both
+  detectors logged, 151 s after the session began, `sync_end ... frame=7542
+  desync_seen=0`. Rematch was answered No on both.
+- Neither instance reported an unmapped access, and neither console log had a
+  `panic`, `abort`, `crash` or `Unmapped` line. Down restored both profiles
+  and verified them separately.
+- **Note on the chord.** In menus, L+R+Down also delivers D-pad Down to the
+  game. On the Quickplay menu, it moved the focus from Solo to Preferred
+  Rules. The rows close the window again and restore the focus before they
+  navigate.
+
+## 0.10.3 — Unicode opponent names: source and host gates — 2026-11-10
+
+The name reached the label intact. The overlay drew it with JetBrains
+Mono's ASCII subset (95 glyphs, no U+FFFD), in an atlas the NVN backend
+uploaded once, so ImGui drew its fallback `?` for every other character.
+The fix is in the imgui-smash fork, branch `unicode-shared-font` `966835c`
+(`docs/IMGUI_DEPENDENCY.md`):
+
+- glyphs are rasterized when they are first drawn;
+- the system shared fonts are merged after the ASCII font, read in place;
+- the atlas is Alpha8, 512x128 to start and at most 1024x1024;
+- the glyph budget is 512, with a fill guard below ImGui's out-of-texture
+  assert.
+
+`peer_transport::first_player_name` now replaces only an undecodable
+character with U+FFFD. Before, one such character emptied the whole name.
+
+**Gates.** 325 unit and 23 integration tests (new: Latin and Japanese names
+reach the label byte for byte in both wire encodings; one bad UTF-8 byte or
+unpaired surrogate costs one character; the font-stats lines);
+`tools/test_prepare_imgui.py`; clippy with warnings denied, host and Skyline;
+the no-default-features build; the Skyline release build. The fork's six host
+tests pass, including the label drawn through ImGui's text path before
+(`?` for Æ and the kana) and after (each its own glyph), all 95 ASCII glyphs
+identical to the old atlas, and a seeded overfill that aborts without the
+fill guard.
+
 ## 0.10.2 — release assets and card install — 2026-11-02
 
 Built again from a clean clone of tag `v0.10.2` (`73488c1`); the NRO is

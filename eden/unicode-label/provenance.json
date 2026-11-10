@@ -1,0 +1,56 @@
+{
+ "source": "/home/intpa/eden-runs/qcf-srm02/rows",
+ "copied": {
+  "steps.py": "db917b88a6e2d73662ab02edae499f0531fa0d7a72ad4253371941554d6b1bbf",
+  "segments/to-online.edenmacro.json": "d52590537267a9aa817e3d7e8969fde0d70e38ca93cf36a5ca616ba8d4678858",
+  "segments/to-quickplay.edenmacro.json": "4db24aee967ca0721918af0291deb53cbefdc07ce4485cf8d423401a5bc63acc",
+  "segments/pick.edenmacro.json": "aa7177b16f3c04163c79e3faac2cc3f5ba6ea52ab569c5a0d2d6c5e5acf7ca02",
+  "segments/tile-up.edenmacro.json": "281878f3b0c24b0a8703890518e1579cdc5aa1946320754da05605fbebe954eb",
+  "segments/to-css.edenmacro.json": "df589d123449a453b70525e393591b2a95249bc8d55470402985236df774a4d5",
+  "segments/ready.edenmacro.json": "a66184f087ac3841bbecd7198f2adbc20ffab73d18c1ba2a84edecc4027c7ede",
+  "refs/main.png": "902628cebd8620847be44e41a826046740f495ca0dfa7e78d8482c43c0da1bdc",
+  "refs/quickplay-menu.png": "4bf9d8236d2630faa734950587817c432e478e0b2d2b6396f2de6b7015ff070f",
+  "refs/ready-banner.png": "a70e14b154caa901a65a3d2f0dcac1d852a9635372103097dd67791b256900be",
+  "refs/rematch-dialog.png": "7b17ea2ffc148fbd831746ee5fa50ae4a9baa959dd38a34dcf29bc7b3ec2b061",
+  "refs/leave-battle-tab.png": "d4527e6e0de84a14bcbfd5b11b35852fb8eea3de9bcb8f1bf4936054bd62aafe",
+  "refs/waiting-menu.png": "a252bc5f94d1dcd71a0cf9b41a2df6a94345cf4c1631cb137ec5a574a541e6da",
+  "refs/online-menu.png": "2f4d98fd992d0bf622806cd7d3bd1442754940dd5d4296ce41dfee089bf3bcc9",
+  "refs/css-quickplay.png": "98f65bb06afb7c73071a3a2f092932178184298ce364519c8f8614518b6fa644"
+ },
+ "derived": {
+  "refs/online-menu-roi.png": {
+   "from": "refs/online-menu.png",
+   "roi": [
+    40,
+    5,
+    300,
+    45
+   ],
+   "sha256": "34a845b1c6b6d087e85ca87b3da3e3c6c5250a4804e5913142392244439bc641"
+  },
+  "refs/quickplay-menu-roi.png": {
+   "from": "refs/quickplay-menu.png",
+   "roi": [
+    40,
+    5,
+    300,
+    45
+   ],
+   "sha256": "901ebd27ee19bcd2d8d84e0192e6b20160f489e8d471562394fa185862f83f29"
+  },
+  "refs/ready-banner-roi.png": {
+   "from": "refs/ready-banner.png",
+   "roi": [
+    200,
+    110,
+    600,
+    240
+   ],
+   "sha256": "18b0c2ae137dca481cbcf5149b2864b3addc96356e2c5c38a82326051801ecef"
+  }
+ },
+ "authored": {
+  "segments/open-deluxe.edenmacro.json": "b8e281835025f76eaf3c010e33032f1f5479203e5f4edd5a658b210b7b2fa4a0",
+  "segments/dpad-up.edenmacro.json": "83708ed609d78985ce499fffdf0c2992766da3244e63659391ea9ac8691dba8c"
+ }
+}
