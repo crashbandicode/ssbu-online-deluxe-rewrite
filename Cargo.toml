@@ -1,6 +1,6 @@
 [package]
 name = "ssbu-online-deluxe-rewrite"
-version = "0.10.3"
+version = "0.10.4"
 edition = "2021"
 publish = false
 build = "build.rs"
