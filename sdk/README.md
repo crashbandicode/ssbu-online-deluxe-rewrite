@@ -19,7 +19,10 @@ share that layout and are accepted by the host under the same rules (see
 that table version, not against the descriptor version. A second export,
 `ssbu_online_deluxe_online_context_v1` (`extern "C" fn() -> u32`), returns the
 host's scene context as `ONLINE_CONTEXT_READY | ONLINE | MATCH | TRAINING`
-bits; the SDK wraps it as `host_online_context()`, `None` on older hosts.
+bits; the SDK wraps it as `host_online_context()`, `None` on older hosts. A
+third, `ssbu_online_deluxe_overlay_state_v1` (Deluxe 0.10.5), reports whether
+the host's window is drawn ([Window state](#window-state-0105-hosts)); the SDK
+wraps it as `host_overlay_state()`.
 
 **Deluxe 0.8.0** includes commit `0d28adc`, adding descriptor revision 5
 (`CELL_ABI_VERSION`) with `OPTION_FLAG_CELL` passive status cells; that host
@@ -234,6 +237,29 @@ The Rust SDK wraps it as `deluxe_plugin_sdk::host_online_context() ->
 Option<u32>`; `None` means no host or a host older than 0.5.0. Resolve it once
 (the SDK caches the lookup) and read it when you need it; it is safe to call
 from any thread.
+
+## Window state (0.10.5 hosts)
+
+A plugin whose controller shortcuts overlap the host window's controls can
+stand them down while the window is up. The host exports
+`ssbu_online_deluxe_overlay_state_v1`, an `extern "C" fn(*mut
+DeluxeOverlayStateV1) -> bool` that fills an 8-byte `{ size, flags }` and
+returns true (false for a null pointer). It reads one atomic: lock-free, safe
+from any thread every frame.
+
+| Bit | Meaning |
+| --- | --- |
+| `DELUXE_WINDOW_VISIBLE` (1) | the window is drawn (any page); `0` once it has not drawn for half a second |
+| `DELUXE_ROWS_PAGE` (2) | the shown page has rows that D-pad Up/Down and ZR + Left/Right act on (Settings, Window Options, Plugins, an own page) |
+| `DELUXE_DEBUG_VIEW` (4) | the Debug view is open |
+
+Look the symbol up once, and again on a miss at most once a second; a missing
+symbol is an older host, to be treated as "no window". The Rust SDK wraps it as
+`deluxe_plugin_sdk::host_overlay_state() -> Option<u32>` with that rule.
+`deluxe_plugin_abi` has `DeluxeOverlayStateV1`, the `DELUXE_*` bits,
+`OVERLAY_STATE_SYMBOL(_C)` and `OverlayStateFn`. Added without a crate-version
+bump (still 5.0.0), like the 0.8.0 revision-5 constants: depend on the release
+tag.
 
 ## Host persistence (optional)
 

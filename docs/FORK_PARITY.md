@@ -556,6 +556,16 @@ reinstall hooks and never patch SGPO's `0x374812c` neighborhood.
   identity and restored by Streamer. Ordinary game input remains unsuppressed.
 - No hardware overclocking, software FPS boost (removed 2026-10-17), or
   duplicate external backend is introduced.
+- Since 0.10.5 (2026-11-11, the card's plugin shortcut conflicts C4–C7):
+  D-pad Up/Down move no row while ZL, ZR or R is held; the Debug view's
+  chords (L+R+Plus/Minus, and Plus/Minus held with L+R+Down) act only with
+  `debug_view=on` (default off) and never while A is held; and the window
+  publishes its state to other plugins (`ssbu_online_deluxe_overlay_state_v1`,
+  [Plugins](PLUGINS.md#window-state-0105)). Until 0.10.4 Up/Down moved the
+  selection under any hold and the Debug chords always acted. The fork's
+  native-pane allow rule (`native_banner_allowed`) is unchanged: the Quickplay
+  waiting-room practice edits no pane because its stage load drops every pane
+  (C11, `the_waiting_practice_never_edits_through_a_native_pane`).
 
 ## Dependency and compatibility boundaries
 

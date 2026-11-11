@@ -146,6 +146,39 @@ in-match strip a cell run is one entry (`Pool:✓ | Results:✓ | Save:✗`, dra
 with the same marks), and the final strip page takes the passive rows that follow
 the last editable row so they stay reachable.
 
+## Window state (0.10.5)
+
+Deluxe reads the controller through `nn::hid` and lets every press through to
+the game, so a plugin whose own controller shortcuts overlap Deluxe's window
+controls (the D-pad rows, ZR + Left/Right value edits) can ask whether the
+window is up and stand its shortcuts down meanwhile. TrainingRooms (rc.9) and
+the CPU pilot (0.2.4) do. The host exports:
+
+```rust
+#[repr(C)]
+pub struct DeluxeOverlayStateV1 { pub size: u32, pub flags: u32 }   // size = 8
+pub const DELUXE_WINDOW_VISIBLE: u32 = 1 << 0; // Deluxe's window is drawn (any page)
+pub const DELUXE_ROWS_PAGE: u32      = 1 << 1; // the shown page has selectable/editable rows (D-pad and ZR+L/R act)
+pub const DELUXE_DEBUG_VIEW: u32     = 1 << 2; // the Debug view is open
+#[no_mangle]
+pub unsafe extern "C" fn ssbu_online_deluxe_overlay_state_v1(out: *mut DeluxeOverlayStateV1) -> bool;
+// Fills *out and returns true; false if out is null. Lock-free, safe to call from any game thread every frame.
+```
+
+- **Pages:** `DELUXE_ROWS_PAGE` is set on Settings, Window Options, the shared
+  Plugins page and a plugin's own page; Performance and Debug have no rows.
+- **Freshness:** the flags are the last draw's. A window that has not drawn for
+  half a second reports `0`, so a stopped window never keeps another plugin's
+  shortcuts off.
+- **Consumers:** resolve the symbol with `nn::ro::LookupSymbol` once, and again
+  on a miss at most once a second. A missing symbol means an older Deluxe:
+  treat it as "no window". Never block on it.
+- **Types:** `deluxe_plugin_abi` carries the struct, the bits,
+  `OVERLAY_STATE_SYMBOL` / `OVERLAY_STATE_SYMBOL_C` and `OverlayStateFn`; the
+  Rust SDK wraps the call as `deluxe_plugin_sdk::host_overlay_state() ->
+  Option<u32>` with that lookup rule. Both crates stay at version 5.0.0, as
+  when 0.8.0 added the revision-5 constants: depend on the release tag.
+
 ## Your own windows through the imgui-smash host
 
 Deluxe statically links the `deluxe` branch of

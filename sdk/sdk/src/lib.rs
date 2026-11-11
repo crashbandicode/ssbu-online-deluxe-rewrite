@@ -41,7 +41,7 @@
 //! Deluxe 0.5.3; the SDK does not retry and returns [`RegisterError::Abi`].
 
 use std::ffi::{c_char, c_void, CString};
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::OnceLock;
 
 pub use deluxe_plugin_abi as abi;
@@ -332,6 +332,69 @@ fn lookup_online_context() -> Option<abi::OnlineContextFn> {
 #[cfg(not(target_os = "switch"))]
 fn lookup_online_context() -> Option<abi::OnlineContextFn> {
     None
+}
+
+/// Deluxe's window state as `abi::DELUXE_*` bits (Deluxe 0.10.5 hosts), or
+/// `None` when no host exports it; treat `None` as "no window". A found entry
+/// is kept; a miss is looked up again at most once a second (by system tick,
+/// never blocking). Each call reads one atomic on the host side and is safe
+/// from any thread every frame. Always `None` off-console.
+pub fn host_overlay_state() -> Option<u32> {
+    static ENTRY: AtomicUsize = AtomicUsize::new(0);
+    static LAST_MISS: AtomicU64 = AtomicU64::new(0);
+    let mut entry = ENTRY.load(Ordering::Acquire);
+    if entry == 0 {
+        let now = system_tick();
+        if !overlay_lookup_due(LAST_MISS.load(Ordering::Relaxed), now) {
+            return None;
+        }
+        LAST_MISS.store(now.max(1), Ordering::Relaxed);
+        entry = lookup_overlay_state();
+        if entry == 0 {
+            return None;
+        }
+        ENTRY.store(entry, Ordering::Release);
+    }
+    // SAFETY: a non-zero entry is the host's exported `OverlayStateFn` by contract.
+    let entry = unsafe { std::mem::transmute::<usize, abi::OverlayStateFn>(entry) };
+    let mut state = abi::DeluxeOverlayStateV1::default();
+    // SAFETY: `state` is a valid, writable `DeluxeOverlayStateV1`.
+    unsafe { entry(&mut state) }.then_some(state.flags)
+}
+
+/// The Switch system tick rate (19.2 MHz).
+const SYSTEM_TICK_HZ: u64 = 19_200_000;
+
+/// Whether a missed overlay-state lookup may be tried again: the first try
+/// always, then once a second has passed since the last miss.
+fn overlay_lookup_due(last_miss: u64, now: u64) -> bool {
+    last_miss == 0 || now.saturating_sub(last_miss) >= SYSTEM_TICK_HZ
+}
+
+#[cfg(target_os = "switch")]
+fn system_tick() -> u64 {
+    // SAFETY: reads the system counter; no preconditions.
+    unsafe { skyline::nn::os::GetSystemTick() as u64 }
+}
+
+#[cfg(not(target_os = "switch"))]
+fn system_tick() -> u64 {
+    0
+}
+
+#[cfg(target_os = "switch")]
+fn lookup_overlay_state() -> usize {
+    let mut address = 0usize;
+    // SAFETY: `OVERLAY_STATE_SYMBOL_C` is NUL-terminated and `address` is a valid out slot.
+    unsafe {
+        skyline::nn::ro::LookupSymbol(&mut address, abi::OVERLAY_STATE_SYMBOL_C.as_ptr());
+    }
+    address
+}
+
+#[cfg(not(target_os = "switch"))]
+fn lookup_overlay_state() -> usize {
+    0
 }
 
 /// Looks up the host and registers `spec` with `handler`.
@@ -709,6 +772,21 @@ mod tests {
     use std::cell::{Cell, RefCell};
     use std::ffi::CStr;
     use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn overlay_state_is_none_off_console_and_a_miss_retries_once_a_second() {
+        // No host off-console: "no window", and repeated calls stay cheap.
+        assert_eq!(host_overlay_state(), None);
+        assert_eq!(host_overlay_state(), None);
+        // The first lookup is always due; after a miss, only a second later.
+        assert!(overlay_lookup_due(0, 0));
+        assert!(overlay_lookup_due(0, 5));
+        assert!(!overlay_lookup_due(100, 100));
+        assert!(!overlay_lookup_due(100, 100 + SYSTEM_TICK_HZ - 1));
+        assert!(overlay_lookup_due(100, 100 + SYSTEM_TICK_HZ));
+        // A clock read before the recorded miss is not a second later.
+        assert!(!overlay_lookup_due(100, 50));
+    }
 
     #[derive(Clone, Debug, PartialEq, Eq)]
     struct SeenOption {

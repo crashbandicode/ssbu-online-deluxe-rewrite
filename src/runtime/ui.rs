@@ -33,9 +33,20 @@ const TABLE_WINDOW: usize = 10;
 /// colour when there are none) and its second line.
 type Strip = (Vec<Row>, String, Option<Vec4>, String);
 
+/// The window's state as of the last draw (0.10.5):
+/// `overlay::pack_overlay_state` of the view's flags and the draw's tick.
+/// `0` until the first draw. The exported `ssbu_online_deluxe_overlay_state_v1`
+/// reads only this word.
+static OVERLAY_STATE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 /// True once the menu draw callback was handed to the ImGui host.
 pub(super) fn installed() -> bool {
     INSTALLED.load(std::sync::atomic::Ordering::Acquire)
+}
+
+/// The last draw's packed overlay state; one atomic load, no lock.
+pub(super) fn overlay_state_word() -> u64 {
+    OVERLAY_STATE.load(std::sync::atomic::Ordering::Acquire)
 }
 
 unsafe fn text(value: &str) {
@@ -976,15 +987,12 @@ unsafe fn poll(ui: &mut UiState, sample: input::Sample) -> Frame {
     let command_edge = ui.controls.command_edge(buttons);
     let (surface_gen, surface_kind) = super::native_banner::surface_sample();
     let scene = super::auto_driver::snapshot();
-    let native = crate::menu::NativePads {
-        allow: crate::menu::native_banner_allowed(scene.ready, scene.connection, scene.status),
-        surface: crate::menu::NativeSurface::from_byte(if surface_gen != 0 {
-            surface_kind
-        } else {
-            0
-        }),
-        fresh: surface_gen != 0 && surface_gen != ui.surface_gen,
-    };
+    let native = crate::menu::NativePads::sample(
+        crate::menu::native_banner_allowed(scene.ready, scene.connection, scene.status),
+        surface_gen,
+        surface_kind,
+        ui.surface_gen,
+    );
     ui.surface_gen = surface_gen;
     // Every scene (0.5.6, operator rule): a Left/Right edit in the open window
     // needs ZR held, in menus as much as in Training and matches, so a taunt,
@@ -1136,6 +1144,13 @@ unsafe extern "C" fn draw() {
     }
     let frame = poll(ui, sample);
     let view = ui.controls.view;
+    OVERLAY_STATE.store(
+        crate::overlay::pack_overlay_state(
+            crate::overlay::overlay_flags(view),
+            skyline::nn::os::GetSystemTick() as u64,
+        ),
+        std::sync::atomic::Ordering::Release,
+    );
     if view == View::Hidden {
         hidden_window();
     } else {

@@ -4,6 +4,9 @@ use crate::{
     menu::{Action, Menu, NativePads, YouIcon},
 };
 
+/// A: never part of a window command. The game's replay Quit is L+R+A+Plus,
+/// so the Debug view does not toggle while A is held (0.10.5).
+const A: u64 = 1 << 0;
 pub(crate) const L: u64 = 1 << 6;
 pub(crate) const R: u64 = 1 << 7;
 const ZL: u64 = 1 << 8;
@@ -190,6 +193,62 @@ pub(crate) const fn edit_modifier(buttons: u64) -> bool {
     buttons & ZR != 0 && buttons & ZL == 0
 }
 
+/// D-pad Up/Down move no row selection while ZL, ZR or R is held (0.10.5).
+/// With those held, Up/Down belong to another plugin's chord (TrainingRooms'
+/// save and load state, record and play, input display and game speed) or to
+/// a trigger hold, and no Deluxe row needs them: a moved selection was what
+/// the next ZR + Left/Right then edited.
+const fn selection_held(buttons: u64) -> bool {
+    buttons & (ZL | ZR | R) != 0
+}
+
+/// Whether a window command may open, close or keep the Debug view (0.10.5):
+/// only with `debug_view=on` in the INI, and never while A is held (the
+/// game's replay Quit, L+R+A+Plus).
+pub const fn debug_allowed(debug_view: bool, buttons: u64) -> bool {
+    debug_view && buttons & A == 0
+}
+
+/// The exported overlay state's `DELUXE_*` flags for `view` (0.10.5): every
+/// page but Hidden is a drawn window; Settings, Window Options, the Plugins
+/// page and an own page have rows that D-pad Up/Down and ZR + Left/Right act
+/// on; Debug is the Debug view.
+pub const fn overlay_flags(view: View) -> u32 {
+    use deluxe_plugin_abi::{DELUXE_DEBUG_VIEW, DELUXE_ROWS_PAGE, DELUXE_WINDOW_VISIBLE};
+    match view {
+        View::Hidden => 0,
+        View::Settings | View::Window | View::Plugins | View::PluginPage => {
+            DELUXE_WINDOW_VISIBLE | DELUXE_ROWS_PAGE
+        }
+        View::Debug => DELUXE_WINDOW_VISIBLE | DELUXE_DEBUG_VIEW,
+        View::Performance => DELUXE_WINDOW_VISIBLE,
+    }
+}
+
+/// A published state older than this is reported as no window: half a
+/// second of system ticks without a draw.
+pub const OVERLAY_STALE_TICKS: u64 = crate::capture::TICK_HZ / 2;
+
+/// One draw's state in one word: the flags in the low byte, the system tick
+/// of the draw above it (19.2 MHz: 2^56 ticks is more than a century), so a
+/// reader never sees one draw's flags with another draw's time.
+pub const fn pack_overlay_state(flags: u32, tick: u64) -> u64 {
+    (tick << 8) | (flags & 0xff) as u64
+}
+
+/// The flags a reader at system tick `now` reports for a published word:
+/// none before the first draw, or when the last draw is older than
+/// [`OVERLAY_STALE_TICKS`]. A draw published just after `now` was read counts
+/// as fresh.
+pub const fn exported_overlay_flags(word: u64, now: u64) -> u32 {
+    let drawn = word >> 8;
+    if drawn == 0 || now.saturating_sub(drawn) > OVERLAY_STALE_TICKS {
+        0
+    } else {
+        (word & 0xff) as u32
+    }
+}
+
 impl Overlay {
     /// Diagnostic edge for a view-command attempt, sampled before `poll_native`.
     /// Held chords and ordinary gameplay do not emit per-frame records. Bit 0
@@ -295,20 +354,31 @@ impl Overlay {
             }
         }
         let chord = shoulders;
+        // `debug_view=off` (the default since 0.10.5) keeps the Debug view
+        // closed; one left open by a setting that changed since is closed.
+        if self.view == View::Debug && !config.debug_view {
+            (self.view, self.page) = (View::Hidden, 0);
+            self.plugin_row = 0;
+            self.menu.open = false;
+        }
         let command = self.latch.sample(buttons);
         if let Some(command) = command {
             let previous = (self.view, self.page);
             let snapshot = plugins.snapshot();
             let own = own_page_ids(&snapshot);
+            // L+R+Minus is also TrainingRooms' menu shortcut and L+R+Plus the
+            // game's pause; L+R+A+Plus is the game's replay Quit (0.10.5).
+            let debug = debug_allowed(config.debug_view, buttons);
             (self.view, self.page) = match command {
                 Command::Cycle { debug_modifier } => next_view(
                     self.view,
                     self.page,
-                    debug_modifier,
+                    debug_modifier && debug,
                     crate::plugin_api::has_shared_rows(&snapshot),
                     &own_pages_hidden(config, &own),
                     config.hide_pages,
                 ),
+                Command::Debug if !debug => return false,
                 Command::Debug if self.view == View::Debug => (View::Hidden, 0),
                 Command::Debug => (View::Debug, self.page),
             };
@@ -330,7 +400,9 @@ impl Overlay {
             let page = (self.view == View::PluginPage).then_some(self.page);
             let snapshot = plugins.snapshot();
             let rows = crate::plugin_api::rows_for(&snapshot, page);
-            let direction: i8 = if pressed & UP != 0 {
+            let direction: i8 = if selection_held(buttons) {
+                0
+            } else if pressed & UP != 0 {
                 -1
             } else if pressed & DOWN != 0 {
                 1
@@ -340,6 +412,7 @@ impl Overlay {
             self.plugin_row =
                 crate::plugin_api::move_selection(&snapshot, &rows, self.plugin_row, direction);
             if direction == 0
+                && pressed & (UP | DOWN) == 0
                 && !chord
                 && pressed & (LEFT | RIGHT) != 0
                 && (!self.edit_hold || edit_modifier(buttons))
@@ -393,10 +466,15 @@ impl Overlay {
             }
             return false;
         }
-        let action = if pressed & UP != 0 {
-            Action::Up
-        } else if pressed & DOWN != 0 {
-            Action::Down
+        let action = if pressed & (UP | DOWN) != 0 {
+            if selection_held(buttons) {
+                return false;
+            }
+            if pressed & UP != 0 {
+                Action::Up
+            } else {
+                Action::Down
+            }
         } else if pressed & (LEFT | RIGHT) != 0 {
             // Mid-game a value edit needs ZR held (see `edit_hold`).
             if self.edit_hold && !edit_modifier(buttons) {
@@ -562,7 +640,12 @@ mod tests {
     fn both_shortcuts_and_debug_modifier_preserve_settings() {
         let _gate = crate::peer_transport::global_gate();
         let mut ui = Overlay::default();
-        let mut config = Config::default();
+        // The Debug view needs `debug_view=on` (0.10.5).
+        let on = Config {
+            debug_view: true,
+            ..Config::default()
+        };
+        let mut config = on.clone();
         // ZL+ZR is not a window chord any more (0.5.3).
         ui.poll(ZL | ZR | DOWN, &mut config);
         assert_eq!(ui.view, View::Hidden);
@@ -574,16 +657,21 @@ mod tests {
         ui.poll(0, &mut config);
         ui.poll(L | R | DOWN | PLUS_MINUS, &mut config);
         assert_eq!(ui.view, View::Debug);
-        assert_eq!(config, Config::default());
+        assert_eq!(config, on);
     }
 
     #[test]
     fn individual_debug_modifiers_work_with_down_release_and_held_shoulders() {
         let _gate = crate::peer_transport::global_gate();
         crate::peer_transport::clear_session();
+        // The Debug view needs `debug_view=on` (0.10.5).
+        let on = Config {
+            debug_view: true,
+            ..Config::default()
+        };
         for modifier in [1 << 10, 1 << 11] {
             let mut ui = Overlay::default();
-            let mut config = Config::default();
+            let mut config = on.clone();
             ui.poll(ZL | ZR | modifier, &mut config);
             assert_eq!(ui.view, View::Hidden, "triggers never open Debug");
             ui.poll(0, &mut config);
@@ -591,7 +679,7 @@ mod tests {
         for chord in [L | R] {
             for modifier in [1 << 10, 1 << 11] {
                 let mut ui = Overlay::default();
-                let mut config = Config::default();
+                let mut config = on.clone();
                 ui.poll(chord | DOWN, &mut config);
                 assert_eq!(ui.view, View::Settings);
                 ui.poll(chord, &mut config);
@@ -613,7 +701,7 @@ mod tests {
                 ui.poll(chord, &mut config);
                 ui.poll(chord | modifier, &mut config);
                 assert_eq!(ui.view, View::Hidden);
-                assert_eq!(config, Config::default());
+                assert_eq!(config, on);
             }
         }
     }
@@ -647,7 +735,12 @@ mod tests {
         let _gate = crate::peer_transport::global_gate();
         crate::peer_transport::clear_session();
         let mut ui = Overlay::default();
-        let mut config = Config::default();
+        // The direct Debug toggle below needs `debug_view=on` (0.10.5).
+        let on = Config {
+            debug_view: true,
+            ..Config::default()
+        };
+        let mut config = on.clone();
         // Hardware order: Down lands first, the bumpers a frame later.
         ui.poll(DOWN, &mut config);
         assert_eq!(ui.view, View::Hidden);
@@ -689,7 +782,7 @@ mod tests {
         ui.poll(DOWN, &mut config);
         ui.poll(ZL | ZR | DOWN, &mut config);
         assert_eq!(ui.view, View::Hidden);
-        assert_eq!(config, Config::default());
+        assert_eq!(config, on);
         let mut latch = CommandLatch::default();
         assert_eq!(latch.sample(L | R), None);
         assert_eq!(
@@ -1277,11 +1370,19 @@ mod tests {
         ui.poll_with(L | R | DOWN, &mut config, css, &registry);
         assert_eq!(ui.view, View::Hidden);
         ui.poll_with(0, &mut config, css, &registry);
+        // The Debug view needs `debug_view=on` (0.10.5).
+        config.debug_view = true;
         ui.poll_with(L | R | DOWN, &mut config, css, &registry);
         ui.poll_with(L | R, &mut config, css, &registry);
         ui.poll_with(L | R | DOWN | PLUS_MINUS, &mut config, css, &registry);
         assert_eq!(ui.view, View::Debug);
-        assert_eq!(config, Config::default());
+        assert_eq!(
+            config,
+            Config {
+                debug_view: true,
+                ..Config::default()
+            }
+        );
         PLUGIN_STATE.values[0].store(0, std::sync::atomic::Ordering::Relaxed);
         PLUGIN_STATE.values[1].store(1, std::sync::atomic::Ordering::Relaxed);
     }
@@ -1374,12 +1475,18 @@ mod tests {
         assert!(ui.poll(L | R | X, &mut config));
         let flipped = config.clone();
         assert_eq!(flipped.vanilla_plus, !Config::default().vanilla_plus);
-        // Moving up to NetLatency, then You, with the chord held is not a new
+        // With R held, Up moves nothing (0.10.5).
+        assert!(!ui.poll(L | R | X | UP, &mut config));
+        assert_eq!(ui.menu.selected, crate::menu::ROW_NET_PROFILE);
+        // Moving up to NetLatency, then You, with X still held (R let go, so
+        // Up moves the selection) and the chord completed again is not a new
         // press on either row.
-        assert!(!ui.poll(L | R | X | UP, &mut config));
+        assert!(!ui.poll(L | X, &mut config));
+        assert!(!ui.poll(L | X | UP, &mut config));
         assert_eq!(ui.menu.selected, crate::menu::ROW_NET_LATENCY);
-        ui.poll(L | R | X, &mut config);
-        assert!(!ui.poll(L | R | X | UP, &mut config));
+        assert!(!ui.poll(L | R | X, &mut config));
+        ui.poll(L | X, &mut config);
+        assert!(!ui.poll(L | X | UP, &mut config));
         assert_eq!(ui.menu.selected, crate::menu::ROW_YOU);
         assert!(!ui.poll(L | R | X, &mut config));
         assert_eq!(config, flipped);
@@ -1861,5 +1968,253 @@ mod tests {
             assert!(!ui.poll(ZR | STICK_L, &mut config));
         }
         assert_eq!(config.hoc_oc, OcMode::Always);
+    }
+
+    // 0.10.5: the plugin shortcut conflicts of rc.9 (C4 to C7, C11).
+
+    const PLUS: u64 = 1 << 10;
+    const MINUS: u64 = 1 << 11;
+
+    #[test]
+    fn exported_overlay_flags_follow_the_view_and_go_stale_without_a_draw() {
+        use deluxe_plugin_abi::{
+            DELUXE_DEBUG_VIEW as DEBUG, DELUXE_ROWS_PAGE as ROWS, DELUXE_WINDOW_VISIBLE as SHOWN,
+        };
+        assert_eq!(overlay_flags(View::Hidden), 0);
+        for view in [View::Settings, View::Window, View::Plugins, View::PluginPage] {
+            assert_eq!(overlay_flags(view), SHOWN | ROWS, "{view:?}");
+        }
+        assert_eq!(overlay_flags(View::Performance), SHOWN);
+        assert_eq!(overlay_flags(View::Debug), SHOWN | DEBUG);
+        // Nothing before the first draw.
+        assert_eq!(exported_overlay_flags(0, 123), 0);
+        let drawn = 1_000_000u64;
+        let word = pack_overlay_state(SHOWN | ROWS, drawn);
+        assert_eq!(exported_overlay_flags(word, drawn), SHOWN | ROWS);
+        assert_eq!(
+            exported_overlay_flags(word, drawn + OVERLAY_STALE_TICKS),
+            SHOWN | ROWS
+        );
+        // Half a second without a draw: no window, so a stopped window never
+        // keeps another plugin's shortcuts off.
+        assert_eq!(exported_overlay_flags(word, drawn + OVERLAY_STALE_TICKS + 1), 0);
+        assert_eq!(OVERLAY_STALE_TICKS, 9_600_000);
+        // A draw published just after the reader read the clock is fresh.
+        assert_eq!(exported_overlay_flags(word, drawn - 5), SHOWN | ROWS);
+        // A hidden window's draw reports nothing.
+        assert_eq!(exported_overlay_flags(pack_overlay_state(0, drawn), drawn), 0);
+        // The tick never reaches the flags byte, a century of uptime on.
+        let late = (1u64 << 55) + 7;
+        assert_eq!(
+            exported_overlay_flags(pack_overlay_state(SHOWN | DEBUG, late), late),
+            SHOWN | DEBUG
+        );
+    }
+
+    static C5_STATE: crate::plugin_api::testing::FakePlugin =
+        crate::plugin_api::testing::FakePlugin::new(
+            [0, 0, 0, 0],
+            deluxe_plugin_abi::REQUEST_APPLIED,
+        );
+
+    #[test]
+    fn dpad_up_down_move_no_row_while_zl_zr_or_r_is_held() {
+        let _gate = crate::peer_transport::global_gate();
+        crate::peer_transport::clear_session();
+        // L + R is not in the list: L+R+Down is the window cycle itself.
+        let holds = [ZL, ZR, R, ZL | ZR, R | ZR];
+        // Settings: the selection stays put under every hold, and the press
+        // edits nothing.
+        let mut ui = Overlay::default();
+        let mut config = Config::default();
+        ui.poll(L | R | DOWN, &mut config);
+        ui.poll(0, &mut config);
+        assert_eq!(
+            (ui.view, ui.menu.selected),
+            (View::Settings, crate::menu::ROW_YOU)
+        );
+        for hold in holds {
+            for press in [UP, DOWN] {
+                ui.poll(hold, &mut config);
+                assert!(!ui.poll(hold | press, &mut config));
+                assert_eq!(
+                    (ui.view, ui.menu.selected),
+                    (View::Settings, crate::menu::ROW_YOU),
+                    "hold {hold:#x} press {press:#x}"
+                );
+                ui.poll(0, &mut config);
+            }
+        }
+        assert_eq!(config, Config::default());
+        // A plain press, or one with only L held, still moves it, and ZR +
+        // Left/Right still edits the selected value.
+        ui.poll(DOWN, &mut config);
+        assert_eq!(ui.menu.selected, crate::menu::ROW_NET_LATENCY);
+        ui.poll(L, &mut config);
+        ui.poll(L | UP, &mut config);
+        assert_eq!(ui.menu.selected, crate::menu::ROW_YOU);
+        ui.poll(0, &mut config);
+        ui.poll(DOWN, &mut config);
+        ui.poll(ZR, &mut config);
+        assert!(ui.poll(ZR | RIGHT, &mut config));
+        assert_eq!(config.input_buffer, 0);
+        // The Window page: the same.
+        let mut ui = Overlay {
+            view: View::Window,
+            menu: Menu {
+                open: true,
+                selected: crate::menu::ROW_PAGE_PLUGINS,
+                own_row: 0,
+            },
+            ..Overlay::default()
+        };
+        for hold in holds {
+            ui.poll(hold, &mut config);
+            assert!(!ui.poll(hold | DOWN, &mut config));
+            assert_eq!(ui.menu.selected, crate::menu::ROW_PAGE_PLUGINS);
+            ui.poll(0, &mut config);
+        }
+        // A plugin page: the row stays, and no request is sent.
+        let registry = crate::plugin_api::Registry::new();
+        let none = crate::menu::NativePads::off();
+        assert_eq!(
+            crate::plugin_api::testing::register_fake(
+                &registry,
+                "pilot",
+                "Pilot",
+                &[
+                    ("p1", "P1", &["Player", "CPU"]),
+                    ("auto", "Auto", &["Off", "On"]),
+                ],
+                &C5_STATE,
+            ),
+            0
+        );
+        let mut ui = Overlay::default();
+        let mut config = Config::default();
+        ui.poll_with(L | R | DOWN, &mut config, none, &registry);
+        ui.poll_with(0, &mut config, none, &registry);
+        ui.poll_with(L | R | DOWN, &mut config, none, &registry);
+        ui.poll_with(0, &mut config, none, &registry);
+        assert_eq!(ui.view, View::Plugins);
+        let first = ui.plugin_row;
+        for hold in holds {
+            for press in [UP, DOWN] {
+                ui.poll_with(hold, &mut config, none, &registry);
+                ui.poll_with(hold | press, &mut config, none, &registry);
+                assert_eq!(ui.plugin_row, first, "hold {hold:#x} press {press:#x}");
+                ui.poll_with(0, &mut config, none, &registry);
+            }
+        }
+        assert_eq!(registry.take_last_step(), None);
+        ui.poll_with(DOWN, &mut config, none, &registry);
+        assert_ne!(ui.plugin_row, first, "a plain Down still moves the row");
+        assert_eq!(config, Config::default());
+    }
+
+    #[test]
+    fn the_debug_view_is_off_by_default_and_never_toggles_while_a_is_held() {
+        let _gate = crate::peer_transport::global_gate();
+        crate::peer_transport::clear_session();
+        // Default: L+R+Plus and L+R+Minus do nothing in Deluxe, and the cycle
+        // with either held is a plain cycle.
+        let mut ui = Overlay::default();
+        let mut config = Config::default();
+        for modifier in [PLUS, MINUS] {
+            assert!(!ui.poll(L | R | modifier, &mut config));
+            assert_eq!(ui.view, View::Hidden);
+            ui.poll(0, &mut config);
+        }
+        ui.poll(L | R | DOWN | PLUS, &mut config);
+        assert_eq!(ui.view, View::Settings);
+        ui.poll(0, &mut config);
+        ui.poll(L | R | DOWN | MINUS, &mut config);
+        assert_eq!(ui.view, View::Performance);
+        ui.poll(0, &mut config);
+        ui.poll(L | R | MINUS, &mut config);
+        assert_eq!(ui.view, View::Performance);
+        ui.poll(0, &mut config);
+        assert_eq!(config, Config::default());
+        // `debug_view=on`: it opens and closes, but never while A is held
+        // (the game's replay Quit, L+R+A+Plus).
+        let on = Config {
+            debug_view: true,
+            ..Config::default()
+        };
+        let mut ui = Overlay::default();
+        let mut config = on.clone();
+        assert!(!ui.poll(L | R | A | PLUS, &mut config));
+        assert_eq!(ui.view, View::Hidden);
+        // Releasing A with Plus still held is not a new command.
+        ui.poll(L | R | PLUS, &mut config);
+        assert_eq!(ui.view, View::Hidden);
+        ui.poll(0, &mut config);
+        ui.poll(A, &mut config);
+        ui.poll(A | L | R, &mut config);
+        ui.poll(A | L | R | PLUS, &mut config);
+        assert_eq!(ui.view, View::Hidden);
+        ui.poll(0, &mut config);
+        ui.poll(L | R | DOWN | PLUS | A, &mut config);
+        assert_eq!(ui.view, View::Settings, "with A held the cycle is plain");
+        ui.poll(0, &mut config);
+        ui.poll(L | R | PLUS, &mut config);
+        assert_eq!(ui.view, View::Debug);
+        ui.poll(0, &mut config);
+        ui.poll(L | R | A | PLUS, &mut config);
+        assert_eq!(ui.view, View::Debug, "A held: no close either");
+        ui.poll(0, &mut config);
+        ui.poll(L | R | MINUS, &mut config);
+        assert_eq!(ui.view, View::Hidden);
+        ui.poll(0, &mut config);
+        // A Debug view left open when the setting goes off closes at once.
+        ui.poll(L | R | PLUS, &mut config);
+        assert_eq!(ui.view, View::Debug);
+        config.debug_view = false;
+        ui.poll(0, &mut config);
+        assert_eq!(ui.view, View::Hidden);
+        assert!(debug_allowed(true, L | R | PLUS));
+        assert!(!debug_allowed(true, L | R | A | PLUS));
+        assert!(!debug_allowed(false, L | R | PLUS));
+    }
+
+    #[test]
+    fn the_waiting_practice_never_edits_through_a_native_pane() {
+        let _gate = crate::peer_transport::global_gate();
+        crate::peer_transport::clear_session();
+        use crate::menu::{NativePads, NativeSurface};
+        // The practice is a ready online Training scene, which the fork's
+        // allow rule admits ...
+        assert!(crate::menu::native_banner_allowed(
+            true,
+            crate::auto_policy::Connection::Quickplay,
+            crate::auto_policy::SceneStatus::Training
+        ));
+        // ... but its stage load drops every pane (generation 0), so a draw
+        // there sees no pane at all; a pane that ran before the stage load and
+        // not since is stale; only a pane hook running again is fresh.
+        let practice = NativePads::sample(true, 0, NativeSurface::Css as u8, 41);
+        assert_eq!(
+            practice,
+            NativePads {
+                allow: true,
+                surface: NativeSurface::None,
+                fresh: false
+            }
+        );
+        let stale = NativePads::sample(true, 41, NativeSurface::Css as u8, 41);
+        assert_eq!((stale.surface, stale.fresh), (NativeSurface::Css, false));
+        assert!(NativePads::sample(true, 42, NativeSurface::Css as u8, 41).fresh);
+        // TrainingRooms' ZL chords (save and load state, the fighter swap)
+        // and every other ZL + D-pad press edit nothing there.
+        let mut ui = Overlay::default();
+        let mut config = Config::default();
+        for pads in [practice, stale] {
+            for press in [UP, DOWN, LEFT, RIGHT] {
+                ui.poll_native(ZL, &mut config, pads);
+                assert!(!ui.poll_native(ZL | press, &mut config, pads));
+                ui.poll_native(0, &mut config, pads);
+            }
+        }
+        assert_eq!(config, Config::default());
     }
 }

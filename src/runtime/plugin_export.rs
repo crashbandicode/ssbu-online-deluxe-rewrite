@@ -118,6 +118,30 @@ pub unsafe extern "C" fn ssbu_online_deluxe_online_context_v1() -> u32 {
     bits
 }
 
+/// Exported entry named by `deluxe_plugin_abi::OVERLAY_STATE_SYMBOL`
+/// (0.10.5): the window's `DELUXE_*` flags as of its last draw, none when it
+/// has not drawn within `overlay::OVERLAY_STALE_TICKS`. Another plugin whose
+/// controller shortcuts overlap the window's stands down while it is drawn.
+///
+/// # Safety
+/// `out` is null or points to writable memory for one
+/// `DeluxeOverlayStateV1`. Reads one atomic and the system tick: no lock, no
+/// allocation, callable from any thread every frame.
+#[no_mangle]
+pub unsafe extern "C" fn ssbu_online_deluxe_overlay_state_v1(
+    out: *mut abi::DeluxeOverlayStateV1,
+) -> bool {
+    if out.is_null() {
+        return false;
+    }
+    let now = skyline::nn::os::GetSystemTick() as u64;
+    out.write_unaligned(abi::DeluxeOverlayStateV1 {
+        size: core::mem::size_of::<abi::DeluxeOverlayStateV1>() as u32,
+        flags: crate::overlay::exported_overlay_flags(super::ui::overlay_state_word(), now),
+    });
+    true
+}
+
 unsafe extern "C" fn host_status() -> u32 {
     if super::ui::installed() {
         abi::HOST_STATUS_MENU_ACTIVE

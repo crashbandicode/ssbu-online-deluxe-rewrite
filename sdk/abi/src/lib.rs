@@ -117,6 +117,42 @@ pub const ONLINE_CONTEXT_MATCH: u32 = 1 << 2;
 /// Online context bit: the scene is Training (also the Quickplay waiting room).
 pub const ONLINE_CONTEXT_TRAINING: u32 = 1 << 3;
 
+/// Exported host function name (Deluxe 0.10.5): `extern "C" fn(*mut
+/// DeluxeOverlayStateV1) -> bool` reporting the state of Deluxe's window, so a
+/// plugin whose own controller shortcuts overlap Deluxe's (the D-pad rows, the
+/// ZR + Left/Right value edit) can stand down while the window is drawn.
+/// Resolve it with `nn::ro::LookupSymbol` once, again on a miss at most once a
+/// second; a missing symbol means an older host, to be treated as "no window".
+/// The call fills `*out` and returns true, or returns false when `out` is
+/// null. It reads one atomic: lock-free and safe from any game thread every
+/// frame.
+pub const OVERLAY_STATE_SYMBOL: &str = "ssbu_online_deluxe_overlay_state_v1";
+/// NUL-terminated form of [`OVERLAY_STATE_SYMBOL`].
+pub const OVERLAY_STATE_SYMBOL_C: &[u8] = b"ssbu_online_deluxe_overlay_state_v1\0";
+/// Signature of the exported [`OVERLAY_STATE_SYMBOL`].
+pub type OverlayStateFn = unsafe extern "C" fn(out: *mut DeluxeOverlayStateV1) -> bool;
+
+/// What [`OVERLAY_STATE_SYMBOL`] fills (8 bytes).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct DeluxeOverlayStateV1 {
+    /// `size_of::<DeluxeOverlayStateV1>()` (8), written by the host.
+    pub size: u32,
+    /// `DELUXE_*` bits.
+    pub flags: u32,
+}
+
+/// Overlay state bit: Deluxe's window is drawn (any page). The host reports
+/// it only while its window drew within the last half second, so a window
+/// that stops drawing never stays reported.
+pub const DELUXE_WINDOW_VISIBLE: u32 = 1 << 0;
+/// Overlay state bit: the shown page has selectable or editable rows (D-pad
+/// Up/Down and ZR + Left/Right act on it): Settings, Window Options, the
+/// shared Plugins page or a plugin's own page.
+pub const DELUXE_ROWS_PAGE: u32 = 1 << 1;
+/// Overlay state bit: the Debug view is open.
+pub const DELUXE_DEBUG_VIEW: u32 = 1 << 2;
+
 /// `OptionDesc::flags`: never write this option even when the plugin persists.
 pub const OPTION_FLAG_NO_PERSIST: u32 = 1 << 0;
 /// `OptionDesc::flags`: a pure status row. Left/Right do nothing, `request`
@@ -377,6 +413,18 @@ mod tests {
         );
         assert!(valid_tones(&[0, 1, 2, 3]));
         assert!(!valid_tones(&[0, 4]));
+        assert_eq!(core::mem::size_of::<DeluxeOverlayStateV1>(), 8);
+        assert_eq!(core::mem::align_of::<DeluxeOverlayStateV1>(), 4);
+        assert_eq!(
+            (DELUXE_WINDOW_VISIBLE, DELUXE_ROWS_PAGE, DELUXE_DEBUG_VIEW),
+            (1, 2, 4)
+        );
+        assert_eq!(OVERLAY_STATE_SYMBOL_C.len(), OVERLAY_STATE_SYMBOL.len() + 1);
+        assert_eq!(
+            &OVERLAY_STATE_SYMBOL_C[..OVERLAY_STATE_SYMBOL.len()],
+            OVERLAY_STATE_SYMBOL.as_bytes()
+        );
+        assert_eq!(OVERLAY_STATE_SYMBOL_C[OVERLAY_STATE_SYMBOL.len()], 0);
         assert_eq!(API_SYMBOL_C.len(), API_SYMBOL.len() + 1);
         assert_eq!(&API_SYMBOL_C[..API_SYMBOL.len()], API_SYMBOL.as_bytes());
         assert_eq!(API_SYMBOL_C[API_SYMBOL.len()], 0);

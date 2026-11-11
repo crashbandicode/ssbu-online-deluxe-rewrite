@@ -30,30 +30,36 @@ fork's room-ID path, but still needs an NSO test. See [native display](NATIVE_DI
 | Control | Action |
 | --- | --- |
 | L+R + Down | Cycle settings → (plugins) → (own plugin pages) → performance → window options → hidden. The Window Options page rows PluginsPage, one row per own page (0.10.0; titled with the plugin's label, replacing the single OwnPages row) and PerfPage (or `hide_pages` and `hide_plugin_pages` in the INI; the rows moved from Settings to the Window Options page in 0.6.0) take pages out of the cycle, e.g. settings → CPU Pilot → window options → hidden with FX Control hidden; Settings and Window Options are always in it. See [Configuration](CONFIGURATION.md) |
-| Up / Down | Move the selection; it wraps within the page. **Settings**: You (the first row, carrying the player-mode icons), the Opp line (only while the peer shows), NetLatency, NetProfile. You has no value: ZR + Left/Right moves the light-blue frame between its icons and L+R + X toggles the framed one (0.9.0). There are no separate Stealth, Streamer or OC rows. **Window Options**: PluginsPage / OwnPages / PerfPage (Shown or Hidden), PerfView (Graph or Number) and Hints (Shown or Hidden). On a plugin page, the plugin's rows |
+| Up / Down | Move the selection; it wraps within the page. Since 0.10.5 not while ZL, ZR or R is held: those Up/Down presses are another plugin's chords (TrainingRooms' save/load state, record/play, input display and game speed) or a trigger hold, and a selection they moved was what the next ZR + Left/Right edited. **Settings**: You (the first row, carrying the player-mode icons), the Opp line (only while the peer shows), NetLatency, NetProfile. You has no value: ZR + Left/Right moves the light-blue frame between its icons and L+R + X toggles the framed one (0.9.0). There are no separate Stealth, Streamer or OC rows. **Window Options**: PluginsPage / OwnPages / PerfPage (Shown or Hidden), PerfView (Graph or Number) and Hints (Shown or Hidden). On a plugin page, the plugin's rows |
 | Left / Right (window open) | Does not change a value since 0.5.6; the window ignores a plain press in every scene (until 0.5.5 it changed values in menus and on the character select). Use ZR + Left / Right below |
 | ZR + Left / Right | Change the selected value on any Settings row, Window Options row or plugin row; on the Opp line (Settings) it cycles the selected remote station, what the Peer row did before 0.6.0. On **You** (0.9.0) it moves the light-blue frame Stealth → Streamer → OC (the clock only while it shows), wrapping, and saves nothing. The hold is required in **every scene since 0.5.6** (menus, character select, Training and matches); in 0.5.3–0.5.5 it applied only while a fight was live (Training, Singles, Doubles). A plain Left/Right is ignored, so a menu D-pad press, a taunt or a stray press cannot change a setting (operator rule, 2026-10-18); Up/Down still move the selection. Since 0.6.0 the selected row's value reads `< value >` (for example `< Auto >`) while ZR is held and is plain text without it, on Settings, Window Options and in the match strip. ZR rather than ZL because ZL + D-pad Left/Right in Training swaps the controlled fighter. Window closed, the ZL-gated native pane edits below are unchanged |
 | Shoulder chord + Left / Right outside Settings and Window Options | Cycle the selected remote peer |
-| ZL + Left / Right or Up / Down on an online character select or arena pane, window closed | Edit the input buffer or the profile on the native status (since 0.4.1 the D-pad alone only moves the hand) |
+| ZL + Left / Right or Up / Down on an online character select or arena pane, window closed | Edit the input buffer or the profile on the native status (since 0.4.1 the D-pad alone only moves the hand). Only while that pane runs: every stage load, the Quickplay waiting-room practice's included, drops the panes, so TrainingRooms' ZL chords in Training or the practice edit nothing here (`the_waiting_practice_never_edits_through_a_native_pane`) |
 | L+R + X with **You** selected on Settings (neither ZL nor ZR held) | 0.9.0: toggle the framed player mode and save it. **Stealth**: the eye closes when enabled and opens when disabled; a session-latched change is amber with `*` and a reconnect notice. **Streamer**: the TV has a green filled screen when enabled and a grey outline when disabled. **OC** (only while the game-aware Horizon-OC fork answers, when the clock shows): switch `hoc_oc` between **online** (Smash's saved profile applies only while connected to another player, internet or local wireless, and for 15 s after the last player disconnects) and **always** (Horizon-OC applies it whenever Smash runs, as it always has). Works in the table (`> You`) and the match strip (`>You:`). A new X press is required: holding X does not repeat, and an X already held when the selection reaches You does not fire. ZR+X, ZR+Y and ZR+L3 (0.7.0–0.8.1) do nothing since 0.9.0 |
 | L+R + X with **NetProfile** selected on Settings (neither ZL nor ZR held) | With manual console LLUltra selected, cycle 576p → 720p → 1080p → 576p in place (LLUltra → LLUltra+ → LLUltra++ → LLUltra), saving `ultra_resolution`. For Auto, the emulator and every other profile, toggle and save Vanilla+ instead (0.5.6). A new X press is required; holding X does not repeat. See [Rendering profiles](RENDERING.md#vanilla-056) |
 | L+R + X with a plugin row selected, on the Plugins page or a plugin's own page (neither ZL nor ZR held) | 0.10.1: asks the plugin for the value the row already shows, once per press. The plugin decides what that does: ssbu-cpu-pilot 0.2.1 steps the CPU level on its P1 row (`CPU (L1)` … `CPU (L9)`); every other plugin changes nothing. Deluxe saves nothing for it, and a row waiting on a pending change is left alone |
 | L+R + X anywhere else | 0.9.0: nothing. L+R+X toggles only what is highlighted, so on NetLatency, the Opp line, Performance, Window Options or with the window hidden it changes no setting. Until the first 0.9.0 candidate it flipped Vanilla+ from any of these |
-| L+R + Plus or Minus | Open the debug view; again to hide it. ZL+ZR stopped being a window chord in 0.5.3, so a trigger chord during play cannot open the window |
-| L+R + Up in the Debug view | Start a 30 s timing capture (see [Captures](CAPTURES.md)) |
+| L+R + Plus or Minus | Open the debug view; again to hide it. Since 0.10.5 only with `debug_view=on` in the INI ([Configuration](CONFIGURATION.md)); by default it does nothing, because L+R+Minus is also TrainingRooms' menu shortcut and L+R+Plus the game's pause. It never opens or closes while A is held: the game's replay Quit is L+R+A+Plus. ZL+ZR stopped being a window chord in 0.5.3, so a trigger chord during play cannot open the window |
+| L+R + Up in the Debug view | Start a 30 s timing capture (see [Captures](CAPTURES.md)); the Debug view needs `debug_view=on` since 0.10.5, and the `CAPTURE_*` flags start captures without it |
 | L+R + Left in the Debug view | Coverage build only: write a `manual-NNN.profraw` snapshot (see [Coverage build](DEBUGGING.md#coverage-build-052)) |
 
 The window commands fire when the whole combination is held, in any press
 order, and once per press: L+R+Down works whether the bumpers or the D-pad
-land first. Holding Plus or Minus while tapping Down with the chord opens Debug
-from Settings, Plugins, an own plugin page or Window Options and keeps Debug
-open; a plain chord then continues from Debug to Performance (to Window Options
-when Performance is hidden). From hidden the chord still opens Settings, and from
-Window Options (the last page, since 0.6.0) it hides the window.
+land first. With `debug_view=on`, holding Plus or Minus while tapping Down with
+the chord opens Debug from Settings, Plugins, an own plugin page or Window
+Options and keeps Debug open; a plain chord then continues from Debug to
+Performance (to Window Options when Performance is hidden). With the default
+`debug_view=off`, or with A held, that press is a plain cycle step. From hidden
+the chord still opens Settings, and from Window Options (the last page, since
+0.6.0) it hides the window.
 
 The first controller operates the window. Input also reaches the game. If
 Elite's menu is open too, D-pad edits can affect both menus; close one before
-changing settings. On Eden the chord is the two keys mapped to L and R plus
+changing settings. Since 0.10.5 another plugin can ask whether the window is
+drawn and whether its page has rows (`ssbu_online_deluxe_overlay_state_v1`,
+see [Plugins](PLUGINS.md#window-state-0105)) and stand its own D-pad
+shortcuts down meanwhile; TrainingRooms and the CPU pilot do so from their rc.9
+and 0.2.4 builds. On Eden the chord is the two keys mapped to L and R plus
 Down Arrow (the ZL/ZR keys no longer work since 0.5.3).
 
 ## Settings page

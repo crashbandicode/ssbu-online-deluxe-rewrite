@@ -584,6 +584,19 @@ impl NativePads {
             fresh: false,
         }
     }
+
+    /// One draw's permission from the pane hooks' published sample: the
+    /// surface generation (`0` after every scene entry and stage load, which
+    /// drop the panes), the kind of the pane that last ran, and the generation
+    /// the previous draw saw. Only a pane hook that ran again since that draw
+    /// makes the sample fresh; with generation `0` there is no pane at all.
+    pub const fn sample(allow: bool, generation: u64, kind: u8, previous: u64) -> Self {
+        Self {
+            allow,
+            surface: NativeSurface::from_byte(if generation != 0 { kind } else { 0 }),
+            fresh: generation != 0 && generation != previous,
+        }
+    }
 }
 
 /// Fork overlay allow-interact: a ready online scene that is not singles or doubles.

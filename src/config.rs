@@ -166,6 +166,12 @@ pub struct Config {
     /// You line's OC clock toggles it while the fork answers (0.9.0; ZR+L3
     /// in 0.8.1).
     pub hoc_oc: OcMode,
+    /// 0.10.5: the developer Debug view (`debug_view`, `on` or `off`). Default
+    /// off: L+R+Plus and L+R+Minus then do nothing in Deluxe, so they leave
+    /// TrainingRooms' Minus menu shortcut, the game's Plus pause and the
+    /// replay Quit (L+R+A+Plus) alone. Written only when `on`, so a file that
+    /// never chose it still loads in a build without the key.
+    pub debug_view: bool,
 }
 
 /// Pages left out of the window cycle (`hide_pages=none` or a comma list of
@@ -443,6 +449,7 @@ impl Default for Config {
             vanilla_plus: true,
             hints: true,
             hoc_oc: OcMode::Always,
+            debug_view: false,
         }
     }
 }
@@ -484,6 +491,7 @@ fn key_slot(key: &str) -> Option<usize> {
         "hints" => 18,
         "hoc_oc" => 19,
         "hide_plugin_pages" => 20,
+        "debug_view" => 21,
         _ => return None,
     })
 }
@@ -508,7 +516,7 @@ pub fn changed_keys(previous: &str, next: &str) -> u64 {
 
 pub fn parse(text: &str) -> Result<Config, String> {
     let mut config = Config::default();
-    let mut seen = [false; 21];
+    let mut seen = [false; 22];
     for (index, raw) in text.lines().enumerate() {
         let line = raw.split('#').next().unwrap_or_default().trim();
         if line.is_empty() {
@@ -662,6 +670,13 @@ pub fn parse(text: &str) -> Result<Config, String> {
                 config.hoc_oc =
                     OcMode::parse(value).ok_or_else(|| error("hoc_oc must be always or online"))?;
             }
+            "debug_view" => {
+                config.debug_view = match value {
+                    "on" => true,
+                    "off" => false,
+                    _ => return Err(error("debug_view must be on or off")),
+                };
+            }
             "input_buffer" => {
                 config.input_buffer = if value == "auto" {
                     -1
@@ -746,6 +761,10 @@ pub fn serialize(config: &Config) -> String {
     );
     text.push_str(&hoc_oc);
     text.push_str(&plugin_pages);
+    // Written only when on, for the same reason as `hoc_oc` (0.10.5).
+    if config.debug_view {
+        text.push_str("debug_view=on\n");
+    }
     text
 }
 
@@ -848,6 +867,7 @@ mod tests {
                 vanilla_plus: true,
                 hints: true,
                 hoc_oc: OcMode::Always,
+                debug_view: false,
             };
             assert_eq!(parse(&config.serialize()).unwrap(), config);
         }
@@ -881,6 +901,37 @@ mod tests {
         assert_eq!(
             parse("version=1\nhoc_oc=online\nhoc_oc=always").unwrap_err(),
             "line 3: duplicate key 'hoc_oc'"
+        );
+    }
+
+    #[test]
+    fn debug_view_defaults_off_and_is_written_only_when_on() {
+        // 0.10.5: off by default, so L+R+Plus/Minus leave TrainingRooms' menu
+        // shortcut, the pause and the replay Quit alone; a default save stays
+        // loadable by older builds, which reject unknown keys.
+        assert!(!Config::default().debug_view);
+        assert!(!parse("version=1").unwrap().debug_view);
+        assert!(parse("version=1\ndebug_view=on").unwrap().debug_view);
+        assert!(!parse("version=1\ndebug_view=off").unwrap().debug_view);
+        assert!(!Config::default().serialize().contains("debug_view"));
+        assert!(!parse("version=1\ndebug_view=off")
+            .unwrap()
+            .serialize()
+            .contains("debug_view"));
+        let on = Config {
+            debug_view: true,
+            ..Config::default()
+        };
+        assert!(on.serialize().ends_with("\nhints=true\ndebug_view=on\n"));
+        assert_eq!(parse(&on.serialize()).unwrap(), on);
+        assert_eq!(changed_keys(&Config::default().serialize(), &on.serialize()), 1 << 21);
+        assert_eq!(
+            parse("version=1\ndebug_view=true").unwrap_err(),
+            "line 2: debug_view must be on or off"
+        );
+        assert_eq!(
+            parse("version=1\ndebug_view=on\ndebug_view=off").unwrap_err(),
+            "line 3: duplicate key 'debug_view'"
         );
     }
 

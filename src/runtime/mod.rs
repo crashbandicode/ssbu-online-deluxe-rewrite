@@ -78,6 +78,8 @@ static HINTS: AtomicBool = AtomicBool::new(true);
 /// `hoc_oc` (0.8.1): `OcMode` as u8. The game-aware client thread reads it
 /// every pass; L+R+X on the You line's OC clock flips it (0.9.0).
 static HOC_OC: AtomicU8 = AtomicU8::new(0);
+/// `debug_view` (0.10.5): the Debug view's chords act only when on.
+static DEBUG_VIEW: AtomicBool = AtomicBool::new(false);
 static DRS_MOVES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 static DRS_ADAPTIVE: AtomicBool = AtomicBool::new(false);
 static DRS_THRESHOLD: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(1750);
@@ -173,6 +175,7 @@ pub(super) fn settings() -> Config {
         vanilla_plus: VANILLA_PLUS.load(Ordering::Acquire),
         hints: HINTS.load(Ordering::Acquire),
         hoc_oc: hoc_oc(),
+        debug_view: DEBUG_VIEW.load(Ordering::Acquire),
     }
 }
 
@@ -255,6 +258,7 @@ pub(super) fn publish(config: &Config) {
     VANILLA_PLUS.store(config.vanilla_plus, Ordering::Release);
     HINTS.store(config.hints, Ordering::Release);
     HOC_OC.store(config.hoc_oc as u8, Ordering::Release);
+    DEBUG_VIEW.store(config.debug_view, Ordering::Release);
     DRS_MOVES.store(config.drs_moves.0, Ordering::Release);
     DRS_ADAPTIVE.store(config.drs_adaptive.enabled, Ordering::Release);
     DRS_THRESHOLD.store(
