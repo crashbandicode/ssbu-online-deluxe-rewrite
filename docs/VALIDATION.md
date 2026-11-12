@@ -1,5 +1,39 @@
 # Validation record
 
+## 0.10.5 — plugin shortcut conflicts: source and host gates — 2026-11-11
+
+Build `0.10.5-e46f455f4041-1794441042` from `e46f455` (clean tree): NRO
+**1,187,840 bytes**, SHA-256
+`1471e21e9667ca5ccf662fb5233fe8948d5ee335bddd44ede7723b6c3e63dc11`,
+resident 1,228,800 bytes (one page more than 0.10.4's 1,224,704). The
+diagnostic build (`--features diag`, NRO `5c49b948…`) runs only in Eden.
+`readelf --dyn-syms` on the release ELF lists
+`ssbu_online_deluxe_overlay_state_v1` as a global function beside the plugin
+API and online-context exports.
+
+The change (`055d653`) resolves the card's shortcut conflicts on Deluxe's side:
+
+- the window-state export (C4);
+- no Up/Down row moves while ZL, ZR or R is held (C5);
+- the Debug view behind `debug_view=on`, never while A is held (C6/C7);
+- the Quickplay waiting practice making no ZL pane edit (C11), shown from the code
+  ([Fork parity](FORK_PARITY.md#deliberate-differences)).
+
+**Gates**, each one cargo call:
+
+- `cargo test`: 335 unit and 23 integration tests;
+- `cargo clippy --all-targets -- -D warnings`;
+- `cargo build --no-default-features`;
+- `cargo skyline clippy -- -- -D warnings`;
+- `cargo skyline build --release` and `--features diag`;
+- `sdk/abi`: test (2) and clippy;
+- `sdk/sdk`: test (24 + 1) and clippy.
+
+**Not yet run:** no Eden or console run. The Eden check rows for C5, C6 and
+C11 are staged for the combined ship boot. C4's Eden check is TrainingRooms
+rc.9 reading the export. C7 needs a replay and is host-tested only. No tag and
+no release.
+
 ## 0.10.4 — paged codepoint index: Eden checks — 2026-11-10
 
 LAN Online Quickplay pairs on the Surface: TLS off (`lan_online_tls=false`),
