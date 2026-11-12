@@ -557,7 +557,8 @@ reinstall hooks and never patch SGPO's `0x374812c` neighborhood.
 - No hardware overclocking, software FPS boost (removed 2026-10-17), or
   duplicate external backend is introduced.
 - Since 0.10.5 (2026-11-11, the card's plugin shortcut conflicts C4–C7):
-  D-pad Up/Down move no row while ZL, ZR or R is held; the Debug view's
+  D-pad Up/Down move no row while ZL, ZR, R or L is held (L: a GameCube pad's
+  left trigger, TrainingRooms' ZL); the Debug view's
   chords (L+R+Plus/Minus, and Plus/Minus held with L+R+Down) act only with
   `debug_view=on` (default off) and never while A is held; and the window
   publishes its state to other plugins (`ssbu_online_deluxe_overlay_state_v1`,

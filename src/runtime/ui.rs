@@ -36,7 +36,9 @@ type Strip = (Vec<Row>, String, Option<Vec4>, String);
 /// The window's state as of the last draw (0.10.5):
 /// `overlay::pack_overlay_state` of the view's flags and the draw's tick.
 /// `0` until the first draw. The exported `ssbu_online_deluxe_overlay_state_v1`
-/// reads only this word.
+/// reads only this word. The ImGui host calls `draw` every frame, the hidden
+/// window included (`hidden_window`), and the view changes only in `draw`'s
+/// own `poll`, so the draw whose input closes the window stores flags 0.
 static OVERLAY_STATE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// True once the menu draw callback was handed to the ImGui host.

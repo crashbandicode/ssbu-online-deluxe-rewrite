@@ -193,13 +193,16 @@ pub(crate) const fn edit_modifier(buttons: u64) -> bool {
     buttons & ZR != 0 && buttons & ZL == 0
 }
 
-/// D-pad Up/Down move no row selection while ZL, ZR or R is held (0.10.5).
+/// D-pad Up/Down move no row selection while ZL, ZR, R or L is held (0.10.5).
 /// With those held, Up/Down belong to another plugin's chord (TrainingRooms'
 /// save and load state, record and play, input display and game speed) or to
 /// a trigger hold, and no Deluxe row needs them: a moved selection was what
-/// the next ZR + Left/Right then edited.
+/// the next ZR + Left/Right then edited. L is in the set for GameCube pads:
+/// `nn::hid` reports their triggers as L and R, and TrainingRooms maps the
+/// left trigger as its ZL. L + R + Down, the window cycle, is handled before
+/// any row move.
 const fn selection_held(buttons: u64) -> bool {
-    buttons & (ZL | ZR | R) != 0
+    buttons & (ZL | ZR | R | L) != 0
 }
 
 /// Whether a window command may open, close or keep the Debug view (0.10.5):
@@ -1478,15 +1481,15 @@ mod tests {
         // With R held, Up moves nothing (0.10.5).
         assert!(!ui.poll(L | R | X | UP, &mut config));
         assert_eq!(ui.menu.selected, crate::menu::ROW_NET_PROFILE);
-        // Moving up to NetLatency, then You, with X still held (R let go, so
-        // Up moves the selection) and the chord completed again is not a new
-        // press on either row.
-        assert!(!ui.poll(L | X, &mut config));
-        assert!(!ui.poll(L | X | UP, &mut config));
+        // Moving up to NetLatency, then You, with X still held (L and R let
+        // go, so Up moves the selection) and the chord completed again is not
+        // a new press on either row.
+        assert!(!ui.poll(X, &mut config));
+        assert!(!ui.poll(X | UP, &mut config));
         assert_eq!(ui.menu.selected, crate::menu::ROW_NET_LATENCY);
         assert!(!ui.poll(L | R | X, &mut config));
-        ui.poll(L | X, &mut config);
-        assert!(!ui.poll(L | X | UP, &mut config));
+        ui.poll(X, &mut config);
+        assert!(!ui.poll(X | UP, &mut config));
         assert_eq!(ui.menu.selected, crate::menu::ROW_YOU);
         assert!(!ui.poll(L | R | X, &mut config));
         assert_eq!(config, flipped);
@@ -1980,6 +1983,21 @@ mod tests {
         use deluxe_plugin_abi::{
             DELUXE_DEBUG_VIEW as DEBUG, DELUXE_ROWS_PAGE as ROWS, DELUXE_WINDOW_VISIBLE as SHOWN,
         };
+        let _gate = crate::peer_transport::global_gate();
+        crate::peer_transport::clear_session();
+        // A draw publishes the view its own poll left, hidden too: the press
+        // that closes the window publishes 0 in that same draw, with no wait
+        // for the stale limit.
+        let mut ui = Overlay::default();
+        let mut config = Config::default();
+        ui.poll(L | R | DOWN, &mut config);
+        assert_eq!(overlay_flags(ui.view), SHOWN | ROWS);
+        for view in [View::Performance, View::Window, View::Hidden] {
+            ui.poll(L | R, &mut config);
+            ui.poll(L | R | DOWN, &mut config);
+            assert_eq!(ui.view, view);
+        }
+        assert_eq!(overlay_flags(ui.view), 0);
         assert_eq!(overlay_flags(View::Hidden), 0);
         for view in [View::Settings, View::Window, View::Plugins, View::PluginPage] {
             assert_eq!(overlay_flags(view), SHOWN | ROWS, "{view:?}");
@@ -2022,7 +2040,7 @@ mod tests {
         let _gate = crate::peer_transport::global_gate();
         crate::peer_transport::clear_session();
         // L + R is not in the list: L+R+Down is the window cycle itself.
-        let holds = [ZL, ZR, R, ZL | ZR, R | ZR];
+        let holds = [ZL, ZR, R, L, ZL | ZR, R | ZR];
         // Settings: the selection stays put under every hold, and the press
         // edits nothing.
         let mut ui = Overlay::default();
@@ -2046,12 +2064,12 @@ mod tests {
             }
         }
         assert_eq!(config, Config::default());
-        // A plain press, or one with only L held, still moves it, and ZR +
-        // Left/Right still edits the selected value.
+        // A plain press still moves it, and ZR + Left/Right still edits the
+        // selected value.
         ui.poll(DOWN, &mut config);
         assert_eq!(ui.menu.selected, crate::menu::ROW_NET_LATENCY);
-        ui.poll(L, &mut config);
-        ui.poll(L | UP, &mut config);
+        ui.poll(0, &mut config);
+        ui.poll(UP, &mut config);
         assert_eq!(ui.menu.selected, crate::menu::ROW_YOU);
         ui.poll(0, &mut config);
         ui.poll(DOWN, &mut config);
@@ -2109,6 +2127,31 @@ mod tests {
         assert_eq!(registry.take_last_step(), None);
         ui.poll_with(DOWN, &mut config, none, &registry);
         assert_ne!(ui.plugin_row, first, "a plain Down still moves the row");
+        assert_eq!(config, Config::default());
+    }
+
+    #[test]
+    fn gamecube_left_trigger_up_down_move_no_row() {
+        let _gate = crate::peer_transport::global_gate();
+        crate::peer_transport::clear_session();
+        // On a GameCube pad `nn::hid` reports the triggers as L and R, and
+        // TrainingRooms maps the left trigger as its ZL: its save and load
+        // state there are L + Down and L + Up to Deluxe.
+        let mut ui = Overlay::default();
+        let mut config = Config::default();
+        ui.poll(L | R | DOWN, &mut config);
+        ui.poll(0, &mut config);
+        assert_eq!(ui.view, View::Settings);
+        let start = ui.menu.selected;
+        for tap in [DOWN, UP, DOWN, UP] {
+            ui.poll(L, &mut config);
+            assert!(!ui.poll(L | tap, &mut config));
+            assert_eq!(ui.menu.selected, start, "L + {tap:#x}");
+            ui.poll(0, &mut config);
+        }
+        // Both triggers with Down are still Deluxe's page cycle.
+        ui.poll(L | R | DOWN, &mut config);
+        assert_eq!(ui.view, View::Performance);
         assert_eq!(config, Config::default());
     }
 
