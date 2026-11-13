@@ -6,8 +6,7 @@
 //! [`commit_original`] runs from the game function hook.
 
 use crate::{config::Platform, render_policy::Profile};
-use std::sync::atomic::{fence, AtomicBool, AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Canonical level order. A higher discriminant is a lower resolution.
 /// The dynamic-resolution override is the maximum discriminant in the multiset.
@@ -361,6 +360,9 @@ pub struct Status {
 }
 
 pub const TRANSITION_CAP: usize = 12;
+/// Transitions one policy operation can note; they are emitted after the
+/// operation is published, so an update that loses a race emits nothing.
+const OUTBOX_CAP: usize = 8;
 pub const TRANSITION_PUSH: u8 = 1;
 pub const TRANSITION_POP: u8 = 2;
 pub const TRANSITION_APPLIED: u8 = 3;
@@ -408,6 +410,9 @@ pub struct Policy {
     transitions: [Transition; TRANSITION_CAP],
     transition_len: u8,
     transition_dropped: u8,
+    outbox: [Transition; OUTBOX_CAP],
+    outbox_len: u8,
+    resets_applied: u32,
 }
 
 impl Policy {
@@ -426,6 +431,9 @@ impl Policy {
             transitions: [NO_TRANSITION; TRANSITION_CAP],
             transition_len: 0,
             transition_dropped: 0,
+            outbox: [NO_TRANSITION; OUTBOX_CAP],
+            outbox_len: 0,
+            resets_applied: 0,
         }
     }
 
@@ -674,7 +682,19 @@ impl Policy {
         } else {
             self.transition_dropped = self.transition_dropped.saturating_add(1);
         }
-        emit_transition(kind, a, b);
+        if (self.outbox_len as usize) < OUTBOX_CAP {
+            self.outbox[self.outbox_len as usize] = Transition { kind, a, b };
+            self.outbox_len += 1;
+        }
+    }
+
+    /// The transitions noted since [`Policy::clear_outbox`], for the event log.
+    pub fn outbox(&self) -> &[Transition] {
+        &self.outbox[..self.outbox_len as usize]
+    }
+
+    fn clear_outbox(&mut self) {
+        self.outbox_len = 0;
     }
 
     fn clear_slots(&mut self) {
@@ -719,116 +739,121 @@ fn emit_transition(kind: u8, a: u32, b: u32) {
     }
 }
 
-/// Game threads only: the present, NVN, render and fighter hooks. Plugin
-/// threads read [`published_status`] and never take it, so no hook waits on a
-/// plugin thread here (ssbu-mod-playbook WORKFLOW, "Hooks never wait on a
-/// plugin thread"); a scene reset from a plugin thread goes through
-/// `fighter_main::request_reset`.
-static POLICY: Mutex<Policy> = Mutex::new(Policy::initial());
-/// [`Status`] as of the policy's last use, in [`pack_status`] words behind a
-/// sequence count: odd while the one writer (holding `POLICY`) stores them.
-static PUBLISHED_SEQ: AtomicU64 = AtomicU64::new(0);
-static PUBLISHED: [AtomicU64; 3] = [const { AtomicU64::new(0) }; 3];
+/// The policy every hook shares, as a lock-free cell: an update copies it,
+/// changes the copy and publishes it with one compare-and-swap, so no thread
+/// waits on another, plugin threads included (ssbu-mod-playbook WORKFLOW,
+/// "Hooks never wait on a plugin thread"). 64 words hold a `Policy`
+/// (checked by `SnapCell::new`).
+static POLICY: crate::hook_lock::SnapCell<Policy, 64> = crate::hook_lock::SnapCell::new(Policy::initial());
 
-fn with_policy<T>(body: impl FnOnce(&mut Policy) -> T) -> T {
-    let mut policy = POLICY.lock().unwrap_or_else(|err| err.into_inner());
-    let out = body(&mut policy);
-    let words = pack_status(&policy.status());
-    if (0..3).any(|i| PUBLISHED[i].load(Ordering::Relaxed) != words[i])
-        || PUBLISHED_SEQ.load(Ordering::Relaxed) == 0
-    {
-        let seq = PUBLISHED_SEQ.load(Ordering::Relaxed);
-        PUBLISHED_SEQ.store(seq.wrapping_add(1), Ordering::Relaxed);
-        fence(Ordering::Release);
-        for (slot, word) in PUBLISHED.iter().zip(words) {
-            slot.store(word, Ordering::Relaxed);
+/// Runs `body` on the policy and publishes the result, then emits the
+/// transitions it noted. `None` when the update gave up (see `SnapCell`; it is
+/// counted in `hook_lock_skipped`); `body` may run more than once.
+fn with_policy<T>(mut body: impl FnMut(&mut Policy) -> T) -> Option<T> {
+    let (out, outbox, len, popped) = POLICY.update(|policy| {
+        policy.clear_outbox();
+        let popped = apply_pending(policy);
+        let out = body(policy);
+        (out, policy.outbox, policy.outbox_len, popped)
+    })?;
+    for (slot, packed) in PENDING_POPS.iter().zip(popped) {
+        if packed != 0 {
+            let _ = slot.compare_exchange(packed, 0, Ordering::AcqRel, Ordering::Relaxed);
         }
-        PUBLISHED_SEQ.store(seq.wrapping_add(2), Ordering::Release);
     }
-    out
+    for item in &outbox[..len as usize] {
+        emit_transition(item.kind, item.a, item.b);
+    }
+    Some(out)
 }
 
-/// The policy's status as the hooks last left it, for plugin threads: no
-/// lock. A read that overlaps the hook's store sleeps a millisecond, which
-/// lets a writer it preempted finish, and reads again.
+/// The policy's status for plugin threads. A read that keeps losing races to
+/// the hooks' updates (none has been seen) yields and reads again; hooks call
+/// [`status`] instead, which never waits.
 pub fn published_status() -> Status {
     loop {
-        let before = PUBLISHED_SEQ.load(Ordering::Acquire);
-        let words = [
-            PUBLISHED[0].load(Ordering::Relaxed),
-            PUBLISHED[1].load(Ordering::Relaxed),
-            PUBLISHED[2].load(Ordering::Relaxed),
-        ];
-        fence(Ordering::Acquire);
-        if before & 1 == 0 && PUBLISHED_SEQ.load(Ordering::Relaxed) == before {
-            if before == 0 {
-                return Policy::initial().status();
-            }
-            if let Some(status) = unpack_status(words) {
-                return status;
-            }
+        if let Some(status) = status() {
+            return status;
         }
-        std::thread::sleep(std::time::Duration::from_millis(1));
+        std::thread::yield_now();
     }
 }
 
-const NO_LEVEL: u64 = 0xff;
-
-/// `Status` in three words: levels and flags, the crop size, the counters.
-pub fn pack_status(status: &Status) -> [u64; 3] {
-    let crop = status.crop.unwrap_or((0, 0));
-    [
-        status.requested as u64
-            | u64::from(status.dynamic) << 8
-            | (status.effective as u64) << 16
-            | status.applied.map_or(NO_LEVEL, |level| level as u64) << 24
-            | u64::from(status.dirty) << 32
-            | u64::from(status.reports) << 40
-            | u64::from(status.cropped) << 48
-            | u64::from(status.crop.is_some()) << 56,
-        u64::from(crop.0) | u64::from(crop.1) << 32,
-        u64::from(status.crop_counter) | u64::from(status.original_calls) << 32,
-    ]
-}
-
-pub fn unpack_status(words: [u64; 3]) -> Option<Status> {
-    let byte = |shift: u32| (words[0] >> shift) as u8;
-    Some(Status {
-        requested: Level::from_u8(byte(0))?,
-        dynamic: byte(8) != 0,
-        effective: Level::from_u8(byte(16))?,
-        applied: match byte(24) {
-            0xff => None,
-            value => Some(Level::from_u8(value)?),
-        },
-        dirty: byte(32) != 0,
-        reports: byte(40),
-        cropped: byte(48) != 0,
-        crop: (byte(56) != 0).then_some((words[1] as u32, (words[1] >> 32) as u32)),
-        crop_counter: words[2] as u32,
-        original_calls: (words[2] >> 32) as u32,
-    })
-}
-
+/// A push that could not be published is `Full`: the trigger tries again on
+/// its next tick.
 pub fn push_report(level: Level) -> PushResult {
-    with_policy(|policy| policy.push_report(level))
+    with_policy(|policy| policy.push_report(level)).unwrap_or(PushResult::Full)
 }
 
+/// A pop that could not be published is retried on the next policy update
+/// (`PENDING_POPS`), so a report is never left live.
 pub fn pop_report(token: ReportToken) -> bool {
-    with_policy(|policy| policy.pop_report(token))
+    match with_policy(|policy| policy.pop_report(token)) {
+        Some(popped) => popped,
+        None => {
+            defer_pop(token);
+            false
+        }
+    }
 }
 
+/// A reset that could not be published is applied by the next update.
 pub fn reset_scene() {
-    with_policy(|policy| policy.reset_scene());
+    if with_policy(|policy| policy.reset_scene()).is_none() {
+        RESET_REQUESTS.fetch_add(1, Ordering::AcqRel);
+    }
 }
 
+/// `false` when the status could not be read: the present hook checks again
+/// on its next call.
 pub fn needs_retarget(level: Level, dynamic: bool) -> bool {
-    let view = status();
-    view.requested != level || view.dynamic != dynamic
+    status().is_some_and(|view| view.requested != level || view.dynamic != dynamic)
 }
 
+/// `false` when not published; the caller's next present retries.
 pub fn retarget(level: Level, dynamic: bool) -> bool {
-    with_policy(|policy| policy.retarget(level, dynamic))
+    with_policy(|policy| policy.retarget(level, dynamic)).unwrap_or(false)
+}
+
+/// Token pops and a scene reset that could not be published when asked for.
+static PENDING_POPS: [std::sync::atomic::AtomicU32; REPORT_CAP] =
+    [const { std::sync::atomic::AtomicU32::new(0) }; REPORT_CAP];
+/// Resets asked for and not published; the policy counts the ones it applied.
+static RESET_REQUESTS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+fn defer_pop(token: ReportToken) {
+    let packed = (u32::from(token.generation) << 8) | u32::from(token.index) | 1 << 31;
+    if !PENDING_POPS.iter().any(|slot| {
+        slot.compare_exchange(0, packed, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
+    }) {
+        crate::hook_lock::note_skipped();
+    }
+}
+
+/// Inside every update, first: the deferred reset and pops. The reset count is
+/// kept in the policy, so a reset is applied once whichever update publishes
+/// it. A deferred pop is read here and removed only after its update is
+/// published (`with_policy`); applying it twice changes nothing the second
+/// time, because the popped token's generation no longer matches.
+fn apply_pending(policy: &mut Policy) -> [u32; REPORT_CAP] {
+    let requests = RESET_REQUESTS.load(Ordering::Acquire);
+    if requests != policy.resets_applied {
+        policy.resets_applied = requests;
+        policy.reset_scene();
+    }
+    let mut applied = [0u32; REPORT_CAP];
+    for (seen, slot) in applied.iter_mut().zip(&PENDING_POPS) {
+        let packed = slot.load(Ordering::Acquire);
+        if packed != 0 {
+            let _ = policy.pop_report(ReportToken {
+                index: (packed & 0xff) as u8,
+                generation: ((packed >> 8) & 0xffff) as u16,
+            });
+            *seen = packed;
+        }
+    }
+    applied
 }
 
 pub fn applied_label(applied: Option<Level>) -> &'static str {
@@ -869,66 +894,102 @@ pub fn format_status(ready: bool, triggers_available: bool, status: Status) -> S
     )
 }
 
-pub fn status() -> Status {
-    with_policy(|policy| policy.status())
+/// The policy's status, or `None` when no consistent read was had (counted).
+pub fn status() -> Option<Status> {
+    POLICY.read().map(|policy| policy.status())
 }
 
+/// `None` also when not published: the policy stays dirty and the game's
+/// next call runs the original.
 pub fn begin_original() -> Option<Level> {
-    with_policy(|policy| policy.begin_original())
+    with_policy(|policy| policy.begin_original()).flatten()
 }
 
 pub fn commit_original(level: Level) {
-    with_policy(|policy| policy.commit_original(level));
+    // Not published (counted): `applied` stays as it was and the next crop
+    // check sees the older level for one more present.
+    let _ = with_policy(|policy| policy.commit_original(level));
 }
 
+/// `None` also when not published: the next present asks again.
 pub fn due_crop(delay: IndexDelay) -> Option<(u32, u32)> {
-    with_policy(|policy| policy.due_crop(delay))
+    with_policy(|policy| policy.due_crop(delay)).flatten()
 }
 
 pub fn note_crop(width: u32, height: u32) {
-    with_policy(|policy| policy.note_crop(width, height));
+    // Not published (counted): the crop is due again and set again.
+    let _ = with_policy(|policy| policy.note_crop(width, height));
 }
 
 pub fn rearm_fullscreen_reset(delay: IndexDelay, observed: ObservedCrop) -> bool {
-    with_policy(|policy| policy.rearm_fullscreen_reset(delay, observed))
+    with_policy(|policy| policy.rearm_fullscreen_reset(delay, observed)).unwrap_or(false)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn the_published_status_words_round_trip() {
-        let levels = [
-            Level::P1080,
-            Level::P900,
-            Level::P720,
-            Level::P576,
-            Level::P480,
-        ];
-        for (i, level) in levels.into_iter().enumerate() {
-            let status = Status {
-                requested: level,
-                dynamic: i % 2 == 0,
-                effective: levels[(i + 2) % levels.len()],
-                applied: (i != 1).then_some(levels[(i + 3) % levels.len()]),
-                dirty: i % 3 == 0,
-                reports: (i * 7) as u8,
-                cropped: i % 2 == 1,
-                crop: (i != 4).then_some((1920 - i as u32, 1080 + i as u32)),
-                crop_counter: u32::MAX - i as u32,
-                original_calls: 40_000 + i as u32,
-            };
-            assert_eq!(unpack_status(pack_status(&status)), Some(status));
-        }
-        assert_eq!(unpack_status([0xee, 0, 0]), None);
-    }
-
     fn token(result: PushResult) -> ReportToken {
         match result {
             PushResult::Stored(token) => token,
             other => panic!("expected a stored report, got {other:?}"),
         }
+    }
+
+    fn global_reports() -> u8 {
+        status().unwrap().reports
+    }
+
+    #[test]
+    fn a_deferred_pop_and_reset_are_applied_by_the_next_update_once() {
+        let _guard = crate::perf_scaler::tests::LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        reset_scene();
+        retarget(Level::P1080, true);
+        let first = token(push_report(Level::P720));
+        let _second = token(push_report(Level::P576));
+        assert_eq!(global_reports(), 2);
+        // As when the pop's own update gave up: it waits for the next update.
+        defer_pop(first);
+        assert_eq!(global_reports(), 2);
+        assert!(!needs_retarget(Level::P1080, true));
+        let _ = due_crop(IndexDelay::Immediate);
+        assert_eq!(global_reports(), 1);
+        assert!(PENDING_POPS.iter().all(|slot| slot.load(Ordering::Acquire) == 0));
+        // Applied twice (two racing updates) changes nothing the second time.
+        let mut copy = POLICY.read().unwrap();
+        apply_pending(&mut copy);
+        defer_pop(first);
+        apply_pending(&mut copy);
+        assert_eq!(copy.status().reports, 1);
+        for slot in &PENDING_POPS {
+            slot.store(0, Ordering::Release);
+        }
+        // A deferred reset is applied once, by whichever update publishes it.
+        let _third = token(push_report(Level::P900));
+        RESET_REQUESTS.fetch_add(1, Ordering::AcqRel);
+        let _ = due_crop(IndexDelay::Immediate);
+        assert_eq!(global_reports(), 0);
+        let _fourth = token(push_report(Level::P900));
+        let _ = due_crop(IndexDelay::Immediate);
+        assert_eq!(global_reports(), 1);
+        reset_scene();
+        retarget(Level::P1080, false);
+    }
+
+    #[test]
+    fn an_update_that_runs_twice_notes_its_transitions_once() {
+        let mut policy = Policy::initial();
+        policy.retarget(Level::P1080, true);
+        policy.clear_outbox();
+        let mut copy = policy;
+        let _ = copy.push_report(Level::P720);
+        let first = copy.outbox().len();
+        assert!(first > 0);
+        // The retry starts from the published value again, not from the copy.
+        let mut copy = policy;
+        copy.clear_outbox();
+        let _ = copy.push_report(Level::P720);
+        assert_eq!(copy.outbox().len(), first);
     }
 
     #[test]

@@ -10,7 +10,7 @@ use crate::pia_rtt::PresentedPing;
 use crate::plugin_api::{
     cell_group, page_plugins, rows_for, selectable, PageRow, Registry, RowKind,
 };
-use std::{sync::Mutex, time::Instant};
+use std::time::Instant;
 
 struct UiState {
     controls: Overlay,
@@ -24,7 +24,7 @@ struct UiState {
     /// An edit `try_publish` could not publish yet; tried again next frame.
     unpublished: Option<crate::config::Config>,
 }
-static UI: Mutex<Option<UiState>> = Mutex::new(None);
+static UI: crate::hook_lock::TryLock<Option<UiState>> = crate::hook_lock::TryLock::new(None);
 static INSTALLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 const NO_TITLE_BAR: i32 = 1 << 0;
 /// Fields per compact-strip page. The strip never scales text below
@@ -394,7 +394,8 @@ fn entry(label: &str, value: &str, selected: bool) -> Row {
 fn perf_facts(width: f32, height: f32, strip: bool) -> Vec<(&'static str, String)> {
     let on_off = |on: bool| if on { "On" } else { "Off" }.to_owned();
     let label = |long: &'static str, short: &'static str| if strip { short } else { long };
-    let resolution = crate::resolution::status();
+    let resolution = crate::resolution::status()
+        .unwrap_or_else(|| crate::resolution::Policy::initial().status());
     let fighter = super::fighter_main::view();
     let settings = super::settings();
     let counters = crate::perf_scaler::global().counters();
@@ -700,7 +701,8 @@ fn window_rows(frame: &Frame, menu: &crate::menu::Menu) -> Vec<Row> {
 unsafe fn footer(frames: &FrameTimes, config: &crate::config::Config, perf: bool, reconnect: bool) {
     if perf {
         let mean = frames.average();
-        let resolution = crate::resolution::status();
+        let resolution = crate::resolution::status()
+        .unwrap_or_else(|| crate::resolution::Policy::initial().status());
         let line = perf_footer(
             mean,
             crate::resolution::applied_label(resolution.applied),

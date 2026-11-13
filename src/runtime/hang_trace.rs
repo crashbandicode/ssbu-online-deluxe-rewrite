@@ -15,7 +15,6 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, Ordering};
-use std::sync::Mutex;
 
 const FILE: &str = "hang-trace.log";
 const MAX_BYTES: u64 = 2 * 1024 * 1024;
@@ -69,7 +68,7 @@ static SCENE: AtomicU8 = AtomicU8::new(0);
 static WRITTEN_SCENE: AtomicU8 = AtomicU8::new(0);
 static SCENE_CHANGES: AtomicU64 = AtomicU64::new(0);
 static WRITTEN_CHANGES: AtomicU64 = AtomicU64::new(0);
-static LOG: Mutex<Option<File>> = Mutex::new(None);
+static LOG: crate::hook_lock::TryLock<Option<File>> = crate::hook_lock::TryLock::new(None);
 /// Latest kernel memory numbers, refreshed every poll for the overlay row.
 static MEM_USED: AtomicU64 = AtomicU64::new(0);
 static MEM_TOTAL: AtomicU64 = AtomicU64::new(0);

@@ -12,11 +12,13 @@ use crate::hook_chain::{plan_far_chain, EntryPlan};
 use skyline::hooks::A64HookFunction;
 use skyline::nn::ro::Module;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Mutex;
 
 static LOAD_ORIGINAL: AtomicUsize = AtomicUsize::new(0);
 static UNLOAD_ORIGINAL: AtomicUsize = AtomicUsize::new(0);
-static STATE: Mutex<fighter_probe::Observation> = Mutex::new(fighter_probe::Observation::idle());
+/// The module load and unload hooks update it lock-free; 32 words hold an
+/// `Observation` (checked by `SnapCell::new`).
+static STATE: crate::hook_lock::SnapCell<fighter_probe::Observation, 32> =
+    crate::hook_lock::SnapCell::new(fighter_probe::Observation::idle());
 
 type LoadFn = unsafe extern "C" fn(*mut Module, *const u8, *mut u8, usize, i32, bool) -> u32;
 type UnloadFn = unsafe extern "C" fn(*mut Module) -> u32;
@@ -28,8 +30,8 @@ pub(super) fn install() {
     let load = lookup(LOAD_MODULE_INTERNAL);
     let unload = skyline::nn::ro::UnloadModule as *const () as usize;
     if !hookable(load) || !hookable(unload) {
-        record(Code::HookRejected, 1, load as u64);
-        record(Code::HookRejected, 2, unload as u64);
+        super::record_install(Code::HookRejected, 1, load as u64);
+        super::record_install(Code::HookRejected, 2, unload as u64);
         logging::startup_phase("fighter_module_probe_unresolved");
         return;
     }
@@ -66,7 +68,7 @@ fn hookable(address: usize) -> bool {
 
 fn hook(target: usize, replacement: *const (), original: &AtomicUsize, site: u64) -> bool {
     if !hookable(target) || !unsafe { memory::executable(replacement as usize, 4) } {
-        record(Code::HookRejected, site, 0);
+        super::record_install(Code::HookRejected, site, 0);
         return false;
     }
     let before = entry_words(target);
@@ -83,14 +85,14 @@ fn hook(target: usize, replacement: *const (), original: &AtomicUsize, site: u64
     ));
     record(Code::HookEntryWord, site, before[0] as u64);
     if plan == EntryPlan::Reject {
-        record(Code::HookRejected, site, 2);
+        super::record_install(Code::HookRejected, site, 2);
         return false;
     }
-    record(Code::HookInstalling, site, target as u64);
+    super::record_install(Code::HookInstalling, site, target as u64);
     match plan {
         EntryPlan::Chain(handler) => {
             if !unsafe { memory::executable(handler as usize, 4) } {
-                record(Code::HookRejected, site, handler);
+                super::record_install(Code::HookRejected, site, handler);
                 return false;
             }
             // The existing LDR/BR stub already supplies the previous callable.
@@ -117,7 +119,7 @@ fn hook(target: usize, replacement: *const (), original: &AtomicUsize, site: u64
                 );
             }
             if trampoline.is_null() {
-                record(Code::HookRejected, site, 1);
+                super::record_install(Code::HookRejected, site, 1);
                 return false;
             }
             original.store(trampoline as usize, Ordering::Release);
@@ -137,7 +139,7 @@ fn hook(target: usize, replacement: *const (), original: &AtomicUsize, site: u64
         "fighter_module_hook_after site={site} installed={installed} words={after:08x?} previous={:#x}",
         original.load(Ordering::Acquire),
     ));
-    record(
+    super::record_install(
         if installed {
             Code::HookInstalled
         } else {
@@ -184,7 +186,7 @@ unsafe extern "C" fn on_unload(module: *mut Module) -> u32 {
     // Every unload, tracked or not, marks the frame for the render-sequence
     // teardown guard before the module goes away.
     super::render_sequence::note_module_unload();
-    let tracked = address != 0 && address == snapshot().module;
+    let tracked = address != 0 && STATE.read().is_some_and(|seen| seen.module == address);
     let trampoline = UNLOAD_ORIGINAL.load(Ordering::Acquire);
     if trampoline == 0 {
         return u32::MAX;
@@ -193,10 +195,12 @@ unsafe extern "C" fn on_unload(module: *mut Module) -> u32 {
     hang_trace::enter(Hook::FighterUnload);
     let result = original(module);
     if tracked {
-        let current = snapshot();
-        let next = fighter_probe::note_unload(current, address, result);
-        if next.generation != current.generation {
-            publish(next);
+        let changed = STATE.update(|seen| {
+            let before = seen.generation;
+            *seen = fighter_probe::note_unload(*seen, address, result);
+            seen.generation != before
+        });
+        if changed == Some(true) {
             fighter_main::on_common_unloaded(address);
         }
     }
@@ -214,21 +218,23 @@ fn observe_load(module: *mut Module) {
     let base = read_base(module);
     let (symbol, symbol_words) = lookup_call_line();
     let site_words = base.and_then(read_site);
-    let current = snapshot();
-    let next = fighter_probe::note_load(
-        current,
-        LoadView {
-            module: module as u64,
-            result: 0,
-            name: &name,
-            base,
-            symbol,
-            symbol_words: symbol_words.as_ref().map(|words| words.as_slice()),
-            site_words: site_words.as_ref().map(|words| words.as_slice()),
-        },
-    );
-    if next.generation != current.generation {
-        publish(next);
+    let changed = STATE.update(|seen| {
+        let before = seen.generation;
+        *seen = fighter_probe::note_load(
+            *seen,
+            LoadView {
+                module: module as u64,
+                result: 0,
+                name: &name,
+                base,
+                symbol,
+                symbol_words: symbol_words.as_ref().map(|words| words.as_slice()),
+                site_words: site_words.as_ref().map(|words| words.as_slice()),
+            },
+        );
+        (seen.generation != before).then_some(*seen)
+    });
+    if let Some(Some(next)) = changed {
         fighter_main::consider(&next);
     }
 }
@@ -297,12 +303,3 @@ fn read_base(module: *mut Module) -> Option<u64> {
     }
 }
 
-fn snapshot() -> fighter_probe::Observation {
-    let guard = STATE.lock().unwrap_or_else(|err| err.into_inner());
-    *guard
-}
-
-fn publish(next: fighter_probe::Observation) {
-    let mut guard = STATE.lock().unwrap_or_else(|err| err.into_inner());
-    *guard = next;
-}

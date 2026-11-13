@@ -244,8 +244,7 @@ pub(super) unsafe fn install() {
     );
     for offset in [MODELS, RECORD_FIGHTERS, DISPATCH, POST_SCENE] {
         let word = *((base() + offset) as *const u32);
-        record(Code::HookInstalled, offset as u64, word as u64);
-        logging::install_checkpoint(Code::HookInstalled, offset as u64, word as u64);
+        super::record_install(Code::HookInstalled, offset as u64, word as u64);
         assert!(
             word & 0xfc00_0000 == 0x1400_0000 || word == 0x5800_0051,
             "sequence hook did not install at {offset:x}"

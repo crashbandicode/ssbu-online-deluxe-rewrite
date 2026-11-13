@@ -62,8 +62,8 @@ static HIDE_PAGES: AtomicU8 = AtomicU8::new(0);
 /// `hide_plugin_pages` (0.10.0). Only the window and the config writer read
 /// it ([`settings_with_pages`]), so [`settings`], which game hooks call,
 /// takes no lock and allocates nothing for it.
-static PLUGIN_PAGES: std::sync::Mutex<crate::config::PluginPages> =
-    std::sync::Mutex::new(crate::config::PluginPages::EMPTY);
+static PLUGIN_PAGES: crate::hook_lock::TryLock<crate::config::PluginPages> =
+    crate::hook_lock::TryLock::new(crate::config::PluginPages::EMPTY);
 /// `perf_view` (0.5.3): true = number, false = graph.
 static PERF_NUMBER: AtomicBool = AtomicBool::new(false);
 /// `early_present` (0.5.3): present at the flush in the render-opts profiles.
@@ -151,25 +151,41 @@ pub(super) fn settings_with(plugin_pages: crate::config::PluginPages) -> Config 
     }
 }
 
+/// Single settings for hook paths, which never build a [`Config`] (its plugin
+/// page list is a `Vec`, and dropping one reaches the allocator).
+pub(super) fn input_buffer() -> i8 {
+    INPUT_BUFFER.load(Ordering::Acquire)
+}
+
+pub(super) fn auto_profile() -> bool {
+    AUTO_PROFILE.load(Ordering::Acquire)
+}
+
+pub(super) fn platform() -> crate::config::Platform {
+    if PLATFORM.load(Ordering::Acquire) == crate::config::Platform::Emulator as u8 {
+        crate::config::Platform::Emulator
+    } else {
+        crate::config::Platform::Console
+    }
+}
+
+pub(super) fn ultra_resolution() -> crate::config::UltraResolution {
+    crate::config::UltraResolution::from_byte(ULTRA_RES.load(Ordering::Acquire))
+}
+
 /// The configuration without `hide_plugin_pages` (always empty here), from
 /// atomics only. Never pass it to [`publish`].
 pub(super) fn settings() -> Config {
     Config {
-        input_buffer: INPUT_BUFFER.load(Ordering::Acquire),
+        input_buffer: input_buffer(),
         render_mode: saved_render_mode(),
-        auto_profile: AUTO_PROFILE.load(Ordering::Acquire),
-        platform: if PLATFORM.load(Ordering::Acquire) == crate::config::Platform::Emulator as u8 {
-            crate::config::Platform::Emulator
-        } else {
-            crate::config::Platform::Console
-        },
+        auto_profile: auto_profile(),
+        platform: platform(),
         stealth: STEALTH.load(Ordering::Acquire),
         streamer: STREAMER.load(Ordering::Acquire),
         drs_moves: drs_moves(),
         drs_adaptive: adaptive_settings(),
-        ultra_resolution: crate::config::UltraResolution::from_byte(
-            ULTRA_RES.load(Ordering::Acquire),
-        ),
+        ultra_resolution: ultra_resolution(),
         hide_pages: {
             let bits = HIDE_PAGES.load(Ordering::Acquire);
             crate::config::HiddenPages {
@@ -311,17 +327,23 @@ pub(crate) fn set_auto_profile(enabled: bool) {
     auto_driver::set_auto_profile(enabled);
 }
 
+/// Any thread, hooks included: one event into the recorder, which the
+/// diagnostics thread drains. No I/O and no allocation.
 pub(super) fn record(code: Code, a: u64, b: u64) {
     let tick = unsafe { skyline::nn::os::GetSystemTick() as u64 };
     RECORDER.record(tick, code, a, b);
-    // Startup-only checkpoints reach disk before/after each patch, so an install
-    // crash is diagnosable even before the background sink first wakes.
-    if matches!(
+}
+
+/// Install time only (`HookInstalling`, `HookInstalled`, `HookRejected`): the
+/// event, and a checkpoint that reaches disk before/after each patch, so an
+/// install crash is diagnosable even before the background sink first wakes.
+pub(super) fn record_install(code: Code, a: u64, b: u64) {
+    debug_assert!(matches!(
         code,
         Code::HookInstalling | Code::HookInstalled | Code::HookRejected
-    ) {
-        logging::install_checkpoint(code, a, b);
-    }
+    ));
+    record(code, a, b);
+    logging::install_checkpoint(code, a, b);
 }
 
 fn display_version() -> String {

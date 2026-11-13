@@ -82,7 +82,7 @@ pub(super) fn install() {
         if words_match(WAIT_WORKER, &WAIT_WORDS) && super::hooks::preflight(WAIT_WORKER) {
             skyline::install_hook!(css_capture_wait_worker);
             hooks |= 1;
-            record(
+            super::record_install(
                 Code::HookInstalled,
                 WAIT_WORKER as u64,
                 u64::from(KIND_DEPENDENCY_WAIT),
@@ -91,7 +91,7 @@ pub(super) fn install() {
         if words_match(UI_JOB, &JOB_WORDS) && super::hooks::preflight(UI_JOB) {
             skyline::install_hook!(css_capture_ui_job);
             hooks |= 2;
-            record(Code::HookInstalled, UI_JOB as u64, u64::from(KIND_UI_JOB));
+            super::record_install(Code::HookInstalled, UI_JOB as u64, u64::from(KIND_UI_JOB));
         }
     }
     HOOKS.store(hooks, Ordering::Release);

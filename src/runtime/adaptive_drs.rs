@@ -10,9 +10,12 @@ use super::{record, Code};
 use crate::drs_triggers::{Adaptive, AdaptiveEvent, TICKS_PER_HUNDREDTH_MS};
 use crate::perf_scaler::{self, Action};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::Mutex;
+use crate::hook_lock::TryLock;
 
-static STATE: Mutex<Adaptive> = Mutex::new(Adaptive::new());
+/// One owner: the present hook. A reset from another hook is handed over
+/// through `RESET_PENDING` and applied before the next observation.
+static STATE: TryLock<Adaptive> = TryLock::new(Adaptive::new());
+static RESET_PENDING: AtomicBool = AtomicBool::new(false);
 static LAST_TICK: AtomicU64 = AtomicU64::new(0);
 /// Mirrors the state machine's active flag so a disabled setting can still
 /// release a held report without taking the lock on every present.
@@ -31,7 +34,12 @@ pub(super) fn on_present(tick: u64) {
     let interval = ((tick - last) / TICKS_PER_HUNDREDTH_MS).min(u64::from(u32::MAX)) as u32;
     OBSERVED.fetch_add(1, Ordering::Relaxed);
     let event = {
-        let mut state = STATE.lock().unwrap_or_else(|err| err.into_inner());
+        let Some(mut state) = crate::hook_lock::try_take(&STATE) else {
+            return;
+        };
+        if RESET_PENDING.swap(false, Ordering::AcqRel) {
+            state.reset();
+        }
         let event = state.observe(interval, &settings);
         ACTIVE.store(state.active(), Ordering::Release);
         event
@@ -62,9 +70,9 @@ pub(super) fn on_present(tick: u64) {
 
 /// Scene reset or retarget: the scaler already dropped the report token; the
 /// counters start over so the next scene needs a fresh run of late frames.
+/// Any thread: the present hook applies it before its next observation.
 pub(super) fn reset() {
-    let mut state = STATE.lock().unwrap_or_else(|err| err.into_inner());
-    state.reset();
+    RESET_PENDING.store(true, Ordering::Release);
     ACTIVE.store(false, Ordering::Release);
     LAST_TICK.store(0, Ordering::Release);
 }

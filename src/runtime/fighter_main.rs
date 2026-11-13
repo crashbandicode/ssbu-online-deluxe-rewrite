@@ -19,7 +19,6 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
-use std::sync::Mutex;
 
 const COUNT_FLAG: &str = "COUNT_FIGHTER_TICKS";
 const TICK_FILE: &str = "fighter-ticks.txt";
@@ -37,14 +36,59 @@ static MANAGER_SLOT: AtomicUsize = AtomicUsize::new(0);
 /// Tick counts: the Main hook only tries it, the diagnostics thread copies
 /// it. Its flags come from `ARMED`, `CUT_IN_INSTALLED` and `COUNT_ONLY` when
 /// the file is written, and `FLAGS_GENERATION` counts their changes.
-static TICKS: Mutex<TickLog> = Mutex::new(TickLog::idle());
+static TICKS: crate::hook_lock::TryLock<TickLog> = crate::hook_lock::TryLock::new(TickLog::idle());
 static FLAGS_GENERATION: AtomicU32 = AtomicU32::new(0);
 static LAST_FLAGS: AtomicU32 = AtomicU32::new(0);
-/// Game threads only (fighter Main, cut-in, module load and unload, present):
-/// a plugin thread asks for a reset with [`request_reset`] instead, so no hook
-/// waits on a plugin thread here (ssbu-mod-playbook WORKFLOW).
-static GATE: Mutex<()> = Mutex::new(());
+/// The gate between ticks and resets, which no thread waits at. Fighter Main
+/// and cut-in ticks run side by side: each touches its own entry's scaler
+/// slot, and the resolution policy is a lock-free cell. A reset or retarget
+/// clears every slot, so it runs alone. A tick that finds a reset running
+/// skips (counted in `hook_lock_skipped`); a reset that finds a tick running
+/// stays requested, and the next hook entry applies it.
+static TICKS_RUNNING: AtomicU32 = AtomicU32::new(0);
+static RESETTING: AtomicBool = AtomicBool::new(false);
 static RESET_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+struct TickPass;
+
+impl Drop for TickPass {
+    fn drop(&mut self) {
+        TICKS_RUNNING.fetch_sub(1, Ordering::Release);
+    }
+}
+
+fn enter_tick() -> Option<TickPass> {
+    TICKS_RUNNING.fetch_add(1, Ordering::SeqCst);
+    if RESETTING.load(Ordering::SeqCst) {
+        TICKS_RUNNING.fetch_sub(1, Ordering::Release);
+        crate::hook_lock::note_skipped();
+        return None;
+    }
+    Some(TickPass)
+}
+
+struct ResetPass;
+
+impl Drop for ResetPass {
+    fn drop(&mut self) {
+        RESETTING.store(false, Ordering::Release);
+    }
+}
+
+/// Never called while the caller holds a `TickPass`.
+fn enter_reset() -> Option<ResetPass> {
+    if RESETTING
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::Relaxed)
+        .is_err()
+    {
+        return None;
+    }
+    if TICKS_RUNNING.load(Ordering::SeqCst) != 0 {
+        RESETTING.store(false, Ordering::Release);
+        return None;
+    }
+    Some(ResetPass)
+}
 
 extern "C" {
     #[link_name = "\u{1}_ZN3app8lua_bind24WorkModule__get_int_implEPNS_26BattleObjectModuleAccessorEi"]
@@ -114,28 +158,34 @@ pub(super) fn on_common_unloaded(module: u64) {
 
 /// Game threads (the module load and unload hooks): reset now.
 pub(super) fn reset_reports() {
-    let _gate = lock_gate();
-    RESET_REQUESTED.store(false, Ordering::Release);
-    reset_locked();
+    RESET_REQUESTED.store(true, Ordering::Release);
+    apply_requested_reset();
 }
 
-/// Any thread: the next fighter Main, cut-in or present hook resets under
-/// `GATE`. The scene driver calls this, from hooks and from the diagnostics
-/// thread's stale check alike.
+/// Any thread: the next fighter Main, cut-in or present hook resets. The scene
+/// driver calls this, from hooks and from the diagnostics thread's stale check
+/// alike.
 pub(super) fn request_reset() {
     RESET_REQUESTED.store(true, Ordering::Release);
 }
 
-/// With `GATE` held: a requested reset, once.
-fn apply_requested_reset_locked() {
+/// A requested reset, once, when no tick is running; otherwise it stays
+/// requested for the next hook entry.
+fn apply_requested_reset() {
+    if !RESET_REQUESTED.load(Ordering::Acquire) {
+        return;
+    }
+    let Some(_pass) = enter_reset() else {
+        return;
+    };
     if RESET_REQUESTED.swap(false, Ordering::AcqRel) {
-        reset_locked();
+        reset_alone();
     }
 }
 
-fn reset_locked() {
-    // GATE, then the scaler, then the resolution policy. Clear tokens before
-    // the scene reset so a stale token cannot pop the next scene's report.
+fn reset_alone() {
+    // The scaler, then the resolution policy. Clear tokens before the scene
+    // reset so a stale token cannot pop the next scene's report.
     perf_scaler::clear_global();
     super::adaptive_drs::reset();
     crate::resolution::reset_scene();
@@ -143,23 +193,22 @@ fn reset_locked() {
 
 /// The present hook, every tracked present.
 pub(super) fn sync_resolution() {
-    if RESET_REQUESTED.load(Ordering::Acquire) {
-        let _gate = lock_gate();
-        apply_requested_reset_locked();
-    }
+    apply_requested_reset();
     let decision = crate::render_policy::load_decision();
-    let settings = super::settings();
     let setting = crate::resolution::active_setting(
         decision.live,
         crate::resolution::hooks_ready(),
         decision.committed,
-        settings.platform,
-        settings.ultra_resolution.level(),
+        super::platform(),
+        super::ultra_resolution().level(),
     );
     if !crate::resolution::needs_retarget(setting.level, setting.dynamic) {
         return;
     }
-    let _gate = lock_gate();
+    // With a tick running, the next present retargets.
+    let Some(_pass) = enter_reset() else {
+        return;
+    };
     if !crate::resolution::needs_retarget(setting.level, setting.dynamic) {
         return;
     }
@@ -236,16 +285,16 @@ fn install_cut_in() {
     }
     let text = unsafe { getRegionAddress(Region::Text) as usize };
     let Some(site) = text.checked_add(CUT_IN_OFFSET) else {
-        record(Code::HookRejected, CUT_IN_OFFSET as u64, 0);
+        super::record_install(Code::HookRejected, CUT_IN_OFFSET as u64, 0);
         return;
     };
     let word = read_u32(site as u64).unwrap_or(0);
     if !perf_scaler::cut_in_install_allowed(true, word) {
-        record(Code::HookRejected, CUT_IN_OFFSET as u64, word as u64);
+        super::record_install(Code::HookRejected, CUT_IN_OFFSET as u64, word as u64);
         logging::startup_phase("fighter_cut_in_rejected");
         return;
     }
-    record(Code::HookInstalling, CUT_IN_OFFSET as u64, word as u64);
+    super::record_install(Code::HookInstalling, CUT_IN_OFFSET as u64, word as u64);
     let mut trampoline: *mut c_void = std::ptr::null_mut();
     unsafe {
         A64HookFunction(
@@ -255,18 +304,18 @@ fn install_cut_in() {
         );
     }
     if trampoline.is_null() {
-        record(Code::HookRejected, CUT_IN_OFFSET as u64, 1);
+        super::record_install(Code::HookRejected, CUT_IN_OFFSET as u64, 1);
         return;
     }
     CUT_IN_ORIGINAL.store(trampoline as usize, Ordering::Release);
     let after = read_u32(site as u64).unwrap_or(0);
     if !fighter_probe::site_already_hooked(after) {
-        record(Code::HookRejected, CUT_IN_OFFSET as u64, after as u64);
+        super::record_install(Code::HookRejected, CUT_IN_OFFSET as u64, after as u64);
         return;
     }
     CUT_IN_INSTALLED.store(true, Ordering::Release);
     FLAGS_GENERATION.fetch_add(1, Ordering::AcqRel);
-    record(Code::HookInstalled, CUT_IN_OFFSET as u64, after as u64);
+    super::record_install(Code::HookInstalled, CUT_IN_OFFSET as u64, after as u64);
     logging::startup_phase("fighter_cut_in_ready");
 }
 
@@ -297,8 +346,10 @@ unsafe fn fighter_main_body(this: u64) {
             if COUNT_ONLY.load(Ordering::Acquire) {
                 return;
             }
-            let _gate = lock_gate();
-            apply_requested_reset_locked();
+            apply_requested_reset();
+            let Some(_tick) = enter_tick() else {
+                return;
+            };
             if !ARMED.load(Ordering::Acquire) {
                 return;
             }
@@ -351,8 +402,10 @@ unsafe fn cut_in_body(accessor: *mut c_void) {
     let Some(entry) = valid_entry(accessor, manager) else {
         return;
     };
-    let _gate = lock_gate();
-    apply_requested_reset_locked();
+    apply_requested_reset();
+    let Some(_tick) = enter_tick() else {
+        return;
+    };
     if COUNT_ONLY.load(Ordering::Acquire) || !ARMED.load(Ordering::Acquire) {
         return;
     }
@@ -522,8 +575,4 @@ fn reason_code(reason: &str) -> u64 {
         "hook_failed" => 7,
         _ => 9,
     }
-}
-
-fn lock_gate() -> std::sync::MutexGuard<'static, ()> {
-    GATE.lock().unwrap_or_else(|err| err.into_inner())
 }

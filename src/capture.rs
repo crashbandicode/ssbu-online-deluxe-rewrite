@@ -8,7 +8,6 @@ use std::{
     io::{self, Write},
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
-        Mutex,
     },
 };
 
@@ -215,7 +214,7 @@ struct State<T> {
 /// locks, so callbacks never lose rows to API contention or overflow.
 pub struct Ring<T> {
     capacity: usize,
-    state: Mutex<State<T>>,
+    state: crate::hook_lock::TryLock<State<T>>,
     active: AtomicBool,
     epoch: AtomicU64,
     skipped: AtomicU64,
@@ -235,7 +234,7 @@ impl<T: Entry> Ring<T> {
     pub const fn new(capacity: usize) -> Self {
         Self {
             capacity,
-            state: Mutex::new(State {
+            state: crate::hook_lock::TryLock::new(State {
                 phase: Phase::Idle,
                 id: 0,
                 duration: 0,

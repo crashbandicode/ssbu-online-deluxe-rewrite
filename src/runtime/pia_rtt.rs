@@ -19,7 +19,8 @@ use crate::pia_rtt::{
 };
 use skyline::hooks::InlineCtx;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Mutex, MutexGuard, PoisonError, TryLockError};
+use crate::hook_lock::{TryGuard as MutexGuard, TryLock as Mutex};
+use std::sync::{PoisonError, TryLockError};
 
 const LOCAL_INDEX_OFFSET: usize = 0x38;
 
@@ -213,7 +214,7 @@ pub(super) fn install() {
     ];
     for (offset, expected) in guards {
         if !unsafe { super::hooks::guard_matches(offset, expected) } {
-            record(Code::HookRejected, offset as u64, 9);
+            super::record_install(Code::HookRejected, offset as u64, 9);
             skyline::println!(
                 "[Deluxe] Pia RTT guard mismatch at {offset:#x}; observer not installed"
             );
@@ -226,7 +227,7 @@ pub(super) fn install() {
         deluxe_rewrite_observe_session_end
     );
     INSTALLED.store(true, Ordering::Release);
-    record(Code::HookInstalled, RTT_SAMPLE_OFFSET as u64, 0);
+    super::record_install(Code::HookInstalled, RTT_SAMPLE_OFFSET as u64, 0);
     skyline::println!("[Deluxe] Pia RTT observer installed");
 }
 

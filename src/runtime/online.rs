@@ -44,7 +44,7 @@ pub(super) fn mark_match() {
 
 fn reject_stage() {
     super::clear_auto_buffer();
-    record(Code::HookRejected, STAGE_SETUP as u64, 0);
+    super::record_install(Code::HookRejected, STAGE_SETUP as u64, 0);
 }
 
 #[skyline::hook(offset = 0x235aaa0, inline)]
@@ -161,8 +161,8 @@ pub(super) fn install() {
         deluxe_rewrite_stage_setup
     );
     for offset in offsets {
-        record(Code::HookInstalled, offset as u64, 0);
+        super::record_install(Code::HookInstalled, offset as u64, 0);
     }
-    record(Code::HookInstalled, STAGE_SETUP as u64, 0);
+    super::record_install(Code::HookInstalled, STAGE_SETUP as u64, 0);
     auto_driver::set_ready(true, STAGE_SETUP as u64);
 }

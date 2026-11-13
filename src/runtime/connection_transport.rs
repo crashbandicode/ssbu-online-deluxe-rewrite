@@ -52,7 +52,7 @@ pub(super) fn local_interface_label() -> &'static str {
 pub(super) fn install() {
     refresh_local_facts();
     if !super::pia_rtt::ready() {
-        record(Code::HookRejected, 0, 11);
+        super::record_install(Code::HookRejected, 0, 11);
         skyline::println!(
             "[Deluxe] connection transport not installed; Pia cleanup hook is not active"
         );
@@ -68,7 +68,7 @@ pub(super) fn install() {
         } else {
             SEND_PLAINTEXT_OFFSET
         };
-        record(Code::HookRejected, offset as u64, 0);
+        super::record_install(Code::HookRejected, offset as u64, 0);
         skyline::println!(
             "[Deluxe] connection transport guard mismatch at {offset:#x}; not installed"
         );
@@ -78,7 +78,7 @@ pub(super) fn install() {
         deluxe_rewrite_observe_parsed_message,
         deluxe_rewrite_observe_send_plaintext
     );
-    record(
+    super::record_install(
         Code::HookInstalled,
         PARSED_MESSAGE_OFFSET as u64,
         SEND_PLAINTEXT_OFFSET as u64,
@@ -86,14 +86,14 @@ pub(super) fn install() {
     skyline::println!("[Deluxe] connection transport installed");
     if unsafe { guard_matches(STATION_INDEX_OFFSET, STATION_INDEX_GUARD.as_slice()) } {
         skyline::install_hook!(deluxe_rewrite_observe_station_index);
-        record(
+        super::record_install(
             Code::HookInstalled,
             PARSED_MESSAGE_OFFSET as u64,
             STATION_INDEX_OFFSET as u64,
         );
         skyline::println!("[Deluxe] station map installed");
     } else {
-        record(Code::HookRejected, STATION_INDEX_OFFSET as u64, 0x153844);
+        super::record_install(Code::HookRejected, STATION_INDEX_OFFSET as u64, 0x153844);
         skyline::println!("[Deluxe] station map guard mismatch; map not installed");
     }
 }
@@ -241,17 +241,16 @@ fn observe_send_packet(packet: u64) {
 /// state. A rejected resolution guard keeps that bit clear. Saved latency is
 /// unchanged.
 fn current_announce() -> crate::peer_transport::Announce {
-    let settings = super::settings();
     let decision = crate::render_policy::load_machine().decision();
     let setting = crate::resolution::active_setting(
         decision.live,
         crate::resolution::hooks_ready(),
         decision.committed,
-        settings.platform,
-        settings.ultra_resolution.level(),
+        super::platform(),
+        super::ultra_resolution().level(),
     );
     crate::peer_transport::announce_from(
-        settings.input_buffer,
+        super::input_buffer(),
         decision.live,
         decision.committed,
         setting,

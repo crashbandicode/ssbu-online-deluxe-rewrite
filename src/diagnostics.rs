@@ -2,7 +2,6 @@
 //! Contended events are counted as dropped; a game hook never waits for a logger.
 use std::sync::{
     atomic::{AtomicU64, Ordering},
-    Mutex,
 };
 
 pub const CAPACITY: usize = 128;
@@ -253,7 +252,7 @@ struct State {
 }
 
 pub struct Recorder {
-    state: Mutex<State>,
+    state: crate::hook_lock::TryLock<State>,
     dropped: AtomicU64,
 }
 
@@ -288,7 +287,7 @@ impl Recorder {
             b: 0,
         };
         Self {
-            state: Mutex::new(State {
+            state: crate::hook_lock::TryLock::new(State {
                 events: [EMPTY; CAPACITY],
                 sequence: 0,
             }),

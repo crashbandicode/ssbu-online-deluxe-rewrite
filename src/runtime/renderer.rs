@@ -219,14 +219,14 @@ unsafe fn deluxe_rewrite_flush_dispatches(object: *mut u8, flag: u32) {
 pub(crate) unsafe fn expect(offset: usize, expected: u32) -> bool {
     let address = getRegionAddress(Region::Text) as usize + offset;
     if !memory::accessible(address, 4, false) {
-        record(Code::HookRejected, offset as u64, 0);
+        super::record_install(Code::HookRejected, offset as u64, 0);
         return false;
     }
     let actual = *(address as *const u32);
     record(Code::HookEntryWord, offset as u64, actual as u64);
     logging::install_checkpoint(Code::HookEntryWord, offset as u64, actual as u64);
     if actual != expected {
-        record(Code::HookRejected, offset as u64, actual as u64);
+        super::record_install(Code::HookRejected, offset as u64, actual as u64);
         return false;
     }
     true
@@ -277,7 +277,7 @@ pub(super) fn install() {
     }
     for offset in [INDEX, WAIT, FLUSH] {
         let word = unsafe { *((getRegionAddress(Region::Text) as usize + offset) as *const u32) };
-        record(Code::HookInstalled, offset as u64, word as u64);
+        super::record_install(Code::HookInstalled, offset as u64, word as u64);
         let branch = word & 0xfc00_0000 == 0x1400_0000;
         let far_entry = offset == FLUSH && word == 0x5800_0051;
         assert!(

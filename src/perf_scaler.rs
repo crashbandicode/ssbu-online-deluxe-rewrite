@@ -412,12 +412,13 @@ fn pop_packed(slot: &AtomicU32) {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::resolution::{self, Level};
     use std::sync::Mutex;
 
-    static LOCK: Mutex<()> = Mutex::new(());
+    /// Serializes every test that uses the global resolution policy.
+    pub(crate) static LOCK: Mutex<()> = Mutex::new(());
 
     fn with_reports(base: Level, test: impl FnOnce(&Scaler)) {
         let _guard = LOCK.lock().unwrap_or_else(|err| err.into_inner());
@@ -450,8 +451,8 @@ mod tests {
     fn cut_in_pops_on_the_seventh_clear_tick_and_resets_while_slow() {
         with_reports(Level::P1080, |scaler| {
             assert_eq!(scaler.cut_in_start(0, true), Action::Started);
-            assert_eq!(resolution::status().reports, 1);
-            assert_eq!(resolution::status().effective, Level::P720);
+            assert_eq!(resolution::status().unwrap().reports, 1);
+            assert_eq!(resolution::status().unwrap().effective, Level::P720);
             assert_eq!(
                 scaler.cut_in_tick(0, true, false),
                 Action::Cooling { left: 6 }
@@ -466,8 +467,8 @@ mod tests {
             }
             assert_eq!(lefts, vec![6, 5, 4, 3, 2, 1]);
             assert_eq!(scaler.cut_in_tick(0, true, false), Action::Ended);
-            assert_eq!(resolution::status().reports, 0);
-            assert_eq!(resolution::status().effective, Level::P1080);
+            assert_eq!(resolution::status().unwrap().reports, 0);
+            assert_eq!(resolution::status().unwrap().effective, Level::P1080);
             assert_eq!(scaler.cut_in_tick(0, true, false), Action::Idle);
         });
     }
@@ -478,9 +479,9 @@ mod tests {
             for entry in 0..ENTRIES as i32 {
                 assert_eq!(scaler.cut_in_start(entry, true), Action::Started);
             }
-            assert_eq!(resolution::status().reports, ENTRIES as u8);
+            assert_eq!(resolution::status().unwrap().reports, ENTRIES as u8);
             assert_eq!(scaler.cut_in_start(0, true), Action::Already);
-            assert_eq!(resolution::status().reports, ENTRIES as u8);
+            assert_eq!(resolution::status().unwrap().reports, ENTRIES as u8);
             assert_eq!(scaler.cut_in_start(8, true), Action::Ignored);
             assert_eq!(scaler.cut_in_start(-1, true), Action::Ignored);
             assert_eq!(scaler.cut_in_start(0, false), Action::Ignored);
@@ -490,7 +491,7 @@ mod tests {
                     Action::Cooling { .. } | Action::Ended
                 ));
             }
-            assert_eq!(resolution::status().reports, (ENTRIES as u8) - 1);
+            assert_eq!(resolution::status().unwrap().reports, (ENTRIES as u8) - 1);
             assert_eq!(
                 scaler.cut_in_tick(4, true, false),
                 Action::Cooling { left: 6 }
@@ -512,8 +513,8 @@ mod tests {
                 ));
             }
             assert_eq!(scaler.cut_in_tick(1, true, false), Action::Ended);
-            assert_eq!(resolution::status().reports, 1);
-            assert_eq!(resolution::status().effective, Level::P480);
+            assert_eq!(resolution::status().unwrap().reports, 1);
+            assert_eq!(resolution::status().unwrap().effective, Level::P480);
             assert!(resolution::pop_report(match kept {
                 PushResult::Stored(token) => token,
                 other => panic!("expected stored, got {other:?}"),
@@ -527,7 +528,7 @@ mod tests {
             resolution::retarget(Level::P1080, false);
             assert_eq!(scaler.cut_in_start(0, true), Action::NotStored);
             assert_eq!(scaler.cut_in_tick(0, true, false), Action::Idle);
-            assert_eq!(resolution::status().reports, 0);
+            assert_eq!(resolution::status().unwrap().reports, 0);
             resolution::retarget(Level::P1080, true);
             let mut held = Vec::new();
             for _ in 0..8 {
@@ -537,7 +538,7 @@ mod tests {
                 });
             }
             assert_eq!(scaler.cut_in_start(2, true), Action::NotStored);
-            assert_eq!(resolution::status().reports, 8);
+            assert_eq!(resolution::status().unwrap().reports, 8);
             for token in held {
                 assert!(resolution::pop_report(token));
             }
@@ -552,14 +553,14 @@ mod tests {
             let (cut, moved) = scaler.on_main(MainTick::new(2, 0x59, 0x1e5), MoveSet::NONE);
             assert_eq!(cut, Action::Idle);
             assert_eq!(moved, (Action::Ignored, None));
-            assert_eq!(resolution::status().reports, 0);
+            assert_eq!(resolution::status().unwrap().reports, 0);
             assert_eq!(scaler.cut_in_start(2, true), Action::Started);
             let (cooling, moved) = scaler.on_main(MainTick::new(2, 0x59, 0x1e5), MoveSet::NONE);
             assert_eq!(cooling, Action::Cooling { left: 6 });
             assert_eq!(moved, (Action::Ignored, None));
-            assert_eq!(resolution::status().reports, 1);
+            assert_eq!(resolution::status().unwrap().reports, 1);
             scaler.clear();
-            assert_eq!(resolution::status().reports, 0);
+            assert_eq!(resolution::status().unwrap().reports, 0);
         });
     }
 
@@ -571,7 +572,7 @@ mod tests {
             // Off: nothing happens even on a matching status.
             let (_, off) = scaler.on_main(MainTick::new(0, KIND_EFLAME, SPECIAL_S), MoveSet::NONE);
             assert_eq!(off, (Action::Ignored, None));
-            assert_eq!(resolution::status().reports, 0);
+            assert_eq!(resolution::status().unwrap().reports, 0);
             // Pyra side special on entry 0, Kirby hammer on entry 1.
             assert_eq!(
                 scaler.move_tick(0, true, KIND_EFLAME, SPECIAL_S, set),
@@ -585,8 +586,8 @@ mod tests {
                 scaler.move_tick(1, true, KIND_KIRBY, 0x1F3, set),
                 (Action::Started, Some(8))
             );
-            assert_eq!(resolution::status().reports, 2);
-            assert_eq!(resolution::status().effective, Level::P720);
+            assert_eq!(resolution::status().unwrap().reports, 2);
+            assert_eq!(resolution::status().unwrap().effective, Level::P720);
             assert_eq!(scaler.counters().move_pushes, 2);
             assert_eq!(scaler.counters().move_active, Some(1));
             // Leaving the status pops; an unrelated kind never pushes.
@@ -602,11 +603,11 @@ mod tests {
                 scaler.move_tick(2, true, 0x1, SPECIAL_S, set),
                 (Action::Idle, None)
             );
-            assert_eq!(resolution::status().reports, 1);
+            assert_eq!(resolution::status().unwrap().reports, 1);
             // The mask going to none while a report is held still pops it.
             let (_, released) = scaler.on_main(MainTick::new(1, KIND_KIRBY, 0x1F3), MoveSet::NONE);
             assert_eq!(released, (Action::Ended, Some(8)));
-            assert_eq!(resolution::status().reports, 0);
+            assert_eq!(resolution::status().unwrap().reports, 0);
             assert_eq!(scaler.counters().move_pops, 2);
             assert_eq!(
                 scaler.move_tick(8, true, KIND_KIRBY, 0x1F3, set),
@@ -621,18 +622,18 @@ mod tests {
             assert_eq!(scaler.adaptive_pop(), Action::Idle);
             assert_eq!(scaler.adaptive_push(), Action::Started);
             assert_eq!(scaler.adaptive_push(), Action::Already);
-            assert_eq!(resolution::status().reports, 1);
-            assert_eq!(resolution::status().effective, Level::P720);
+            assert_eq!(resolution::status().unwrap().reports, 1);
+            assert_eq!(resolution::status().unwrap().effective, Level::P720);
             assert!(scaler.counters().adaptive_active);
             assert_eq!(scaler.adaptive_pop(), Action::Ended);
             assert_eq!(scaler.adaptive_pop(), Action::Idle);
-            assert_eq!(resolution::status().reports, 0);
+            assert_eq!(resolution::status().unwrap().reports, 0);
             assert_eq!(scaler.counters().adaptive_pushes, 1);
             assert_eq!(scaler.counters().adaptive_pops, 1);
             assert_eq!(scaler.adaptive_push(), Action::Started);
             scaler.clear();
             assert!(!scaler.counters().adaptive_active);
-            assert_eq!(resolution::status().reports, 0);
+            assert_eq!(resolution::status().unwrap().reports, 0);
             resolution::retarget(Level::P1080, false);
             assert_eq!(scaler.adaptive_push(), Action::NotStored);
             assert!(!scaler.counters().adaptive_active);
@@ -644,13 +645,13 @@ mod tests {
         with_reports(Level::P720, |scaler| {
             assert_eq!(scaler.cut_in_start(5, true), Action::Started);
             assert_eq!(scaler.adaptive_push(), Action::Started);
-            assert_eq!(resolution::status().reports, 2);
-            assert_eq!(resolution::status().effective, Level::P576);
+            assert_eq!(resolution::status().unwrap().reports, 2);
+            assert_eq!(resolution::status().unwrap().effective, Level::P576);
             assert_eq!(scaler.adaptive_pop(), Action::Ended);
-            assert_eq!(resolution::status().reports, 1);
-            assert_eq!(resolution::status().effective, Level::P576);
+            assert_eq!(resolution::status().unwrap().reports, 1);
+            assert_eq!(resolution::status().unwrap().effective, Level::P576);
             scaler.clear();
-            assert_eq!(resolution::status().reports, 0);
+            assert_eq!(resolution::status().unwrap().reports, 0);
         });
     }
 }

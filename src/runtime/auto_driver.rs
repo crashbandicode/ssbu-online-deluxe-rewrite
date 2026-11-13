@@ -1,7 +1,7 @@
 //! Applies the pure Auto decision to the E2 request. Scene hooks and presents
 //! call this; it does not write config.ini.
 
-use super::{record, settings, Code};
+use super::{record, Code};
 use crate::auto_policy::{
     self, Connection, Entry, Platform, Scene, SceneStatus, Selection, StageWords,
 };
@@ -180,12 +180,13 @@ fn store_cleanup(active: bool, generation: u64) {
 }
 
 fn selection() -> Selection {
-    let config = settings();
+    // Single settings, not a `Config`: the online-context export calls this
+    // from other plugins' hooks.
     let (cleanup_active, cleanup_generation) = cleanup();
     Selection {
-        auto_profile: config.auto_profile,
-        manual: config.render_mode,
-        platform: match config.platform {
+        auto_profile: super::auto_profile(),
+        manual: super::saved_render_mode(),
+        platform: match super::platform() {
             crate::config::Platform::Console => Platform::Console,
             crate::config::Platform::Emulator => Platform::Emulator,
         },

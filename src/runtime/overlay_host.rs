@@ -222,7 +222,7 @@ unsafe extern "C" fn on_backend_ready() {
 
 unsafe extern "C" fn accept_external_context(ctx: *mut u64) {
     if ctx.is_null() || (ctx as usize) & 7 != 0 {
-        record(Code::HookRejected, SITE_BOOTSTRAP, 5);
+        super::record_install(Code::HookRejected, SITE_BOOTSTRAP, 5);
         return;
     }
     EXTERNAL_CONTEXT.store(ctx as usize, Ordering::Release);
@@ -248,6 +248,7 @@ unsafe extern "C" fn external_draw() {
     }
     super::imgui::igSetCurrentContext(ctx as *mut c_void);
     if super::imgui::igGetCurrentContext() != ctx as *mut c_void {
+        // Every frame while it lasts: the event only, no install.log line.
         record(Code::HookRejected, SITE_BOOTSTRAP, 6);
         return;
     }
@@ -365,7 +366,7 @@ fn locate_export(name: &[u8]) -> Export {
 
 fn refuse(phase: &str, detail: u64) -> bool {
     STATE.store(STATE_REFUSED, Ordering::Release);
-    record(Code::HookRejected, SITE_BOOTSTRAP, detail);
+    super::record_install(Code::HookRejected, SITE_BOOTSTRAP, detail);
     logging::startup_phase(phase);
     skyline::println!("[Deluxe] imgui host refused ({phase}); menu callbacks not installed");
     false
@@ -407,7 +408,7 @@ fn hook_bootstrap() -> Result<(), BootstrapFailure> {
     let replacement_module = loaded_nro(replacement).map(|image| image.base);
     log_bootstrap_binding(replacement, own_module, replacement_module);
     if !owns_replacement(own_module, replacement_module) {
-        record(Code::HookRejected, SITE_BOOTSTRAP, 9);
+        super::record_install(Code::HookRejected, SITE_BOOTSTRAP, 9);
         logging::startup_phase("overlay_host_foreign_bootstrap");
         skyline::println!("[Deluxe] nvn bootstrap replacement is not this NRO; hook not installed");
         return Err(BootstrapFailure::ForeignReplacement);
@@ -435,15 +436,15 @@ fn hook_bootstrap() -> Result<(), BootstrapFailure> {
     logging::startup_phase(&format!(
         "nvn_bootstrap_hook_before target={entry:#x} replacement={replacement:#x} words={before:08x?} plan={plan:?}"
     ));
-    record(Code::HookInstalling, SITE_BOOTSTRAP, entry as u64);
+    super::record_install(Code::HookInstalling, SITE_BOOTSTRAP, entry as u64);
     match plan {
         EntryPlan::Reject => {
-            record(Code::HookRejected, SITE_BOOTSTRAP, 2);
+            super::record_install(Code::HookRejected, SITE_BOOTSTRAP, 2);
             return Err(BootstrapFailure::EntryMalformed);
         }
         EntryPlan::Chain(handler) => {
             if !unsafe { memory::executable(handler as usize, 4) } {
-                record(Code::HookRejected, SITE_BOOTSTRAP, handler);
+                super::record_install(Code::HookRejected, SITE_BOOTSTRAP, handler);
                 return Err(BootstrapFailure::EntryMalformed);
             }
             BOOTSTRAP_ORIGINAL.store(handler as usize, Ordering::Release);
@@ -465,7 +466,7 @@ fn hook_bootstrap() -> Result<(), BootstrapFailure> {
                 );
             }
             if trampoline.is_null() {
-                record(Code::HookRejected, SITE_BOOTSTRAP, 1);
+                super::record_install(Code::HookRejected, SITE_BOOTSTRAP, 1);
                 return Err(BootstrapFailure::EntryMalformed);
             }
             BOOTSTRAP_ORIGINAL.store(trampoline as usize, Ordering::Release);
@@ -484,7 +485,7 @@ fn hook_bootstrap() -> Result<(), BootstrapFailure> {
         "nvn_bootstrap_hook_after installed={installed} words={after:08x?} previous={:#x}",
         BOOTSTRAP_ORIGINAL.load(Ordering::Acquire),
     ));
-    record(
+    super::record_install(
         if installed {
             Code::HookInstalled
         } else {

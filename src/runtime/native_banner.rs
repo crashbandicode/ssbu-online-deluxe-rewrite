@@ -15,7 +15,6 @@ use crate::native_banner::{
 use skyline::hooks::{getRegionAddress, InlineCtx, Region};
 use skyline::nn::ui2d::{Material, MaterialFlags, Pane, PaneFlag, PaneNode, TextBox, TextBoxFlag};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, AtomicUsize, Ordering};
-use std::sync::Mutex;
 
 pub(super) const CSS_UPDATE: usize = 0x1a12f60;
 const ARENA_INIT: usize = 0x1887b1c;
@@ -41,7 +40,7 @@ static SURFACE_GEN: AtomicU64 = AtomicU64::new(0);
 static LAST_REJECT: AtomicU64 = AtomicU64::new(u64::MAX);
 static SETTER_READY: AtomicBool = AtomicBool::new(false);
 static OPEN_LOGGED: AtomicU64 = AtomicU64::new(u64::MAX);
-static STATE: Mutex<BannerState> = Mutex::new(BannerState::empty(0));
+static STATE: crate::hook_lock::TryLock<BannerState> = crate::hook_lock::TryLock::new(BannerState::empty(0));
 /// The lobby pane the scene entry captured, and the scene generation it belongs to.
 static LOCAL_PANE: AtomicUsize = AtomicUsize::new(0);
 static LOCAL_GEN: AtomicU64 = AtomicU64::new(0);
@@ -126,9 +125,9 @@ pub(super) fn install() {
 
 fn note_install(ok: bool, site: usize) -> bool {
     if ok {
-        record(Code::HookInstalled, site as u64, 0);
+        super::record_install(Code::HookInstalled, site as u64, 0);
     } else {
-        record(Code::HookRejected, site as u64, 0);
+        super::record_install(Code::HookRejected, site as u64, 0);
         skyline::println!("[Deluxe] native pane hook not installed at {site:x}");
     }
     ok
@@ -140,13 +139,13 @@ pub(super) unsafe fn enter_local_scene(base: u64) {
     drop_scene();
     let site = native_banner::LOCAL_SCENE as u64;
     if !SCENE_WORD_OK.load(Ordering::Acquire) {
-        record(Code::HookRejected, site, 0);
+        super::record_install(Code::HookRejected, site, 0);
         return;
     }
     let Some(address) =
         crate::ui_safety::linked_pane(base as usize, 8, |addr| unsafe { read_ptr(addr) })
     else {
-        record(Code::HookRejected, site, 1);
+        super::record_install(Code::HookRejected, site, 1);
         return;
     };
     let identity = checked_pane(address).and_then(|pane| unsafe {
@@ -594,7 +593,7 @@ unsafe fn setter_available() -> bool {
         .checked_add(SET_TEXT)
         .filter(|entry| memory::accessible(*entry, 0x1c, false));
     let Some(entry) = entry else {
-        record(Code::HookRejected, SET_TEXT as u64, 0);
+        super::record_install(Code::HookRejected, SET_TEXT as u64, 0);
         return false;
     };
     let word = |index: usize| *((entry + index * 4) as *const u32);

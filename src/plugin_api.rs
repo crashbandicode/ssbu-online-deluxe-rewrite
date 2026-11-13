@@ -14,7 +14,9 @@
 use core::ffi::{c_char, c_void};
 use deluxe_plugin_abi as abi;
 use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard};
+#[cfg(test)]
+use std::sync::Mutex;
+use std::sync::Arc;
 
 /// How a row behaves.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -175,7 +177,7 @@ pub struct Registry {
     /// Registration order; every slot below `count` is set and never changes.
     slots: [AtomicPtr<Plugin>; abi::MAX_PLUGINS],
     count: AtomicUsize,
-    book: Mutex<Book>,
+    book: crate::hook_lock::TryLock<Book>,
 }
 
 struct Book {
@@ -442,7 +444,7 @@ impl Registry {
         Self {
             slots: [const { AtomicPtr::new(std::ptr::null_mut()) }; abi::MAX_PLUGINS],
             count: AtomicUsize::new(0),
-            book: Mutex::new(Book {
+            book: crate::hook_lock::TryLock::new(Book {
                 pending: Vec::new(),
                 last_step: None,
                 writes: Vec::new(),
@@ -451,7 +453,7 @@ impl Registry {
     }
 
     /// The bookkeeping, or `None` while the other side holds it.
-    fn try_book(&self) -> Option<MutexGuard<'_, Book>> {
+    fn try_book(&self) -> Option<crate::hook_lock::TryGuard<'_, Book>> {
         crate::hook_lock::try_take(&self.book)
     }
 

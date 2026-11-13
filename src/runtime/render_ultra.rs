@@ -165,8 +165,7 @@ pub(super) unsafe fn install() {
     );
     skyline::install_hook!(deluxe_rewrite_pre_present);
     let word = *((base() + ENTRY) as *const u32);
-    record(Code::HookInstalled, ENTRY as u64, word as u64);
-    logging::install_checkpoint(Code::HookInstalled, ENTRY as u64, word as u64);
+    super::record_install(Code::HookInstalled, ENTRY as u64, word as u64);
     assert!(
         word & 0xfc00_0000 == 0x1400_0000,
         "present entry inline hook failed"

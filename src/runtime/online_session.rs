@@ -5,10 +5,9 @@
 
 use crate::online_session::{live_since, Session};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
 
 /// Written only by the diagnostics thread; the lock never contends.
-static SESSION: Mutex<Session> = Mutex::new(Session::new());
+static SESSION: crate::hook_lock::TryLock<Session> = crate::hook_lock::TryLock::new(Session::new());
 /// The last evidence tick, for readers on other threads (0 never).
 static EVIDENCE_TICK: AtomicU64 = AtomicU64::new(0);
 

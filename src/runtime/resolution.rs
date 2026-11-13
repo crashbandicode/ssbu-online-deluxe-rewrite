@@ -87,12 +87,12 @@ pub(super) fn install() {
                 record(Code::HookEntryWord, site.offset as u64, word as u64);
             }
             Some(word) => {
-                record(Code::HookRejected, site.offset as u64, word as u64);
+                super::record_install(Code::HookRejected, site.offset as u64, word as u64);
                 logging::startup_phase("resolution_guard_rejected");
                 return;
             }
             None => {
-                record(Code::HookRejected, site.offset as u64, 0);
+                super::record_install(Code::HookRejected, site.offset as u64, 0);
                 logging::startup_phase("resolution_guard_unmapped");
                 return;
             }
@@ -103,10 +103,10 @@ pub(super) fn install() {
         if site.kind != SiteKind::Gate {
             continue;
         }
-        record(Code::HookInstalling, site.offset as u64, site.word as u64);
+        super::record_install(Code::HookInstalling, site.offset as u64, site.word as u64);
         if Patch::in_text(site.offset).nop().is_err() {
             rollback_gates(patched);
-            record(Code::HookRejected, site.offset as u64, u64::from(NOP));
+            super::record_install(Code::HookRejected, site.offset as u64, u64::from(NOP));
             logging::startup_phase("resolution_gate_patch_failed");
             return;
         }
@@ -123,11 +123,11 @@ pub(super) fn install() {
             crate::resolution::installed_hook_word(offset, word),
             "resolution hook did not install at {offset:x}"
         );
-        record(Code::HookInstalled, offset as u64, word as u64);
+        super::record_install(Code::HookInstalled, offset as u64, word as u64);
     }
     for site in SITES {
         if site.kind == SiteKind::Gate {
-            record(Code::HookInstalled, site.offset as u64, u64::from(NOP));
+            super::record_install(Code::HookInstalled, site.offset as u64, u64::from(NOP));
         }
     }
     crate::resolution::set_hooks_ready(true);

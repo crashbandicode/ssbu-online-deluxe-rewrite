@@ -27,7 +27,7 @@ pub(super) unsafe fn preflight(offset: usize) -> bool {
         return false;
     };
     if address % 4 != 0 || address.checked_add(20).is_none_or(|v| v > end) {
-        record(Code::HookRejected, offset as u64, 1);
+        super::record_install(Code::HookRejected, offset as u64, 1);
         return false;
     }
     let word = *(address as *const u32);
@@ -36,10 +36,10 @@ pub(super) unsafe fn preflight(offset: usize) -> bool {
     let literal = word & 0xff00_0000 == 0x5800_0000;
     let call = word & 0xfc00_0000 == 0x9400_0000;
     if (branch && !call) || indirect || literal || word == 0 {
-        record(Code::HookRejected, offset as u64, word as u64);
+        super::record_install(Code::HookRejected, offset as u64, word as u64);
         return false;
     }
-    record(Code::HookInstalling, offset as u64, word as u64);
+    super::record_install(Code::HookInstalling, offset as u64, word as u64);
     true
 }
 
@@ -115,7 +115,7 @@ fn install_buffer_observer() {
     }
     unsafe {
         if !guard_matches(ONLINE_BUFFER_READ - 4, &ONLINE_BUFFER_GUARD) {
-            record(Code::HookRejected, ONLINE_BUFFER_READ as u64, 0);
+            super::record_install(Code::HookRejected, ONLINE_BUFFER_READ as u64, 0);
             return;
         }
         if !preflight(ONLINE_BUFFER_READ) {
@@ -124,7 +124,7 @@ fn install_buffer_observer() {
         skyline::install_hook!(deluxe_rewrite_observe_online_buffer);
     }
     BUFFER_OBSERVER_INSTALLED.store(true, Ordering::Relaxed);
-    record(Code::HookInstalled, ONLINE_BUFFER_READ as u64, 0);
+    super::record_install(Code::HookInstalled, ONLINE_BUFFER_READ as u64, 0);
 }
 
 /// Shared positive online-match signal, independent of buffer mutation.
@@ -139,7 +139,7 @@ pub(super) fn install_match_setup() -> bool {
         skyline::install_hook!(deluxe_rewrite_set_online_latency);
     }
     LATENCY_INSTALLED.store(true, Ordering::Relaxed);
-    record(Code::HookInstalled, ONLINE_LATENCY as u64, 0);
+    super::record_install(Code::HookInstalled, ONLINE_LATENCY as u64, 0);
     true
 }
 

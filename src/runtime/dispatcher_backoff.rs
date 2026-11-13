@@ -355,7 +355,7 @@ pub(super) fn install() {
     }
     INSTALLED.store(true, Ordering::Release);
     OUTCOME.store(1, Ordering::Release);
-    record(Code::HookInstalled, SITE as u64, 0);
+    super::record_install(Code::HookInstalled, SITE as u64, 0);
     record(Code::DispatcherBackoff, 1, policy.packed());
 }
 

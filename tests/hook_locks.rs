@@ -869,13 +869,10 @@ const HOOK_LOCKS: &[(&str, bool, &str)] = &[
     // The first run on f33cfef (2026-11-13) found 12 locks, 11 shared with a plugin thread. Fixed the same day: the
     // Registry's plugins are published lock-free and its bookkeeping, PLUGIN_PAGES and TICKS are only tried on hook
     // paths (`hook_lock::try_take`); BUILD is a static C string; a plugin thread reads POLICY's published status and
-    // hands scene resets to the hooks (`fighter_main::request_reset`), so GATE, POLICY and the adaptive state are
-    // taken on game threads only; Ring.state was a false edge (`row.begin()`, renamed `start_tick`).
-    // Taken only on game threads (hooks) in the scan: a wait between game threads, not on a plugin thread.
-    ("resolution.rs::POLICY", false, "NVN procs, fighter Main / cut-in and render hooks -> resolution::with_policy (state update, no I/O under the lock)"),
-    ("runtime/adaptive_drs.rs::STATE", false, "queue_present and the render hooks -> adaptive_drs::on_present; resets under GATE from hooks"),
-    ("runtime/fighter_main.rs::GATE", false, "fighter Main / cut-in / module load and unload / present hooks"),
-    ("runtime/fighter_probe.rs::STATE", false, "module load and unload hooks -> fighter_probe::publish/snapshot"),
+    // hands scene resets to the hooks (`fighter_main::request_reset`); Ring.state was a false edge (`row.begin()`,
+    // renamed `start_tick`). 0.10.7 removed the last four, which only game threads took: resolution POLICY and the
+    // fighter probe's state are lock-free cells (`hook_lock::SnapCell`), the adaptive state has one owner (the
+    // present hook, which applies resets handed to it), and fighter_main's GATE is a gate no thread waits on.
 ];
 
 struct Reach {
@@ -990,6 +987,7 @@ fn no_new_lock_is_reachable_from_a_hook() {
         }
     }
     assert!(problems.is_empty(), "{}", problems.join("\n"));
+    assert!(HOOK_LOCKS.is_empty(), "no hook path may take a blocking lock, game-thread-only ones included");
 }
 
 #[test]
@@ -1061,10 +1059,7 @@ const STD_NAMED_METHODS: &[(&str, &str)] = &[
         "shipped callers are statics, which the scan follows (runtime/capture.rs CALLBACKS.drain, TRACE.drain); \
          `ring.drain(..)` is in capture.rs's tests only (2026-11-13)",
     ),
-    (
-        "perf_scaler::Scaler::clear",
-        "shipped caller is the static GLOBAL.clear() (followed); `scaler.clear()` is in perf_scaler.rs's tests only (2026-11-13)",
-    ),
+    // perf_scaler::Scaler::clear reached POLICY's lock until 0.10.7 made the policy a lock-free cell.
 ];
 
 #[test]
