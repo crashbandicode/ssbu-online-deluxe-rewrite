@@ -30,9 +30,10 @@ def _fresh(ctx, cap_s=15.0):
     return (path.read_text(errors='replace') if path.exists() else ''), False
 
 
-def status(ctx, tag='status', plugins=21):
-    """A fresh renderer-status.txt: `hook_lock_skipped=<n>` present (release builds write it), Deluxe drawing
-    through the standalone (`imgui_stats=external`), the host-clients line with index=paged and the plugin count."""
+def status(ctx, tag='status', plugins=21, host='external'):
+    """A fresh renderer-status.txt: `hook_lock_skipped=<n>` present (release builds write it), and Deluxe drawing
+    through the standalone (`host='external'`: `imgui_stats=external`, the host-clients line with index=paged and
+    the plugin count) or through its built-in ImGui (`host='embedded'`, as on the card since 0.10.6)."""
     text, fresh = _fresh(ctx)
     Path(ctx.row_dir, f'renderer-status-{tag}-{ctx.on}.txt').write_text(text)
     skipped = re.search(r'^hook_lock_skipped=(\d+)\s*$', text, re.M)
@@ -47,9 +48,9 @@ def status(ctx, tag='status', plugins=21):
         problems.append('renderer-status.txt not rewritten within 15 s')
     if skipped is None:
         problems.append('no hook_lock_skipped= line')
-    if out['imgui_stats'] != 'external':
+    if out['imgui_stats'] != host:
         problems.append(f'imgui_stats={out["imgui_stats"]}')
-    if not clients or clients.group(2) != 'paged' or int(clients.group(1)) != plugins:
+    if host == 'external' and (not clients or clients.group(2) != 'paged' or int(clients.group(1)) != plugins):
         problems.append(f'host clients line: {out["host_clients"]}')
     if problems:
         raise RuntimeError(f'{ctx.on}: {problems}')
