@@ -1,5 +1,24 @@
 # Validation record
 
+## 0.10.6 release (`v0.10.6` on `10e481f`) — card install and release assets, untested on hardware — 2026-11-13
+
+**Untested on hardware (Eden-tested only; installed on the card, not yet played).** The operator ordered the release at
+about 22:57Z: "push everything but note it's untested on hardware".
+
+- **Card install (22:09Z, hekate UMS):** `installed_verified`. The card's NRO read back as `66349759…` (1,191,936
+  bytes), and the card's other plugins and protected files read back unchanged. The receipt is
+  `smash-training-lobby/artifacts/phase23/card-rc12/2-deluxe/deployment.json` in the operator's evidence root.
+- **Not run on the console:** there are no console logs and no logged build id from hardware.
+- **Assets:** made with the release tool's `--untested-on-hardware` mode. It still requires the tag build's NRO to be
+  the card readback's bytes. Its evidence comes from the install receipt alone, and every hardware field reads "not run
+  on hardware".
+  - `libssbu_online_deluxe_rewrite.nro`: `66349759c5d14272e1c87a94302251ac3e434a6b5af6dda65adb8032a9e02b41`.
+  - `manifest.json`: `5fe1f3bbd33251adeedc31582a0f4522a441c41063f12c96f116769d0b68b94b`, with `runtime_tested=false`.
+  - `SHA256SUMS.txt`: `831bdfa4316cf01d6c3bcd82345546ccb9d4a7d1e76782a1d94c02b04980e898`.
+- **Releases:** Forgejo release 673 and GitHub. Every asset was downloaded back (anonymously from Forgejo, with
+  `gh release download` from GitHub) and matched.
+- Eden evidence for this build is the 0.10.6 entry below.
+
 ## 0.10.7 (`dab8772`, rc.13 branch) — fixed-capacity text: the window and the banner hooks no longer allocate: gates, ELF check and the RC pair — 2026-11-13
 
 **The change (`dab8772`).**

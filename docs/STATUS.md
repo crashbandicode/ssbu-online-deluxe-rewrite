@@ -1,9 +1,10 @@
 # Implementation and validation status
 
-Checked on 2026-11-13 against the rc.13 branch (version 0.10.7, not released; `main` is 0.10.6, the release candidate) and the
-latest release, **0.10.4**; the version sections below are dated records.
+Checked on 2026-11-13 against `main` (version 0.10.7, rc.13 work: not released, Eden-tested and untested on hardware)
+and the latest release, **0.10.6**, which is **untested on hardware (Eden-tested only; installed on the card, not yet
+played)**. The version sections below are dated records.
 Exact release/build and console evidence is in
-[VALIDATION.md](VALIDATION.md). Releases: 0.10.4 `21c0009`, 0.10.2 `73488c1`,
+[VALIDATION.md](VALIDATION.md). Releases: 0.10.6 `10e481f`, 0.10.4 `21c0009`, 0.10.2 `73488c1`,
 0.10.1 `03e9d42`, 0.10.0 `89e9b47`, 0.9.0 `d6402b4`, 0.8.1 `84da224`, 0.8.0
 `d92bc3d`, 0.7.0 `9a7f81c`, 0.6.2 `302c095`, 0.6.1 `9d0cec2`, 0.6.0 `a0dc5d6`,
 0.5.7 `282a2df`, 0.5.6 `fb2012a`, 0.5.5 `6a9e61a`, 0.5.4 `a63bc8c`. The rewrite is one Rust/Skyline
@@ -31,7 +32,7 @@ Publication routing: `origin` is Forgejo
 (`git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite`), authoritative
 and public; the GitHub repository is a downstream mirror that is not pushed automatically.
 Nothing is pushed without the operator's explicit permission. Forgejo
-releases carry the NRO and its SHA-256 manifest (see [Current release: 0.10.4](#current-release-0104)).
+releases carry the NRO and its SHA-256 manifest (see [Current release: 0.10.6](#current-release-0106)).
 
 Evidence levels used below: **host** = Rust host tests, clippy with warnings
 denied, the no-default-features build and the Skyline release build;
@@ -70,7 +71,42 @@ the operator's Switch, recorded with its build hash in [VALIDATION.md](VALIDATIO
 | Coverage build | Cargo feature `coverage`, raw profile writer, event code 109, manual snapshots from the Debug view (0.5.2; since 0.10.5 that needs `debug_view=on`) | Eden only. 2026-10-17 trace: 1,192 instrumented functions, 1,047 executed, 145 never executed. 2026-10-18 LAN Online run (two modded peers, NSO scenes only): 893 executed, 299 never executed, 12 functions new against the 10-17 report; [DEBUGGING.md](DEBUGGING.md) |
 | Removed in 0.5.4 | The opt-in peer observer, FPS++ (emulator-only diagnostic), the Gigaflare DRS trigger, five opt-in diagnostics, 21 helpers without a production caller; `peer_observer=` and `fps_boost=` are ignored legacy keys. Per-file reduction: `src/` 22,253 → 15,332 production lines (−31.1 %) | Host gates on every step; Eden latency, quota frame-rate, capture and plugin-page passes on the candidate. Console: the 0.5.4 first boot is the acceptance test. [FPS boost history](FPS_BOOST_INVESTIGATION.md) |
 
-## Current release: 0.10.4
+## On `main`: 0.10.7 (rc.13 work, not released)
+
+**Eden-tested and untested on hardware. There is no tag or release yet.** That
+waits for the operator's rc.13 hardware test.
+- No game hook waits on another thread.
+- No per-frame hook allocates, including the window and the native banner
+  text, which use fixed-capacity buffers.
+- The ELF check `tools/hook_wait_check.py` holds both rules for every hook.
+
+Details:
+[Validation](VALIDATION.md) (the `dab8772` entry)
+and [Debugging](DEBUGGING.md).
+
+## Current release: 0.10.6
+
+**Untested on hardware (Eden-tested only; installed on the card, not yet played).**
+Tagged `v0.10.6` on 2026-11-13 at `10e481f` and released on Forgejo and
+GitHub. The NRO is `66349759…`, build `0.10.6-10e481fcc7b3-1794597809`.
+- It was installed on the operator's card over hekate UMS at 22:09Z and read
+  back byte-identical, with the card's other plugins unchanged.
+- It has not run on the console, so its manifest says `runtime_tested=false`
+  and names no logged build.
+- No game hook waits on another plugin's lock. Hooks take a single try, and
+  `hook_lock_skipped=` counts the skipped takes.
+- D-pad Up/Down move no Deluxe row while ZL, ZR, R or L is held.
+- The Debug view needs `debug_view=on`, and it never acts while A is held.
+- Other plugins can read whether the window is open
+  (`ssbu_online_deluxe_overlay_state_v1`).
+- Offline Training reads `offline/training`.
+- An online battle isn't demoted early.
+- The built-in ImGui is built from imgui-smash 1.2.0's archive.
+- 0.10.5 was a test build and was not released.
+
+Details: [Validation](VALIDATION.md) (the 0.10.6 entries).
+
+## 0.10.4
 
 Tagged `v0.10.4` on 2026-11-13 at `21c0009`, the build that ran on the
 operator's Switch on 2026-11-10 (firmware 23.0.1, Atmosphère 1.12.1; the
@@ -92,7 +128,8 @@ Details: [Validation](VALIDATION.md#0104--release-assets-and-the-console-run--20
 [ImGui dependency](IMGUI_DEPENDENCY.md). Since 2026-11-12 01:11Z the card has
 held 0.10.5 (`c37ee0ff…`, built from `a88d659`), which is not released and has
 not run on the console, and a 1.0.2 standalone `libimgui_smash.nro`
-(`f72a6b8d…`), also ASCII-only.
+(`f72a6b8d…`), also ASCII-only. On 2026-11-13 at 22:09Z the card moved
+to 0.10.6 (`66349759…`).
 
 ## 0.10.2
 
