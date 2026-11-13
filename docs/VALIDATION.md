@@ -112,6 +112,12 @@ and configs in `eden/imgui-parity/`. 10 of 10 rows passed on each instance in bo
   standalone's image (950,272 bytes resident). In both pairs the scene read `offline/singles` for most of the
   online match on the built-in host too; that classification is not affected by the standalone.
 
+**Run `imp-yfc1` (the Yoga, the card's 20 plugins plus the standalone 1.2.0 `9c411083`, this build):**
+`imgui_stats=external`, `imgui_host_clients=1 declared=1 declarations=1 plugins=21 index=paged`, index 23,560 bytes
+in 2 pages, as 0.10.5's built-in host in Training. CSS memory 2,375.0 MiB against hang-card-r5's 2,384.3 on the
+same host (`tools/heartbeat_memory.py`). It did not reach Training: the straight-to-Training route's CPU-coin step
+failed, as in two Surface boots with this build and two without any standalone (`eden/imgui-parity/training/`).
+
 ## 0.10.5 — ImGui re-pin to the standalone 1.1.0's archive: gates and Eden — 2026-11-13
 
 Build `0.10.5-9c994bf68aae-1794571432` from `9c994bf` (`SOURCE_DATE_EPOCH`

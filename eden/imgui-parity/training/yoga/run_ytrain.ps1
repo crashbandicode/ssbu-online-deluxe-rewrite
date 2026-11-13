@@ -31,7 +31,7 @@ foreach ($v in $Order.Split(',')) {
         Start-Sleep 60
     }
     Note "$label start (variant $v)"
-    $cmd = "/usr/bin/python3 -B -I $et all --from /home/intpa/eden-runs/imp-ytrain/base-y$v.json --label $label --rows /home/intpa/eden-runs/imp-ytrain/rows --app $app --owner 'OpenCode deluxe-imgui-parity' > /home/intpa/eden-runs/imp-ytrain/run-$label.log 2>&1; echo EXIT:`$LASTEXITCODE >> /home/intpa/eden-runs/imp-ytrain/run-$label.log"
+    $cmd = "systemd-run --user --scope --quiet -p MemoryMax=3G /usr/bin/timeout 4200 /usr/bin/python3 -B -I $et all --from /home/intpa/eden-runs/imp-ytrain/base-y$v.json --label $label --rows /home/intpa/eden-runs/imp-ytrain/rows --app $app --owner 'OpenCode deluxe-imgui-parity' > /home/intpa/eden-runs/imp-ytrain/run-$label.log 2>&1; echo EXIT:`$LASTEXITCODE >> /home/intpa/eden-runs/imp-ytrain/run-$label.log"
     & ssh -o BatchMode=yes -o ServerAliveInterval=30 $y $cmd
     $tail = & ssh -o BatchMode=yes $y "Get-Content /home/intpa/eden-runs/$label/RESULTS.md -ErrorAction SilentlyContinue | Select-String 'Rows:|Down:'"
     Note "$label end: $tail"
