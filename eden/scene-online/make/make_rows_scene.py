@@ -6,7 +6,7 @@ usage: make_rows_scene.py <imp-split rows-b dir> <qpt-y1 rows dir> <pair: prepos
 Writes <out>/rows-<pair>-a and <out>/rows-<pair>-b. Sources, copied unchanged: the imgui-parity split rows
 (quickplay-cancel-fix's steps.py through deluxe_steps.qcf, split_steps.search_until_session, its segments and refs)
 and the qp-offline-training rows (gdb_rc11.py, gdbdump.py, gdb-nohold.txt, qp_steps.py's file readers, the
-attract-cancel segment). Added: scene_steps.py and scene_table.py from this folder, gdb-port-<key>.txt.
+attract-cancel segment). Added: scene_steps.py from this folder, tools/scene_table.py, gdb-port-<key>.txt.
 prepost: a = Deluxe 9128cd2 (before 1173bea), b = f33cfef (local main HEAD); the evidence row records.
 fix: a and b = the fix; the evidence row needs every battle to read quickplay with the online bit on.
 """
@@ -26,7 +26,6 @@ FROM_IMP = ['steps.py', 'deluxe_steps.py', 'split_steps.py', 'segments/to-online
             'refs/quickplay-menu.png', 'refs/ready-banner-roi.png', 'refs/ready-banner.png', 'refs/rematch-dialog.png',
             'refs/leave-battle-tab.png', 'refs/waiting-menu.png', 'refs/online-menu.png', 'refs/css-quickplay.png']
 FROM_QPT = ['gdb_rc11.py', 'gdbdump.py', 'gdb-nohold.txt', 'qp_steps.py', 'segments/attract-cancel.edenmacro.json']
-OURS = ['scene_steps.py', 'scene_table.py']
 
 
 def sha(path):
@@ -108,7 +107,8 @@ def main():
         dest = out / ('rows-%s-%s' % (pair, key))
         if dest.exists():
             shutil.rmtree(dest)
-        for src, names in ((imp, FROM_IMP), (qpt, FROM_QPT), (HERE, OURS)):
+        for src, names in ((imp, FROM_IMP), (qpt, FROM_QPT), (HERE, ['scene_steps.py']),
+                           (HERE.parent.parent / 'tools', ['scene_table.py'])):
             for name in names:
                 (dest / name).parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src / name, dest / name)

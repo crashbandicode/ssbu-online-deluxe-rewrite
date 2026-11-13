@@ -16,7 +16,7 @@ operator's evidence root (`artifacts/deluxe-scene-online/`), not here.
 - `make/make_config_scene.py` runs on the executor host and starts from that host's imgui-parity base: profile g, 1x,
   the Æsir `profiles.dat`, Deluxe's `config.ini` (Auto on, `platform=emulator`), the Yoga's Qt fixture; the Eden
   `2f315fc4` gdbstub build, the GDB stub on before `game.load`, no guest trace.
-- `scene_table.py` (host tests: `python3 -B -I eden/scene-online/test_scene_table.py`) reads `hang-trace.log`,
+- `tools/scene_table.py` (host tests: `python3 -B -I tools/test_scene_table.py`) reads `hang-trace.log`,
   `events.log` and the stage logs and gives the scene per phase: the waiting room, each online battle (at its load,
-  its heartbeats, events 107 and 30 with seconds after the load) and the results. `phase_rows.py` prints one table
-  row per instance; `scene_steps.py` is the row hook that runs it on the run's own files.
+  its heartbeats, events 107 and 30 with seconds after the load) and the results. `tools/phase_rows.py` prints one
+  table row per instance; `scene_steps.py` is the row hook that runs it on the run's own files.
