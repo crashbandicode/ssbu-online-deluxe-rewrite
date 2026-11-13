@@ -1,5 +1,39 @@
 # Validation record
 
+## 0.10.6 (`10e481f`) — the release candidate's version: gates, build and an Eden boot — 2026-11-13
+
+**The change (`10e481f`).** The operator named the release candidate 0.10.6:
+`Cargo.toml` and `Cargo.lock` move from 0.10.5 to 0.10.6, and `docs/STATUS.md`
+names `main` 0.10.6. The source is otherwise `989e38d`'s, which the entries below
+validate (the RC pair and Training ran build `0.10.5-1a7235f93c14-1794591188`,
+whose code is the same).
+
+**Gates (nice 19 / ionice 3, memory/time guard).**
+- `cargo test`: 353 unit, 8 and 27 integration tests passed.
+- Clippy with warnings denied passed, each with and without `diag`: `cargo clippy --all-targets` and `cargo skyline clippy`.
+- `cargo build --no-default-features` passed.
+- The tools' Python tests passed: 41, one skipped.
+
+**Build.**
+- `cargo skyline build --release` then `tools/package_debug.py`: build
+  `0.10.6-10e481fcc7b3-1794597809`, NRO
+  `66349759c5d14272e1c87a94302251ac3e434a6b5af6dda65adb8032a9e02b41`
+  (1,191,936 bytes). The ImGui archive is `c1e4471b…`, and `text_verified` is
+  true.
+- Diag (`--features diag`): NRO `c7f997c8…` (1,200,128 bytes).
+
+**Eden boot (`dv106-a1`, XPS, 2026-11-13 19:26–19:31Z).**
+- Setup: one instance with the card's plugin set (TrainingRooms `e9e18b00`) and
+  no standalone `libimgui_smash.nro`, as on the card. 20 plugins. Volume 0, the
+  GDB stub on before `game.load`.
+- Rows: load, main menu, console check. All 3 passed.
+- `install.log`, `events.log` and `renderer-status.txt` name
+  `Deluxe rewrite 0.10.6-10e481fcc7b3-1794597809`.
+- `imgui_stats=embedded` (the built-in ImGui), `hook_lock_skipped=0`.
+- The console has no panic, abort, crash or Unmapped line. Claim released at 19:31:45Z.
+- Evidence: `artifacts/deluxe-2/eden/dv106-a1` in the operator's evidence root.
+- Not yet run on the console. That happens in the rc.12 card session.
+
 ## Unreleased (`45333a1`, after the 0.10.5 card build) — no game hook waits on a lock a plugin thread can hold; the standalone in Training and the release-candidate pair: gates and Eden — 2026-11-13
 
 **The change (`45333a1`).** Game hooks only try their locks
