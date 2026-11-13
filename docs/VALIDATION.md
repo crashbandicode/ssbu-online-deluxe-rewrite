@@ -1,5 +1,61 @@
 # Validation record
 
+## Unreleased (`4573890`, after the 0.10.5 card build) — an online battle is not demoted before the latency mark: source, host gates and Eden — 2026-11-13
+
+**The defect.** In Eden LAN Quickplay the battle read `offline/singles` for most
+of the match and the exported online context went off. The waiting room had made
+the connection Quickplay and the battle loaded with online words (melee `0x0e`,
+mode `0x07010101`, `is_online_stage`), but `auto_driver::set_scene` armed the
+five-second stale check for any Singles/Doubles stage under a stored Quickplay
+without the online-latency mark (`0x16ccab8`). Eden reaches that mark 5.0–17 s
+after the stage load (the console 3.1–3.3 s), so `poll` demoted the battle 5 s in
+(event 107 `a=2`, event 30 `online=0 src=stale_check`). `1173bea` did not cause
+it: `9128cd2` and `f33cfef` behave the same, and the outcome depends only on
+whether the mark beats 5 s. The console's margin is about 1.7 s.
+
+**The change (`4573890`).** `auto_policy::stale_check_applies(connection,
+status, marked, stage_online)` is the one predicate for arming and for the poll;
+`offline_match_due` takes `stage_online` too. `auto_driver::STAGE_ONLINE` (an
+atomic) keeps the last stage load's online words, stored by `note_stage_words`
+before the stage hook sets the status. A local match after a kept Quickplay has
+no online words and is still demoted five seconds in. Unchanged: `1173bea`'s
+Training rule, the main menu's Quickplay hold, the mark, every install guard. No
+hook, address, lock or game write added.
+
+**Gates.** `cargo test` (348 unit and 23 integration tests;
+`an_online_battle_is_not_demoted_before_the_latency_mark` failed first on a stub
+with the old decision, `left: Offline, right: Quickplay`;
+`a_kept_quickplay_is_still_demoted_in_an_offline_match` is new; `1173bea`'s
+Training tests pass). `cargo clippy --all-targets -- -D warnings` and `cargo
+skyline clippy -- -- -D warnings`, each with and without `diag`; `cargo build
+--no-default-features`; `tools/Build.ps1 -Package`: build
+`0.10.5-4573890e7157-1794586942`, NRO
+`baf0437b8750ad4200d5efd29b56700125fd6a01b4b43a4ac0079c76b9b57d0a`
+(1,187,840 bytes, resident 1,228,800); diagnostic build `f240b726…`. The
+`tools/` suite: 40 OK, 1 skipped (`test_scene_table.py` new).
+
+**Eden `scn-*` (LAN Quickplay pair split XPS (a) / Yoga (b), the GDB stub on,
+1x, volume 0; rows in `eden/scene-online/`).** Every instance passed 7/7 rows.
+From `hang-trace.log`, `events.log` and the stage logs, read by
+`tools/phase_rows.py`:
+
+| Run | Build | Battle heartbeats | Stale demotion (107 `a=2`) | Online bit (30) |
+| --- | --- | --- | --- | --- |
+| scn-prepost-a1 | `9128cd2` | quickplay/singles x24 | none | no change |
+| scn-prepost-b1 | `f33cfef` | offline/singles x24 | +5.4 s | off +5.4 s (stale_check), on +5.7 s (latency_hook) |
+| scn-fix-a1 | `4573890` | quickplay/singles x26 | none | no change |
+| scn-fix-b1 | `4573890` | quickplay/singles x34 | none | no change |
+
+Each waiting room read `quickplay/training` and each result screen
+`quickplay/inactive`. The desync detector logged `desync_seen=0` on both fix
+instances at the same `frame=7521`. No console log has a `panic`, `abort`,
+`crash` or `Unmapped` line. Eden timing varies (prepost-a1 passed without the
+fix), so the causal proof is the host test with the code; the fix pair shows no
+regression.
+
+**Not run:** a console Quickplay match on this build, Elite Smash. Not tagged or
+released.
+
 ## Unreleased (`1173bea`, after the 0.10.5 card build) — offline Training is offline: source, host gates and Eden — 2026-11-13
 
 **The defect.** Games & More → Training ran as `quickplay/training`. Both console
