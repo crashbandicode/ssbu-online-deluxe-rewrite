@@ -19,19 +19,21 @@ carries the former local renderer patch as a commit plus the memory trims and
 font work below. That work was done on the fork's `deluxe`,
 `unicode-shared-font` and `sparse-codepoint-index` branches. All three were
 merged into the fork's `main` on 2026-11-13 and deleted; the commits keep
-their hashes. The compiled archive stays in the ignored
-`target/native/imgui/` directory.
+their hashes. Since 0.10.5 the pin is the fork's `main` at `f9844e9`, whose
+archive is also the one the fork's standalone 1.1.0 links (below). The
+compiled archive stays in the ignored `target/native/imgui/` directory.
 
 | Item | Value |
 |---|---|
-| Static archive | `libimgui_smash.a`, 14,788,410 bytes |
-| SHA-256 | `26ea2c3b8f401b710d0827efe10cb4059de091757b9254dd832b5e5e0a84d58d` |
-| Source | `https://git.syntaxbyexample.com/intpa/imgui-smash`, commit `9405a494982d6eb091b334d08c5bc67fd6336b74` (made on `sparse-codepoint-index`, now in `main`) |
+| Static archive | `libimgui_smash.a`, 14,820,452 bytes |
+| SHA-256 | `c1e4471b354565ab97b2c8d5b5698a70f774a991c540fce7fc12511fb42c0d88` |
+| Source | `https://git.syntaxbyexample.com/intpa/imgui-smash`, `main`, commit `f9844e9cf5935291ed5cafcc7390677162e77c16`: the source of `9405a49` (0.10.4) plus `97ca947` and `c27ab7e` |
 | Upstream | `Coolsonickirby/imgui-smash` at `bb47b205ed0be2fb864269ee2d37fc886b81221e`, the fork's base |
 | ImGui submodule | `2b415e642b002f4312ac02f6bfa955960f8bd3b6` (unchanged in the tree; the fork's CMake applies `imgui-smash/patches/imgui/0001-paged-codepoint-index.patch`, `09e7b2fd…`, to a copy) |
 | Historical patch | `patches/imgui-smash/renderer-bb47.patch` (`4e138e35…`), now fork commit `ae77450`; no longer applied by the tool |
 
-Previous pins: 0.10.3 archive `3141ede99c1c4edea759556f8cd706c3a8d77702820375d2dd9f5a97040eddf8`,
+Previous pins: 0.10.4 archive `26ea2c3b8f401b710d0827efe10cb4059de091757b9254dd832b5e5e0a84d58d`,
+14,788,410 bytes (fork `sparse-codepoint-index` `9405a49`); 0.10.3 archive `3141ede99c1c4edea759556f8cd706c3a8d77702820375d2dd9f5a97040eddf8`,
 14,753,490 bytes (fork `unicode-shared-font` `bec80ec`); archive `666401152c6e624cebcd7896c5ef198f6c8b8f0daae21519585b48cd309a9dbc`,
 14,545,660 bytes (fork `966835c`, the glyph budget; in a 0.10.3 build that was
 never released); 0.3.9–0.10.2 archive `09b296a0f5c67641d229bb4a6d8b170f75281368da3957d666af424476bc2731`,
@@ -93,9 +95,8 @@ rootless Podman running the same pinned devkitA64 image and
 `prepare_imgui.py`'s own commands; the same route rebuilt the previous pin
 `09b296a0` exactly. `renderer-status.txt` adds `imgui_font_*` lines and
 `imgui_font_dynamic_set`. The external host (a standalone `libimgui_smash.nro`)
-keeps its own backend and font. No published standalone has this work: the
-newest imgui-smash release, v1.0.1, predates it, and the fork's `main` still
-pins 1.0.2's archive `7be7d40f…`, built before the merge.
+keeps its own backend and font. The fork's standalone has this work from
+1.1.0 on (below); v1.0.1 and the 1.0.2 build predate it.
 
 ### Fork branch `sparse-codepoint-index` (2026-11-10, 0.10.4)
 
@@ -150,6 +151,20 @@ the fork: 1,282,048 bytes). Remaining deferred trims with their measured
 costs (`ClearTexData()` 256 KiB, R8 atlas 384 KiB, gc-sections for the
 Skyline link, fewer slots) are listed in the tangent evidence
 `imgui-fork-1014/REPORT.md`.
+
+### Fork `main` `f9844e9` (2026-11-13, 0.10.5)
+
+The fork's `main` holds `9405a49`'s source plus two commits of the fork's
+1.0.2 line (applying their diff to `9405a49` gives `main`'s `imgui-smash/`
+tree, apart from the upstream README). The fork's standalone 1.1.0 links this
+same archive. Two clean builds with the fork's `Build-Standalone.ps1 -Action
+archive` and one with this repository's `prepare_imgui.py` commands (a clone
+of the pinned commit; rootless Podman in place of Docker) gave the same bytes.
+
+| Commit | Change | What it changes for Deluxe's embedded host |
+|---|---|---|
+| `97ca947` | Swapchain texture-table guard (`overlay_texture_policy.hpp`): `nvnWindowBuilderSetTextures` copies at most three texture pointers into the backend's table (the old `memcpy` copied any count into three entries) and still passes the native count and pointer on; every table replacement drops the current index; the acquire wrapper publishes an index only after a successful acquire whose index fits the table, and returns the native result (it returned nothing before); the overlay draws only with an accepted index. | With at most three textures and successful acquires, the overlay draws as before. Otherwise it skips the frame instead of reading or writing past the table. Deluxe's own `nvnWindowAcquireTexture` wrapper (`src/runtime/nvn.rs` `window_acquire`) sits above the backend's and returns nothing, as before, so the result the game sees is unchanged. |
+| `c27ab7e` | L3 + R3 toggles ImGui gamepad navigation only after `imgui_smash_set_gamepad_nav_toggle(true)`. The flag starts false (`InputHelper.cpp`), `nav_toggle::next` keeps navigation off while it is false, and the backend passes the pad to ImGui (`updateGamepad`) only while navigation is on. | Deluxe doesn't call that function or read `imgui_smash/config.ini`, so L3 + R3 no longer turns ImGui gamepad navigation on (with `26ea2c3b` it did). Deluxe's windows are created with `NoNavInputs` and `NoNavFocus` (`src/runtime/imgui.rs` `WINDOW_FLAGS`) and Deluxe reads the pad itself through `nn::hid`, so no window of Deluxe's used ImGui navigation; ImGui just stops receiving pad input after the chord. |
 
 ## Preparing the archive
 

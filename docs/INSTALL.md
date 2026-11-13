@@ -37,7 +37,7 @@ This NRO implements all three parts itself (`src/render_policy.rs`, `src/runtime
 | `libssbu_pia_manager.nro` | **Remove** | Replaced by the built-in handshake and RTT reading. |
 | `libnx_over.nro` | Not needed | The fork's overclock companion. Deluxe does no overclocking. Keep it only if another mod needs it. |
 | `libsmashline_plugin.nro` | Not needed by Deluxe | Keep it if another mod needs it. |
-| `libimgui_smash.nro` | **Remove** unless another mod needs it | Deluxe has ImGui built in. While this file is loaded, Deluxe draws with it instead, and with the published version names outside ASCII show `?` (see [ImGui](#imgui)). FX Control, CPU Pilot, Legal Stages + Loser Counterpick and TrainingRooms don't link ImGui; they add their rows or pages to Deluxe's window. |
+| `libimgui_smash.nro` | **Remove** unless another mod needs it | Deluxe has ImGui built in. While this file is loaded, Deluxe draws with it instead: imgui-smash 1.1.0 draws names outside ASCII as the built-in ImGui does, older versions show `?` (see [ImGui](#imgui)). FX Control, CPU Pilot, Legal Stages + Loser Counterpick and TrainingRooms don't link ImGui; they add their rows or pages to Deluxe's window. |
 | `libnro_hook.nro`, `libparam_hook.nro`, `libarcropolis.nro`, `libcss_preserve.nro` | Keep | Shared infrastructure other mods use. |
 | FX Control, CPU Pilot, Legal Stages + Loser Counterpick, TrainingRooms, the gamepad overlay | Keep | Separate mods that work next to Deluxe. FX Control, CPU Pilot and Legal Stages + Loser Counterpick each add their own page to Deluxe's window; TrainingRooms adds a row to its Plugins page. |
 
@@ -74,8 +74,10 @@ Replace any other character-FX plugin rather than running two.
 - When it's loaded, Deluxe doesn't start its own ImGui. If its exports and ImGui version (1.92.7 WIP, 19263) match,
   Deluxe draws in that plugin's ImGui; if they don't, Deluxe's window stays off. The check uses the exports, not the
   filename (`src/imgui_host.rs`, `src/runtime/overlay_host.rs`).
-- Drawing in the standalone copy means its font and its renderer. The newest published imgui-smash, v1.0.1, predates
-  the fonts 0.10.4 added and has only an ASCII font, so opponent names outside ASCII show `?`.
+- Drawing in the standalone copy means its font and its renderer. imgui-smash 1.1.0 is current: it is built from the
+  source Deluxe 0.10.4 links plus two fixes (a bounded swapchain texture table, and L3 + R3 gamepad navigation off
+  by default), and since 0.10.5 Deluxe links exactly its archive, so its fonts are the built-in ones. It is still
+  optional. v1.0.1 and earlier have only an ASCII font, so opponent names outside ASCII show `?`.
 
 ## Legal Stages + Loser Counterpick
 

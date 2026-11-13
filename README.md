@@ -28,8 +28,9 @@ Training and used about 300 KiB less memory.
 > SsbuSync and the PIA manager, so remove all three. If SsbuSync is still
 > loaded, Deluxe switches its hooks off.
 > ImGui is built in, so Deluxe doesn't need `libimgui_smash.nro`. Remove it
-> unless another mod needs it: while it's loaded, Deluxe draws with it, and
-> with the published version names outside ASCII show `?`.
+> unless another mod needs it: while it's loaded, Deluxe draws with it.
+> imgui-smash 1.1.0 has the built-in ImGui's fonts; with older versions names
+> outside ASCII show `?`.
 > [Install guide](docs/INSTALL.md)
 
 ## What it does

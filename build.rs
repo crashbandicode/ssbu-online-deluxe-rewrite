@@ -8,8 +8,8 @@ use std::{
 /// Pinned imgui-smash static archive (see docs/IMGUI_DEPENDENCY.md). The
 /// preparation script verifies this digest when it places the file; build.rs
 /// only re-checks the sidecar and size so no hashing code is needed here.
-const IMGUI_SMASH_SHA256: &str = "26ea2c3b8f401b710d0827efe10cb4059de091757b9254dd832b5e5e0a84d58d";
-const IMGUI_SMASH_SIZE: u64 = 14_788_410;
+const IMGUI_SMASH_SHA256: &str = "c1e4471b354565ab97b2c8d5b5698a70f774a991c540fce7fc12511fb42c0d88";
+const IMGUI_SMASH_SIZE: u64 = 14_820_452;
 const IMGUI_SMASH_DIR: &str = "target/native/imgui";
 const IMGUI_SMASH_LIB: &str = "libimgui_smash.a";
 

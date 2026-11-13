@@ -203,11 +203,11 @@ pub unsafe extern "C" fn ssbu_online_deluxe_overlay_state_v1(out: *mut DeluxeOve
 ## Your own windows through the imgui-smash host
 
 Deluxe statically links `libimgui_smash.a`, built from
-[intpa/imgui-smash](https://git.syntaxbyexample.com/intpa/imgui-smash) at
-`9405a49`, now on that repository's `main` ([ImGui dependencies](IMGUI_DEPENDENCY.md)).
+[intpa/imgui-smash](https://git.syntaxbyexample.com/intpa/imgui-smash) `main`
+at `f9844e9`, the archive of that repository's standalone 1.1.0 ([ImGui dependencies](IMGUI_DEPENDENCY.md)).
 When a compatible standalone `libimgui_smash.nro` is installed, Deluxe reuses
-that host instead, with that host's font (v1.0.1's is ASCII only, so names
-outside ASCII show `?`); a standalone whose exports or ImGui version don't
+that host instead, with that host's font (1.1.0's is the built-in one; v1.0.1's
+is ASCII only, so names outside ASCII show `?`); a standalone whose exports or ImGui version don't
 match keeps Deluxe's window off ([Install](INSTALL.md#imgui)). A plugin that wants its own windows registers through the
 host's exported `imgui_smash_*` callbacks and draws with matching Dear ImGui
 code; the fork's

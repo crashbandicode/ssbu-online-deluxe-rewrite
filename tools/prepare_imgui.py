@@ -2,8 +2,8 @@
 """Place the imgui-smash archive at target/native/imgui.
 
 The default action clones the pinned commit of the pinned repository (the
-Forgejo fork's deluxe branch since 0.3.8; upstream plus a local patch
-before), checks out its pinned submodule, applies the committed patch when
+Forgejo fork since 0.3.8, its main branch since 0.10.5; upstream plus a
+local patch before), checks out its pinned submodule, applies the committed patch when
 the pin names one, and builds with the pinned devkit image. --upstream uses
 a local checkout instead of the network. --source installs a local archive
 only when it matches the recorded pin.
