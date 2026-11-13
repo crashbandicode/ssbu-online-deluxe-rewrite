@@ -442,7 +442,11 @@ Match class (`net/mod.rs`, all installed at `:374-390`):
   `effective_connection`). Since 0.4.2 main-menu entry keeps a stored
   Quickplay, and the only write to the stored connection outside the scene
   hooks is the demotion of an unmarked Singles/Doubles stage to Offline five
-  seconds after its load (`offline_match_due`). **Deliberate difference,
+  seconds after its load (`offline_match_due`); since `4573890` only a stage
+  whose own scene words were not online is checked
+  (`auto_policy::stale_check_applies`), because Eden's LAN Quickplay battles
+  reached the latency mark 5–17 s after the load and were demoted to
+  offline/singles. **Deliberate difference,
   0.10.2:** stage setup makes an Offline connection Quickplay when the game's
   scene words name an online Quickplay or Elite stage (mode `0x0701xxxx` with
   melee `0x0d`, `0x0e` or `0x10`; `auto_policy::is_online_stage`, code 107
