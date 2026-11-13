@@ -1,6 +1,6 @@
 # Implementation and validation status
 
-Checked on 2026-11-13 against `main` (version 0.10.5, not released) and the
+Checked on 2026-11-13 against `main` (version 0.10.6, the release candidate, not released) and the
 latest release, **0.10.4**; the version sections below are dated records.
 Exact release/build and console evidence is in
 [VALIDATION.md](VALIDATION.md). Releases: 0.10.4 `21c0009`, 0.10.2 `73488c1`,
