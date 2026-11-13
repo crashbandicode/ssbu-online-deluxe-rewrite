@@ -3,7 +3,8 @@
 Phases, from each file's own scene lines:
 - menu: offline/inactive heartbeats (css=0) in the `--menu-window` seconds before the first scene change;
 - css: heartbeats with css=1 before the first */training heartbeat;
-- load: */training heartbeats less than `--settle` seconds after the scene changed to */training;
+- load: heartbeats after the last CSS heartbeat (the game loads the stage and fighters before the packed scene says
+  training) and */training heartbeats less than `--settle` seconds after the scene changed to */training;
 - training: */training heartbeats from `--settle` seconds on (one Training entry: up to the next scene change).
 `peak` is the largest mem_used of the file.
 
@@ -53,6 +54,8 @@ def phases(text, menu_window=30.0, settle=15.0):
     training_at = next((t for t, _, to in changes if to.endswith("/training")), None)
     after = [t for t, _, _ in changes if training_at is not None and t > training_at]
     training_end = after[0] if after else float("inf")
+    css_end = max((t for t, _, css, _ in beats if css == 1 and (training_at is None or t < training_at)),
+                  default=None)
     groups = {name: [] for name in PHASES}
     for t, scene, css, used in beats:
         if t < first_change and scene == "offline/inactive" and css == 0 and t >= first_change - menu_window:
@@ -61,6 +64,8 @@ def phases(text, menu_window=30.0, settle=15.0):
             groups["css"].append(used)
         elif scene.endswith("/training") and training_at is not None and training_at <= t < training_end:
             groups["load" if t - training_at < settle else "training"].append(used)
+        elif training_at is not None and css_end is not None and css_end < t < training_at:
+            groups["load"].append(used)
     out = {name: summary(groups[name]) for name in PHASES}
     out["peak"] = round(max(used for _, _, _, used in beats) / MIB, 1)
     out["training_entered_at"] = training_at

@@ -270,6 +270,22 @@ buffer exist (`imgui_nvn.cpp`). Detection is by export, not by file path.
   symbols are not dynamic exports. The standalone module can export the same
   names from its own compiled copy. `LookupSymbol` is not used for `ig*`,
   because that lookup would follow the export, not this NRO's copy.
+  Since 2026-11-13 (`6c05693`), when that same standalone also exports them
+  (imgui-smash 1.2.0), the External path, before the setup export:
+  - calls `imgui_smash_declare_paged_index_reader_v1` with the draw thunk: the
+    pinned archive carries `0001-paged-codepoint-index.patch`, so this NRO's
+    `ig*` read a paged index. The standalone pages its fonts' index only when
+    every plugin that names one of its context exports declared this, which
+    makes the overlay's index the embedded host's (`recorded`, `late` or
+    `unbound` in `overlay_host_external_paged_reader`; events `Compatibility 6`
+    with the result);
+  - keeps the standalone's counter getters (`imgui_smash_font_stats_wrapper`,
+    `_font_dynamic_set_wrapper`, `_draw_stats_wrapper`,
+    `_frame_guard_stats_wrapper`, `imgui_smash_host_clients_v1`), and
+    `renderer-status.txt` then has `imgui_stats=external` with the embedded
+    host's frame, draw and font lines (one formatter for both) plus
+    `imgui_host_clients=<n> declared=<n> declarations=<n> plugins=<n>
+    index=paged|dense`. Without the getters it stays `imgui_stats=not_embedded`.
 - **Refuse** when any standalone export is present but the pair or the version
   tag is not. No `imgui_smash_init`, no draw callback, no `ig*` call. The NVN
   observation hook still chains to `original!()` so window setup keeps running.

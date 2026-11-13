@@ -22,6 +22,7 @@ SAMPLE = log([
     beat(126.0, "quickplay/inactive", 2050.0),
     beat(131.0, "quickplay/inactive", 2380.0, css=1),
     beat(136.0, "quickplay/inactive", 2390.0, css=1),
+    beat(138.0, "quickplay/inactive", 2450.0),
     "[HangTrace] scene quickplay/inactive -> quickplay/training t=140.000 tick=0x3",
     beat(142.0, "quickplay/training", 2600.0),
     beat(150.0, "quickplay/training", 2880.0),
@@ -38,8 +39,8 @@ class HeartbeatMemoryTest(unittest.TestCase):
         # Boot's 220 MiB is outside the 30 s before the first change.
         self.assertEqual(result["menu"], {"n": 3, "min": 2100.0, "median": 2110.0, "max": 2120.0})
         self.assertEqual(result["css"], {"n": 2, "min": 2380.0, "median": 2385.0, "max": 2390.0})
-        # Load: the first 15 s after the change (142 and 150).
-        self.assertEqual(result["load"], {"n": 2, "min": 2600.0, "median": 2740.0, "max": 2880.0})
+        # Load: after the CSS (138, before the scene says training) and the first 15 s after the change (142, 150).
+        self.assertEqual(result["load"], {"n": 3, "min": 2450.0, "median": 2600.0, "max": 2880.0})
         # Settled Training: 15 s after the change, up to the next change (the CSS beat after it is not Training).
         self.assertEqual(result["training"], {"n": 2, "min": 2882.0, "median": 2883.0, "max": 2884.0})
         self.assertEqual(result["peak"], 2884.0)
