@@ -34,8 +34,17 @@ static TRACKED_MODULE: AtomicU64 = AtomicU64::new(0);
 static CUT_IN_ORIGINAL: AtomicUsize = AtomicUsize::new(0);
 static LAST_WRITTEN: AtomicU32 = AtomicU32::new(0);
 static MANAGER_SLOT: AtomicUsize = AtomicUsize::new(0);
+/// Tick counts: the Main hook only tries it, the diagnostics thread copies
+/// it. Its flags come from `ARMED`, `CUT_IN_INSTALLED` and `COUNT_ONLY` when
+/// the file is written, and `FLAGS_GENERATION` counts their changes.
 static TICKS: Mutex<TickLog> = Mutex::new(TickLog::idle());
+static FLAGS_GENERATION: AtomicU32 = AtomicU32::new(0);
+static LAST_FLAGS: AtomicU32 = AtomicU32::new(0);
+/// Game threads only (fighter Main, cut-in, module load and unload, present):
+/// a plugin thread asks for a reset with [`request_reset`] instead, so no hook
+/// waits on a plugin thread here (ssbu-mod-playbook WORKFLOW).
 static GATE: Mutex<()> = Mutex::new(());
+static RESET_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 extern "C" {
     #[link_name = "\u{1}_ZN3app8lua_bind24WorkModule__get_int_implEPNS_26BattleObjectModuleAccessorEi"]
@@ -61,9 +70,7 @@ pub(super) fn configure() {
     cache_manager_slot();
     let count_only = Path::new(DATA_DIR).join(COUNT_FLAG).exists();
     COUNT_ONLY.store(count_only, Ordering::Release);
-    let mut ticks = lock_ticks();
-    ticks.count_only = count_only;
-    ticks.generation = ticks.generation.wrapping_add(1);
+    FLAGS_GENERATION.fetch_add(1, Ordering::AcqRel);
 }
 
 pub(super) fn view() -> HookView {
@@ -102,21 +109,44 @@ pub(super) fn on_common_unloaded(module: u64) {
     ARMED_BASE.store(0, Ordering::Release);
     TRACKED_MODULE.store(0, Ordering::Release);
     reset_reports();
-    let mut ticks = lock_ticks();
-    ticks.main_armed = false;
-    ticks.generation = ticks.generation.wrapping_add(1);
+    FLAGS_GENERATION.fetch_add(1, Ordering::AcqRel);
 }
 
+/// Game threads (the module load and unload hooks): reset now.
 pub(super) fn reset_reports() {
+    let _gate = lock_gate();
+    RESET_REQUESTED.store(false, Ordering::Release);
+    reset_locked();
+}
+
+/// Any thread: the next fighter Main, cut-in or present hook resets under
+/// `GATE`. The scene driver calls this, from hooks and from the diagnostics
+/// thread's stale check alike.
+pub(super) fn request_reset() {
+    RESET_REQUESTED.store(true, Ordering::Release);
+}
+
+/// With `GATE` held: a requested reset, once.
+fn apply_requested_reset_locked() {
+    if RESET_REQUESTED.swap(false, Ordering::AcqRel) {
+        reset_locked();
+    }
+}
+
+fn reset_locked() {
     // GATE, then the scaler, then the resolution policy. Clear tokens before
     // the scene reset so a stale token cannot pop the next scene's report.
-    let _gate = lock_gate();
     perf_scaler::clear_global();
     super::adaptive_drs::reset();
     crate::resolution::reset_scene();
 }
 
+/// The present hook, every tracked present.
 pub(super) fn sync_resolution() {
+    if RESET_REQUESTED.load(Ordering::Acquire) {
+        let _gate = lock_gate();
+        apply_requested_reset_locked();
+    }
     let decision = crate::render_policy::load_decision();
     let settings = super::settings();
     let setting = crate::resolution::active_setting(
@@ -141,17 +171,25 @@ pub(super) fn sync_resolution() {
 }
 
 pub(super) fn poll() {
-    let ticks = {
-        let guard = lock_ticks();
+    let mut ticks = {
+        let guard = TICKS.lock().unwrap_or_else(|err| err.into_inner());
         *guard
     };
-    if ticks.generation == 0 || ticks.generation == LAST_WRITTEN.load(Ordering::Acquire) {
+    let flags = FLAGS_GENERATION.load(Ordering::Acquire);
+    if (ticks.generation == 0 && flags == 0)
+        || (ticks.generation == LAST_WRITTEN.load(Ordering::Acquire)
+            && flags == LAST_FLAGS.load(Ordering::Acquire))
+    {
         return;
     }
+    ticks.main_armed = ARMED.load(Ordering::Acquire);
+    ticks.cut_in_installed = CUT_IN_INSTALLED.load(Ordering::Acquire);
+    ticks.count_only = COUNT_ONLY.load(Ordering::Acquire);
     let text = ticks.text(crate::build_info::BUILD_ID);
     if let Ok(mut file) = File::create(Path::new(DATA_DIR).join(TICK_FILE)) {
         if file.write_all(text.as_bytes()).is_ok() && file.sync_all().is_ok() {
             LAST_WRITTEN.store(ticks.generation, Ordering::Release);
+            LAST_FLAGS.store(flags, Ordering::Release);
         }
     }
 }
@@ -184,12 +222,7 @@ fn install_site(base: u64) {
     }
     ARMED_BASE.store(base, Ordering::Release);
     ARMED.store(true, Ordering::Release);
-    {
-        let mut ticks = lock_ticks();
-        ticks.main_armed = true;
-        ticks.count_only = COUNT_ONLY.load(Ordering::Acquire);
-        ticks.generation = ticks.generation.wrapping_add(1);
-    }
+    FLAGS_GENERATION.fetch_add(1, Ordering::AcqRel);
     record(Code::FighterMain, 1, site);
     logging::startup_phase("fighter_main_armed");
     if !COUNT_ONLY.load(Ordering::Acquire) {
@@ -232,11 +265,7 @@ fn install_cut_in() {
         return;
     }
     CUT_IN_INSTALLED.store(true, Ordering::Release);
-    {
-        let mut ticks = lock_ticks();
-        ticks.cut_in_installed = true;
-        ticks.generation = ticks.generation.wrapping_add(1);
-    }
+    FLAGS_GENERATION.fetch_add(1, Ordering::AcqRel);
     record(Code::HookInstalled, CUT_IN_OFFSET as u64, after as u64);
     logging::startup_phase("fighter_cut_in_ready");
 }
@@ -254,8 +283,9 @@ unsafe fn fighter_main_body(this: u64) {
     let present = nvn::tracked_presents();
     match read_tick(this) {
         Ok(sample) => {
-            {
-                let mut ticks = lock_ticks();
+            // While the diagnostics thread copies the counts, this tick is
+            // not counted (`hook_lock_skipped` counts it instead).
+            if let Some(mut ticks) = crate::hook_lock::try_take(&TICKS) {
                 ticks.note(
                     sample.entry,
                     sample.kind,
@@ -268,6 +298,7 @@ unsafe fn fighter_main_body(this: u64) {
                 return;
             }
             let _gate = lock_gate();
+            apply_requested_reset_locked();
             if !ARMED.load(Ordering::Acquire) {
                 return;
             }
@@ -287,8 +318,9 @@ unsafe fn fighter_main_body(this: u64) {
             note_move_trigger(sample.entry, which, moved);
         }
         Err(reason) => {
-            let mut ticks = lock_ticks();
-            ticks.reject(reason, present);
+            if let Some(mut ticks) = crate::hook_lock::try_take(&TICKS) {
+                ticks.reject(reason, present);
+            }
         }
     }
 }
@@ -320,6 +352,7 @@ unsafe fn cut_in_body(accessor: *mut c_void) {
         return;
     };
     let _gate = lock_gate();
+    apply_requested_reset_locked();
     if COUNT_ONLY.load(Ordering::Acquire) || !ARMED.load(Ordering::Acquire) {
         return;
     }
@@ -489,10 +522,6 @@ fn reason_code(reason: &str) -> u64 {
         "hook_failed" => 7,
         _ => 9,
     }
-}
-
-fn lock_ticks() -> std::sync::MutexGuard<'static, TickLog> {
-    TICKS.lock().unwrap_or_else(|err| err.into_inner())
 }
 
 fn lock_gate() -> std::sync::MutexGuard<'static, ()> {

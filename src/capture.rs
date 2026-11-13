@@ -110,11 +110,11 @@ impl Finish {
     }
 }
 
-/// One ring row. `begin`/`end` drive the elapsed check, `clock_valid` is the
+/// One ring row. `start_tick`/`end` drive the elapsed check, `clock_valid` is the
 /// rule whose violation ends the capture `clock_invalid`, and `csv` writes the
 /// row's line in its stream.
 pub trait Entry: Copy {
-    fn begin(&self) -> u64;
+    fn start_tick(&self) -> u64;
     fn end(&self) -> u64;
     fn clock_valid(&self, previous: Option<&Self>) -> bool;
     fn csv(&self, out: &mut dyn Write, n: usize) -> io::Result<()>;
@@ -132,7 +132,7 @@ pub struct Sample {
 }
 
 impl Entry for Sample {
-    fn begin(&self) -> u64 {
+    fn start_tick(&self) -> u64 {
         self.tick
     }
     fn end(&self) -> u64 {
@@ -171,7 +171,7 @@ pub struct Event {
 }
 
 impl Entry for Event {
-    fn begin(&self) -> u64 {
+    fn start_tick(&self) -> u64 {
         self.begin
     }
     fn end(&self) -> u64 {
@@ -298,13 +298,13 @@ impl<T: Entry> Ring<T> {
         };
         if state.phase != Phase::Recording
             || self.epoch.load(Ordering::Acquire) != epoch
-            || row.begin() < state.id
+            || row.start_tick() < state.id
         {
             return;
         }
         let invalid = !row.clock_valid(state.last.as_ref());
         if state.total == 0 {
-            state.first = row.begin();
+            state.first = row.start_tick();
         }
         state.last = Some(row);
         // `begin` reserved the capacity, so this push never reallocates.

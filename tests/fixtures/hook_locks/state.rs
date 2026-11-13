@@ -17,6 +17,13 @@ pub fn install_only() {
     let _guard = STATE.lock();
 }
 
+/// A function whose name a hook also uses for a tuple-pattern local: that local's cast is not a call.
+pub fn level() -> u32 {
+    *OTHER.lock().unwrap()
+}
+
+static OTHER: Mutex<u32> = Mutex::new(0);
+
 pub struct Ring {
     rows: Mutex<Vec<u32>>,
 }

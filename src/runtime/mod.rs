@@ -126,11 +126,25 @@ pub(super) fn saved_render_mode() -> crate::config::RenderMode {
 
 /// The whole configuration, `hide_plugin_pages` included: for the window,
 /// the config writer and [`publish`].
+/// Plugin threads only: it waits for `PLUGIN_PAGES`. The window, which runs
+/// inside the present hook, uses [`try_settings_with_pages`].
 pub(super) fn settings_with_pages() -> Config {
     let plugin_pages = PLUGIN_PAGES
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .clone();
+    settings_with(plugin_pages)
+}
+
+/// [`settings_with_pages`] for the window, or `None` while a plugin thread
+/// holds `PLUGIN_PAGES` (the window then keeps the pages it last read).
+pub(super) fn try_settings_with_pages() -> Option<Config> {
+    let plugin_pages = crate::hook_lock::try_take(&PLUGIN_PAGES)?.clone();
+    Some(settings_with(plugin_pages))
+}
+
+/// The whole configuration with `plugin_pages` as given.
+pub(super) fn settings_with(plugin_pages: crate::config::PluginPages) -> Config {
     Config {
         plugin_pages,
         ..settings()
@@ -223,11 +237,28 @@ pub(super) fn stealth() -> bool {
 }
 
 /// Makes `config` current and due for saving. It must be whole: a parse
-/// result or [`settings_with_pages`], never [`settings`].
+/// result or [`settings_with_pages`], never [`settings`]. Plugin threads only:
+/// it waits for `PLUGIN_PAGES`; the window uses [`try_publish`].
 pub(super) fn publish(config: &Config) {
     *PLUGIN_PAGES
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner) = config.plugin_pages.clone();
+    publish_atomics(config);
+}
+
+/// [`publish`] for the window: publishes nothing and returns false while a
+/// plugin thread holds `PLUGIN_PAGES`, so the window can try again next frame.
+pub(super) fn try_publish(config: &Config) -> bool {
+    let Some(mut pages) = crate::hook_lock::try_take(&PLUGIN_PAGES) else {
+        return false;
+    };
+    *pages = config.plugin_pages.clone();
+    drop(pages);
+    publish_atomics(config);
+    true
+}
+
+fn publish_atomics(config: &Config) {
     let mode_changed = saved_render_mode() != config.render_mode;
     let auto_changed = AUTO_PROFILE.load(Ordering::Acquire) != config.auto_profile;
     let previous_buffer = INPUT_BUFFER.swap(config.input_buffer, Ordering::AcqRel);

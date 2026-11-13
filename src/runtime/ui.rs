@@ -1,5 +1,5 @@
 //! Fork-style global Player Info window. This window does not write panes.
-use super::{cells, imgui::*, input, overlay_host, publish, record, settings_with_pages, Code};
+use super::{cells, imgui::*, input, overlay_host, record, Code};
 use crate::hoc_game_aware::{Indicator, MarkTone};
 use crate::menu::{
     mark_editing, net_profile_value, opp_line, perf_footer, strip_line, strip_segments, you_line,
@@ -19,6 +19,10 @@ struct UiState {
     count: u64,
     previous_timing_buttons: u64,
     surface_gen: u64,
+    /// `hide_plugin_pages` as last read, for a frame that finds the lock busy.
+    pages: crate::config::PluginPages,
+    /// An edit `try_publish` could not publish yet; tried again next frame.
+    unpublished: Option<crate::config::Config>,
 }
 static UI: Mutex<Option<UiState>> = Mutex::new(None);
 static INSTALLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -983,7 +987,20 @@ unsafe fn draw_strip((rows, plain, color, second): &Strip, privacy: Option<(Priv
 /// reconcile and the chord records of one draw. Returns what the window shows.
 unsafe fn poll(ui: &mut UiState, sample: input::Sample) -> Frame {
     let buttons = sample.buttons;
-    let mut config = settings_with_pages();
+    // The draw runs inside the present hook, so `hide_plugin_pages` is only
+    // tried: a frame that finds it busy keeps the last pages, and an edit that
+    // could not be published stays the window's configuration until it is.
+    let mut config = if let Some(waiting) = ui.unpublished.take() {
+        if !super::try_publish(&waiting) {
+            ui.unpublished = Some(waiting.clone());
+        }
+        waiting
+    } else if let Some(current) = super::try_settings_with_pages() {
+        ui.pages = current.plugin_pages.clone();
+        current
+    } else {
+        super::settings_with(ui.pages.clone())
+    };
     let saved = config.clone();
     let previous_view = ui.controls.view;
     let command_edge = ui.controls.command_edge(buttons);
@@ -1016,7 +1033,11 @@ unsafe fn poll(ui: &mut UiState, sample: input::Sample) -> Frame {
             }
             ProfileAction::Unchanged => {}
         }
-        publish(&config);
+        if super::try_publish(&config) {
+            ui.pages = config.plugin_pages.clone();
+        } else {
+            ui.unpublished = Some(config.clone());
+        }
         // `a` carried the FX mode until 0.5.0 and is always 0 now.
         record(Code::MenuChanged, 0, config.input_buffer as i64 as u64);
     }
@@ -1132,6 +1153,8 @@ unsafe extern "C" fn draw() {
         count: 0,
         previous_timing_buttons: 0,
         surface_gen: 0,
+        pages: crate::config::PluginPages::EMPTY,
+        unpublished: None,
     });
     let sampled = ui.count.is_multiple_of(300);
     if sampled {

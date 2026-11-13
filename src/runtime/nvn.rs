@@ -613,9 +613,10 @@ pub(super) fn write_status() {
                     let view = super::fighter_main::view();
                     crate::resolution::triggers_available(view.callback_armed, view.count_only)
                 },
-                crate::resolution::status()
+                crate::resolution::published_status()
             )
         );
+        let _ = writeln!(file, "hook_lock_skipped={}", crate::hook_lock::skipped());
         let settings = super::settings();
         let counters = crate::perf_scaler::global().counters();
         let _ = writeln!(

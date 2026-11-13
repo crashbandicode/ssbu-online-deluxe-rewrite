@@ -13,7 +13,8 @@
 
 use core::ffi::{c_char, c_void};
 use deluxe_plugin_abi as abi;
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 /// How a row behaves.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -162,13 +163,39 @@ pub struct ValueText {
 
 /// Registered plugins plus the host-side pending bookkeeping. The runtime uses
 /// one global instance; tests use their own so parallel tests do not race.
+///
+/// The overlay's draw callback (inside the game's present hook) and the
+/// diagnostics thread both use it, so nothing here waits for the other side
+/// (ssbu-mod-playbook WORKFLOW, "Hooks never wait on a plugin thread"):
+/// plugins are published slot by slot and read without a lock, and the
+/// bookkeeping is one mutex that the shared paths only try
+/// ([`crate::hook_lock::try_take`]); a busy try leaves the work for the next
+/// call. Only [`Self::take_writes`], the diagnostics thread's, waits.
 pub struct Registry {
-    plugins: Mutex<Vec<Arc<Plugin>>>,
+    /// Registration order; every slot below `count` is set and never changes.
+    slots: [AtomicPtr<Plugin>; abi::MAX_PLUGINS],
+    count: AtomicUsize,
+    book: Mutex<Book>,
+}
+
+struct Book {
     /// `(plugin, option, choice)` of requests answered `Pending` and not yet
     /// seen in the plugin's live value.
-    pending: Mutex<Vec<(usize, usize, usize)>>,
-    last_step: Mutex<Option<StepResult>>,
-    writes: Mutex<Vec<PersistWrite>>,
+    pending: Vec<(usize, usize, usize)>,
+    last_step: Option<StepResult>,
+    writes: Vec<PersistWrite>,
+}
+
+impl Drop for Registry {
+    fn drop(&mut self) {
+        for slot in &self.slots {
+            let raw = slot.swap(std::ptr::null_mut(), Ordering::AcqRel);
+            if !raw.is_null() {
+                // SAFETY: `register` stored it with `Arc::into_raw`, once.
+                drop(unsafe { Arc::from_raw(raw) });
+            }
+        }
+    }
 }
 
 impl Default for Registry {
@@ -413,39 +440,85 @@ pub fn apply_ini_assignment(text: &str, key: &str, value: &str) -> String {
 impl Registry {
     pub const fn new() -> Self {
         Self {
-            plugins: Mutex::new(Vec::new()),
-            pending: Mutex::new(Vec::new()),
-            last_step: Mutex::new(None),
-            writes: Mutex::new(Vec::new()),
+            slots: [const { AtomicPtr::new(std::ptr::null_mut()) }; abi::MAX_PLUGINS],
+            count: AtomicUsize::new(0),
+            book: Mutex::new(Book {
+                pending: Vec::new(),
+                last_step: None,
+                writes: Vec::new(),
+            }),
         }
     }
 
-    /// Drains queued INI writes for the background thread.
+    /// The bookkeeping, or `None` while the other side holds it.
+    fn try_book(&self) -> Option<MutexGuard<'_, Book>> {
+        crate::hook_lock::try_take(&self.book)
+    }
+
+    /// Drains queued INI writes. Diagnostics thread only: the one caller that
+    /// waits for the bookkeeping.
     pub fn take_writes(&self) -> Vec<PersistWrite> {
-        self.writes
+        let mut book = self
+            .book
             .lock()
-            .map(|mut writes| std::mem::take(&mut *writes))
-            .unwrap_or_default()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        std::mem::take(&mut book.writes)
+    }
+
+    fn plugin_at(&self, index: usize) -> Option<Arc<Plugin>> {
+        let raw = self.slots.get(index)?.load(Ordering::Acquire);
+        if raw.is_null() {
+            return None;
+        }
+        // SAFETY: a set slot holds one `Arc::into_raw` reference that lives as
+        // long as the registry; this adds a reference of our own.
+        unsafe {
+            Arc::increment_strong_count(raw);
+            Some(Arc::from_raw(raw))
+        }
     }
 
     /// Registration order is the display order.
     pub fn snapshot(&self) -> Vec<Arc<Plugin>> {
-        self.plugins.lock().map(|p| p.clone()).unwrap_or_default()
+        let count = self.count.load(Ordering::Acquire).min(abi::MAX_PLUGINS);
+        (0..count).filter_map(|i| self.plugin_at(i)).collect()
     }
 
     /// Inserts a validated plugin. Returns its handle or a `REGISTER_ERR_*` code.
+    /// Lock-free: a registrant claims the first free slot with one
+    /// compare-exchange and checks for a duplicate id below every slot it
+    /// tries, so two registrants of one id cannot both succeed.
     pub fn register(&self, plugin: Plugin) -> i32 {
-        let Ok(mut plugins) = self.plugins.lock() else {
-            return abi::REGISTER_ERR_FULL;
-        };
-        if plugins.len() >= abi::MAX_PLUGINS {
-            return abi::REGISTER_ERR_FULL;
+        let plugin = Arc::new(plugin);
+        let mut index = self.count.load(Ordering::Acquire);
+        loop {
+            if index >= abi::MAX_PLUGINS {
+                return abi::REGISTER_ERR_FULL;
+            }
+            if (0..index)
+                .filter_map(|i| self.plugin_at(i))
+                .any(|p| p.id == plugin.id)
+            {
+                return abi::REGISTER_ERR_DUPLICATE;
+            }
+            let raw = Arc::into_raw(plugin.clone()).cast_mut();
+            match self.slots[index].compare_exchange(
+                std::ptr::null_mut(),
+                raw,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            ) {
+                Ok(_) => {
+                    self.count.fetch_max(index + 1, Ordering::AcqRel);
+                    return index as i32;
+                }
+                Err(_) => {
+                    // SAFETY: the reference made just above, never stored.
+                    drop(unsafe { Arc::from_raw(raw) });
+                    index += 1;
+                }
+            }
         }
-        if plugins.iter().any(|p| p.id == plugin.id) {
-            return abi::REGISTER_ERR_DUPLICATE;
-        }
-        plugins.push(Arc::new(plugin));
-        (plugins.len() - 1) as i32
     }
 
     /// The C entry: parse, then insert.
@@ -459,27 +532,10 @@ impl Registry {
         }
     }
 
-    fn pending_for(&self, plugin: usize, option: usize) -> Option<usize> {
-        self.pending
-            .lock()
-            .ok()?
-            .iter()
-            .find_map(|(p, o, choice)| (*p == plugin && *o == option).then_some(*choice))
-    }
-
-    fn set_pending(&self, plugin: usize, option: usize, choice: Option<usize>) {
-        let Ok(mut pending) = self.pending.lock() else {
-            return;
-        };
-        pending.retain(|(p, o, _)| !(*p == plugin && *o == option));
-        if let Some(choice) = choice {
-            pending.push((plugin, option, choice));
-        }
-    }
-
     /// Current display text. Pure: a pending request stays shown until
     /// [`Self::reconcile_pending`], which the overlay runs before every draw,
-    /// sees the plugin's live value reach it and persists it.
+    /// sees the plugin's live value reach it and persists it. While the other
+    /// side holds the bookkeeping, this frame shows the row as not pending.
     pub fn value(&self, plugin_index: usize, plugin: &Plugin, option: usize) -> ValueText {
         let Some(spec) = plugin.options.get(option) else {
             return ValueText {
@@ -494,7 +550,8 @@ impl Registry {
                 .and_then(|index| spec.choices.get(index).cloned())
                 .unwrap_or_else(|| "Unavailable".to_owned()),
             pending: self
-                .pending_for(plugin_index, option)
+                .try_book()
+                .and_then(|book| book.pending_for(plugin_index, option))
                 .is_some_and(|wanted| Some(wanted) != current),
             tone: current.map_or(abi::TONE_NEUTRAL, |index| spec.tone_of(index)),
         }
@@ -507,16 +564,21 @@ impl Registry {
         if direction == 0 {
             return None;
         }
-        let plugin = self.snapshot().get(plugin_index)?.clone();
+        let plugin = self.plugin_at(plugin_index)?;
         let spec = plugin.options.get(option)?;
         if !spec.editable() {
             return None;
         }
         let current = plugin.current(option)?;
+        // The pending entry, the write and the last step change together with
+        // the request, so the bookkeeping is held across it; while the other
+        // side holds it, the edge asks nothing (the plugin is not asked for a
+        // change the host could not record).
+        let mut book = self.try_book()?;
         // Step from an outstanding pending request rather than the live value,
         // so a second Left/Right can take a pending change back instead of
         // re-requesting the same choice.
-        let base = self.pending_for(plugin_index, option).unwrap_or(current);
+        let base = book.pending_for(plugin_index, option).unwrap_or(current);
         let requested = wrap(base, direction, spec.choices.len());
         let status = plugin.request(option, requested);
         // A pending request that merely returns to the live value is a
@@ -525,9 +587,9 @@ impl Registry {
         // `reconcile_pending`), so a plugin that defers in-match edits sees no
         // disk activity until then. Applied writes at once.
         let still_pending = status == RequestStatus::Pending && requested != current;
-        self.set_pending(plugin_index, option, still_pending.then_some(requested));
+        book.set_pending(plugin_index, option, still_pending.then_some(requested));
         if status == RequestStatus::Applied {
-            self.queue_persist(plugin_index, &plugin, option, requested);
+            book.queue_persist(plugin_index, &plugin, option, requested);
         }
         let result = StepResult {
             plugin: plugin_index,
@@ -535,9 +597,7 @@ impl Registry {
             requested,
             status,
         };
-        if let Ok(mut last) = self.last_step.lock() {
-            *last = Some(result);
-        }
+        book.last_step = Some(result);
         Some(result)
     }
 
@@ -545,11 +605,12 @@ impl Registry {
     /// already shows. A plugin may use that as the row's second action
     /// (ssbu-cpu-pilot steps the CPU level); for any other plugin it moves
     /// nothing. Nothing is persisted and nothing is left pending; a row with a
-    /// pending request is left alone.
+    /// pending request is left alone, and so is every row while the other
+    /// side holds the bookkeeping.
     pub fn activate(&self, plugin_index: usize, option: usize) -> Option<StepResult> {
-        let plugin = self.snapshot().get(plugin_index)?.clone();
-        if !plugin.options.get(option)?.editable()
-            || self.pending_for(plugin_index, option).is_some()
+        let plugin = self.plugin_at(plugin_index)?;
+        let mut book = self.try_book()?;
+        if !plugin.options.get(option)?.editable() || book.pending_for(plugin_index, option).is_some()
         {
             return None;
         }
@@ -560,31 +621,68 @@ impl Registry {
             requested: current,
             status: plugin.request(option, current),
         };
-        if let Ok(mut last) = self.last_step.lock() {
-            *last = Some(result);
-        }
+        book.last_step = Some(result);
         Some(result)
     }
 
-    /// The most recent step since the previous call, for diagnostics.
+    /// The most recent step since the previous call, for diagnostics; kept for
+    /// the next call while the other side holds the bookkeeping.
     pub fn take_last_step(&self) -> Option<StepResult> {
-        self.last_step.lock().ok()?.take()
+        self.try_book()?.last_step.take()
+    }
+
+    /// Checks every pending request against the plugin's live value and
+    /// persists the ones that have been applied. The overlay calls this once
+    /// per draw, so a change a plugin applies at match end is written even
+    /// while the Plugins page is hidden; a draw that finds the bookkeeping
+    /// busy leaves it to the next. Callbacks run on the draw thread.
+    pub fn reconcile_pending(&self) {
+        let Some(mut book) = self.try_book() else {
+            return;
+        };
+        if book.pending.is_empty() {
+            return;
+        }
+        let pending = book.pending.clone();
+        for (plugin_index, option, choice) in pending {
+            let Some(plugin) = self.plugin_at(plugin_index) else {
+                continue;
+            };
+            if plugin.current(option) == Some(choice) {
+                book.set_pending(plugin_index, option, None);
+                book.queue_persist(plugin_index, &plugin, option, choice);
+            }
+        }
+    }
+}
+
+impl Book {
+    fn pending_for(&self, plugin: usize, option: usize) -> Option<usize> {
+        self.pending
+            .iter()
+            .find_map(|(p, o, choice)| (*p == plugin && *o == option).then_some(*choice))
+    }
+
+    fn set_pending(&mut self, plugin: usize, option: usize, choice: Option<usize>) {
+        self.pending
+            .retain(|(p, o, _)| !(*p == plugin && *o == option));
+        if let Some(choice) = choice {
+            self.pending.push((plugin, option, choice));
+        }
     }
 
     /// Queues the INI write for `choice` when the plugin persists this option.
     /// Same path and key coalesce to the newest value.
-    fn queue_persist(&self, plugin_index: usize, plugin: &Plugin, option: usize, choice: usize) {
+    fn queue_persist(&mut self, plugin_index: usize, plugin: &Plugin, option: usize, choice: usize) {
         let Some(spec) = plugin.options.get(option) else {
             return;
         };
         let Some(path) = plugin.config_path.as_ref().filter(|_| spec.persist) else {
             return;
         };
-        let Ok(mut writes) = self.writes.lock() else {
-            return;
-        };
-        writes.retain(|w| !(w.path == *path && w.key == spec.config_key));
-        writes.push(PersistWrite {
+        self.writes
+            .retain(|w| !(w.path == *path && w.key == spec.config_key));
+        self.writes.push(PersistWrite {
             plugin: plugin_index,
             option,
             path: path.clone(),
@@ -595,28 +693,6 @@ impl Registry {
                 .and_then(|values| values.get(choice).cloned())
                 .unwrap_or_else(|| choice.to_string()),
         });
-    }
-
-    /// Checks every pending request against the plugin's live value and
-    /// persists the ones that have been applied. The overlay calls this once
-    /// per draw, so a change a plugin applies at match end is written even
-    /// while the Plugins page is hidden. Callbacks run on the draw thread.
-    pub fn reconcile_pending(&self) {
-        let pending: Vec<(usize, usize, usize)> = match self.pending.lock() {
-            Ok(list) if list.is_empty() => return,
-            Ok(list) => list.clone(),
-            Err(_) => return,
-        };
-        let plugins = self.snapshot();
-        for (plugin_index, option, choice) in pending {
-            let Some(plugin) = plugins.get(plugin_index) else {
-                continue;
-            };
-            if plugin.current(option) == Some(choice) {
-                self.set_pending(plugin_index, option, None);
-                self.queue_persist(plugin_index, plugin, option, choice);
-            }
-        }
     }
 }
 
@@ -991,6 +1067,55 @@ mod tests {
 
     fn option(plugin: usize, option: usize) -> PageRow {
         PageRow::Option { plugin, option }
+    }
+
+    #[test]
+    fn concurrent_registrants_get_distinct_handles_and_one_id_registers_once() {
+        let registry = Registry::new();
+        let results: Vec<i32> = std::thread::scope(|s| {
+            let ids = ["a", "b", "c", "d", "same", "same", "same", "same"];
+            let handles: Vec<_> = ids
+                .iter()
+                .map(|id| s.spawn(|| register_fake(&registry, id, "Label", DEMO, &TOGGLE)))
+                .collect();
+            handles.into_iter().map(|h| h.join().unwrap()).collect()
+        });
+        let mut accepted: Vec<i32> = results.iter().copied().filter(|r| *r >= 0).collect();
+        accepted.sort_unstable();
+        assert_eq!(accepted, [0, 1, 2, 3, 4], "{results:?}");
+        assert_eq!(
+            results
+                .iter()
+                .filter(|r| **r == abi::REGISTER_ERR_DUPLICATE)
+                .count(),
+            3
+        );
+        let ids: Vec<String> = registry.snapshot().iter().map(|p| p.id.clone()).collect();
+        assert_eq!(ids.len(), 5);
+        assert_eq!(ids.iter().filter(|id| *id == "same").count(), 1);
+    }
+
+    #[test]
+    fn a_step_while_the_bookkeeping_is_held_asks_the_plugin_nothing() {
+        // The overlay draw runs inside the present hook: it must not wait for
+        // the diagnostics thread (here the test thread holds the lock, and
+        // std's try_lock answers busy to its own holder too).
+        static HELD: FakePlugin = FakePlugin::new([0, 0, 0, 0], abi::REQUEST_APPLIED);
+        let registry = Registry::new();
+        assert_eq!(register_fake(&registry, "held", "Held", DEMO, &HELD), 0);
+        let plugin = registry.snapshot()[0].clone();
+        let guard = registry.book.lock().unwrap();
+        assert_eq!(registry.step(0, 0, 1), None);
+        assert_eq!(registry.activate(0, 0), None);
+        assert_eq!(registry.take_last_step(), None);
+        registry.reconcile_pending();
+        assert!(!registry.value(0, &plugin, 0).pending);
+        assert!(HELD.requests.lock().unwrap().is_empty());
+        drop(guard);
+        let step = registry.step(0, 0, 1).unwrap();
+        assert_eq!((step.requested, step.status), (1, RequestStatus::Applied));
+        assert_eq!(registry.take_last_step(), Some(step));
+        assert_eq!(HELD.requests.lock().unwrap().as_slice(), &[(0, 1)]);
     }
 
     #[test]

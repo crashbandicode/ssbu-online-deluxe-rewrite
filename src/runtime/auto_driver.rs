@@ -338,7 +338,9 @@ pub(crate) fn set_scene(
     }
     log_context(source);
     let _ = current_request();
-    super::fighter_main::reset_reports();
+    // The diagnostics thread's stale check calls this too, so the reset is
+    // handed to the next fighter or present hook rather than taken here.
+    super::fighter_main::request_reset();
 }
 
 pub(crate) fn current_request() -> RenderMode {

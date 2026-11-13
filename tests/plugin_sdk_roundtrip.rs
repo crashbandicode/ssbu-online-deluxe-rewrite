@@ -10,6 +10,9 @@ use deluxe_plugin_sdk::{
 #[path = "../src/plugin_api.rs"]
 #[allow(dead_code)]
 mod plugin_api;
+#[path = "../src/hook_lock.rs"]
+#[allow(dead_code)]
+mod hook_lock;
 
 use plugin_api::{
     has_shared_rows, move_selection, page_plugins, rows_for, selectable, PageRow, Registry,

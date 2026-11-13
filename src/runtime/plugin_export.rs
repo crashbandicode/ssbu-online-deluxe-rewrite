@@ -6,8 +6,6 @@
 use super::{record, Code};
 use deluxe_plugin_abi as abi;
 use skyline::libc::c_char;
-use std::ffi::CString;
-use std::sync::OnceLock;
 
 // The table shape is version 1 and stays so; `register` accepts descriptor
 // versions 2 to 4 under one rule set (see `plugin_api::parse_descriptor`).
@@ -18,8 +16,6 @@ static TABLE: abi::PluginApiV1 = abi::PluginApiV1 {
     host_status,
     host_build,
 };
-
-static BUILD: OnceLock<CString> = OnceLock::new();
 
 /// Exported entry named by `deluxe_plugin_abi::API_SYMBOL`.
 ///
@@ -150,10 +146,8 @@ unsafe extern "C" fn host_status() -> u32 {
     }
 }
 
+/// A static C string from `build.rs`: no lazy initialiser another caller could
+/// be inside when a plugin's hook asks.
 unsafe extern "C" fn host_build() -> *const c_char {
-    BUILD
-        .get_or_init(|| {
-            CString::new(crate::build_info::BUILD_ID).unwrap_or_else(|_| CString::default())
-        })
-        .as_ptr()
+    crate::build_info::BUILD_ID_C.as_ptr()
 }

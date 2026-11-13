@@ -6,7 +6,7 @@
 //! [`commit_original`] runs from the game function hook.
 
 use crate::{config::Platform, render_policy::Profile};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{fence, AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 
 /// Canonical level order. A higher discriminant is a lower resolution.
@@ -719,11 +719,95 @@ fn emit_transition(kind: u8, a: u32, b: u32) {
     }
 }
 
+/// Game threads only: the present, NVN, render and fighter hooks. Plugin
+/// threads read [`published_status`] and never take it, so no hook waits on a
+/// plugin thread here (ssbu-mod-playbook WORKFLOW, "Hooks never wait on a
+/// plugin thread"); a scene reset from a plugin thread goes through
+/// `fighter_main::request_reset`.
 static POLICY: Mutex<Policy> = Mutex::new(Policy::initial());
+/// [`Status`] as of the policy's last use, in [`pack_status`] words behind a
+/// sequence count: odd while the one writer (holding `POLICY`) stores them.
+static PUBLISHED_SEQ: AtomicU64 = AtomicU64::new(0);
+static PUBLISHED: [AtomicU64; 3] = [const { AtomicU64::new(0) }; 3];
 
 fn with_policy<T>(body: impl FnOnce(&mut Policy) -> T) -> T {
     let mut policy = POLICY.lock().unwrap_or_else(|err| err.into_inner());
-    body(&mut policy)
+    let out = body(&mut policy);
+    let words = pack_status(&policy.status());
+    if (0..3).any(|i| PUBLISHED[i].load(Ordering::Relaxed) != words[i])
+        || PUBLISHED_SEQ.load(Ordering::Relaxed) == 0
+    {
+        let seq = PUBLISHED_SEQ.load(Ordering::Relaxed);
+        PUBLISHED_SEQ.store(seq.wrapping_add(1), Ordering::Relaxed);
+        fence(Ordering::Release);
+        for (slot, word) in PUBLISHED.iter().zip(words) {
+            slot.store(word, Ordering::Relaxed);
+        }
+        PUBLISHED_SEQ.store(seq.wrapping_add(2), Ordering::Release);
+    }
+    out
+}
+
+/// The policy's status as the hooks last left it, for plugin threads: no
+/// lock. A read that overlaps the hook's store sleeps a millisecond, which
+/// lets a writer it preempted finish, and reads again.
+pub fn published_status() -> Status {
+    loop {
+        let before = PUBLISHED_SEQ.load(Ordering::Acquire);
+        let words = [
+            PUBLISHED[0].load(Ordering::Relaxed),
+            PUBLISHED[1].load(Ordering::Relaxed),
+            PUBLISHED[2].load(Ordering::Relaxed),
+        ];
+        fence(Ordering::Acquire);
+        if before & 1 == 0 && PUBLISHED_SEQ.load(Ordering::Relaxed) == before {
+            if before == 0 {
+                return Policy::initial().status();
+            }
+            if let Some(status) = unpack_status(words) {
+                return status;
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+}
+
+const NO_LEVEL: u64 = 0xff;
+
+/// `Status` in three words: levels and flags, the crop size, the counters.
+pub fn pack_status(status: &Status) -> [u64; 3] {
+    let crop = status.crop.unwrap_or((0, 0));
+    [
+        status.requested as u64
+            | u64::from(status.dynamic) << 8
+            | (status.effective as u64) << 16
+            | status.applied.map_or(NO_LEVEL, |level| level as u64) << 24
+            | u64::from(status.dirty) << 32
+            | u64::from(status.reports) << 40
+            | u64::from(status.cropped) << 48
+            | u64::from(status.crop.is_some()) << 56,
+        u64::from(crop.0) | u64::from(crop.1) << 32,
+        u64::from(status.crop_counter) | u64::from(status.original_calls) << 32,
+    ]
+}
+
+pub fn unpack_status(words: [u64; 3]) -> Option<Status> {
+    let byte = |shift: u32| (words[0] >> shift) as u8;
+    Some(Status {
+        requested: Level::from_u8(byte(0))?,
+        dynamic: byte(8) != 0,
+        effective: Level::from_u8(byte(16))?,
+        applied: match byte(24) {
+            0xff => None,
+            value => Some(Level::from_u8(value)?),
+        },
+        dirty: byte(32) != 0,
+        reports: byte(40),
+        cropped: byte(48) != 0,
+        crop: (byte(56) != 0).then_some((words[1] as u32, (words[1] >> 32) as u32)),
+        crop_counter: words[2] as u32,
+        original_calls: (words[2] >> 32) as u32,
+    })
 }
 
 pub fn push_report(level: Level) -> PushResult {
@@ -812,6 +896,33 @@ pub fn rearm_fullscreen_reset(delay: IndexDelay, observed: ObservedCrop) -> bool
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_published_status_words_round_trip() {
+        let levels = [
+            Level::P1080,
+            Level::P900,
+            Level::P720,
+            Level::P576,
+            Level::P480,
+        ];
+        for (i, level) in levels.into_iter().enumerate() {
+            let status = Status {
+                requested: level,
+                dynamic: i % 2 == 0,
+                effective: levels[(i + 2) % levels.len()],
+                applied: (i != 1).then_some(levels[(i + 3) % levels.len()]),
+                dirty: i % 3 == 0,
+                reports: (i * 7) as u8,
+                cropped: i % 2 == 1,
+                crop: (i != 4).then_some((1920 - i as u32, 1080 + i as u32)),
+                crop_counter: u32::MAX - i as u32,
+                original_calls: 40_000 + i as u32,
+            };
+            assert_eq!(unpack_status(pack_status(&status)), Some(status));
+        }
+        assert_eq!(unpack_status([0xee, 0, 0]), None);
+    }
 
     fn token(result: PushResult) -> ReportToken {
         match result {

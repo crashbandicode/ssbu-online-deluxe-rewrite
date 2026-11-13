@@ -11,6 +11,7 @@ pub mod diagnostics;
 pub mod dispatcher_backoff;
 pub mod hoc_game_aware;
 pub mod hook_chain;
+pub mod hook_lock;
 pub mod hud_place;
 mod imgui_host;
 #[cfg(any(test, feature = "diag"))]

@@ -312,6 +312,18 @@ Zero-code bisection for a freeze: delete `CAPTURE_CSS` first (removes the two
 CSS hooks), then add `DISABLE_BACKOFF`, then the other `DISABLE_*` flags. The
 heartbeat keeps running with every family disabled.
 
+**Hooks never wait on a plugin thread (2026-11-13).** No game hook blocks on a
+lock the diagnostics thread or another plugin's thread can take; the reason is
+the TrainingRooms rc.6 Quickplay freeze (ssbu-mod-playbook WORKFLOW). Hook paths
+take such a lock only through `hook_lock::try_take` and leave the work for their
+next call when it is busy: the overlay's plugin bookkeeping, `hide_plugin_pages`
+and the fighter tick counts. `renderer-status.txt` line `hook_lock_skipped=`
+counts those misses since boot. The resolution policy, its report gate and the
+adaptive trigger are taken on game threads only: the diagnostics thread reads the
+policy's published status and hands a scene reset to the next fighter or present
+hook. `tests/hook_locks.rs` lists the locks hooks still reach (all game-thread
+only) and fails on a new one.
+
 ## Coverage build (0.5.2)
 
 A separate, never-shipped variant of the NRO records which functions, lines

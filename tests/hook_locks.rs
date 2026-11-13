@@ -307,6 +307,8 @@ struct Graph {
     uses: BTreeMap<String, BTreeMap<String, Vec<String>>>,
     /// Static `RwLock`s by name.
     rwlocks: BTreeSet<String>,
+    /// `file::STATIC` -> its type's last path segment, for `STATIC.method()` calls.
+    static_types: BTreeMap<String, String>,
 }
 
 fn parse_file(rel: &str, module: &[String], toks: &[Tok], funcs: &mut Vec<Func>) {
@@ -507,6 +509,7 @@ impl Graph {
         let mut funcs = Vec::new();
         let mut uses = BTreeMap::new();
         let mut rwlocks = BTreeSet::new();
+        let mut static_types = BTreeMap::new();
         let excluded = unshipped_modules(src, &files);
         for path in files {
             let rel = path.strip_prefix(src).unwrap().to_string_lossy().replace('\\', "/");
@@ -522,10 +525,26 @@ impl Graph {
                     }
                 }
             }
+            for k in 0..toks.len().saturating_sub(2) {
+                if let (Tok::Ident(kw), Tok::Ident(name), Tok::Punct(':')) = (&toks[k], &toks[k + 1], &toks[k + 2]) {
+                    if kw != "static" {
+                        continue;
+                    }
+                    // `static NAME: a::b::Type<..> = ..`: the type's last segment before its generics.
+                    let ty = toks[k + 3..]
+                        .iter()
+                        .take_while(|t| !matches!(t, Tok::Punct('<') | Tok::Punct('=') | Tok::Punct(';')))
+                        .filter_map(|t| if let Tok::Ident(s) = t { Some(s.clone()) } else { None })
+                        .last();
+                    if let Some(ty) = ty {
+                        static_types.insert(format!("{rel}::{name}"), ty);
+                    }
+                }
+            }
             uses.insert(rel.clone(), parse_uses(&toks));
             parse_file(&rel, &module_of(Path::new(&rel)), &toks, &mut funcs);
         }
-        Graph { funcs, uses, rwlocks }
+        Graph { funcs, uses, rwlocks, static_types }
     }
 
     fn find(&self, key: &str) -> Vec<usize> {
@@ -609,6 +628,11 @@ impl Graph {
             .filter(|&k| ident(k) == Some("let") || toks[k] == Tok::Punct('|'))
             .filter_map(|k| ident(k + 1).filter(|s| *s != "mut").or_else(|| ident(k + 2)))
             .collect();
+        // Tuple patterns: every name in `let (a, mut b) = ..`.
+        for k in (0..toks.len()).filter(|&k| ident(k) == Some("let") && toks.get(k + 1) == Some(&Tok::Punct('('))) {
+            let close = matching(toks, k + 1, '(', ')');
+            shadowed.extend((k + 2..close).filter_map(|j| ident(j).filter(|s| *s != "mut" && *s != "ref")));
+        }
         shadowed.extend(f.params.iter().map(String::as_str));
         for k in 0..toks.len() {
             let Some(name) = ident(k) else { continue };
@@ -630,9 +654,18 @@ impl Graph {
                 if !on_self && !on_static && STD_METHODS.contains(&name) {
                     continue;
                 }
+                // A static of this file whose type is known: only that type's method.
+                let static_type = match &toks[k - 2] {
+                    Tok::Ident(r) if on_static => self.static_types.get(&format!("{}::{r}", f.file)),
+                    _ => None,
+                };
                 for i in 0..self.funcs.len() {
                     let g = &self.funcs[i];
-                    if g.name == name && g.receiver && (!on_self || (g.impl_type == f.impl_type && g.file == f.file)) {
+                    if g.name == name
+                        && g.receiver
+                        && (!on_self || (g.impl_type == f.impl_type && g.file == f.file))
+                        && static_type.is_none_or(|t| g.impl_type.as_ref() == Some(t))
+                    {
                         out.insert(i);
                     }
                 }
@@ -833,19 +866,15 @@ const NOT_HOOK_PATHS: &[(&str, &str)] = &[];
 /// Each row is a known defect to remove, not a permission; the test fails on a lock that is not listed (a new one) and
 /// on a row whose lock no hook reaches any more (delete it), and checks `shared` against the scan.
 const HOOK_LOCKS: &[(&str, bool, &str)] = &[
-    // Found by this test's first run on f33cfef (2026-11-13). Shared with a plugin thread: the playbook's hang class.
-    ("Registry.last_step", true, "overlay draw -> ui::poll -> Registry::step/activate/take_last_step; the diagnostics thread steps plugins too"),
-    ("Registry.pending", true, "overlay draw -> ui::poll -> Registry::reconcile_pending/step; plugin_export and the diagnostics thread"),
-    ("Registry.plugins", true, "overlay draw -> ui::plugin_rows -> Registry::snapshot; plugin registration (another plugin's thread)"),
-    ("Registry.writes", true, "overlay draw -> Registry::queue_persist; the diagnostics thread flushes persistence"),
-    ("Ring.state", true, "css_capture hooks -> api_trace::end -> capture::Ring::begin; the diagnostics thread drains the rings"),
-    ("runtime/mod.rs::PLUGIN_PAGES", true, "overlay draw -> ui::poll -> settings_with_pages/publish; the diagnostics thread saves the config"),
-    ("runtime/plugin_export.rs::BUILD", true, "host_build export -> OnceLock::get_or_init (blocks only while another caller initialises it)"),
-    ("resolution.rs::POLICY", true, "NVN procs, fighter Main / cut-in and render hooks -> resolution::with_policy (state update, no I/O under the lock); the diagnostics thread reads the status"),
-    ("runtime/adaptive_drs.rs::STATE", true, "queue_present and the render hooks -> adaptive_drs::on_present; the diagnostics thread reads it"),
-    ("runtime/fighter_main.rs::GATE", true, "fighter Main / cut-in / module unload hooks; the diagnostics thread's reports"),
-    ("runtime/fighter_main.rs::TICKS", true, "fighter Main / module load and unload hooks; the diagnostics thread's reports"),
-    // Taken only on game threads (hooks) in the scan; still a wait between game threads.
+    // The first run on f33cfef (2026-11-13) found 12 locks, 11 shared with a plugin thread. Fixed the same day: the
+    // Registry's plugins are published lock-free and its bookkeeping, PLUGIN_PAGES and TICKS are only tried on hook
+    // paths (`hook_lock::try_take`); BUILD is a static C string; a plugin thread reads POLICY's published status and
+    // hands scene resets to the hooks (`fighter_main::request_reset`), so GATE, POLICY and the adaptive state are
+    // taken on game threads only; Ring.state was a false edge (`row.begin()`, renamed `start_tick`).
+    // Taken only on game threads (hooks) in the scan: a wait between game threads, not on a plugin thread.
+    ("resolution.rs::POLICY", false, "NVN procs, fighter Main / cut-in and render hooks -> resolution::with_policy (state update, no I/O under the lock)"),
+    ("runtime/adaptive_drs.rs::STATE", false, "queue_present and the render hooks -> adaptive_drs::on_present; resets under GATE from hooks"),
+    ("runtime/fighter_main.rs::GATE", false, "fighter Main / cut-in / module load and unload / present hooks"),
     ("runtime/fighter_probe.rs::STATE", false, "module load and unload hooks -> fighter_probe::publish/snapshot"),
 ];
 
@@ -946,6 +975,9 @@ fn no_new_lock_is_reachable_from_a_hook() {
     for (lock, (op, entries, chain)) in &result.hooks.locks {
         let shared = result.threads.locks.contains_key(lock);
         println!("HOOK-LOCK {lock} .{op}() shared={shared} from {} hook entries, e.g. {}", entries.len(), chain.join(" -> "));
+        if let Some((_, threads, thread_chain)) = result.threads.locks.get(lock) {
+            println!("  thread side: {} entries {:?}, e.g. {}", threads.len(), threads, thread_chain.join(" -> "));
+        }
         match HOOK_LOCKS.iter().find(|(l, _, _)| l == lock) {
             None => problems.push(format!("new: {lock} .{op}() (shared={shared}) reached by {} hook entries, e.g. {}", entries.len(), chain.join(" -> "))),
             Some((_, listed, _)) if *listed != shared => problems.push(format!("{lock}: listed shared={listed}, the scan says {shared}")),
@@ -1069,6 +1101,8 @@ fn a_lock_planted_in_a_hook_path_is_found() {
     assert!(found.contains("state.rs::STATE"), "helper path missed: {found:?}");
     assert!(found.contains("Ring.rows"), "method-call path missed: {found:?}");
     assert!(found.contains("runtime/hooks/shared.rs::CELL"), "OnceLock init missed: {found:?}");
+    // `let (level, ..)` shadows the imported `state::level`: `level as u64` is a cast, not a handed-over function.
+    assert!(!found.contains("state.rs::OTHER"), "tuple-pattern local taken for a function: {found:?}");
     assert_eq!(found.len(), 3, "only the planted locks: {found:?}");
     let chains: Vec<String> = result.hooks.locks.values().map(|(_, _, c)| c.join(" -> ")).collect();
     assert!(chains.iter().all(|c| !c.contains("try_peek") && !c.contains("install_only") && !c.contains("thread_only")), "{chains:?}");

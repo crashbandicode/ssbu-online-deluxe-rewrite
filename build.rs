@@ -50,6 +50,7 @@ fn main() {
     );
     let data = format!(
         "pub const BUILD_ID: &str = {id:?};
+pub const BUILD_ID_C: &core::ffi::CStr = c{id:?};
 pub const GIT_COMMIT: &str = {git:?};
 pub const BUILD_EPOCH: u64 = {epoch};
 "
