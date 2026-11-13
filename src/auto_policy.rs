@@ -196,6 +196,82 @@ pub const fn is_online_stage(initialized: bool, melee: u8, mode: u32) -> bool {
     initialized && mode & 0x7fff_0000 == 0x0701_0000 && matches!(melee, 0x0d | 0x0e | 0x10)
 }
 
+/// What the game itself said at a stage load (`0x25d9288`).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct StageWords {
+    /// `app::smashball::is_training_mode()`: the game's Training mode (melee
+    /// byte `0x20`, mode word `0x04040000` in every log on record).
+    pub training_mode: bool,
+    /// Waiting-room practice ([`is_waiting_practice`]).
+    pub lobby: bool,
+    /// An online Quickplay or Elite stage ([`is_online_stage`]).
+    pub online: bool,
+}
+
+/// A scene hook that may write the stored connection. Every hook's write goes
+/// through [`entry_connection`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Entry {
+    /// Main menu (`0x235aaa0`): [`main_menu_connection`].
+    MainMenu,
+    /// The fork's two Quickplay menu sites (`0x22da160`, `0x22da090`).
+    QuickplayMenu,
+    /// The fork's arena menu site (`0x22d9fa0`).
+    ArenaMenu,
+    /// Local-wireless room entry (`0x1bd45e0`).
+    LocalWireless,
+    /// Stage setup with the game's words at that load: [`stage_connection`].
+    Stage(StageWords),
+}
+
+/// The connection a scene hook writes; `None` leaves the stored one.
+///
+/// The Quickplay menu sites write nothing. `0x22da160` is a scene-factory
+/// entry whose object the offline Games & More flow builds too: both console
+/// boots of 2026-11-13 and Eden since 2026-10-14 logged it on the way to
+/// Training, which then ran as quickplay/training. On the console's Elite path
+/// and in Eden LAN Online neither site fired at all, and the stage's own words
+/// (0.10.2) made those stages Quickplay. So Quickplay comes from the game: an
+/// online stage's words, or the online-latency mark ([`Scene::marked_online`]).
+pub const fn entry_connection(previous: Connection, entry: Entry) -> Option<Connection> {
+    match entry {
+        Entry::MainMenu => Some(main_menu_connection(previous)),
+        Entry::QuickplayMenu => None,
+        Entry::ArenaMenu => Some(Connection::Arena),
+        Entry::LocalWireless => Some(Connection::Local),
+        Entry::Stage(words) => {
+            let next = stage_connection(previous, words);
+            if next as u8 == previous as u8 {
+                None
+            } else {
+                Some(next)
+            }
+        }
+    }
+}
+
+/// The connection a stage runs under, from the stored one and the game's words
+/// at its load. An online Quickplay or Elite stage makes an Offline connection
+/// Quickplay (0.10.2; Local and Arena are kept). A stage in the game's Training
+/// mode that is neither waiting-room practice nor online is local play, so any
+/// stored connection becomes Offline: a Quickplay kept through the main menu
+/// after a session, or an Arena the mis-addressed arena site wrote during
+/// offline Training (Eden `docs-rs7`). Any other stage keeps the stored
+/// connection; [`offline_match_due`] still checks a Singles/Doubles stage
+/// under a stored Quickplay.
+pub const fn stage_connection(stored: Connection, words: StageWords) -> Connection {
+    if words.online {
+        match stored {
+            Connection::Offline => Connection::Quickplay,
+            other => other,
+        }
+    } else if words.training_mode && !words.lobby {
+        Connection::Offline
+    } else {
+        stored
+    }
+}
+
 /// CSS reflects the live Training-mode bit, not the stage that led to it.
 pub fn classify_css(training_mode: bool) -> SceneStatus {
     if training_mode {
@@ -254,7 +330,8 @@ pub fn mode_for(profile: Profile) -> RenderMode {
 /// fired at 72 s, the main menu at 308 s, and the match at 422 s was then
 /// classified offline. The fork kept Quickplay for the same reason; the
 /// rewrite's unconditional reset was the gap. A Quickplay that turns out stale
-/// is demoted by [`offline_match_due`].
+/// is demoted by [`offline_match_due`], and by [`stage_connection`] at a
+/// Training-mode stage.
 pub const fn main_menu_connection(previous: Connection) -> Connection {
     match previous {
         Connection::Quickplay => Connection::Quickplay,
@@ -267,10 +344,10 @@ pub const fn main_menu_connection(previous: Connection) -> Connection {
 /// room for a slow start.
 pub const OFFLINE_CHECK_TICKS: u64 = 5 * 19_200_000;
 
-/// A Singles/Doubles stage under a menu-set Quickplay connection whose
-/// online-latency hook has not fired by the deadline is an offline match (the
-/// menu hook also fires on some offline menus, and Quickplay now survives the
-/// main menu): the connection is demoted to Offline. `armed_tick` 0 is idle.
+/// A Singles/Doubles stage under a stored Quickplay connection whose
+/// online-latency hook has not fired by the deadline is an offline match
+/// (Quickplay survives the main menu, so an offline match can follow a
+/// session): the connection is demoted to Offline. `armed_tick` 0 is idle.
 pub fn offline_match_due(
     connection: Connection,
     status: SceneStatus,
@@ -666,6 +743,223 @@ mod tests {
         for mode in [0, 0x0201_0000, 0x0700_0000, 0x0702_0000, u32::MAX] {
             assert!(!is_online_stage(true, 0x10, mode), "{mode:#x}");
         }
+    }
+
+    /// The stage words of the console logs: Training (Games & More, 2026-11-13
+    /// boots), the Elite waiting room and battle (2026-11-02), Eden's Quickplay
+    /// waiting room and battle (`dun-x1`), and the local-wireless practice.
+    const TRAINING: (u8, u32) = (0x20, 0x0404_0000);
+    const ELITE_PRACTICE: (u8, u32) = (0x0d, 0x0701_0400);
+    const ELITE_BATTLE: (u8, u32) = (0x10, 0x0701_0400);
+    const EDEN_PRACTICE: (u8, u32) = (0x0d, 0x0701_0101);
+    const EDEN_BATTLE: (u8, u32) = (0x0e, 0x0701_0101);
+    const LOCAL_PRACTICE: (u8, u32) = (0x0d, 0x0201_0000);
+    const LOCAL_SMASH: (u8, u32) = (0x00, 0x0201_0000);
+
+    /// What the stage hook derives from the words: `is_training_mode()` is the
+    /// game's predicate over the same melee byte (`0x20`).
+    fn words((melee, mode): (u8, u32)) -> StageWords {
+        StageWords {
+            training_mode: melee == 0x20,
+            lobby: is_waiting_practice(true, melee, mode),
+            online: is_online_stage(true, melee, mode),
+        }
+    }
+
+    /// The stored connection after `entries`, as the runtime applies them.
+    fn after(start: Connection, entries: &[Entry]) -> Connection {
+        entries.iter().fold(start, |stored, entry| {
+            entry_connection(stored, *entry).unwrap_or(stored)
+        })
+    }
+
+    #[test]
+    fn games_and_more_training_is_offline_training() {
+        // Main menu, the Quickplay menu site firing on Games & More, the
+        // Training stage: offline/training, as the stage log must say.
+        let stage = Entry::Stage(words(TRAINING));
+        assert_eq!(
+            after(
+                Connection::Offline,
+                &[Entry::MainMenu, Entry::QuickplayMenu]
+            ),
+            Connection::Offline
+        );
+        assert_eq!(
+            after(
+                Connection::Offline,
+                &[Entry::MainMenu, Entry::QuickplayMenu, stage]
+            ),
+            Connection::Offline
+        );
+        assert!(words(TRAINING).training_mode);
+        assert!(!words(TRAINING).lobby && !words(TRAINING).online);
+        assert_eq!(classify_stage(0, true, 1), SceneStatus::Training);
+        assert_eq!(classify_stage(3, true, 2), SceneStatus::Training);
+        // Before the fix the menu site wrote Quickplay and the stage kept it.
+        assert_eq!(
+            stage_connection(Connection::Quickplay, words(TRAINING)),
+            Connection::Offline
+        );
+    }
+
+    #[test]
+    fn the_quickplay_menu_hooks_set_no_connection() {
+        for previous in [
+            Connection::Offline,
+            Connection::Local,
+            Connection::Arena,
+            Connection::Quickplay,
+        ] {
+            assert_eq!(entry_connection(previous, Entry::QuickplayMenu), None);
+        }
+        // The other menu sites keep their writes.
+        assert_eq!(
+            entry_connection(Connection::Offline, Entry::ArenaMenu),
+            Some(Connection::Arena)
+        );
+        assert_eq!(
+            entry_connection(Connection::Quickplay, Entry::LocalWireless),
+            Some(Connection::Local)
+        );
+        assert_eq!(
+            entry_connection(Connection::Arena, Entry::MainMenu),
+            Some(Connection::Offline)
+        );
+    }
+
+    #[test]
+    fn waiting_room_training_during_a_quickplay_search_is_quickplay_training() {
+        for practice in [ELITE_PRACTICE, EDEN_PRACTICE] {
+            let stage = words(practice);
+            assert!(stage.lobby && stage.online && !stage.training_mode);
+            // The hooks missed the entry (console Elite, Eden LAN): promoted.
+            assert_eq!(
+                after(
+                    Connection::Offline,
+                    &[Entry::MainMenu, Entry::QuickplayMenu, Entry::Stage(stage)]
+                ),
+                Connection::Quickplay
+            );
+            // A stored Quickplay stays.
+            assert_eq!(
+                stage_connection(Connection::Quickplay, stage),
+                Connection::Quickplay
+            );
+            assert_eq!(classify_stage(3, stage.lobby, 2), SceneStatus::Training);
+        }
+        // The local-wireless room's practice is Training under Local.
+        let local = words(LOCAL_PRACTICE);
+        assert!(local.lobby && !local.online && !local.training_mode);
+        assert_eq!(
+            after(
+                Connection::Offline,
+                &[Entry::LocalWireless, Entry::Stage(local)]
+            ),
+            Connection::Local
+        );
+    }
+
+    #[test]
+    fn quickplay_and_elite_battles_keep_their_classification() {
+        for (practice, battle) in [(ELITE_PRACTICE, ELITE_BATTLE), (EDEN_PRACTICE, EDEN_BATTLE)] {
+            let session = [Entry::Stage(words(practice)), Entry::Stage(words(battle))];
+            assert_eq!(after(Connection::Offline, &session), Connection::Quickplay);
+            // A battle with no waiting room before it is promoted by itself.
+            assert_eq!(
+                stage_connection(Connection::Offline, words(battle)),
+                Connection::Quickplay
+            );
+            assert_eq!(
+                match_kind(
+                    after(Connection::Offline, &session),
+                    classify_stage(0x5f, false, 2)
+                ),
+                MatchKind::QuickplaySingles
+            );
+            // Arena and Local are kept, as in 0.10.2.
+            for kept in [Connection::Arena, Connection::Local] {
+                assert_eq!(stage_connection(kept, words(battle)), kept);
+            }
+        }
+    }
+
+    #[test]
+    fn the_main_menu_during_a_live_search_keeps_quickplay() {
+        // Waiting room, then the main menu while the search goes on in the
+        // background, the menus, and the battle the search finds.
+        let mut stored = after(Connection::Offline, &[Entry::Stage(words(ELITE_PRACTICE))]);
+        assert_eq!(stored, Connection::Quickplay);
+        stored = after(stored, &[Entry::MainMenu, Entry::QuickplayMenu]);
+        assert_eq!(stored, Connection::Quickplay);
+        stored = after(stored, &[Entry::Stage(words(ELITE_BATTLE))]);
+        assert_eq!(stored, Connection::Quickplay);
+        // Background matchmaking with no waiting room: the battle's words.
+        assert_eq!(
+            after(
+                Connection::Offline,
+                &[Entry::MainMenu, Entry::Stage(words(EDEN_BATTLE))]
+            ),
+            Connection::Quickplay
+        );
+    }
+
+    #[test]
+    fn training_after_a_quickplay_session_is_offline_training() {
+        // Quickplay kept through the main menu, then Games & More → Training:
+        // the game's Training mode is local play, so the stage is offline; a
+        // battle the search finds later is promoted by its own words.
+        let session = after(Connection::Offline, &[Entry::Stage(words(EDEN_BATTLE))]);
+        let training = after(
+            session,
+            &[
+                Entry::MainMenu,
+                Entry::QuickplayMenu,
+                Entry::Stage(words(TRAINING)),
+            ],
+        );
+        assert_eq!(training, Connection::Offline);
+        assert_eq!(
+            after(training, &[Entry::Stage(words(EDEN_BATTLE))]),
+            Connection::Quickplay
+        );
+        assert_eq!(after(training, &[Entry::MainMenu]), Connection::Offline);
+    }
+
+    #[test]
+    fn a_training_stage_is_offline_whatever_a_hook_stored() {
+        let training = Entry::Stage(words(TRAINING));
+        for stored in [
+            Connection::Offline,
+            Connection::Local,
+            Connection::Arena,
+            Connection::Quickplay,
+        ] {
+            assert_eq!(
+                after(stored, &[training]),
+                Connection::Offline,
+                "{stored:?}"
+            );
+        }
+        // Waiting-room practice is never demoted, even with the Training bit
+        // reported (it is off there on every log; this pins the order).
+        let practice = StageWords {
+            training_mode: true,
+            ..words(ELITE_PRACTICE)
+        };
+        assert_eq!(
+            stage_connection(Connection::Quickplay, practice),
+            Connection::Quickplay
+        );
+        // A local Smash stage keeps what was stored; the stale check covers it.
+        for stored in [
+            Connection::Offline,
+            Connection::Quickplay,
+            Connection::Local,
+        ] {
+            assert_eq!(stage_connection(stored, words(LOCAL_SMASH)), stored);
+        }
+        assert_eq!(entry_connection(Connection::Offline, training), None);
     }
 
     #[test]

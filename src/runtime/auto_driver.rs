@@ -2,7 +2,9 @@
 //! call this; it does not write config.ini.
 
 use super::{record, settings, Code};
-use crate::auto_policy::{self, Connection, Platform, Scene, SceneStatus, Selection};
+use crate::auto_policy::{
+    self, Connection, Entry, Platform, Scene, SceneStatus, Selection, StageWords,
+};
 use crate::config::RenderMode;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 
@@ -70,28 +72,50 @@ pub(crate) fn mark_match() {
 /// Quickplay.
 pub(crate) fn note_main_menu(source: u64) {
     let (connection, _) = scene_pair();
-    let next = auto_policy::main_menu_connection(connection);
-    if next == connection && connection == Connection::Quickplay {
+    let next = auto_policy::entry_connection(connection, Entry::MainMenu);
+    if next == Some(connection) && connection == Connection::Quickplay {
         record(Code::SceneHold, 1, source);
         set_scene(None, Some(SceneStatus::Inactive), source);
     } else {
-        set_scene(Some(next), Some(SceneStatus::Inactive), source);
+        set_scene(next, Some(SceneStatus::Inactive), source);
     }
 }
 
-/// Stage load whose scene words name an online Quickplay stage, Elite Smash
-/// included ([`auto_policy::is_online_stage`], 0.10.2). The menu hooks missed
-/// that entry when the connection is still Offline: it becomes Quickplay, so
-/// the waiting room and the match are online from their stage load instead of
-/// from the latency hook three seconds into the first match. Local and Arena
-/// are kept. Code 107 `a=4`, `b` = the mode word. The caller runs this before
-/// the stage opens its match buffer, because a connection change clears it.
-pub(crate) fn note_online_stage(mode: u32, source: u64) {
-    if !ready() || connection() != Connection::Offline {
+/// A menu-site hook other than the main menu: its connection write comes from
+/// [`auto_policy::entry_connection`]. The Quickplay sites (`0x22da160`,
+/// `0x22da090`) write none, because the offline Games & More flow reaches
+/// `0x22da160` too; code 107 `a=6`, `b` = the hook address, records that one
+/// fired.
+pub(crate) fn note_menu_entry(entry: Entry, status: Option<SceneStatus>, source: u64) {
+    let next = auto_policy::entry_connection(connection(), entry);
+    if entry == Entry::QuickplayMenu {
+        record(Code::SceneHold, 6, source);
+    }
+    set_scene(next, status, source);
+}
+
+/// Stage load: the game's words decide the connection
+/// ([`auto_policy::stage_connection`]). An online Quickplay or Elite stage
+/// makes an Offline connection Quickplay (0.10.2; code 107 `a=4`, `b` = the
+/// mode word), so the waiting room and the match are online from their stage
+/// load instead of from the latency hook three seconds into the first match. A
+/// stage in the game's Training mode makes any stored connection Offline (code
+/// 107 `a=5`, `b` = the previous connection). The caller runs this before the
+/// stage opens its match buffer, because a connection change clears it.
+pub(crate) fn note_stage_words(words: StageWords, mode: u32, source: u64) {
+    if !ready() {
         return;
     }
-    record(Code::SceneHold, 4, u64::from(mode));
-    set_scene(Some(Connection::Quickplay), None, source);
+    let previous = connection();
+    let Some(next) = auto_policy::entry_connection(previous, Entry::Stage(words)) else {
+        return;
+    };
+    if next == Connection::Quickplay {
+        record(Code::SceneHold, 4, u64::from(mode));
+    } else {
+        record(Code::SceneHold, 5, previous as u64);
+    }
+    set_scene(Some(next), None, source);
 }
 
 /// Diagnostics thread, every 500 ms: a Singles/Doubles stage that has run

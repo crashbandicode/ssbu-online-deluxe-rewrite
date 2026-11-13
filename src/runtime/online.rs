@@ -1,14 +1,17 @@
 //! Source-verified 13.0.5 scene entries from the preserved Quickplay fork.
-//! Only tracks context; never changes a scene or network state. Main-menu
-//! entry resets the connection unless Quickplay is live (0.4.2; background
+//! Only tracks context; never changes a scene or network state. Every hook's
+//! connection write follows `auto_policy::entry_connection`. Main-menu entry
+//! resets the connection unless Quickplay is live (0.4.2; background
 //! matchmaking passes through the main menu and the match starts from there,
 //! see `auto_policy::main_menu_connection`); a Quickplay that turns out stale
-//! is demoted five seconds into a match without the online-latency hook.
-//! A stage whose scene words name online Quickplay or Elite Smash promotes an
-//! Offline connection the menu hooks left behind (0.10.2).
+//! is demoted five seconds into a match without the online-latency hook. The
+//! fork's Quickplay menu sites write no connection: the offline Games & More
+//! flow reaches `0x22da160` too. The stage's own words decide instead: online
+//! Quickplay or Elite words promote an Offline connection (0.10.2), and the
+//! game's Training mode makes the stage offline.
 //! An unreadable stage context is ignored.
 use super::{auto_driver, hooks::preflight, record, Code};
-use crate::auto_policy::{self, Connection, SceneStatus};
+use crate::auto_policy::{self, Entry, SceneStatus, StageWords};
 use skyline::hooks::InlineCtx;
 
 extern "C" {
@@ -53,37 +56,25 @@ unsafe fn deluxe_rewrite_main_menu(_: &InlineCtx) {
 #[skyline::hook(offset = 0x22da160, inline)]
 unsafe fn deluxe_rewrite_quickplay(_: &InlineCtx) {
     super::native_banner::drop_scene();
-    auto_driver::set_scene(
-        Some(Connection::Quickplay),
-        Some(SceneStatus::Inactive),
-        0x22da160,
-    );
+    auto_driver::note_menu_entry(Entry::QuickplayMenu, Some(SceneStatus::Inactive), 0x22da160);
 }
 
 #[skyline::hook(offset = 0x22da090, inline)]
 unsafe fn deluxe_rewrite_background_matchmaking(_: &InlineCtx) {
     super::native_banner::drop_scene();
-    auto_driver::set_scene(
-        Some(Connection::Quickplay),
-        Some(SceneStatus::Inactive),
-        0x22da090,
-    );
+    auto_driver::note_menu_entry(Entry::QuickplayMenu, Some(SceneStatus::Inactive), 0x22da090);
 }
 
 #[skyline::hook(offset = 0x22d9fa0, inline)]
 unsafe fn deluxe_rewrite_arena(_: &InlineCtx) {
     super::native_banner::drop_scene();
-    auto_driver::set_scene(Some(Connection::Arena), None, 0x22d9fa0);
+    auto_driver::note_menu_entry(Entry::ArenaMenu, None, 0x22d9fa0);
 }
 
 #[skyline::hook(offset = 0x1bd45e0, inline)]
 unsafe fn deluxe_rewrite_local_wireless(ctx: &InlineCtx) {
     super::native_banner::enter_local_scene(ctx.registers[0].x());
-    auto_driver::set_scene(
-        Some(Connection::Local),
-        Some(SceneStatus::Inactive),
-        0x1bd45e0,
-    );
+    auto_driver::note_menu_entry(Entry::LocalWireless, Some(SceneStatus::Inactive), 0x1bd45e0);
 }
 
 #[skyline::hook(offset = STAGE_SETUP, inline)]
@@ -104,18 +95,24 @@ unsafe fn deluxe_rewrite_stage_setup(ctx: &InlineCtx) {
     let lobby = mode.is_some_and(|(initialized, melee, word)| {
         auto_policy::is_waiting_practice(initialized, melee, word)
     });
-    let status = auto_policy::classify_stage(
-        stage_id,
-        is_training_mode() || lobby,
-        get_fighter_entry_count(),
+    let training_mode = is_training_mode();
+    let status =
+        auto_policy::classify_stage(stage_id, training_mode || lobby, get_fighter_entry_count());
+    // The game's words decide the connection: an online stage the menu hooks
+    // missed (Elite Smash on the console) is Quickplay, and the game's Training
+    // mode is offline whatever a hook stored. Before the match buffer opens: a
+    // connection change clears it.
+    let online = matches!(mode, Some((true, melee, word))
+        if auto_policy::is_online_stage(true, melee, word));
+    auto_driver::note_stage_words(
+        StageWords {
+            training_mode,
+            lobby,
+            online,
+        },
+        mode.map_or(0, |(_, _, word)| word),
+        STAGE_SETUP as u64,
     );
-    // An online stage the menu hooks missed (Elite Smash on the console) is
-    // Quickplay. Before the match buffer opens: a connection change clears it.
-    if let Some((true, melee, word)) = mode {
-        if auto_policy::is_online_stage(true, melee, word) {
-            auto_driver::note_online_stage(word, STAGE_SETUP as u64);
-        }
-    }
     // Reset on each stage entry, even if two consecutive stages classify alike.
     // A result from the previous match must never become this match's value.
     match status {

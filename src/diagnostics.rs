@@ -159,7 +159,10 @@ pub enum Code {
     /// shared online session ended dropped an earlier match's latency mark.
     /// `a=4` (0.10.2): a stage load whose scene words name an online
     /// Quickplay or Elite stage promoted an Offline connection to Quickplay
-    /// (`b` = the mode word).
+    /// (`b` = the mode word). `a=5`: a stage load in the game's Training mode
+    /// made a stored connection Offline (`b` = that connection: 1 local,
+    /// 2 arena, 3 quickplay). `a=6`: a Quickplay menu site fired and wrote no
+    /// connection (`b` = the hook address, `0x22da160` or `0x22da090`).
     SceneHold = 107,
     /// 0.5.2 dynamic-resolution experiment trigger edge. `a`: source in bits
     /// 0..7 (1 = move table, 2 = adaptive), catalog move index in bits 8..15
