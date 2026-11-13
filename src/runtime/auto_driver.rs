@@ -16,6 +16,9 @@ static MATCH_MARKED: AtomicBool = AtomicBool::new(false);
 static CLEANUP: AtomicU64 = AtomicU64::new(0);
 /// Tick of the Singles/Doubles stage load under a menu-set Quickplay; 0 idle.
 static OFFLINE_CHECK: AtomicU64 = AtomicU64::new(0);
+/// The last stage load's words were an online Quickplay or Elite stage
+/// ([`auto_policy::is_online_stage`]); such a stage needs no stale check.
+static STAGE_ONLINE: AtomicBool = AtomicBool::new(false);
 /// Pseudo-source of the demotion in the context log (not a hook address).
 const OFFLINE_CHECK_SOURCE: u64 = 0x0ff_11e;
 static SELECTION_GENERATION: AtomicU64 = AtomicU64::new(0);
@@ -101,8 +104,11 @@ pub(crate) fn note_menu_entry(entry: Entry, status: Option<SceneStatus>, source:
 /// load instead of from the latency hook three seconds into the first match. A
 /// stage in the game's Training mode makes any stored connection Offline (code
 /// 107 `a=5`, `b` = the previous connection). The caller runs this before the
-/// stage opens its match buffer, because a connection change clears it.
+/// stage opens its match buffer, because a connection change clears it, and
+/// before it sets the stage's status, which arms the stale check only for a
+/// stage whose words were not online ([`auto_policy::stale_check_applies`]).
 pub(crate) fn note_stage_words(words: StageWords, mode: u32, source: u64) {
+    STAGE_ONLINE.store(words.online, Ordering::Release);
     if !ready() {
         return;
     }
@@ -118,27 +124,21 @@ pub(crate) fn note_stage_words(words: StageWords, mode: u32, source: u64) {
     set_scene(Some(next), None, source);
 }
 
-/// Diagnostics thread, every 500 ms: a Singles/Doubles stage that has run
-/// five seconds under a menu-set Quickplay without the online-latency hook is
-/// an offline match; demote the connection so Auto stops treating it as
-/// online. Code 107 `a=2`, context source `0x0ff11e`.
+/// Diagnostics thread, every 500 ms: a Singles/Doubles stage without online
+/// words that has run five seconds under a menu-set Quickplay without the
+/// online-latency hook is an offline match; demote the connection so Auto
+/// stops treating it as online. Code 107 `a=2`, context source `0x0ff11e`.
 pub(crate) fn poll() {
     let armed = OFFLINE_CHECK.load(Ordering::Acquire);
     if armed == 0 {
         return;
     }
     let (connection, status) = scene_pair();
+    let marked = MATCH_MARKED.load(Ordering::Acquire);
+    let stage_online = STAGE_ONLINE.load(Ordering::Acquire);
     let now = unsafe { skyline::nn::os::GetSystemTick() as u64 };
-    if !auto_policy::offline_match_due(
-        connection,
-        status,
-        MATCH_MARKED.load(Ordering::Acquire),
-        armed,
-        now,
-    ) {
-        if !matches!(status, SceneStatus::Singles | SceneStatus::Doubles)
-            || connection != Connection::Quickplay
-        {
+    if !auto_policy::offline_match_due(connection, status, marked, stage_online, armed, now) {
+        if !auto_policy::stale_check_applies(connection, status, marked, stage_online) {
             OFFLINE_CHECK.store(0, Ordering::Release);
         }
         return;
@@ -297,12 +297,14 @@ pub(crate) fn set_scene(
     {
         record(Code::SceneHold, 3, source);
     }
-    // A match stage under a menu-set Quickplay starts the stale check; any
-    // other status ends it.
-    if matches!(status, SceneStatus::Singles | SceneStatus::Doubles)
-        && connection == Connection::Quickplay
-        && !MATCH_MARKED.load(Ordering::Acquire)
-    {
+    // A match stage under a menu-set Quickplay whose words were not online
+    // starts the stale check; anything else ends it.
+    if auto_policy::stale_check_applies(
+        connection,
+        status,
+        MATCH_MARKED.load(Ordering::Acquire),
+        STAGE_ONLINE.load(Ordering::Acquire),
+    ) {
         if status != previous_status {
             OFFLINE_CHECK.store(
                 unsafe { skyline::nn::os::GetSystemTick() as u64 }.max(1),

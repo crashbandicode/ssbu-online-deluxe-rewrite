@@ -344,22 +344,43 @@ pub const fn main_menu_connection(previous: Connection) -> Connection {
 /// room for a slow start.
 pub const OFFLINE_CHECK_TICKS: u64 = 5 * 19_200_000;
 
-/// A Singles/Doubles stage under a stored Quickplay connection whose
-/// online-latency hook has not fired by the deadline is an offline match
-/// (Quickplay survives the main menu, so an offline match can follow a
-/// session): the connection is demoted to Offline. `armed_tick` 0 is idle.
+/// A Singles/Doubles stage under a stored Quickplay connection whose words
+/// were not online and whose online-latency hook has not fired by the
+/// deadline is an offline match (Quickplay survives the main menu, so an
+/// offline match can follow a session): the connection is demoted to Offline.
+/// `armed_tick` 0 is idle. See [`stale_check_applies`].
 pub fn offline_match_due(
     connection: Connection,
     status: SceneStatus,
     marked_online: bool,
+    stage_online: bool,
     armed_tick: u64,
     now: u64,
 ) -> bool {
     armed_tick != 0
-        && connection == Connection::Quickplay
+        && stale_check_applies(connection, status, marked_online, stage_online)
+        && now.wrapping_sub(armed_tick) >= OFFLINE_CHECK_TICKS
+}
+
+/// Whether a Singles/Doubles stage under a stored Quickplay still has to
+/// prove itself online. Two game signals answer it: the online-latency mark,
+/// and the stage's own words at its load (`stage_online`,
+/// [`is_online_stage`]). The words are there at the load; the mark comes when
+/// the match starts, 3.1–3.3 s after the load on the console but 5.1–17 s in
+/// Eden's LAN Quickplay, so a check that waited only for the mark demoted
+/// Eden's online battles to offline/singles five seconds in. A stage without
+/// online words (a local match after a session's Quickplay was kept through
+/// the main menu) is still checked.
+pub const fn stale_check_applies(
+    connection: Connection,
+    status: SceneStatus,
+    marked_online: bool,
+    stage_online: bool,
+) -> bool {
+    matches!(connection, Connection::Quickplay)
         && matches!(status, SceneStatus::Singles | SceneStatus::Doubles)
         && !marked_online
-        && now.wrapping_sub(armed_tick) >= OFFLINE_CHECK_TICKS
+        && !stage_online
 }
 
 /// 0.8.1: entering a Singles/Doubles stage drops the online-latency mark an
@@ -528,6 +549,7 @@ mod tests {
             Quickplay,
             SceneStatus::Singles,
             false,
+            false,
             1,
             1 + OFFLINE_CHECK_TICKS
         ));
@@ -569,12 +591,14 @@ mod tests {
             Connection::Quickplay,
             SceneStatus::Singles,
             false,
+            false,
             0,
             due
         ));
         assert!(!offline_match_due(
             Connection::Quickplay,
             SceneStatus::Singles,
+            false,
             false,
             armed,
             due - 1
@@ -583,6 +607,7 @@ mod tests {
             Connection::Quickplay,
             SceneStatus::Singles,
             true,
+            false,
             armed,
             due
         ));
@@ -590,12 +615,14 @@ mod tests {
             Connection::Quickplay,
             SceneStatus::Training,
             false,
+            false,
             armed,
             due
         ));
         assert!(!offline_match_due(
             Connection::Arena,
             SceneStatus::Singles,
+            false,
             false,
             armed,
             due
@@ -605,12 +632,14 @@ mod tests {
             Connection::Quickplay,
             SceneStatus::Singles,
             false,
+            false,
             armed,
             due
         ));
         assert!(offline_match_due(
             Connection::Quickplay,
             SceneStatus::Doubles,
+            false,
             false,
             armed,
             due + 7
@@ -924,6 +953,109 @@ mod tests {
             Connection::Quickplay
         );
         assert_eq!(after(training, &[Entry::MainMenu]), Connection::Offline);
+    }
+
+    /// The stored connection `elapsed` ticks into a two-fighter stage loaded
+    /// with `stage` words over `stored`, with no online-latency mark yet: the
+    /// runtime's stage load (`note_stage_words`, then `set_scene` arming the
+    /// stale check) and its 500 ms poll (`auto_driver::poll`).
+    fn unmarked_after(stored: Connection, stage: (u8, u32), elapsed: u64) -> Connection {
+        let stage = words(stage);
+        let connection = stage_connection(stored, stage);
+        let status = classify_stage(0x15b, stage.training_mode || stage.lobby, 2);
+        let armed = if stale_check_applies(connection, status, false, stage.online) {
+            1
+        } else {
+            0
+        };
+        if offline_match_due(connection, status, false, stage.online, armed, 1 + elapsed) {
+            Connection::Offline
+        } else {
+            connection
+        }
+    }
+
+    #[test]
+    fn an_online_battle_is_not_demoted_before_the_latency_mark() {
+        // Eden LAN Quickplay (imp-oppb10, 2026-11-13): the waiting room made
+        // the connection Quickplay, the battle loaded with melee 0x0e and mode
+        // 0x07010101, the stale check demoted it 5.1 s in and the latency mark
+        // came 14.1 s in, so the battle read offline/singles. The battle's own
+        // words prove it online; only the mark's timing was missing.
+        for (practice, battle) in [(EDEN_PRACTICE, EDEN_BATTLE), (ELITE_PRACTICE, ELITE_BATTLE)] {
+            let session = after(Connection::Offline, &[Entry::Stage(words(practice))]);
+            assert_eq!(session, Connection::Quickplay);
+            for elapsed in [0, OFFLINE_CHECK_TICKS, 3 * OFFLINE_CHECK_TICKS] {
+                let connection = unmarked_after(session, battle, elapsed);
+                assert_eq!(connection, Connection::Quickplay, "{battle:x?} {elapsed}");
+                assert_eq!(
+                    match_kind(connection, SceneStatus::Singles),
+                    MatchKind::QuickplaySingles
+                );
+                // The exported context's online bit is the connection's.
+                assert!(connection.is_online());
+            }
+            // A battle the hooks left Offline is promoted and kept the same way.
+            assert_eq!(
+                unmarked_after(Connection::Offline, battle, OFFLINE_CHECK_TICKS),
+                Connection::Quickplay
+            );
+            assert!(!stale_check_applies(
+                Connection::Quickplay,
+                SceneStatus::Doubles,
+                false,
+                words(battle).online
+            ));
+        }
+    }
+
+    #[test]
+    fn a_kept_quickplay_is_still_demoted_in_an_offline_match() {
+        // The guard the stale check exists for (0.4.2): Quickplay kept through
+        // the main menu after a session, then a local Smash match. Its words
+        // are not online, so five seconds without the mark demote it.
+        let kept = after(
+            Connection::Offline,
+            &[Entry::Stage(words(EDEN_BATTLE)), Entry::MainMenu],
+        );
+        assert_eq!(kept, Connection::Quickplay);
+        assert_eq!(
+            unmarked_after(kept, LOCAL_SMASH, OFFLINE_CHECK_TICKS - 1),
+            Connection::Quickplay
+        );
+        assert_eq!(
+            unmarked_after(kept, LOCAL_SMASH, OFFLINE_CHECK_TICKS),
+            Connection::Offline
+        );
+        assert!(stale_check_applies(
+            Connection::Quickplay,
+            SceneStatus::Doubles,
+            false,
+            false
+        ));
+        // The mark still answers it, and nothing else is checked.
+        assert!(!stale_check_applies(
+            Connection::Quickplay,
+            SceneStatus::Singles,
+            true,
+            false
+        ));
+        for status in [SceneStatus::Inactive, SceneStatus::Training] {
+            assert!(!stale_check_applies(
+                Connection::Quickplay,
+                status,
+                false,
+                false
+            ));
+        }
+        for connection in [Connection::Offline, Connection::Local, Connection::Arena] {
+            assert!(!stale_check_applies(
+                connection,
+                SceneStatus::Singles,
+                false,
+                false
+            ));
+        }
     }
 
     #[test]
