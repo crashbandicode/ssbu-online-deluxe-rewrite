@@ -132,7 +132,9 @@ def analyse(hang_text, events_text, stage_logs=None):
                    for e in rows if e[2] == 30]
         out['battles'].append({
             't': start, 'stage': hex(battle[2]), 'status': battle[3], 'melee': hex(battle[4]),
-            'mode': hex(battle[5]), 'before': state_before(battle), 'scene_at_load': scene_at(rows, battle[1]),
+            # No 73 row when the stage changed nothing (a sudden death after a Singles battle): the state carried in.
+            'mode': hex(battle[5]), 'before': state_before(battle),
+            'scene_at_load': scene_at(rows, battle[1]) or state_before(battle),
             'heartbeats': counts, 'scene_changes': changes_in, 'scene_holds_107': holds,
             'online_context_30': context,
             'demoted': any(h.startswith('a=2 ') for h in holds),

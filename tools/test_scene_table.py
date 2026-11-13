@@ -99,6 +99,14 @@ class SceneTable(unittest.TestCase):
         self.assertEqual(again['scene_at_load'], 'quickplay/singles')
         self.assertEqual(r['results'], {'t': 383.5, 'stage': '0x162', 'scene': 'quickplay/inactive'})
 
+    def test_a_sudden_death_that_changes_nothing_keeps_the_scene_it_carried(self):
+        # scn-prepost-a1: a second battle under the same quickplay/singles logs no 73 row of its own.
+        lines = AFTER_EVENTS.splitlines()
+        second = [ev(20, 347.1, 110, 0x15B, 2), ev(21, 347.1, 116, 0x30E, 0x07010101)]
+        r = scene_table.analyse(AFTER_HANG, '\n'.join(lines[:10] + second + lines[10:]))
+        self.assertEqual([b['scene_at_load'] for b in r['battles']], ['quickplay/singles', 'quickplay/singles'])
+        self.assertTrue(scene_table.battle_online(r)[0])
+
     def test_no_online_battle(self):
         events = '\n'.join(BEFORE_EVENTS.splitlines()[:7])
         r = scene_table.analyse(BEFORE_HANG, events)
