@@ -1,5 +1,49 @@
 # Validation record
 
+## 0.10.7 (`d8a6909`, rc.13 branch) — no game hook waits, no per-frame hook allocates: gates, ELF check and the RC pair — 2026-11-13
+
+**The change (`d8a6909`).** The four locks that only game threads still took after
+`45333a1` are gone:
+- The resolution `POLICY` and the fighter probe's state are `hook_lock::SnapCell`s, updated lock-free.
+- `adaptive_drs` has one owner, the present hook.
+- `fighter_main`'s `GATE` is now a gate no thread waits at.
+
+Every other mutex a hook path touches is a `hook_lock::TryLock`, a single atomic flag; Horizon std's mutex allocates on its first use. `record()` posts events only; install sites use `record_install`. Hook paths read single settings instead of building a `Config`. Details are in `docs/DEBUGGING.md`. The version is 0.10.7.
+
+**Failing first, on `fdb002e`.**
+- `tests/hook_locks.rs`, now requiring an empty `HOOK_LOCKS`, failed with 4 locks.
+- `tools/hook_wait_check.py`, ported from TrainingRooms' `game_thread_wait_check.py`, exited 1 on the 0.10.6 ELF: 2 forbidden waits and 5 allocation or print sinks.
+
+**Gates on `d8a6909` (nice 19 / ionice 3, memory/time guard).**
+- `cargo test`: 357 unit tests, then 8 and 30 integration tests, passed.
+- Clippy with warnings denied passed with and without `diag`, for both `cargo clippy --all-targets` and `cargo skyline clippy`.
+- `cargo build --no-default-features` passed.
+- The tools' Python tests passed: 47, one skipped, including 6 new ones for the ELF check.
+- `ssbu-mod-playbook` compliance (`13b2e83`, `--base fdb002e`) shows the same 20 machine-row failures as 0.10.6, none new.
+
+**Build.**
+- Release: build `0.10.7-d8a69099652f-1794606005`, NRO `ee6a6edce02e5c4cc86ec6d6159eb3778a49bbc970f896ae7271610757fbca8d` (1,208,320 bytes).
+- Diag: NRO `7d006675…` (1,216,512 bytes).
+- `tools/hook_wait_check.py` on both:
+  - 58 hook roots and 0 forbidden waits. The one wait allowed by name is the dispatcher backoff's timed `SleepThread`.
+  - 31 per-frame roots and 0 allocation or print.
+- Still allocating, and listed by name as the remaining work: the ImGui window (`draw`) and the three native banner text hooks (`deluxe_rewrite_local_count`, `deluxe_rewrite_css_banner`, `deluxe_rewrite_arena_room_update`).
+
+**Eden RC pair (`drc13-a1` XPS, `drc13-b1` Yoga, 2026-11-13 21:43–21:56Z).**
+- Setup: LAN Quickplay with the RC rows (`eden/rc-pair/retarget_rows.py`). Both instances ran the release NRO above. Volume 0, and the GDB stub was on before `game.load`.
+  - a: the card's 19 plugins plus the tile cursor, with the built-in ImGui (`imgui_stats=embedded`).
+  - b: the same set plus the standalone imgui-smash 1.2.0, 21 plugins (`imgui_stats=external`, `plugins=21 index=paged`).
+- Rows: load, main menu, online, Quickplay, CSS, match, after and console. All 8 passed on each instance.
+- The desync detector's `events.log` on both instances:
+  - The two `sync_end` lines read `desync_seen=0`, at frames 7542 and 1984 on both sides.
+  - The match row reports `desync_free: true`.
+- `hook_lock_skipped=0` in every `renderer-status.txt` taken (mid-match, end and post-run), on both instances.
+- `status_diff.py`: 27 `imgui_*` lines are equal. Only `imgui_stats` and `imgui_host_clients` differ, as the setup intends.
+- The consoles have no panic, abort, crash or Unmapped line. Both claims were released. The SIGKILL at `down` is the harness's forced stop.
+- The XPS also ran another lane's Eden during this pair. Both rows still passed.
+- Evidence: `artifacts/deluxe-2/eden/drc13-{a,b}1` in the operator's evidence root.
+- Not run on the console.
+
 ## 0.10.6 (`10e481f`) — the release candidate's version: gates, build and an Eden boot — 2026-11-13
 
 **The change (`10e481f`).** The operator named the release candidate 0.10.6:

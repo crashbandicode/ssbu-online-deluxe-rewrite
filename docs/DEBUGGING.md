@@ -318,11 +318,37 @@ the TrainingRooms rc.6 Quickplay freeze (ssbu-mod-playbook WORKFLOW). Hook paths
 take such a lock only through `hook_lock::try_take` and leave the work for their
 next call when it is busy: the overlay's plugin bookkeeping, `hide_plugin_pages`
 and the fighter tick counts. `renderer-status.txt` line `hook_lock_skipped=`
-counts those misses since boot. The resolution policy, its report gate and the
-adaptive trigger are taken on game threads only: the diagnostics thread reads the
-policy's published status and hands a scene reset to the next fighter or present
-hook. `tests/hook_locks.rs` lists the locks hooks still reach (all game-thread
-only) and fails on a new one.
+counts those misses since boot.
+
+**No game hook waits at all (0.10.7).** Since then, no hook path waits on
+another game thread either, and no per-frame hook allocates:
+
+- **Locks:** every mutex a hook path touches is a `hook_lock::TryLock`, a single
+  atomic flag. Horizon's std mutex is boxed on its first use, so even trying it
+  could reach the allocator.
+- **Resolution policy and fighter probe:** the policy and the fighter probe's
+  observation are `hook_lock::SnapCell`s. They are updated by compare-and-swap of
+  whole copies, so a preempted thread holds nothing.
+- **Adaptive trigger:** it has one owner, the present hook.
+- **Report gate:** the fighter ticks run side by side, and a reset or retarget
+  runs alone or stays requested.
+- **Logging:** hooks record events into the recorder, which the diagnostics
+  thread drains. Only install sites also write `install.log`
+  (`record_install`).
+
+`hook_lock_skipped=` also counts a tick skipped while a reset ran, and a policy
+update that gave up. Any value above 0 is worth a look.
+
+**What the gates check:**
+
+- **`tests/hook_locks.rs`:** fails if any hook reaches a blocking lock.
+- **`tools/hook_wait_check.py <.so>`:** checks the built ELF.
+  - No wait (lock, condvar, `Once` waiter, parker, sleep, channel, Horizon
+    wait) is reachable from any hook root. The dispatcher backoff's timed
+    sleep is allowed by name.
+  - No allocation or print is reachable from a per-frame root.
+  - The ImGui window and the three native banner text hooks still allocate.
+    It lists them by name.
 
 ## Coverage build (0.5.2)
 
