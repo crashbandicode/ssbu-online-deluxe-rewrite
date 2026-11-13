@@ -10,7 +10,9 @@ it, to `docs/FX_RUNTIME_MATRIX.md` and `docs/FX_PERFORMANCE_METHOD.md` in that
 repository. The FX results below are dated records of 0.4.2 and earlier builds.
 
 `lesslag_core` and `doubles_core` stay INI-only startup experiments. They are
-separate from the four live profiles. Hardware clocks stay excluded. The
+separate from the four live profiles. Deluxe sets no hardware clocks; the
+0.8.1 `hoc_oc=online` option only asks the game-aware Horizon-OC fork to hold
+its Smash profile back outside online play. The
 software FPS boost diagnostic was removed on 2026-10-17 and the Sephiroth
 Gigaflare DRS trigger with it; the Gigaflare pilots below are history.
 
@@ -36,7 +38,7 @@ change drains before commit. A transition does not reinstall hooks.
 
 | Profile | Active textures | Index | Live flush when committed | Render opts | Resolution / dynamic resolution |
 | --- | --- | --- | --- | --- | --- |
-| Vanilla | 3 | TwoBehind | original once, fields off | No | 1080p, off |
+| Vanilla | 3 | TwoBehind | original once, fields off; with Vanilla+ (0.5.6, `vanilla_plus`, default on) presents the acquired image at this flush like LessLag | No | 1080p, off |
 | LessLag | 2 | OneBehind | original once, LessLag fields; since 0.4.0 presents the acquired image at the flush that submits it (`render_policy::present_at_flush`) and skips the game's later present of that index | Yes | console 1080p on; emulator 1080p off |
 | LLUltra | 2 | Immediate | original three times, fields off, early flush; since 0.5.2 presents the acquired image at this flush like LessLag | Yes | console 576p on; emulator 1080p off |
 | LLDoubles | 3 | OneBehind | original once, LessLag fields; since 0.5.2 presents the acquired image at this flush like LessLag | Yes | 1080p on, both platforms |
@@ -52,16 +54,19 @@ shared by all four hooks. The queue lock and its +0x20 header byte follow the
 game's own dispatcher rather than the archive's offset bug. LLUltra's pre-present
 flush runs from an entry hook on 0x38701e0, guarded by the saved caller address,
 owner alias and virtual flush target; SGPO's 0x374812c neighborhood is not patched.
-The 0x38701e0 entry hook is installed in every mode and only flushes when
-Immediate (LLUltra) is committed; in any other mode it counts the entry and
+The 0x38701e0 entry hook is installed in every mode and only flushes while
+Immediate (LLUltra) is the effective policy (committed, or the target of an
+index swap in progress); in any other mode it counts the entry and
 returns without flushing or changing the mode. There is no separate
 observer flag (`src/runtime/render_ultra.rs`, `renderer.rs` `install`).
 
 **Teardown guard (0.5.1, 2026-10-15).** The relocated model update runs
 after the scene update, so on the frame that leaves Training or a match it
-would touch fighters the scene update has just destroyed; four Eden runs on
-2026-10-14 aborted there in `nn::os::LockMutex` (kernel `InvalidHandle`) with
-`deluxe_rewrite_post_scene` on the stack (VALIDATION.md, "0.5.0"). The
+would touch fighters the scene update has just destroyed; in Eden on the
+night of 2026-10-14/15 the release aborted there five times in about 22
+Training exits, in `nn::os::LockMutex` (kernel `InvalidHandle`) with
+`deluxe_rewrite_post_scene` on the stack (VALIDATION.md, "0.5.0" and
+"0.5.1"). The
 module-unload hook now bumps an epoch; the fighter-recording hook snapshots
 it per frame; when the post-scene hook sees the epoch changed within the
 frame it skips the relocated model update and fighter worker (the deferred
@@ -97,14 +102,15 @@ Game & Watch versus Sephiroth. Both stations reported the same winner, two KOs,
 and 47% damage, then returned to stage selection. LessLag and then LLUltra were
 each confirmed active. The Game & Watch plugin `bceef` was on A only. A used FX
 Reduced with online scope. B used FX On with scope all. Standalone ImGui and
-Elite were on B only. No disconnect was observed. Both sides held cleanup and
+Elite (the original Elite Legal Stages NRO) were on B only. No disconnect was
+observed. Both sides held cleanup and
 requested Vanilla at results. The window sat on the right during connected CSS
 and stage select, and on the left during the match. The opponent column
 disappeared after B stopped. This match has no full-state or checksum proof. A
 three-station match is still undone. High-RTT, VPN, NSO, and Switch performance
 are not accepted from it. b99 Reduced branch limits stay in
-`docs/FX_RUNTIME_MATRIX.md` (now in ssbu-fx-control). The Switch already has b99 installed; that install
-is not a console performance acceptance.
+`docs/FX_RUNTIME_MATRIX.md` (now in ssbu-fx-control). b99 was installed on the Switch at the time; that
+install was not a console performance acceptance.
 
 The sections from "Native latency baseline" through "Final renderer regression"
 are the exact-artifact record for the NROs they name.
@@ -144,17 +150,23 @@ The callback traces below do not measure or confirm the six-frame native baselin
 An opt-in capture records thirty guest-clock seconds (ten before 0.3.1) of the
 existing ImGui render callback, including callback sequence, raw system ticks,
 sampled HID buttons and overlay view (schema 1, through 0.4.2, also carried
-the requested FX mode/scope and effective suppression state). It adds no game hook. Storage is a 2048-sample buffer (1024 before 0.3.1)
-that the diagnostics thread drains and streams to the CSV every poll; the
+the requested FX mode/scope and effective suppression state). It adds no game hook. Since 0.5.4 storage is a 256-row ring
+that the diagnostics thread swaps out and streams to the CSV every 250 ms while
+the capture runs (a 2048-sample buffer before, 1024 before 0.3.1); the
 callback uses `try_lock`, with explicit skipped counts. Since 0.3.1 the
 `CAPTURE_CSS` boot flag arms the same capture automatically on character-select
-entry (label `css`) and adds the read-only dispatcher/UI rows described in the
-README; the `CAPTURE_MATCH` boot flag arms it for a whole match (label
+entry (label `css`) and adds the read-only dependency-wait and UI-job rows
+(kinds 66 and 77; until 2026-10-17 also dispatcher rows) described in
+[Captures](CAPTURES.md); the
+`CAPTURE_MATCH` boot flag arms it for a whole match (label
 `match_*`, ended by the scene change, ten-minute ceiling).
 No per-sample file write, allocation, or blocking lock occurs in the callback.
 
 From Settings, use the existing debug shortcut (hold L+R and Plus or Minus, tap
-Down), then hold L+R and tap Up to capture. The buffered-export source correction
+Down), then hold L+R and tap Up to capture. Since 0.10.5 (main, not released)
+the Debug view opens only with `debug_view=on` in `config.ini` and never while
+A is held ([Configuration](CONFIGURATION.md)); 0.10.4 has no such key. The
+buffered-export source correction
 shows `Capturing`, then `Exporting CSV`, then `CSV saved` only after both
 CSVs are flushed/synchronized and the saved status is persisted. Errors show
 `Export error`, even if writing the error status file also fails. The debug view's
@@ -169,7 +181,7 @@ consumes that file and arms the capture. Wait for `timing-status.txt` to say
 or export is ignored. A file request left while busy waits for the next capture.
 
 Files live at `sd:/ultimate/ssbu_online_deluxe_rewrite/timing-<tick>.csv`.
-On this host, the data directory is:
+On this host, Eden's default profile maps that directory to:
 
     /home/intpa/.local/share/eden/sdmc/ultimate/ssbu_online_deluxe_rewrite
 
@@ -204,9 +216,9 @@ console entry in [Validation](VALIDATION.md) is the worked example.
 The watchdog does not cancel blocked native filesystem calls. The CSV export uses a bounded
 64KiB buffer per file with an explicit fallible flush before `File::sync_all`.
 
-October9 Switch evidence on installed `5c72a0b54b8c8c95`: recording finished, but
-the API CSV stopped mid-row6308 of6602 while the callback CSV was complete602
-samples. The old status stayed Capturing through export. Skyline std requests
+October 9 Switch evidence on installed `5c72a0b54b8c8c95`: recording finished, but
+the API CSV stopped mid-row 6308 of 6602 while the callback CSV was complete (602
+samples). The old status stayed Capturing through export. Skyline std requests
 a native flush for every unbuffered formatting fragment; this motivated the
 buffering/status correction above. Source/test/build evidence is separate from
 device export acceptance. The correction was later installed on the Switch
@@ -351,15 +363,17 @@ Each CAPTURE_TIMING request also writes api-<tick>.csv, a capture using
 try_lock (4096 events in this build; 8192 later; 65536 resident events in
 0.3.1–0.3.4; since 0.3.5 the rows are packed to 20 B and streamed: hooks fill
 one of two chunks (4096 rows in 0.3.5–0.3.6, 2048 rows = 80 KiB in `.bss`
-since 0.3.7), and the diagnostics thread
+from 0.3.7), and the diagnostics thread
 drains the other into the open CSV every 250 ms while a capture runs (500 ms
-otherwise), so the capture is bounded by
+otherwise); since 0.5.4 one ring of 4096 32-byte rows, reserved when the
+capture arms, is swapped out on the same schedule, so the capture is bounded by
 the 30 s duration, not by memory. The CSV header is written when the capture
 arms and `engine`, `reason`, `skipped` and `event_count` move to the footer;
 `skipped` now also counts rows lost when a chunk filled before its drain, so
 a non-zero value still means "not an A/B trace"). It records CPU
 spans for present, acquire, the acquired texture's CPU wait, zero-timeout waits
-and (non-Vanilla modes only) dispatch flush. Analyze
+and dispatch flush (non-Vanilla modes only in that build; the flush hook now
+runs in every mode). Analyze
 with python3 tools/analyze_render_trace.py /path/to/api-123.csv. The analyzer
 rejects incomplete captures and reports skipped events. Spans can overlap; do not
 sum them. Acquire's result is unavailable through the pinned backend's void ABI,
@@ -650,8 +664,9 @@ build, scene and 640×360 capture as the 0.5.0 re-measurement.
 | LLUltra | 2, 2, 2 | 2, 3, 3 |
 | LLDoubles | 4, 4, 4 | 4, 4, 5 |
 
-The counts match the b19 and 0.5.0 results: present-at-flush on LLUltra and
-LLDoubles did not change the captured response frames, and LLUltra still has one
+The normal-phase counts match the b19 and 0.5.0 results, and the later phase
+differs only by one LLDoubles trial at 5: present-at-flush on LLUltra and
+LLDoubles did not shift the captured response frames, and LLUltra still has one
 frame fewer than LessLag at the normal phase (2 against 3) while the two are
 within one frame at the later phase. All 24 critical windows had consecutive
 present identities; seven later-phase trials are not covered by their API trace

@@ -32,14 +32,14 @@ This NRO implements all three parts itself (`src/render_policy.rs`, `src/runtime
 
 | File in `skyline/plugins/` | Action | Why |
 | --- | --- | --- |
-| `libssbu_online_deluxe*.nro` (the fork, any filename variant such as `(nuevo)`) | **Remove** | Replaced by this NRO. It also crashes at launch when its own companions are missing. |
-| `libssbusync.nro` | **Remove** | Replaced. If it's loaded, Deluxe switches off **all** its hooks and you are running the fork (see the symptom check below). |
+| `libssbu_online_deluxe*.nro` (the fork, any filename variant such as `(nuevo)`) | **Remove** | Replaced by this NRO. On its own, without the PIA manager, it crashed at launch on the operator's Switch (2026-10-15, [Validation](VALIDATION.md#050--2026-10-14-character-fx-split-into-ssbu-fx-control-plugin-own-pages)). |
+| `libssbusync.nro` | **Remove** | Replaced. If it's loaded, Deluxe switches off **all** its hooks (see the symptom check below). |
 | `libssbu_pia_manager.nro` | **Remove** | Replaced by the built-in handshake and RTT reading. |
 | `libnx_over.nro` | Not needed | The fork's overclock companion. Deluxe does no overclocking. Keep it only if another mod needs it. |
-| `libsmashline_plugin.nro` | Not needed by Deluxe | Keep it if another mod needs it (the old FX plugins did). |
-| `libimgui_smash.nro` | Optional | Deluxe has ImGui built in. TrainingRooms and Elite Legal Stages draw their pages through Deluxe's menu, so they don't need it either. Keep it only if some other plugin needs it, and then use the newest build (see [ImGui](#imgui)). |
+| `libsmashline_plugin.nro` | Not needed by Deluxe | Keep it if another mod needs it. |
+| `libimgui_smash.nro` | **Remove** unless another mod needs it | Deluxe has ImGui built in. While this file is loaded, Deluxe draws with it instead, and with the published version names outside ASCII show `?` (see [ImGui](#imgui)). FX Control, CPU Pilot, Legal Stages + Loser Counterpick and TrainingRooms don't link ImGui; they add their rows or pages to Deluxe's window. |
 | `libnro_hook.nro`, `libparam_hook.nro`, `libarcropolis.nro`, `libcss_preserve.nro` | Keep | Shared infrastructure other mods use. |
-| TrainingRooms, Elite Legal Stages, the gamepad overlay, FX Control, the CPU Pilot | Keep | Separate mods that work next to Deluxe; the ones with settings add their own page to Deluxe's window. |
+| FX Control, CPU Pilot, Legal Stages + Loser Counterpick, TrainingRooms, the gamepad overlay | Keep | Separate mods that work next to Deluxe. FX Control, CPU Pilot and Legal Stages + Loser Counterpick each add their own page to Deluxe's window; TrainingRooms adds a row to its Plugins page. |
 
 Replace overlapping latency plugins rather than stacking them. Keep dependencies that other installed mods need;
 don't remove them blindly. The fork's own data folder `sd:/ultimate/ssbu_online_deluxe/` and SsbuSync's
@@ -55,7 +55,8 @@ Since 0.5.0 Deluxe has no character-FX hooks. On, Off and Reduced effects are th
 [FX Control](https://git.syntaxbyexample.com/intpa/ssbu-fx-control) plugin, installed as its own NRO in the same
 plugin folder.
 - It's optional: without it, every effect is the game's original.
-- With it, its FX Control page appears in Deluxe's window cycle, and it uses Deluxe's online tracking.
+- With it, its **FX Control** and **Stages** pages appear in Deluxe's window cycle, and it uses Deluxe's online
+  tracking.
 - Its settings are in `sd:/ultimate/ssbu_fx_control/config.ini`. Deluxe ignores the old `effects` and `effects_scope`
   keys (see [Configuration](CONFIGURATION.md)).
 
@@ -63,22 +64,24 @@ Replace any other character-FX plugin rather than running two.
 
 ## ImGui
 
-**Built in.** Deluxe's menu statically links `libimgui_smash.a`, built from pinned public source with our renderer
-patch. The source, build recipe and digest are in [ImGui dependencies](IMGUI_DEPENDENCY.md).
+**Built in.** Deluxe's menu statically links `libimgui_smash.a`, built from a pinned commit of our public
+[imgui-smash](https://git.syntaxbyexample.com/intpa/imgui-smash) fork. The source, build recipe and digest are in
+[ImGui dependencies](IMGUI_DEPENDENCY.md).
 
-**The standalone `libimgui_smash.nro` is optional.**
-- Nothing of ours needs it. Elite Legal Stages and TrainingRooms register their pages with Deluxe's plugin menu and
-  don't link ImGui themselves.
-- If another plugin of yours needs the standalone NRO, Deluxe reuses it instead of its own copy. Compatibility is
-  checked through its exports and the ImGui ABI, not the filename.
-- While the standalone copy is in use, its renderer owns the GPU buffers, so a renderer fix only arrives when you update
-  that NRO too. Use the newest [imgui-smash](https://git.syntaxbyexample.com/intpa/imgui-smash) build: 1.0.2 as of
-  2026-11-13. Its release isn't published yet; the newest published one is v1.0.1.
+**Leave out the standalone `libimgui_smash.nro` unless another mod needs it.**
+- Nothing of ours needs it. FX Control, CPU Pilot, Legal Stages + Loser Counterpick and TrainingRooms register their
+  rows or pages with Deluxe's plugin menu and don't link ImGui themselves.
+- When it's loaded, Deluxe doesn't start its own ImGui. If its exports and ImGui version (1.92.7 WIP, 19263) match,
+  Deluxe draws in that plugin's ImGui; if they don't, Deluxe's window stays off. The check uses the exports, not the
+  filename (`src/imgui_host.rs`, `src/runtime/overlay_host.rs`).
+- Drawing in the standalone copy means its font and its renderer. The newest published imgui-smash, v1.0.1, predates
+  the fonts 0.10.4 added and has only an ASCII font, so opponent names outside ASCII show `?`.
 
-## Elite Legal Stages
+## Legal Stages + Loser Counterpick
 
-A separate plugin ([Legal Stages + Loser Counterpick](https://git.syntaxbyexample.com/intpa/elite-stages-counterpick))
-whose settings page, **Stages + Counterpick**, appears in Deluxe's window.
+A separate plugin ([elite-stages-counterpick](https://git.syntaxbyexample.com/intpa/elite-stages-counterpick)) that
+replaces the original Elite Legal Stages NRO; remove that one. Its settings page, **Stages + Counterpick**, appears in
+Deluxe's window.
 - Its **legal stage pool** narrows the stages the game may pick to the ones you check; it never adds a stage.
 - Its optional **counterpick** acts only on an accepted online 1v1 rematch under your Preferred Rules.
 
@@ -87,18 +90,17 @@ What it does, how it was tested and what isn't proven yet are in its own
 
 ## Eden
 
-For the normal Eden profile, the plugin folder is:
+On Linux, Eden's default profile keeps the plugin folder at:
 
 ```text
-/home/intpa/.local/share/eden/sdmc/atmosphere/contents/01006A800016E000/romfs/skyline/plugins/
+~/.local/share/eden/sdmc/atmosphere/contents/01006A800016E000/romfs/skyline/plugins/
 ```
 
-The automated test profiles under `eden-cli-handoff` are separate from that path. Set `platform=emulator` in
-`config.ini` on Eden (see [Configuration](CONFIGURATION.md)).
+Set `platform=emulator` in `config.ini` on Eden; Deluxe doesn't detect the emulator itself (see
+[Configuration](CONFIGURATION.md)).
 
 ## Rollback
 
-Keep the previous NRO. The deployment scripts used for the operator's card archive the replaced file under
-`sd:/ultimate/ssbu_online_deluxe_rewrite/backups/` before each install; copying it back over the plugin path restores
-the earlier build. A Deluxe older than 0.5.0 has its own FX hooks again, so remove FX Control before rolling back to
-one.
+Keep the previous NRO; copying it back over the plugin path restores the earlier build. The operator's card installs
+keep the replaced file under `sd:/ultimate/ssbu_online_deluxe_rewrite/backups/`. A Deluxe older than 0.5.0 has its own
+FX hooks again, so remove FX Control before rolling back to one.

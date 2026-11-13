@@ -1,9 +1,11 @@
 # Rendering profiles
 
 **Auto is the default.** It uses Vanilla (Vanilla+ since 0.5.6, below) in menus,
-offline matches and Training;
+offline matches and Training (waiting-room practice counts as Training since 0.9.0);
 online singles use LessLag on console or LLUltra on emulator; online matches with
 more than two fighters use LLDoubles. Local wireless counts as online here.
+Console or emulator is the `platform` key in `config.ini` (default `console`);
+nothing detects the emulator.
 
 | Profile | Active textures | Presentation policy | Console resolution / DRS | Emulator resolution / DRS |
 | --- | --- | --- | --- | --- |
@@ -22,12 +24,12 @@ confirmed. Transitions and safety guards can retain the game's original path.
 
 | Part | Implementation | Code |
 | --- | --- | --- |
-| Active images | Vanilla uses three; LessLag and LLUltra use two. The count is applied through the window wrapper. | [`textures`](../src/config.rs#L64), [window setup](../src/runtime/nvn.rs#L152) |
-| Image selection | Vanilla adds 2 before the game's existing `% 3`; LessLag uses `(index + 1) % 2`; LLUltra uses `index % 2`. Additions wrap as unsigned arithmetic. | [`index_value`](../src/render_policy.rs#L348) |
-| Rendering wait | When the policy permits it, the wait hook returns `0` instead of calling the original function. | [wait hook](../src/runtime/renderer.rs#L116), [`skip_wait`](../src/render_policy.rs#L362) |
+| Active images | Vanilla uses three; LessLag and LLUltra use two. The count is applied through the window wrapper. | [`textures`](../src/config.rs#L65), [window setup](../src/runtime/nvn.rs#L222) |
+| Image selection | Vanilla adds 2 before the game's existing `% 3`; LessLag uses `(index + 1) % 2`; LLUltra uses `index % 2`. Additions wrap as unsigned arithmetic. | [`index_value`](../src/render_policy.rs#L354) |
+| Rendering wait | When the policy permits it, the wait hook returns `0` instead of calling the original function. | [wait hook](../src/runtime/renderer.rs#L116), [`skip_wait`](../src/render_policy.rs#L368) |
 | Work ordering | Model updates and fighter command recording move after the scene update, followed by the deferred rendering queue's dispatch. | [post-scene work](../src/runtime/render_sequence.rs#L148) |
-| LLUltra flush | The earlier present-entry hook flushes; steady operation suppresses the later flush. The flush plan calls the original function three times. | [early/late hooks](../src/runtime/render_ultra.rs#L27), [`plan_flush`](../src/render_policy.rs#L417) |
-| Presentation | The flush hook queues the acquired image when allowed. The later request for the same image is skipped. | [flush hook](../src/runtime/renderer.rs#L219), [presentation wrapper](../src/runtime/nvn.rs#L372) |
+| LLUltra flush | The earlier present-entry hook flushes; steady operation suppresses the later flush. The flush plan calls the original function three times. | [early/late hooks](../src/runtime/render_ultra.rs#L27), [`plan_flush`](../src/render_policy.rs#L429) |
+| Presentation | The flush hook queues the acquired image when allowed. The later request for the same image is skipped. | [flush hook](../src/runtime/renderer.rs#L209), [presentation wrapper](../src/runtime/nvn.rs#L442) |
 
 These are cyclic image indices, not displayed frame numbers. `TwoBehind`,
 `OneBehind` and `Immediate` are the project's relative index-policy names,
@@ -40,7 +42,7 @@ This sketch omits other frame steps and waits. Image acquisition still calls
 the original function, and the relocated fighter work keeps its worker wait.
 The sequence hooks latch one decision per frame and keep the original ordering
 while the teardown guard is active. The hook families are
-[installed together after their checks](../src/runtime/renderer.rs#L265).
+[installed together after their checks](../src/runtime/renderer.rs#L235).
 
 The [0.5.2 console move captures](VALIDATION.md) observed less overlap headroom
 in LLUltra: CPU work and GPU completion had to fit before the same next
@@ -62,7 +64,8 @@ as online for Auto (0.4.1). Since 0.10.2 a stage load whose scene words name
 online Quickplay or Elite Smash (`auto_policy::is_online_stage`) makes an
 Offline connection Quickplay, because the menu hooks miss some entries:
 Elite Smash on the console reached its waiting room and every battle with the
-connection still Offline. Event log code 107 records these decisions; see
+connection still Offline. Event log code 107 records these connection
+decisions and code 30 each change of the online context; see
 [Debugging](DEBUGGING.md).
 
 ## Present at the flush (0.4.0)
@@ -73,7 +76,7 @@ behind it: the game presented a frame only after running the next frame's whole
 CPU update, 13.7 ms after submitting it, and in a two-image ring a present after
 the vsync costs the next acquire a full vsync. On the console the
 character-select hand sweep went from 49.9 fps with 20 % of frames over 20 ms
-to 59.85 fps with 1.3 %; online matches run at 59.7–59.9 fps.
+to 59.85 fps with 1.3 %; the two online matches captured ran at 59.7–59.9 fps.
 `renderer-status.txt` counts `early_presents`, `early_present_skips` and
 `early_present_mismatches`; a mismatch is event log code 105. Evidence is in
 [validation](VALIDATION.md) ("Present-at-flush candidate" and "Console
@@ -219,15 +222,18 @@ The INI key `fps_boost`, the Settings row, the Debug row, the chord, the
 `fps_boost_applied` lines of `renderer-status.txt` are gone; an existing
 `fps_boost=` line is read and ignored. A peer's fork bit 14 is still decoded as
 the `++` suffix on its announced profile. The measurements stay in the
-[FPS++ investigation](FPS_BOOST_INVESTIGATION.md) as history. Hardware
-overclocking remains excluded.
+[FPS++ investigation](FPS_BOOST_INVESTIGATION.md) as history. Deluxe sets no
+hardware clocks itself; since 0.8.1 `hoc_oc=online` only asks the game-aware
+Horizon-OC fork to hold its Smash profile back outside online play
+([Configuration](CONFIGURATION.md)).
 
 ## Measured results
 
 Build-specific acceptance is recorded in [STATUS](STATUS.md) and
 [VALIDATION](VALIDATION.md). Tests have covered the global window plus native
 status, standalone and embedded ImGui, Training Modpack, the corrected gamepad
-overlay, Elite Legal Stages, persistent settings and linked play.
+overlay, the original Elite Legal Stages NRO, persistent settings and linked
+play.
 
 Earlier builds completed asymmetric LessLag/LLUltra matches and a real
 four-fighter Auto/LLDoubles team match with the G&W fix on only one peer.
@@ -235,9 +241,11 @@ The newer peer-display build also joined three independent network stations
 and exercised peer selection in the lobby. That run ended before a match;
 it is not a three-station desync result.
 
-A known emulator issue remains: concurrent instances under host load can hide
-ImGui windows with manual LessLag/LLDoubles. Native text remains visible.
-Removing the load can restore the windows. The cause is under investigation.
+An emulator issue seen on 2026-10-08 (b99): in two concurrent Eden instances
+the embedded ImGui window was visible with Vanilla and LLUltra but not with
+LessLag or LLDoubles; a fresh single-instance capture showed the window
+([Fork parity](FORK_PARITY.md)). The cause was not found, and no later run in
+[VALIDATION](VALIDATION.md) records it.
 
 The following **24 response trials belong to `b19b7d94ae136e55`**; newer
 display/effect builds do not inherit a new timing measurement, and the LessLag

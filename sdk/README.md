@@ -28,20 +28,27 @@ wraps it as `host_overlay_state()`.
 (`CELL_ABI_VERSION`) with `OPTION_FLAG_CELL` passive status cells; that host
 accepts revisions 2 to 5. The released v0.7.0 host accepts 2 to 4 and refuses
 revision 5 with `REGISTER_ERR_ABI`. This SDK still sends revision 4 and has no
-cell layout. See [Status cells](../docs/PLUGINS.md#status-cells-080).
+cell layout. Legal Stages + Loser Counterpick
+([elite-stages-counterpick](https://git.syntaxbyexample.com/intpa/elite-stages-counterpick))
+builds its descriptor without the SDK: its **Stages + Counterpick** page is a
+revision 5 descriptor with a **Pool | Results | Save** cell table, and on
+`REGISTER_ERR_ABI` it registers the same rows as plain status rows with
+revision 4. See [Status cells](../docs/PLUGINS.md#status-cells-080).
 
 Pinned releases: git tag `v0.2.0` on the Forgejo repository
 (`intpa/ssbu-online-deluxe-rewrite`) carries `deluxe-plugin-abi` 2.0.0 and
-`deluxe-plugin-sdk` 2.0.0 (descriptor version 2); the 0.5.0 tag carries 3.0.0
-(descriptor version 3); 0.5.3 carries 5.0.0 (descriptor version 4 only; the
-4.0.0 crates of the earlier 0.5.3 builds still carried the retry chain; the
-crates are unchanged at 5.0.0 through 0.7.0; 0.8.0 adds revision-5 constants
-to `deluxe-plugin-abi` without a crate-version bump, so depend on a release
-tag to identify the exact ABI source). Each
-tag is the tree the matching host NRO was built from; the NRO's SHA-256 and
-size are recorded in `docs/VALIDATION.md`. Consumers depend on the crates by
-git tag (cargo finds the package by name anywhere in the repository) or clone
-the tag and depend by path.
+`deluxe-plugin-sdk` 2.0.0 (descriptor version 2); `v0.5.0` carries 3.0.0
+(descriptor version 3); `v0.5.4` is the first tag with 5.0.0 (descriptor
+version 4 only; 0.5.3 was never released, and the 4.0.0 crates of its earlier
+builds still carried the retry chain). The crates are unchanged at 5.0.0
+through `v0.7.0`; `v0.8.0` adds revision-5 constants to `deluxe-plugin-abi`
+without a crate-version bump, so depend on a release tag to identify the
+exact ABI source. The window-state types ([below](#window-state-0105-hosts))
+were added the same way on `main` (0.10.5) and are in no release tag yet.
+Each tag is the tree its release NRO was built from; the tag's Forgejo
+release carries that NRO and its `manifest.json`. Consumers depend on the
+crates by git tag (cargo finds the package by name anywhere in the
+repository) or clone the tag and depend by path.
 
 Layout of this directory:
 
@@ -53,12 +60,13 @@ Layout of this directory:
 
 Status of verification: the SDK is covered by host-side unit tests against a
 fake host table, and the demo builds for `aarch64-skyline-switch`. The Plugins
-page, pending requests and tones were verified in Eden on 2026-10-12 with the
-demo NRO (`docs/VALIDATION.md`, "Plugin value tones and read-only rows").
-On the console only FX Control's own-page registration and row edits are
-recorded (2026-10-16, `docs/STATUS.md`); tones, pending requests and read-only
-rows are not observed on hardware. A two-step guide with a minimal plugin
-is in [docs/PLUGINS.md](../docs/PLUGINS.md); this file is the reference.
+page, tones and read-only rows were verified in Eden on 2026-10-12 with the
+demo NRO (`docs/VALIDATION.md`, "Plugin value tones and read-only rows");
+pending requests have host tests only. On the console only FX Control's
+own-page registration is recorded (2026-10-16, `docs/STATUS.md`); tones,
+pending requests and read-only rows are not observed on hardware. A
+three-step guide with a minimal plugin, and the plugins that use this API,
+are in [docs/PLUGINS.md](../docs/PLUGINS.md); this file is the reference.
 
 ## What the host shows
 
@@ -79,7 +87,8 @@ is in [docs/PLUGINS.md](../docs/PLUGINS.md); this file is the reference.
 * Outside a match: a vertical table of those rows. Up/Down selects a row (the
   selection wraps and skips group and header rows; since
   v0.8.0 it also skips read-only status rows and cells, see
-  [Plugins](../docs/PLUGINS.md)), ZR + Left/Right asks the
+  [Plugins](../docs/PLUGINS.md); since 0.10.5 it doesn't move while ZL, ZR,
+  L or R is held), ZR + Left/Right asks the
   plugin for the previous or next choice (a plain Left/Right is ignored in the
   open window since Deluxe 0.5.6). Lists longer than ten rows are clipped to
   a window around the selection with `...` markers.
@@ -258,8 +267,8 @@ symbol is an older host, to be treated as "no window". The Rust SDK wraps it as
 `deluxe_plugin_sdk::host_overlay_state() -> Option<u32>` with that rule.
 `deluxe_plugin_abi` has `DeluxeOverlayStateV1`, the `DELUXE_*` bits,
 `OVERLAY_STATE_SYMBOL(_C)` and `OverlayStateFn`. Added without a crate-version
-bump (still 5.0.0), like the 0.8.0 revision-5 constants: depend on the release
-tag.
+bump (still 5.0.0), like the 0.8.0 revision-5 constants. No release tag
+carries them yet (v0.10.4 doesn't); they are on `main` (0.10.5).
 
 ## Host persistence (optional)
 
@@ -300,7 +309,8 @@ It is opt-in: without `config_path` nothing is ever written.
 * **The host never reads the file.** Load it yourself at startup, before you
   register, and report the loaded choice through `current`. Ignore unknown keys
   and bad values so a hand-edited file cannot break the plugin.
-* `PluginDesc::flags` (formerly `reserved`) must still be zero.
+* `PluginDesc::flags` (formerly `reserved`) takes only `PLUGIN_FLAG_OWN_PAGE`;
+  any other bit is `REGISTER_ERR_INVALID`.
 
 The demo registers this INI, so after toggling `Enabled` to On and `Mode` to B
 the host leaves:
@@ -438,11 +448,12 @@ validates the spec locally and returns `RegisterError::Invalid` before calling
 the host, including when no host is installed. Duplicate option ids within one
 plugin are rejected locally as well.
 
-`register` returns `RegisterError::HostMissing` when no host is present,
-`HostIncompatible` when a table exists with a different size or table version,
-and maps each `REGISTER_ERR_*` code to a named variant (`Unknown(code)`
-otherwise). No code is retried; `REGISTER_ERR_ABI` becomes `RegisterError::Abi`
-after the one call.
+`register` returns `RegisterError::HostMissing` when no compatible host is
+present (`host()` treats a table with a different size or table version as
+none; `register_with` given such a table returns `HostIncompatible`), and maps
+each `REGISTER_ERR_*` code to a named variant (`Unknown(code)` otherwise). No
+code is retried; `REGISTER_ERR_ABI` becomes `RegisterError::Abi` after the one
+call.
 
 `deluxe-plugin-demo` is a complete working example registering `enabled`,
 `mode` and a read-only `status` option, with host persistence into

@@ -2,11 +2,14 @@
 
 ![The Debug view of the Player Info window](media/debug-window.png)
 
-The Debug view (L+R+Plus or Minus): build id, renderer, online tracker,
-`Timing`, `Capture L+R+Up (30 s)`, `CSS capture` and `Match capture`, then the
-live resolution, DRS, backoff, memory and frame-time rows. Captured in Eden on
-2026-10-24 with released 0.7.0, build `9a7f81ce1937`: Timing is Idle and the
-CSS/match capture flags are off. See [Media provenance](MEDIA_PROVENANCE.md)
+The Debug view (L+R+Plus or Minus) shows the build's commit, renderer, online
+tracker, engine, `Timing`, `Capture L+R+Up (30 s)`, `CSS capture` and
+`Match capture`, then the Performance rows (resolution, DRS, output, backoff,
+memory, clock, FPS and frame time). Since 0.10.5 (not released yet) the chord
+opens it only with `debug_view=on` in `config.ini` (default off), and never
+while A is held; in 0.10.4 and earlier the chord always toggles it. The image
+was captured in Eden on 2026-10-24 with released 0.7.0, build `9a7f81ce1937`:
+Timing is Idle and the CSS/match capture flags are off. See [Media provenance](MEDIA_PROVENANCE.md)
 for the build and [Screenshots](SCREENSHOTS.md) for the whole-screen and Training views.
 
 Keep the exact dist/<NRO-hash-prefix>/ bundle for every installed build.
@@ -29,7 +32,7 @@ Under sd:/ultimate/ssbu_online_deluxe_rewrite/:
     textures, present interval), the clock probe, and every line of
     `ultimate/ssbu-refresh-clock/status.txt` as `refresh_clock_start.*`.
     `refresh_clock_start=absent` appears without that plugin. Its `interval_*`
-    counters are live only while its `telemetry.flag` exists.
+    counters are live only when its `telemetry.flag` existed when Smash started.
   - Then come the stage's `events.log` rows. These include a code 120 row every
     5 s with the refresh-clock counters, which gives a time series for each
     match.
@@ -53,13 +56,15 @@ Under sd:/ultimate/ssbu_online_deluxe_rewrite/:
   capture runs to the end of the match, ten minutes at most); timing-status.txt
   reports capture/export failures. See [measurement procedure](PERFORMANCE.md).
   Both CSVs stream while the capture runs: header at arm time, rows every
-  poll, `# engine/reason/skipped/sample_count` in the footer before `# complete=1`.
+  poll, `# engine/reason/skipped` and `sample_count` (`event_count` in the API
+  CSV) in the footer before `# complete=1`.
 - api-<tick>.csv: paired CPU spans around render APIs. These are not GPU or display
   times. Analyze with tools/analyze_render_trace.py.
 - renderer-status.txt: actual active mode, texture counts/index masks and cumulative
   hook counters, including `early_presents`, `early_present_skips` and
   `early_present_mismatches` for the present-at-flush path (0.4.0 LessLag;
-  0.5.2 LLUltra and LLDoubles).
+  0.5.2 LLUltra and LLDoubles). Since 0.10.4 it also has `imgui_font_*` lines
+  (fonts, glyph sets, rebuilds, texture and index bytes).
   Values are independent observations, not an atomic frame snapshot.
 
 128 fixed-size events use a nonblocking try-lock. Game hooks do no file I/O; contention
@@ -122,15 +127,15 @@ data directory and flags.
 | 12 / 13 | Sampled CSS entry / exit |
 | 14 / 15 / 16 | Panic / heartbeat (a = 0, b = iteration) / compatibility or diagnostic flag |
 | 17 | Shared function hook entry instruction before chaining |
-| 18 / 19 | Accepted title pane / unsupported CSS pane or mapping |
-| 20 | Sampled pane field: 1/2 chain pointers, 3–5 name bytes, 6 text buffer, 7 capacity/length, 8 font sizes |
+| 18 / 19 | Native status-line pane. 18: the first write to a pane in this scene (a, b = the first 16 bytes of its name). 19: a pane refused (a = hook site; b = reason: 1 pane chain, 2 pane check with the failed check in bits 8–15, 3 text, 4 does not fit, 5 no Arena room id; at the local-wireless scene entry, the pane address) |
+| 20 | Pane detail, after a code 18 or 19 or alone: the pane address and vtable, or the first 16 bytes of a pane name |
 | 21 / 22 | Global overlay entry / exit, sampled every 300 frames |
 | 23 | View change (a = previous view, b = new view): 0 hidden, 1 settings, 2 performance, 3 debug, 4 plugins, 5 a plugin's own page (0.5.0), 6 Window Options (0.6.0) |
-| 24 | Config saved: a = generation; b = bit n for each key slot the save changed (0.9.0; slots in `config::key_slot`: 2 `render_mode`, 3 `auto_profile`, 15 `early_present`, 17 `vanilla_plus`, 19 `hoc_oc`, …), 0 before 0.9.0 |
+| 24 | Config saved: a = generation; b = bit n for each key slot the save changed (0.9.0; slots in `config::key_slot`: 2 `render_mode`, 3 `auto_profile`, 15 `early_present`, 17 `vanilla_plus`, 19 `hoc_oc`, 20 `hide_plugin_pages`, 21 `debug_view`, …), 0 before 0.9.0 |
 | 25 | Overlay health: backend ready / bootstrap-call count |
-| 26 | Embedded backend initialization complete |
+| 26 | Overlay backend ready: a = `0x201` for the embedded backend, `0x202` for a standalone imgui-smash NRO's; b = bootstrap-call count |
 | 30 | Online context changed (`OnlineContext`, `FxOnlineContext` before 0.5.0): online boolean / source scene or latency-setup offset |
-| 31 / 32 | Timing capture started / export finished: capture ID / export success (code 32) |
+| 31 / 32 | Timing capture started / export finished: a = capture ID; b = 1 for a `CAPTURE_MATCH` capture (code 31) / export success (code 32) |
 | 33 / 34 / 35 | Renderer owner / caller / flush target diagnostics |
 | 36 | Pia RTT sample/cleanup and foreign/drop counters |
 | 48 | Render-opts teardown guard fired: a module unloaded between the frame's fighter recording and its post-scene hook, so the relocated model update and fighter worker were skipped and the game's own ordering runs for the next 180 frames. a = unload epoch, b = scene frame |
@@ -141,17 +146,17 @@ data directory and flags.
 | 99 | Plugin registered: a = handle (negative `REGISTER_ERR_*` code on error), b = accepted option count |
 | 100 | Plugins-page Left/Right edge: a = plugin index (bits 0–15) and option index (16–31); b = requested choice (0–15) and the plugin's `REQUEST_*` answer (16–23) |
 | 101 | Plugin INI persisted after a menu edit: a = plugin and option index as in 100; b = 1 success, 0 I/O error |
-| 102 | Dispatcher backoff install: a = 1 installed, 2 other owner patched the site, 3 site words differ from 13.0.5, 4 disabled by flag, 5 eligibility gate first passed (b = tick); otherwise b packs the policy (`spin_passes`, `base_ns / 1000`, `max_ns / 1000`) |
-| 103 | Dispatcher backoff counters, written only when they change: a = idle passes, b = sleeps (bits 0–47) and last sleep in µs (48–63) |
+| 102 | Dispatcher backoff install: a = 1 installed (b packs the policy: `spin_passes` in bits 0–15, `base_ns / 1000` in 16–31, `max_ns / 1000` in 32–47, bit 48 set when worker dispatchers may sleep, `every_passes` in 49–63), 2 other owner patched the site or 3 site words differ from 13.0.5 (b = the site's first instruction word, 0 when the site is out of range), 4 disabled by flag (b = 0), 5 eligibility gate first passed (b = tick) |
+| 103 | Dispatcher backoff counters, at most every 5 s and only when the sleep count changed: a = idle waits (counted on the first idle pass of each), b = sleeps (bits 0–47) and last sleep in µs (48–63) |
 | 104 | CSS capture startup: a = hook mask (bit 0 dependency wait, bit 1 UI job; 3 = both, so `CAPTURE_CSS` can arm); b bit 0 `CAPTURE_CSS` flag. Before 2026-10-17 a bit 0 was the dispatcher-registration hook (7 = all three) and b bits 1–2 said whether `GetThreadPriority`/`GetThreadCoreMask` resolved |
 | 105 | Early present mismatch (two-image present-at-flush): a = 2 when the game then presented a different index than the early one, b = the game's index |
-| 106 | `CAPTURE_MATCH`: a = 0 startup (b = flag present), 1 stage entered (b = scene status), 2 stage left (b = previous status), 3 a running 30 s capture ended for a starting match (b = its id) |
+| 106 | `CAPTURE_MATCH`: a = 0 startup (b = flag present), 1 stage entered (b = scene status), 2 stage left (b = previous status, or `0xC55` when the character select ended it), 3 a running 30 s capture ended for a starting match (b = its id) |
 | 107 | Scene connection hold: a = 1 main-menu entry kept a stored Quickplay (b = hook address); a = 2 a Singles/Doubles stage under Quickplay without the online-latency hook was demoted to Offline (b = ticks since the stage load; the matching code 73 AutoContext row carries source `0x0ff11e`); a = 3 (0.8.1) a Singles/Doubles stage entered after the shared online session ended dropped the latency mark an earlier match left, so the stale check runs for it (b = source hook); a = 4 (0.10.2) a stage load whose scene words name an online Quickplay or Elite stage made an Offline connection Quickplay (b = the mode word, e.g. `0x7010400` for Elite Smash; the next code 73 AutoContext rows carry source `0x25d9288`) |
 | 108 | 0.5.2 dynamic-resolution trigger edge: a = source (1 move table, 2 adaptive) with the catalog move index in bits 8–15 and the fighter entry in bits 16–23 for moves; b = 1 push or 2 pop, the pushed level in bits 8–15, and for the adaptive source the triggering present interval in hundredths of a millisecond in bits 16–47. `renderer-status.txt` carries the settings (`drs_moves`, `drs_adaptive*`) and the counters (`adaptive_active`, `adaptive_observed`, `adaptive_pushes`, `adaptive_pops`, `move_active`, `move_pushes`, `move_pops`); code 82 also records each move edge with source 3 |
 | 109 | Coverage build only (`tools/Build.ps1 -Coverage`): a raw LLVM profile was written under `coverage/`. a bits 0–7 = 1 periodic `live.profraw`, 2 scene status change (bits 8–15 previous status, bits 16–23 new status), 3 manual (Debug view L+R+Left); b = bytes written, 0 when the write failed (the first failure is also printed to the Skyline log). See [Coverage build](#coverage-build-052) |
 | 110 | Stage loaded (0.5.3): a = the game's stage id read at the stage-setup hook, b = the scene status it was classified as (0 Inactive, 1 Training, 2 Singles, 3 Doubles). One edge per stage load; join it with the `CAPTURE_MATCH` capture id (code 106) to attribute a capture to its stage |
 | 111 | Clock probe (0.5.3): a = CPU MHz from a timed chain of dependent adds (0 unknown; about 1020 at the official clock, 1785 during the game's own loading boost or under a Horizon-OC profile), b = Horizon-OC file bits (1 `atmosphere/kips/hoc.kip` present, 2 hoc-clk `boot2.flag` present, 4 a `[01006A800016E000]` section in `config/horizon-oc/config.ini`, 8 `uncapped_clocks=1`). Written at boot, on every stock/OC change and once a minute; the same values go into every capture header (`# clock_mhz`, `# clock`, `# hoc`), `renderer-status.txt` and the Performance row **Clock**. GPU and memory clocks are not readable from the game process |
-| 112 | Peer stale (0.5.5): the selected opponent station is still bound but produced no measured RTT sample for 10 s (`pia_rtt::LIVE_MS`), so the opponent column, the strip's `Peer:` line, the Ping cell and the CSS remote line were hidden (since 0.6.0 the Opp line, the strip's `>Opp:` line and the CSS remote line). a = station index, b = the silence in ms. One row per live-to-silent transition, not per frame; a newly bound station has a 10 s grace. Expected after an opponent declines a rematch without the station-left hook retiring the peer (console behaviour not yet observed) |
+| 112 | Peer stale (0.5.5): the selected opponent station is still bound but produced no measured RTT sample for 10 s (`pia_rtt::LIVE_MS`), so the opponent column, the strip's `Peer:` line, the Ping cell and the CSS remote line were hidden (since 0.6.0 the Opp line, the strip's `>Opp:` line and the CSS remote line). a = station index, b = the silence in ms. One row per live-to-silent transition, not per frame; a newly bound station has a 10 s grace. Expected after an opponent declines a rematch without the station-left hook retiring the peer; on the console 0.8.1 logged it about 10 s after some online matches ended (2026-10-28, [validation](VALIDATION.md#081--console-rematches--2026-10-28)) |
 | 113 | Auto buffer observed (0.8.0): a = current-match count, 0–25; b = guarded input-consumption site `0x16d81a8`. Emitted only when an eligible observation changes the displayed value, not every frame. Join with stage event 110; new stages invalidate older observations. Manual choices suppress observations until the next match. |
 | 114 | Horizon-OC game-aware handshake (0.8.1): a = capability (1 no `hoc:clk` service, 2 stock hoc-clk: cmd 100 answered `0x184`, 3 incompatible API/protocol/reply, 4 game-aware fork present, 5 the fork stopped answering and the client is retrying), b = `caps << 16 \| version` when present, else the failing result or kernel code; `0x53444b0N` means Smash's own `sm:` session could not be read (N: 1 SDK symbol missing, 2 SDK code is not Smash 13.0.5's, 3 session object unreadable, 4 object vtable mismatch, 5 implausible handle). `a=1 b=0x10801` (kernel `LimitReached`) was the pre-`788537d` client opening its own `sm:` session on a console. One row per capability change |
 | 115 | Game-aware gate edge (0.8.1): a bit 0 = the fork reports Smash's saved profile applied, bit 1 = armed for this process, bit 2 = `hoc_oc=online`, bit 3 = shared online session live (a Pia RTT sample within 15 s; the candidate builds `0.8.0-cc6d8fdff592` and `0.8.0-788537dd6f6d` held 90 s); b = the fork's generation, or bit 32 plus the failing result or kernel code. One row per change of a, not per one-second heartbeat. Join with code 111 (clock probe) for the measured CPU MHz |
@@ -170,7 +175,6 @@ Codes 73 `AutoContext` and 74 `AutoRequest`
 `RenderPollProbe` ([`renderer.rs`](../src/runtime/renderer.rs)) are still
 emitted but not described in the table; their fields are defined at those
 call sites and in [`diagnostics.rs`](../src/diagnostics.rs).
-Codes 18–20 describe historical CSS builds; they are no longer emitted.
 Codes 11, 27–29, 84–87 and 91–97 were the character-FX records. They moved
 to the ssbu-fx-control plugin in 0.5.0 and are not reused here. Codes 75–77
 and 83 were opt-in diagnostics retired on 2026-10-16. Codes 37–45, 64 and 65
@@ -179,8 +183,9 @@ map, the 41–45 send probe, the 64/65 station-map reachability sample) and 88
 was FPS++; both were removed on 2026-10-17. Code 89 (`MenuOrder`, one row per
 capture arm) stopped being emitted the same day when the captures were
 consolidated; its number stays reserved. None of these numbers is reused.
-In codes 6, 8, 15 and 24 the field that carried the FX mode is always 0 since
-0.5.0.
+In codes 6, 8 and 15 the field that carried the FX mode (a) is always 0 since
+0.5.0; in code 24 that field (b) was 0 from 0.5.0 and holds the changed keys
+since 0.9.0.
 Codes 12/13 mark character-select entry and exit (exit = one second without a CSS update).
 No game-owned pane or font is modified by the global window.
 
@@ -336,12 +341,12 @@ hook symbol and serialises the counter, descriptor and name sections through
 | `build.txt` | First dump: build id, commit, function and counter counts, section addresses |
 | `live.profraw` | Rewritten every 10 s through a staging file, so a guest abort loses at most that much |
 | `scene-NNN-P-S.profraw` | Every scene status change (`P` previous, `S` new status byte) |
-| `manual-NNN.profraw` | Debug view L+R+Left |
+| `manual-NNN.profraw` | Debug view L+R+Left (since 0.10.5 the Debug view needs `debug_view=on`) |
 
 Counters are cumulative for the life of the process, so every file is a
 superset of the earlier ones. Per-scenario counts come from differencing two
 snapshots with `tools/coverage/profraw_diff.py`, or from separate sessions.
-Each dump is about 140 KB and costs one memory copy; the hooks themselves
+Each dump is about 115–145 KB and costs one memory copy; the hooks themselves
 only add counter increments. Event code 109 records each dump.
 
 Reports: `tools/coverage/report.py --elf <package>.elf --out <dir>
@@ -360,7 +365,11 @@ is true of every emulator session.
 ## Diagnostic build (0.10.3)
 
 `cargo skyline build --release --features diag` builds the Eden-only variant,
-kept in its own folder and never shipped. At boot it reads
+which is never shipped. It writes the same
+`target/aarch64-skyline-switch/release/libssbu_online_deluxe_rewrite.nro` as
+the product build, so copy it to a folder of its own. 0.10.3, which added it,
+was a test build and was not released; 0.10.4 is the first release whose
+source has it. At boot it reads
 `sd:/ultimate/ssbu_online_deluxe_rewrite/diag.txt`. Its one switch so far is
 the label feed:
 

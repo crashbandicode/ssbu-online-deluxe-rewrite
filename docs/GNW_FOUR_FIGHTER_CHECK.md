@@ -26,4 +26,4 @@ Evidence, including raw samples, screenshots, inventories, hook excerpts and res
 
 All three measurement windows completed without an in-match crash and with zero recorded OOM events. The enabled run exited normally. Two absent runs had frontend shutdown failures after explicit game closure, which are not attributed to the plugin. The isolated profile settings, plugins and cosmetic assets were restored and verified; the Switch was untouched.
 
-Earlier attempts with G&W Galaxy cosmetics or incorrectly selected Ice Climbers were excluded. A clean run on the original RTX host remains necessary to check the larger reported slowdown with the latest binary.
+Earlier attempts with G&W Galaxy cosmetics or incorrectly selected Ice Climbers were excluded. A clean run on an RTX 3050 Ti host, the GPU of the original report, followed on 2026-10-09 with this same `bceef1f0` NRO: median 28.00 FPS disabled, 59.99 enabled and 29.00 disabled again, recorded in the [G&W render fix README](https://git.syntaxbyexample.com/intpa/gnw-render-fix).

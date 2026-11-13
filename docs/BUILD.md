@@ -1,8 +1,9 @@
 # Build and release
 
-Use the pinned Rust toolchain in `rust-toolchain.toml`, installed cargo-skyline
-and the Skyline target. Native ImGui preparation and provenance are documented
-in [IMGUI_DEPENDENCY.md](IMGUI_DEPENDENCY.md).
+Host checks use the Rust toolchain pinned in `rust-toolchain.toml`. The Switch
+build uses cargo-skyline and its `skyline-v3` toolchain, which the package
+manifest records as `compiler`. Native ImGui preparation and provenance are
+documented in [IMGUI_DEPENDENCY.md](IMGUI_DEPENDENCY.md).
 
 Run each host check separately from the repository root:
 
@@ -42,15 +43,19 @@ runtime compatibility or reduced latency.
 `Build.ps1 -Coverage` builds the instrumented coverage variant into
 `target/coverage` (feature `coverage`, `tools/coverage/config.toml`); with
 `-Package -Output <dir>` the bundle's manifest records `"variant": "coverage"`.
-It is a measurement build for emulator and console sessions, never a release
-asset. How it works and how to read its profiles:
+It is a measurement build, so far run only in Eden, and never a release asset. How it works and how to read its profiles:
 [Coverage build](DEBUGGING.md#coverage-build-052).
 
 ## Release
 
 A release is a tag `vX.Y.Z` on the commit that bumps `Cargo.toml`, built from
 that commit so the build id (`X.Y.Z-<commit>-<epoch>`) names it, plus a Forgejo
-release carrying `libssbu_online_deluxe_rewrite.nro` and `manifest.json`. The
-manifest records the NRO and ELF SHA-256, module id, compiler and native
-dependency provenance. Every console install is recorded in
-[validation](VALIDATION.md) with the replaced NRO's hash and the rollback path.
+release carrying `libssbu_online_deluxe_rewrite.nro`, `manifest.json` and,
+since 0.10.0, `SHA256SUMS.txt`. The build id's epoch comes from
+`SOURCE_DATE_EPOCH` when it is set (`build.rs`); the v0.10.4 rebuild from its
+tag with that epoch gave the same NRO bytes. The manifest records the NRO and
+ELF SHA-256, module id, compiler, native dependency provenance and
+`runtime_tested`: `tools/package_debug.py` writes `false`, and v0.10.4's
+manifest is the first with `true` and a `runtime_evidence` record of its
+console run. Record each console install in [validation](VALIDATION.md)
+with the replaced NRO's hash and the rollback path.

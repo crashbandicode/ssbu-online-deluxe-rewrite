@@ -1,26 +1,33 @@
 # imgui-smash dependency (embedded host)
 
 The global overlay embeds the imgui-smash NVN backend in this NRO and uses it
-when no standalone `libimgui_smash.nro` is loaded. Elite Legal Stages ships
-that standalone plugin; when its exports match the pinned ImGui 19263 layout,
-this NRO borrows that context and does not start a second backend. There is
+when no standalone imgui-smash host is loaded. A standalone host is
+`libimgui_smash.nro`, or another NRO that carries the same exports, as the
+original Elite Legal Stages NRO did. When its exports match the pinned ImGui
+19263 layout, this NRO borrows that context and does not start a second
+backend. Legal Stages + Loser Counterpick, which replaces the original Elite
+plugin, links no ImGui; it adds a page to Deluxe's window through the plugin
+API ([Plugins](PLUGINS.md)). There is
 no `imgui-api` crate and no `Layout::Draw` hook. The active backend interposes
 `nvnBootstrapLoader` and draws inside the `nvnQueueSubmitCommands` wrapper, so
 the overlay is available in every scene.
 
 ## Pinned artifact and sources
 
-Since 0.3.8 the backend is built from the operator's Forgejo fork, whose
-`deluxe` branch carries the former local renderer patch as a commit plus the
-memory trims below. The compiled archive stays in the ignored
+Since 0.3.8 the backend is built from the operator's Forgejo fork, which
+carries the former local renderer patch as a commit plus the memory trims and
+font work below. That work was done on the fork's `deluxe`,
+`unicode-shared-font` and `sparse-codepoint-index` branches. All three were
+merged into the fork's `main` on 2026-11-13 and deleted; the commits keep
+their hashes. The compiled archive stays in the ignored
 `target/native/imgui/` directory.
 
 | Item | Value |
 |---|---|
 | Static archive | `libimgui_smash.a`, 14,788,410 bytes |
 | SHA-256 | `26ea2c3b8f401b710d0827efe10cb4059de091757b9254dd832b5e5e0a84d58d` |
-| Source | `https://git.syntaxbyexample.com/intpa/imgui-smash`, branch `sparse-codepoint-index`, commit `9405a494982d6eb091b334d08c5bc67fd6336b74` |
-| Upstream | `Coolsonickirby/imgui-smash` at `bb47b205ed0be2fb864269ee2d37fc886b81221e` (fork `main`) |
+| Source | `https://git.syntaxbyexample.com/intpa/imgui-smash`, commit `9405a494982d6eb091b334d08c5bc67fd6336b74` (made on `sparse-codepoint-index`, now in `main`) |
+| Upstream | `Coolsonickirby/imgui-smash` at `bb47b205ed0be2fb864269ee2d37fc886b81221e`, the fork's base |
 | ImGui submodule | `2b415e642b002f4312ac02f6bfa955960f8bd3b6` (unchanged in the tree; the fork's CMake applies `imgui-smash/patches/imgui/0001-paged-codepoint-index.patch`, `09e7b2fd…`, to a copy) |
 | Historical patch | `patches/imgui-smash/renderer-bb47.patch` (`4e138e35…`), now fork commit `ae77450`; no longer applied by the tool |
 
@@ -86,13 +93,16 @@ rootless Podman running the same pinned devkitA64 image and
 `prepare_imgui.py`'s own commands; the same route rebuilt the previous pin
 `09b296a0` exactly. `renderer-status.txt` adds `imgui_font_*` lines and
 `imgui_font_dynamic_set`. The external host (a standalone `libimgui_smash.nro`)
-keeps its own backend and font until it is rebuilt from this branch.
+keeps its own backend and font. No published standalone has this work: the
+newest imgui-smash release, v1.0.1, predates it, and the fork's `main` still
+pins 1.0.2's archive `7be7d40f…`, built before the merge.
 
 ### Fork branch `sparse-codepoint-index` (2026-11-10, 0.10.4)
 
 From `unicode-shared-font` `bec80ec`. Dear ImGui's per-codepoint index (two
 arrays with an entry per codepoint up to the highest one loaded, 6 bytes each)
-was the one font cost that grew with the language: on the console 16,560 bytes
+was the one font cost that grew with the language: in Eden (0.10.3's `dun-x2`
+and `dun-x3`, [Validation](VALIDATION.md)) 16,560 bytes
 with Latin text, 94,910 with the kana label, 336,134 with a Hangul and a kanji
 name (each figure includes the glyph table).
 
@@ -188,23 +198,25 @@ their archived trace records; numeric event IDs have not been reassigned.
 
 Members: `cimgui`, `InputHelper`, `fsHelper`, `memoryHelper`,
 `ImguiShaderCompiler`, `MemoryBuffer`, `MemoryPoolMaker`, `DrawSlots`,
-`frame_guard`, `imgui_impl_nvn`,
-`imgui_nvn`, `imgui_smash`, `Logger`, ImGui core, demo, draw, tables, widgets.
+`font_setup`, `frame_guard`, `imgui_impl_nvn`, `imgui_nvn`, `shared_fonts`,
+`imgui_smash`, `Logger`, ImGui core, demo, draw, tables, widgets.
 It defines the C API (`imgui_smash_init`, `imgui_smash_bootstrap_hook`,
 `imgui_smash_add_on_draw_frame`, `imgui_smash_context_setup`,
 `imgui_smash_set_logger`, …), the `ig*` cimgui functions, and its own allocator
 (`Mem::*`), so it imports no `operator new`.
 
-Symbols resolved at NRO load (all game or nnSdk exports that the fork's host
-already imported): `__cxa_guard_acquire/release`, `nn::fs::{OpenFile, ReadFile,
-WriteFile, CreateFile, CreateDirectory, OpenDirectory, CloseDirectory,
-GetEntryType, GetFileSize, SetFileSize, CloseFile}`, `nn::os::{GetSystemTick,
-ConvertToTimeSpan}`, `nn::ro::LookupSymbol`,
-`nn::gfx::detail::GlslcDll::{GetInstance, Finalize}`,
-`nn::hid::{GetNpadStyleSet, GetNpadState (FullKey, Handheld, JoyDual),
-InitializeKeyboard, InitializeMouse, GetKeyboardState, GetMouseState,
-GetTouchScreenState<1>}`, `nn::diag::detail::AbortImpl`, `nn::util::VSNPrintf`,
-`malloc`, `free`, `memcpy`, `memset`, `strlen`, `snprintf`, `vsnprintf`.
+Symbols resolved at NRO load (game or nnSdk exports): `__cxa_guard_acquire/release`,
+`nn::fs::{OpenFile, ReadFile, WriteFile, CreateFile, CreateDirectory,
+OpenDirectory, CloseDirectory, GetEntryType, GetFileSize, SetFileSize,
+CloseFile}`, `nn::os::{GetSystemTick, ConvertToTimeSpan}`,
+`nn::ro::LookupSymbol`, `nn::gfx::detail::GlslcDll::{GetInstance, Finalize,
+IsInitialized}`, `nn::hid::{GetNpadStyleSet, GetNpadState (FullKey, Handheld,
+JoyDual), InitializeKeyboard, InitializeMouse, GetKeyboardState,
+GetMouseState, GetTouchScreenState<1>}`, `nn::diag::detail::AbortImpl`,
+`nn::util::VSNPrintf`, and C library functions (`malloc`, `free`, `mem*`,
+`str*`, `*printf`). The font work (0.10.3) added the console's shared fonts,
+`nn::pl::{RequestSharedFontLoad, GetSharedFontLoadState,
+GetSharedFontAddress, GetSharedFontSize}`.
 `__cxa_guard_*` resolve to the game's C++ runtime, not to Skyline's private
 copy involved in the earlier `get_plugin_addresses` abort.
 
@@ -226,9 +238,10 @@ buffer exist (`imgui_nvn.cpp`). Detection is by export, not by file path.
   `imgui_smash_add_on_draw_frame_wrapper` both fall in one other NRO's text
   segment, and that header's ro segment contains `1.92.7 WIP (19263)`.
   The text mapping must start at the NRO header (`text_offset == 0`, which the
-  Elite file uses: text `0x0/0xe8000`, ro `0xe8000/0x42000`, tag at file
-  `0xf6083`). `imgui_get_context_export` is optional and, if present, must be
-  in that same text segment. The Elite NRO does not export it. This path does
+  original Elite Legal Stages file uses: text `0x0/0xe8000`, ro
+  `0xe8000/0x42000`, tag at file `0xf6083`). `imgui_get_context_export` is
+  optional and, if present, must be in that same text segment. That Elite NRO
+  does not export it. This path does
   not call this NRO's `imgui_smash_init` or `imgui_smash_bootstrap_hook`. It
   registers the setup callback and a draw thunk with the standalone. The thunk
   calls this NRO's `igSetCurrentContext` with the borrowed pointer, checks
@@ -282,11 +295,12 @@ then, so it sees the same context the draw calls use. Otherwise it returns
   `nn::hid` itself.
 - `IM_ASSERT` aborts the game: Begin/End and Push/Pop must balance in the draw
   callback, and `ig*` must not be called outside a frame.
-- Both Deluxe and Elite consume D-pad input when their menus are open. Edit
-  one menu at a time. Elite's stage restriction is NSO-only; offline stages
-  remaining unrestricted is expected.
-- On the October9 Switch build, the operator reports that Deluxe Debug's
-  `L+R+Up` capture shortcut also opens Elite. Deluxe showed `Capturing (10 s)`
+- The original Elite Legal Stages drew its own ImGui menu, and it and Deluxe
+  both consumed D-pad input while their menus were open: edit one menu at a
+  time. Legal Stages + Loser Counterpick has no menu of its own; its settings
+  are a page in Deluxe's window.
+- On the October 9 Switch build, the operator reports that Deluxe Debug's
+  `L+R+Up` capture shortcut also opens the original Elite's menu. Deluxe showed `Capturing (10 s)`
   (the capture has been 30 s since 0.3.1 and the label now reads `Capturing`),
   so both responded. The collected files show recording completed, with a complete
   callback CSV and truncated API CSV; the source audit identified per-fragment

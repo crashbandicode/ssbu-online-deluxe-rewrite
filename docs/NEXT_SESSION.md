@@ -1,5 +1,11 @@
 # Resume and test plan
 
+> **Historical, last updated 2026-10-28** (0.8.1 candidates). It is not the current plan or card state: 0.9.0
+> released those candidates on 2026-10-30, the latest release is
+> [0.10.4](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.10.4), and what has
+> been checked since is in [Status](STATUS.md) and [Validation](VALIDATION.md). Its checks are kept because those
+> pages link to them.
+
 ## One-boot checks: You-line controls, lobby window, 120 Hz — 2026-10-28
 
 Installed on the card on 2026-10-28: candidate

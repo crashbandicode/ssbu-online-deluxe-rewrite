@@ -87,9 +87,9 @@ not change simulation, networking, rendering policy or input handling.
   known. Its room-ID path, style and positioning are implemented but require an
   actual NSO arena test on Switch.
 - One text builder (`native_banner::status_text`) formats the CSS line and the
-  arena roster, so the CSS fields take the arena byte bounds (name ≤ 40 bytes,
-  profile ≤ 9, latency ≤ 4, ping ≤ 17; since 0.6.2 only the You line's latency
-  field takes 10 for `Auto (4f)`, remote lines keep 4); one style decision
+  arena roster, so the CSS opponent line takes the arena byte bounds (name ≤ 40
+  bytes, profile ≤ 9, latency ≤ 4, ping ≤ 17); the You line's profile takes up
+  to 20 and, since 0.6.2, its latency field 10 for `Auto (4f)`; one style decision
   (`native_banner::paint`) chooses between the Streamer restore and the
   telemetry write for every pane kind (2026-10-17).
 - Original styles are captured and restored instead of assuming the fork's
@@ -102,7 +102,10 @@ not change simulation, networking, rendering policy or input handling.
 
 The offline test used candidate `84d48448ac91e65d`, isolated Eden run
 `20261007-101737-33eb02`, with Training Modpack, corrected gamepad overlay,
-ARCropolis, Elite Legal Stages and standalone ImGui loaded.
+ARCropolis, Elite Legal Stages and standalone ImGui loaded. Elite Legal Stages
+in this record is the original third-party NRO, which drew its own ImGui
+window ("Elite's window" below); Legal Stages + Loser Counterpick has since
+replaced it ([Plugins](PLUGINS.md)).
 
 Observed screenshots and persisted INI confirm:
 

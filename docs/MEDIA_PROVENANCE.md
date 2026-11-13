@@ -9,7 +9,7 @@ and do not show. The observations themselves are recorded in
 The current UI examples were captured on **2026-10-24** in an isolated, muted
 Eden profile on Ubuntu, running Smash **13.0.5**. They replace the older 0.5.0
 UI examples. Four files are from a later session; see
-[Horizon-OC indicator media](#horizon-oc-indicator-media-090-candidate-2026-10-27).
+[Horizon-OC indicator media](#horizon-oc-indicator-media-081-candidate-2026-10-27).
 
 - **Deluxe:** the released 0.7.0 NRO, build `0.7.0-9a7f81ce1937-1792670948`,
   tag `v0.7.0`, SHA-256
@@ -55,8 +55,8 @@ These are offline emulator UI demonstrations:
   benchmark or an input-latency comparison.
 - Not demonstrated: the online Opp summary, Auto's online `(Nf)` value and the
   console-only LLUltra resolution cycle.
-- The unreleased revision-5 status cells on main after v0.7.0 are not in this
-  release binary.
+- The revision-5 plugin status cells, first released in 0.8.0, are not in this
+  0.7.0 binary.
 
 No new console run is claimed.
 
@@ -78,7 +78,7 @@ directory `deluxe-media-refresh-1024/`.
 ## Current assets
 
 All 29 are shown in [Screenshots](SCREENSHOTS.md). The four marked 0.8.1 come
-from the Horizon-OC stand-in run described [below](#horizon-oc-indicator-media-090-candidate-2026-10-27).
+from the Horizon-OC stand-in run described [below](#horizon-oc-indicator-media-081-candidate-2026-10-27).
 
 | File | Size | Length | Shows |
 | --- | --- | --- | --- |

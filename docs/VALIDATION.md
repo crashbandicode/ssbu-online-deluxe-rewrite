@@ -11,12 +11,17 @@ ran on the operator's Switch on 2026-11-10: firmware 23.0.1, Atmosphère
 - **Logs:** the plugin's `install.log`, `events.log`, `renderer-status.txt`
   and their `.previous` copies on the card name that build. They were written
   between 17:31 and 19:59 EST that day and read from the card on 2026-11-13.
-- **The fonts weren't on the console path.** The card also held a standalone
-  `libimgui_smash.nro` (`d8e987fe…`). With one loaded, Deluxe doesn't start
-  its own ImGui (`src/imgui_host.rs` `select_imgui_host`), so the new fonts
-  and the paged index weren't exercised on the console; `dun-x6` and `dun-x8`
-  below exercised them in Eden.
-- The card has had 0.10.5 since 2026-11-11.
+- **The fonts weren't on the console path.** During that run the card also
+  held a standalone `libimgui_smash.nro` (`d8e987fe…`). With one loaded,
+  Deluxe doesn't start its own ImGui (`src/imgui_host.rs`
+  `select_imgui_host`), so the new fonts and the paged index weren't
+  exercised on the console; `dun-x6` and `dun-x8` below exercised them in
+  Eden.
+- **Since then.** On 2026-11-12 at 01:11Z (2026-11-11 20:11 EST), before the
+  logs were read, the card got 0.10.5 (`c37ee0ff…`, receipt
+  `card-install-rc9/2-deluxe`) and a 1.0.2 build of the standalone NRO
+  (`f72a6b8d…`, receipt `card-install-rc9/4-imgui`). No console run of 0.10.5
+  is recorded.
 
 **Release.** Tag `v0.10.4` (annotated `0caec443…`, commit `21c0009d`) was
 built again from a clean clone with the release procedure.
@@ -70,6 +75,12 @@ The change (`055d653`) resolves the card's shortcut conflicts on Deluxe's side:
 C11 are staged for the combined ship boot. C4's Eden check is TrainingRooms
 rc.9 reading the export. C7 needs a replay and is host-tested only. No tag and
 no release.
+
+**On the card (noted 2026-11-13).** The card holds a later 0.10.5 build, not
+this one: `0.10.5-a88d659e3149-1794442134` from `a88d659`, which adds L to
+C5's held buttons (a GameCube pad's left trigger), NRO `c37ee0ff…`, installed
+2026-11-12 01:11Z (receipt `card-install-rc9/2-deluxe`). No console run of it
+is recorded.
 
 ## 0.10.4 — paged codepoint index: Eden checks — 2026-11-10
 
@@ -134,10 +145,13 @@ resident 1,224,704 bytes (as 0.10.3). The diagnostic build
 in Eden.
 
 It pins imgui-smash `sparse-codepoint-index` `9405a49`
-(`docs/IMGUI_DEPENDENCY.md`). Dear ImGui indexed the overlay font's glyphs
-with an entry per codepoint up to the highest one loaded, 6 bytes each: on
-the console, 16,560 bytes with Latin text, 94,910 with the kana label and
-336,134 with a Hangul and a kanji name (each including the glyph table).
+(`docs/IMGUI_DEPENDENCY.md`; on 2026-11-13 the fork's branches
+`sparse-codepoint-index`, `unicode-shared-font` and `deluxe` were merged into
+its `main` and deleted, and their commits keep their hashes). Dear ImGui
+indexed the overlay font's glyphs with an entry per codepoint up to the
+highest one loaded, 6 bytes each: in Eden (0.10.3's `dun-x2` and `dun-x3`
+below), 16,560 bytes with Latin text, 94,910 with the kana label and 336,134
+with a Hangul and a kanji name (each including the glyph table).
 
 - **The patch.** The fork's patch to Dear ImGui keeps the index in
   256-codepoint pages where glyphs exist. Every use of the index goes through
@@ -389,9 +403,11 @@ byte-identical to the build tested in Eden below.
 - **Rollback:** copy `backups/pre-bc8a64283285b762.nro` (the 0.10.1 build)
   over the plugin.
 - Right after this, memory_guard 0.1.0 (a separate plugin) was added to the
-  card, which now holds 17 plugins.
+  card, which then held 17 plugins.
 
-Not run on the console yet.
+Not run on the console yet. Later note (2026-11-13): TrainingRooms' logs read
+from the card on 2026-11-05 and 2026-11-08 show console boots with this build
+as Deluxe; no Deluxe check on the console is recorded.
 
 ## 0.10.2 — Eden checks — 2026-11-02
 
@@ -499,7 +515,9 @@ Installed at the operator's request.
 - **Rollback:** copy `backups/pre-a8dcda242b890f09.nro` (the 0.10.0 build)
   over the plugin.
 
-Not run on the console yet.
+Not run on the console yet. It then ran on the console in the operator's
+Elite Smash session, whose log was read on 2026-11-02
+([0.10.2](#0102--elite-smash-classified-online-source-and-host-gates--2026-11-02)).
 
 ## 0.10.1 — label column and L+R+X on plugin rows: source and host gates — 2026-11-01
 
@@ -1187,7 +1205,8 @@ plugin). `hoc_oc` is absent, so the default `always` keeps Horizon-OC's own
 behavior until ZR+L3. Receipts and local backups are outside the repository:
 `horizon-oc-game-aware-tangent-20261027/usb-install-1027/` (`preflight.json`,
 `deployment.json`, `before/`). Installed only; nothing has run yet, so
-`runtime_tested=false`.
+`runtime_tested=false`. Its one console boot is recorded in the
+handshake-failure entry above.
 
 ## 0.8.0 — public release assets — 2026-10-25
 
@@ -1281,16 +1300,16 @@ External receipt: `docs-notes-fx-1025/release-070/PUBLICATION.json`.
 ## Operator report — Eden and Erista Switch — 2026-10-25
 
 The operator reports that Deluxe has been tested in Eden and on an Erista
-Switch without issues observed, and works with the latest firmware, Atmosphère
-and Skyline. The upstream versions checked on 2026-10-25 are:
+Switch without issues observed, and works with the then-latest firmware,
+Atmosphère and Skyline. The upstream versions checked on 2026-10-25 are:
 
 - [Switch firmware 23.0.1](https://en-americas-support.nintendo.com/app/answers/detail/a_id/22525/~/nintendo-switch-system-updates-and-change-history#current), released 2026-09-30.
 - [Atmosphère 1.12.1](https://github.com/Atmosphere-NX/Atmosphere/releases/tag/1.12.1), released 2026-10-16.
 - [Skyline beta](https://github.com/skyline-dev/skyline/releases/tag/beta), released 2026-04-12, at commit [`2eb226fa9e4ab023dc00cb0db10ad4ec50ac4fa3`](https://github.com/skyline-dev/skyline/commit/2eb226fa9e4ab023dc00cb0db10ad4ec50ac4fa3). Skyline's runtime release uses a `beta` tag, not the Rust crate's version number.
 
-This operator report is the basis for the README's testing and compatibility
-summary. The release links identify the upstream versions; they are not new
-agent-run compatibility tests. No plugin build hash or per-feature checklist
+This operator report became the basis for the README's testing and
+compatibility summary. The release links identify the upstream versions; they
+are not new agent-run compatibility tests. No plugin build hash or per-feature checklist
 was supplied with this report, so build-specific evidence remains separate below.
 
 The operator also confirmed that **dispatcher backoff's Eden benefit carried
@@ -1826,8 +1845,9 @@ ran. Every rewrite hook now has a unique prefix, internal function references
 bind locally, and bootstrap installation checks the replacement's module.
 
 These checks cover boot, menus, toggling and NVN observation in Eden. They do not
-establish native Switch compatibility or actual Elite stage filtering. The
-standalone build was ImGui 1.92.7 WIP (19263), SHA-256
+establish native Switch compatibility or that the original Elite Legal Stages
+plugin actually filters stages. The standalone build was ImGui 1.92.7 WIP
+(19263), SHA-256
 61e19e1b593826b1216228c6536cf2603b512154a8fecc548203e245bb86ed3e.
 Unknown host ABIs are refused with diagnostics.
 
@@ -2046,10 +2066,11 @@ the resolution report recovered afterward. The actual cut-in trigger was not
 exercised. Nonfighter-category rejects during weapon articles are expected
 filtering, not evidence of failed fighter reads.
 
-Both Deluxe and Elite menus worked through the standalone ImGui host. Elite's
-enabled setting persisted; offline Training continued. Both menus consume D-pad
-edits when simultaneously open, so edit one at a time. This does not validate
-Elite's NSO-only stage filter.
+Both Deluxe's menu and the menu of the original Elite Legal Stages plugin
+worked through the standalone ImGui host. Elite's enabled setting persisted;
+offline Training continued. Both menus consume D-pad edits when
+simultaneously open, so edit one at a time. This does not validate that
+plugin's NSO-only stage filter.
 
 A manual console-LLUltra boot showed an undersized title image after the rewrite
 had applied its crop. Later CSS/match images filled the window. Fable reviewed
@@ -2185,7 +2206,8 @@ were visible. The Ethernet value is the emulator's virtual nifm result.
 No ambiguous-identity skips occurred. A few bounded lock-contention skips were
 recorded; these are safe rejected attempts, not a claim of zero contention.
 
-Elite's menu was opened with Deluxe and enabled before a regular linked match.
+The original Elite Legal Stages plugin's menu was opened with Deluxe and
+enabled before a regular linked match.
 G&W on A used LessLag and the one-sided render fix; Sephiroth on B used Auto,
 which selected LLUltra at match start. The G&W log confirms full shader/constants
 verification and narrowed ranges restored after use. On Saffron City, both peers
@@ -5534,7 +5556,8 @@ when each trigger fired.
 
 Branch `post-scene-teardown-guard` (candidate `cc7f07f6…`, Eden evidence in
 the 0.5.0 entry below: 22 Training → character-select exits without the
-post-scene guest abort that hit the release five times in about 22 exits)
+post-scene guest abort that hit the release five times in about 22 exits,
+four of them named as runs in that entry)
 merged into main at 8aaef69 (`--no-ff`), version bumped to 0.5.1 at 231f4c8.
 Change: `src/teardown_guard.rs` and `src/runtime/render_sequence.rs` skip
 the relocated model update and the fighter worker on a frame in which a
@@ -5766,8 +5789,11 @@ request; results in the FX Control repository, `docs/FX_EMULATOR_RESULTS.md`
 27 moves × On/Off/Reduced, one 30 s `CAPTURE_TIMING` each. Deluxe-relevant
 outcomes: (1) the post-scene guest abort recurred twice more on the release
 NRO at Training exits (runs 5 and 6; five guest aborts in roughly 22 exits
-over the night, all the same backtrace); (2) from 04:55Z the Eden profile
-ran the teardown-guard candidate `cc7f07f6…` (branch
+over the night, all the same backtrace. Note 2026-11-13: the guest aborts
+this entry names are four, runs 2, 3, 5 and 6, since runs 1 and 4 were
+traced to the host; the evidence root that would show a fifth isn't on the
+build host); (2) from
+04:55Z the Eden profile ran the teardown-guard candidate `cc7f07f6…` (branch
 `post-scene-teardown-guard`, package `artifacts/6e74426068fed7a2/`): six
 Training → character-select exits plus one boot, `teardown_guard_skips` 0 →
 11 with a code-48 event each time, no abort and 60 fps between captures.
@@ -5782,9 +5808,11 @@ every fourth cycle. 16 of 16 exits reached the character select at 60 fps;
 `teardown_guard_skips` and the code-48 count rose by exactly one across every
 exit (11 → 43, the guard also fires on fighter loads); zero stalls or
 aborts. Together with the campaign that is 22 exits without an abort on the
-candidate against five aborts in about 22 exits on the release build the
-same night, all in Eden. The candidate is not merged, not pushed, not on the
-console; the operator decides.
+candidate against five aborts (four named; see the note above) in about 22
+exits on the release build the same night, all in Eden. The candidate is not
+merged, not pushed, not on the console; the operator decides. (Later that day
+the branch was merged and shipped as 0.5.1, which went on the card and ran on
+the console; see the 0.5.1 entry above.)
 
 ### DBI USB MTP installation of f22d (0.3.0) — 2026-10-12 19:58Z
 

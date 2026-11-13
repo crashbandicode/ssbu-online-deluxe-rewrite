@@ -5,7 +5,7 @@ There are two ways another Skyline plugin can plug in. They are independent.
 | You want | Use | Where |
 | --- | --- | --- |
 | Rows in Deluxe's menu (a toggle, a mode, a status) without writing any UI code | Deluxe's **plugin API** (`ssbu_online_deluxe_plugin_api_v1`) and the Rust SDK | this page, [sdk/README.md](../sdk/README.md) |
-| Your own Dear ImGui windows drawn by the same renderer Deluxe uses | the **imgui-smash host** (`libimgui_smash.nro`, branch `deluxe`) | [intpa/imgui-smash](https://git.syntaxbyexample.com/intpa/imgui-smash) |
+| Your own Dear ImGui windows drawn by the same renderer Deluxe uses | the **imgui-smash host** (`libimgui_smash.nro`) | [intpa/imgui-smash](https://git.syntaxbyexample.com/intpa/imgui-smash) |
 
 ## Menu rows in three steps
 
@@ -91,13 +91,30 @@ scopes its behaviour to online play reads
 scene sites itself: it returns the host's ready / online / match / training
 bits, or `None` when Deluxe is absent or older than 0.5.0.
 
-[FX Control](https://git.syntaxbyexample.com/intpa/ssbu-fx-control) is the
-first plugin built this way. It is the character-FX feature that Deluxe
-carried until 0.5.0, now a separate NRO: an own page titled **FX Control**
-with a scope row, an all-fighters row, one row per covered fighter and, under
-a header per fighter, a value row per move selecting its Reduced variant
-(every non-header row is a `RowLayout::Value`). Its Online scope reads
-`host_online_context()`.
+Plugins that put rows in Deluxe's window:
+
+- [FX Control](https://git.syntaxbyexample.com/intpa/ssbu-fx-control), the
+  first plugin built this way. It is the character-FX feature that Deluxe
+  carried until 0.5.0, now a separate NRO with two own pages through the SDK.
+  **FX Control** has a scope row, an all-fighters row, one row per covered
+  fighter and, under a header per fighter, a value row per move selecting its
+  Reduced variant (every non-header row is a `RowLayout::Value`). **Stages**
+  has an All backgrounds row and an On / Off row per stage for its background
+  visuals. The fighter rows' Online scope reads `host_online_context()`.
+- CPU Pilot (ssbu-cpu-pilot): an own page, **CPU Pilot**, with the P1, Auto
+  rematch and Auto save replay rows, through the SDK.
+- TrainingRooms
+  ([TrainingRoomsForUltimate](https://git.syntaxbyexample.com/intpa/TrainingRoomsForUltimate)):
+  one row, **Replay capture**, under its **Training Rooms** group on the shared
+  Plugins page, through the SDK.
+- Legal Stages + Loser Counterpick
+  ([elite-stages-counterpick](https://git.syntaxbyexample.com/intpa/elite-stages-counterpick)):
+  an own page, **Stages + Counterpick**. Its legal stage pool limits the stages
+  the game may pick to the ones you check. Its optimal counter pick (optional)
+  affects an accepted online 1v1 rematch: under your preferred rules, it makes
+  the game pick the loser's highest-ranked eligible stage. It doesn't use the
+  SDK or link ImGui: it resolves `ssbu_online_deluxe_plugin_api_v1` itself and
+  registers its page with status cells ([below](#status-cells-080)).
 
 `request` is a request, not a command: return
 `Pending` to apply a change later (the row shows `(pending)` until `current`
@@ -141,7 +158,10 @@ revision 2 to 4 descriptor that sets it is `REGISTER_ERR_INVALID`, and a host
 built before revision 5 answers `REGISTER_ERR_ABI` before it registers
 anything, so a plugin can then register the same rows as plain status rows
 with a revision 4 descriptor. The SDK still sends revision 4 and has no cell
-layout; a native plugin sets the flag in its own descriptor. On the compact
+layout; a native plugin sets the flag in its own descriptor. Legal Stages +
+Loser Counterpick is one: its **Pool | Results | Save** table is a run of
+three cells in a revision 5 descriptor, and on `REGISTER_ERR_ABI` it registers
+the same rows as plain status rows with revision 4. On the compact
 in-match strip a cell run is one entry (`Pool:✓ | Results:✓ | Save:✗`, drawn
 with the same marks), and the final strip page takes the passive rows that follow
 the last editable row so they stay reachable.
@@ -177,25 +197,35 @@ pub unsafe extern "C" fn ssbu_online_deluxe_overlay_state_v1(out: *mut DeluxeOve
   `OVERLAY_STATE_SYMBOL` / `OVERLAY_STATE_SYMBOL_C` and `OverlayStateFn`; the
   Rust SDK wraps the call as `deluxe_plugin_sdk::host_overlay_state() ->
   Option<u32>` with that lookup rule. Both crates stay at version 5.0.0, as
-  when 0.8.0 added the revision-5 constants: depend on the release tag.
+  when 0.8.0 added the revision-5 constants. No release tag has these yet
+  (v0.10.4 doesn't); they are on `main`, which is 0.10.5.
 
 ## Your own windows through the imgui-smash host
 
-Deluxe statically links the `deluxe` branch of
-[intpa/imgui-smash](https://git.syntaxbyexample.com/intpa/imgui-smash) and,
-when a compatible standalone `libimgui_smash.nro` is installed, reuses that host
-instead. A plugin that wants its own windows (as Elite Legal Stages does) links
-the host's exported `imgui_smash_*` functions and draws with Dear ImGui; the
-fork's README has the steps and the release carries the host NRO and the
-archive. Both integrations can run at once: Deluxe's menu and your windows
-share one renderer and one controller.
+Deluxe statically links `libimgui_smash.a`, built from
+[intpa/imgui-smash](https://git.syntaxbyexample.com/intpa/imgui-smash) at
+`9405a49`, now on that repository's `main` ([ImGui dependencies](IMGUI_DEPENDENCY.md)).
+When a compatible standalone `libimgui_smash.nro` is installed, Deluxe reuses
+that host instead, with that host's font (v1.0.1's is ASCII only, so names
+outside ASCII show `?`); a standalone whose exports or ImGui version don't
+match keeps Deluxe's window off ([Install](INSTALL.md#imgui)). A plugin that wants its own windows registers through the
+host's exported `imgui_smash_*` callbacks and draws with matching Dear ImGui
+code; the fork's
+[developer guide](https://git.syntaxbyexample.com/intpa/imgui-smash/src/branch/main/docs/DEVELOPMENT.md)
+has the steps, and its release carries the host NRO and the archive. Legal
+Stages + Loser Counterpick, which replaces the original Elite Legal Stages NRO,
+is not such a plugin: it links no ImGui and registers its settings page
+through the plugin API above. Both integrations can run at once: Deluxe's
+menu and your windows share one renderer and one controller.
 
 ## Verification
 
-The Plugins page, pending requests and tones were verified in Eden on
+The Plugins page, tones and read-only rows were verified in Eden on
 2026-10-12 with the demo NRO ([validation](VALIDATION.md), "Plugin value tones
-and read-only rows"). On the console, FX Control's own page registered with
-descriptor 4 and its rows were edited in Training on 2026-10-16
-([Status](STATUS.md)); tones, pending requests and read-only rows have not
-been observed on hardware. Status cells have host layout/registration coverage;
-runtime validation remains pending.
+and read-only rows"); pending requests have host tests only. On the console,
+FX Control's own page registered with descriptor 4 on 2026-10-16
+([Status](STATUS.md)); that record has no row edits, and tones, pending
+requests and read-only rows have not been observed on hardware. Status cells
+have host layout/registration coverage; runtime validation remains pending.
+The window-state export (0.10.5) has host tests only; no Eden or console run
+is recorded yet.

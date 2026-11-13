@@ -6,7 +6,7 @@ tick, buttons and overlay view; schema 1 files also carried three FX columns)
 and `api-<tick>.csv` (CPU-side spans around the render API
 calls and the plugin's own markers). Both stream from the diagnostics thread
 while the capture runs; no game hook does file I/O. `timing-status.txt` reads
-`capturing …` and then `saved …`. Analyze with `tools/analyze_timing.py`,
+`capturing …`, `exporting …` and then `saved …`. Analyze with `tools/analyze_timing.py`,
 `tools/frame_windows.py` (callbacks per second, worst one-second window,
 resolution edges from `events.log`) and
 `tools/analyze_render_trace.py`; the column and footer formats are in
@@ -15,8 +15,11 @@ resolution edges from `events.log`) and
 ## Manual capture
 
 Hold L+R and tap Up in the Debug view, or write a label (letters, digits, `_`,
-`-`, up to 48 characters) to `sd:/ultimate/ssbu_online_deluxe_rewrite/CAPTURE_TIMING`.
-The capture lasts 30 s. A request during a running capture or export is ignored.
+`-`, up to 48 characters; an empty file is labelled `manual`) to
+`sd:/ultimate/ssbu_online_deluxe_rewrite/CAPTURE_TIMING`. Since 0.10.5 (not
+released yet) the Debug view opens only with `debug_view=on` in `config.ini`;
+the file works either way. The capture lasts 30 s. L+R+Up during a running
+capture or export is ignored; a `CAPTURE_TIMING` file waits until it ends.
 
 ## Character-select capture (opt-in)
 
@@ -41,8 +44,9 @@ To see what a whole match does, create an empty file
 capture pair is then armed when a stage loads (Singles, Doubles or Training;
 label `match_singles`, `match_doubles` or `match_training`) and ends when the
 game leaves the stage (results screen or character select; `# reason=scene_end`),
-or after ten minutes. Both files stream to the card while the match runs, about
-4 MB per minute. The flag also installs the two read-only `CAPTURE_CSS` hooks
+or after ten minutes. Both files stream to the card while the match runs; the
+Eden match captures of 2026-11-10 (`dun-x6`, `dun-x8`) wrote 1.6–2.6 MB per
+minute. The flag also installs the two read-only `CAPTURE_CSS` hooks
 so dependency waits and the UI job appear in the trace; with both flags on the
 card the character-select capture runs as well. The Debug view's
 `Match capture` row counts the captures armed and ended; event log code 106

@@ -18,7 +18,10 @@ on that exact binary. Keep this distinction when citing the measurements.
 two-image LessLag presents the acquired image at the flush that submits it
 (`render_policy::present_at_flush`). The LessLag frame counts below come from
 the earlier path. The 0.5.0 and 0.5.2 re-measurements below were taken on the
-new path; since 0.5.2 LLUltra and LLDoubles present at the flush too.
+new path; since 0.5.2 LLUltra and LLDoubles present at the flush too. Since
+0.5.6 Vanilla does as well (Vanilla+, on by default; `vanilla_plus=false` or
+`early_present=false` turns it off); every Vanilla count below predates it and
+is the game's own order.
 
 ## Measurement boundaries
 
@@ -195,8 +198,8 @@ b19b7d94ae136e55d2fe59136dd9ff2c40ce9436393a59984660ed3ab8c52cd7
 
 One isolated Eden `10bcd2d849` instance, Vulkan/docked/1×/100%, Sephiroth versus
 Sora on the Training stage, 640×360 captures. Training Modpack, corrected gamepad
-overlay, ARCropolis, Elite Legal Stages and standalone ImGui were installed.
-FX was On/all and input buffer Auto. Profiles were selected manually and verified
+overlay, ARCropolis, the original Elite Legal Stages NRO and standalone ImGui
+were installed. FX was On/all and input buffer Auto. Profiles were selected manually and verified
 Active in `policy_committed` before and after every group. Normal groups ran
 Vanilla → LessLag → LLUltra → LLDoubles; delayed groups reversed that order.
 

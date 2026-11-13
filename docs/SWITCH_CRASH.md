@@ -1,5 +1,9 @@
 # Switch rollback and crash investigation, 2026-10-05
 
+> **Dated record, 2026-10-05 and 2026-10-06.** "Now", "currently", "pending" and "remains" below describe those
+> days. The card has been updated many times since (Skyline, Atmosphère and many Deluxe builds); its
+> current state and the later console results are in [Status](STATUS.md) and [Validation](VALIDATION.md).
+
 The original Skyline and ARCropolis 4.0.9 files were restored, hash-verified and
 flushed to the Switch SD. Only hash-matched files introduced by the update were
 removed. No rewrite build was deployed to the Switch. The SD has not been accessed

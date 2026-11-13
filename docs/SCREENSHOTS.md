@@ -3,8 +3,8 @@
 A short visual tour of the Deluxe window. Every image is a real capture from an
 offline Eden session: most from the 0.7.0 session on 2026-10-24, with the separate
 [FX Control](https://git.syntaxbyexample.com/intpa/ssbu-fx-control) companion
-installed, and the ZR, privacy and Horizon-OC clips from a 0.8.1-candidate
-session on 2026-10-27. Both used demonstration settings (manual LessLag,
+installed, and the ZR, privacy and Horizon-OC clips and the Clock close-up
+from a 0.8.1-candidate session on 2026-10-27. Both used demonstration settings (manual LessLag,
 `platform=emulator`, `vanilla_plus=false`), not the shipped defaults. Builds,
 encoding and scope are in [Media provenance](MEDIA_PROVENANCE.md); every
 control is in [Controls](CONTROLS.md).
@@ -16,7 +16,9 @@ The window has a few pages, and one chord steps through them.
 1. Hold **L+R** and tap **D-pad Down** to open Settings.
 2. Keep L+R held and tap Down again for each next page: Settings → FX Control →
    Stages → Performance → Window Options → hidden.
-3. Debug is separate: **L+R+Plus** (or Minus) opens and hides it.
+3. Debug is separate: **L+R+Plus** (or Minus) opens and hides it. Since
+   0.10.5 (not released yet) only with `debug_view=on` in `config.ini`; it is
+   off by default.
 
 ![Cycling the window pages with L+R+Down](media/overlay-cycle.gif)
 
@@ -30,7 +32,9 @@ navigation cannot change a setting.
 
 1. On Settings, press **Down** to select NetLatency.
 2. Hold **ZR** and press **Right**: Auto becomes `< 0 >`.
-3. Hold **ZR** and press **Left** to restore Auto; **Up** returns to You.
+3. Hold **ZR** and press **Left** to restore Auto; release ZR, then **Up**
+   returns to You (since 0.10.5 Up and Down move nothing while ZR, ZL, L or R
+   is held).
 
 ![Editing NetLatency with the ZR guard](media/settings-edit.gif)
 
@@ -64,7 +68,8 @@ third player mode.
 - Frame it and press **L+R+X** to switch `hoc_oc` between `online` and `always`.
 - In `online` mode the clock is grey while the saved profile is held back
   (offline here) and green while it is applied.
-- In `always` it is white with a hub (0.9.0; 0.8.1 removed it).
+- In `always` it is white with a hub (since 0.9.0; 0.8.1 drew no clock in
+  `always`).
 
 ![0.8.1: switching the Horizon-OC mode with ZR+L3](media/oc-indicator.gif)
 
@@ -139,7 +144,7 @@ offline match has none.
 
 | | |
 | --- | --- |
-| ![Match with the Settings strip](media/match-settings-strip.png) <br> Pyra against a level-1 CPU Mario on Hollow Bastion: `>You:`, `Net:Auto`, `Profile:LessLag \| Active`. | ![Match with the Settings strip, animated](media/match-strip.gif) <br> Six seconds with the Settings strip open. |
+| ![Match with the Settings strip](media/match-settings-strip.png) <br> Pyra against a CPU Mario on Hollow Bastion: `>You:`, `Net:Auto`, `Profile:LessLag \| Active`. | ![Match with the Settings strip, animated](media/match-strip.gif) <br> Six seconds with the Settings strip open. |
 | ![Match with the Performance strip](media/match-performance.png) <br> Performance uses the compact strip too. | ![Debug table over the pause menu](media/match-debug.png) <br> Debug stays a vertical table; L+R+Plus also opens the game's pause menu. |
 | ![No Contest after quitting](media/results-quit.png) <br> Results after Quit and Yes: No Contest, not a completed match. | |
 

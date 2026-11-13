@@ -17,12 +17,16 @@ hook only decides whether to wait before repeating. It is installed for every
 rendering profile and scene because the waste is in game code and exists in
 Vanilla too.
 
-Eden A/B/A with a 175% CPU quota on the CSS: LessLag 52 → 59 fps and 18% less
-CPU per frame; Vanilla and LLDoubles kept 60 with the same CPU saving; a live
-match lost no frames. **The operator confirms that dispatcher backoff also
-helped on Switch** (2026-10-25). The figures above remain Eden measurements;
-the Switch report did not supply an isolated numeric A/B delta
-(see [validation](VALIDATION.md)). The Performance
+Eden A/B/A with a 175% CPU quota on the CSS, using the diagnostic probe of
+2026-10-12: LessLag 52 → 59 fps and 18% less CPU per frame; Vanilla and
+LLDoubles held about 60 with 12–17% less; a live match held 59–60 fps. The
+shipped hook then measured 54–56 → 60 fps on the same CSS
+([validation](VALIDATION.md#character-select-slowdown-call-level-attribution-and-dispatcher-backoff--2026-10-12)).
+**On 2026-10-25 the operator reported that the Eden benefit carried over to
+the Switch.** That report gave no numeric Switch A/B, so the figures above
+remain Eden measurements
+([validation](VALIDATION.md#operator-report--eden-and-erista-switch--2026-10-25)).
+The Performance
 view shows a **Backoff** row: sleeps per second and the last sleep length,
 `Idle` when nothing is waiting, `External` when another plugin already owns
 the hook site, `Unavailable` when the game image does not match 13.0.5, and
@@ -32,16 +36,18 @@ the hook site, `Unavailable` when the game image does not match 13.0.5, and
 
 The sleep lengths are the shipped defaults: 16 idle passes spin, then 5 µs
 doubling to 50 µs on every later idle pass, main thread only. The optional
-`dispatcher_backoff.ini` override was removed on 2026-10-16 (last shipped in
-`be82f50`). A file by that name is ignored.
+`dispatcher_backoff.ini` override was removed on 2026-10-16 (`aba048c`; v0.5.1
+was the last release that read it). A file by that name is ignored.
 
 `dispatcher_backoff=false` in `config.ini` (0.5.3) keeps the hook installed
 but never sleeps, so an A/B needs only an INI edit and a restart; the Backoff
 row then reads `Off (ini)`. `DISABLE_BACKOFF` in the data directory skips the
 install entirely. The same fix ships alone as the
 [ssbu-dispatcher-backoff](https://git.syntaxbyexample.com/intpa/ssbu-dispatcher-backoff)
-plugin; exactly one of the two installs the hook, whichever loads first, and
-the other reports `External`.
+plugin. Both check the original instruction words first, so whichever loads
+first installs the hook and the other skips: Deluxe's Backoff row then reads
+`External`, and the standalone plugin logs
+`skipped_site_owned_by_another_plugin` in its `install.log`.
 
 ## Eligibility gate
 

@@ -2,10 +2,10 @@
 
 > AI-assisted, human-directed and reviewed.
 
-Tested in **Eden** and on an **Erista Switch** without issues observed.
-Works with [Switch firmware 23.0.1][firmware], [Atmosphère 1.12.1][atmosphere]
-and [Skyline beta `2eb226f`][skyline] (latest checked 2026-10-25).
-[Validation](docs/VALIDATION.md).
+Tested in **Eden** and on the operator's **Switch**: 0.10.4 ran there on
+2026-11-10 with [Switch firmware 23.0.1][firmware] and
+[Atmosphère 1.12.1][atmosphere]. Firmware 23.5.0 and Atmosphère 1.12.2 aren't
+tested yet. [Validation](docs/VALIDATION.md).
 
 A Rust/Skyline rebuild of Online Deluxe for **Super Smash Bros. Ultimate
 13.0.5**, shipped as **one NRO**: lower-latency rendering, a small in-game
@@ -14,18 +14,22 @@ overclocking.
 
 ![The Player Info Settings window: the You row with eye and TV icons, NetLatency and NetProfile](docs/media/settings-window.png)
 
-**[0.10.2 — download NRO and manifest](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.10.2)**
-treats an Elite Smash or Quickplay stage as online from its stage load. 0.10.0
-let Window Options show or hide each plugin's own page on its own (one row
-per page, such as FX Control or CPU Pilot). 0.9.0 put the player modes on the
-You line (ZR+Left/Right picks Stealth, Streamer or the overclock clock, L+R+X
-toggles it), treated waiting-room practice as Training and used about 300 KiB
-less memory. [Status and version history](docs/STATUS.md).
+**[0.10.4 — download NRO and manifest](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.10.4)**
+draws opponent names in any language, with the console's own fonts. 0.10.2
+treats an Elite Smash or Quickplay stage as online from its stage load.
+0.10.0 let Window Options show or hide each plugin's own page on its own (one
+row per page, such as FX Control, CPU Pilot or Stages + Counterpick). 0.9.0
+put the player modes on the You line (ZR+Left/Right picks Stealth, Streamer
+or the overclock clock, L+R+X toggles it), treated waiting-room practice as
+Training and used about 300 KiB less memory.
+[Status and version history](docs/STATUS.md).
 
 > **Install only this NRO.** It replaces the original Online Deluxe fork,
 > SsbuSync and the PIA manager, so remove all three. If SsbuSync is still
-> loaded, Deluxe switches its hooks off and you are playing the old fork.
-> ImGui is built in, so you don't need `libimgui_smash.nro` for Deluxe.
+> loaded, Deluxe switches its hooks off.
+> ImGui is built in, so Deluxe doesn't need `libimgui_smash.nro`. Remove it
+> unless another mod needs it: while it's loaded, Deluxe draws with it, and
+> with the published version names outside ASCII show `?`.
 > [Install guide](docs/INSTALL.md)
 
 ## What it does
@@ -91,23 +95,35 @@ live. [Native display](docs/NATIVE_DISPLAY.md)
 
 ### Lower-latency rendering
 
-Vanilla, LessLag, LLUltra and LLDoubles trade buffered frames for latency, and
-Auto picks one per scene. The default is **Vanilla+**. See the
+Vanilla, LessLag, LLUltra and LLDoubles trade buffered frames for latency.
+**Auto**, on by default, picks one per scene; where it picks Vanilla, the
+default **Vanilla+** runs. See the
 [profile table](#rendering-profiles) and the
 [measured frames](#measured-input-delay).
 
 ### Plugin pages
 
 Other mods can add rows or a whole page through the exported API and
-[Rust SDK](sdk/README.md). The separate
-[FX Control](https://git.syntaxbyexample.com/intpa/ssbu-fx-control) plugin
-adds its character-FX pages this way.
+[Rust SDK](sdk/README.md). Separate plugins that do:
+
+- [FX Control](https://git.syntaxbyexample.com/intpa/ssbu-fx-control) turns
+  down visual effects for ten fighters and eleven stages. Pages
+  **FX Control** and **Stages**.
+- [Legal Stages + Loser Counterpick](https://git.syntaxbyexample.com/intpa/elite-stages-counterpick)
+  limits the stages the game may pick to the ones you check. Its optional
+  counterpick makes an accepted online 1v1 rematch, under *your* Preferred
+  Rules, go to the loser's highest-ranked eligible stage. Page
+  **Stages + Counterpick**.
+- CPU Pilot (ssbu-cpu-pilot) hands P1 to the game's own CPU and back. Page
+  **CPU Pilot**.
+- [TrainingRooms](https://git.syntaxbyexample.com/intpa/TrainingRoomsForUltimate)
+  adds a **Replay capture** row to the shared **Plugins** page.
 
 ![Stepping a Captain Falcon row in FX Control's page from On to Off to Reduced and back to On with ZR+Right](docs/media/fx-control-edit.gif)
 
-[Plugins](docs/PLUGINS.md) explains the API, including a plugin's own ImGui
-windows. Also in the NRO: [dispatcher backoff](docs/DISPATCHER_BACKOFF.md) and
-opt-in [timing captures](docs/CAPTURES.md).
+[Plugins](docs/PLUGINS.md) explains the API. Also in the NRO:
+[dispatcher backoff](docs/DISPATCHER_BACKOFF.md) and opt-in
+[timing captures](docs/CAPTURES.md).
 
 *These examples are offline Eden captures of 0.7.0 with manual LessLag,
 `vanilla_plus=false` and the optional FX Control companion. They show the menu,
@@ -124,8 +140,8 @@ Two things the original Online Deluxe does not do; both have an INI switch
 **Dispatcher backoff.** When the main CPU task keeps finding no work it can do,
 the rewrite lets it sleep briefly, with growing pauses up to a small limit, so
 other tasks get the core. Locks and checks stay as they are.
-The operator also observed its benefit on Switch, alongside the Eden results.
-[How it works](docs/DISPATCHER_BACKOFF.md).
+The operator saw the same benefit on the Switch (2026-10-25); the measured
+numbers are from Eden. [How it works](docs/DISPATCHER_BACKOFF.md).
 
 ![Dispatcher backoff, before and after](docs/media/dispatcher-backoff-before-after.svg)
 
@@ -163,11 +179,10 @@ in [Rendering profiles](docs/RENDERING.md#measured-results).
 | ZR + Left / Right | Change the selected value (shown as `< value >`); on You, move the light-blue frame between Stealth, Streamer and OC |
 | L+R + X, You selected | Toggle the framed mode: Stealth, Streamer or OC (online/always) |
 | L+R + X, NetProfile selected | Toggle Vanilla+; with manual console LLUltra, cycle LLUltra → LLUltra+ → LLUltra++ |
+| L+R + X on a plugin's row | Whatever that plugin does with it, if anything (on its P1 row, CPU Pilot steps the CPU level) |
 | L+R + X anywhere else | Nothing: it toggles only what is highlighted |
-| L+R + Plus or Minus | Show or hide Debug |
 
-Everything else, including 0.6.2's older chords, is in
-[Controls](docs/CONTROLS.md); the You-row icons are drawn in
+Everything else is in [Controls](docs/CONTROLS.md); the You-row icons are drawn in
 [privacy-indicators.svg](docs/privacy-indicators.svg), and the Horizon-OC
 clock that follows them (0.8.1) in
 [oc-indicators.svg](docs/oc-indicators.svg).
@@ -270,6 +285,5 @@ Exceptions, **not** covered by `LICENSE`:
   imgui-smash's license, the GNU GPL v2 ([patches/imgui-smash/LICENSE](patches/imgui-smash/LICENSE), copied
   verbatim from `imgui-smash/LICENSE` at `bb47b205`).
 
-[firmware]: https://en-americas-support.nintendo.com/app/answers/detail/a_id/22525/~/nintendo-switch-system-updates-and-change-history#current
+[firmware]: https://en-americas-support.nintendo.com/app/answers/detail/a_id/22525/~/nintendo-switch-system-updates-and-change-history
 [atmosphere]: https://github.com/Atmosphere-NX/Atmosphere/releases/tag/1.12.1
-[skyline]: https://github.com/skyline-dev/skyline/releases/tag/beta

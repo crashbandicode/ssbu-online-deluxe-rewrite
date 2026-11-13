@@ -115,8 +115,9 @@ same two console numbers.
    recorder's own 640 px GIFs (first attempt) were too coarse to read the
    panel.
 5. Copy `renderer-status.txt` after each clip (`early_presents`,
-   `early_present_skips`, backoff counters, `clock`) and the recorder's frame
-   and drop counts into the run notes.
+   `early_present_skips`, `clock`), the Performance view's `Backoff` row (it
+   is not in that file) and the recorder's frame and drop counts into the run
+   notes.
 
 The clips live under `docs/media/toggles-*.gif`; the run notes and the exact
 quota are in the evidence root beside the captures.

@@ -4,7 +4,7 @@
 
 Vanilla Smash prioritizes smooth performance by preparing and rendering frames ahead of time, keeping multiple images in circulation across three buffers. This gives the CPU and GPU breathing room, but also means frames can appear on screen later than necessary after you press a button.
 
-**LessLag** reduces the buffers from three to two, changes which frame gets rendered, and eliminates unnecessary waiting, allowing newer frames to reach the screen sooner. Together, these changes reduce input delay by approximately **three frames**.
+**LessLag** reduces the buffers from three to two, changes which frame gets rendered, and eliminates unnecessary waiting, allowing newer frames to reach the screen sooner. Together, these changes reduce input delay by approximately **three frames** in the Eden measurements below.
 
 **LLUltra** pushes this further, potentially saving a fourth frame by using a more immediate rendering schedule, at the cost of giving the CPU and GPU less time to finish their work. Particularly demanding frames can exceed this tighter deadline, causing FPS drops. Overclocking or reducing rendering resolution can help recover the lost performance headroom.
 
@@ -22,6 +22,8 @@ Illustrative, not a measured trace or a profile-specific schedule. Follow frame 
 ![Vanilla has three reusable image buffers; LessLag and LLUltra each have two](media/framebuffers-three-vs-two.svg)
 
 A framebuffer is reusable memory; a frame is the picture drawn into it. The presentation queue tracks requests to display those pictures. More buffers allow more frames in circulation. Removing one buffer does not itself explain three saved frames: the measured reduction belongs to the combined buffer selection, rendering schedule and waiting changes.
+
+Deluxe's default Vanilla+ (0.5.6) keeps these three buffers but requests presentation at the flush, like LessLag ([Vanilla+](RENDERING.md#vanilla-056)). The Vanilla measurements on this page are the plain profile; Vanilla+ has no captured-response measurement.
 
 ## LessLag: a shorter pipeline
 

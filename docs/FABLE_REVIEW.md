@@ -35,15 +35,20 @@ user's local chara_select.layout.arc; no asset bytes are included. Unknown panes
 skip both display and input handling. The callback now updates before original,
 matching the inspected fork and avoiding post-transition pointer use.
 Finding 4: shared effect entries record the first instruction without rejecting chaining.
-Finding 5: Auto actual-value and second-pane gaps are in STATUS.md.
+Finding 5: Auto actual-value and second-pane gaps were recorded in STATUS.md at
+the time; the Auto value (`Auto (4f)`) came back in 0.6.2
+([Fork parity](FORK_PARITY.md)).
 New pointer-walk regression tests cover the exact extra-dereference failure.
 
 ## Global window update
 
 Live CSS evidence later found set_txt_title_00 and confirmed interaction, but the
-user required the fork's global window. CSS ownership/font changes are now removed.
+user required the fork's global window. CSS ownership/font changes were then
+removed; the fork's native CSS and arena text came back alongside the window on
+2026-10-07 ([Native display](NATIVE_DISPLAY.md)).
 Fable's subsequent source review established that imgui-smash uses NVN bootstrap
 and submit interposition, without Layout::Draw; it implemented the embedded host
 glue. The primary implemented the table, controller state and config recovery.
-See VALIDATION.md for runtime evidence and remaining limits. Banner findings above
-describe the earlier milestone, not the current runtime.
+See VALIDATION.md for runtime evidence and remaining limits. All findings above
+describe the earlier milestone, not the current runtime: for example, the effect
+hooks left Deluxe in 0.5.0, and `policy::select_profile` now drives Auto.
