@@ -1,5 +1,70 @@
 # Validation record
 
+## Unreleased (`45333a1`, after the 0.10.5 card build) — no game hook waits on a lock a plugin thread can hold; the standalone in Training and the release-candidate pair: gates and Eden — 2026-11-13
+
+**The change (`45333a1`).** Game hooks only try their locks
+(`hook_lock::try_take`): a hook that finds a lock held skips that frame's work and
+counts it in `hook_lock_skipped=`, which `renderer-status.txt` now writes in
+release builds too (`docs/DEBUGGING.md`). Plugin threads no longer take the locks
+the hooks take: `POLICY` is read through `published_status`; resets are
+requested (`request_reset`) and applied under `GATE` by the fighter, cut-in and
+present hooks; the Registry slots are lock-free; the `Book` mutex is only tried
+by hooks; the window reaches `PLUGIN_PAGES` through try paths
+(`try_settings_with_pages`, `try_publish`) with a cache and a retry;
+`BUILD_ID_C` is a static C string from `build.rs`; `TICKS` is only tried by
+hooks. `tests/hook_locks.rs` lists four game-thread-only locks (`POLICY`,
+`GATE`, adaptive `STATE`, `fighter_probe` `STATE`); its scanner now treats
+tuple-pattern locals as shadowing and resolves `STATIC.method()` to the static's
+type. No hook, address or game write added.
+
+**Gates (`45333a1`, nice 19 / ionice 3, memory/time guard).** `cargo test`
+(353 unit, 8 and 27 integration); `cargo clippy --all-targets -- -D warnings`
+and `cargo skyline clippy -- -- -D warnings`, each with and without `diag`;
+`cargo build --no-default-features`; `tools/Build.ps1 -Package` at `1a7235f`
+(only `eden/` files after `45333a1`): build `0.10.5-1a7235f93c14-1794591188`,
+NRO `7d0c1c68d261564f2bd9c712a80a1b1e1dd16c486dce32f6992761fec09398d2`
+(1,191,936 bytes); diagnostic build `540fdb3b…`.
+
+**Eden Training (`dtr-*`, Surface, one slot, the card's 20 plugins and the tile
+cursor, GDB stub on, volume 0; rows in `eden/imgui-parity/training/`, the CPU
+coin through `css_pair.py`).** `fa` = Deluxe `7d0c1c68` built-in; `fc` = the same
+Deluxe through imgui-smash 1.2.0 `9c411083`. Settled Training, median MiB
+(`compare.ps1`):
+
+| Boot | Host | CSS | Training (settled) | Peak |
+| --- | --- | --- | --- | --- |
+| dtr-fa1 | built-in | 2,398.0 (n=10) | 2,892.8 (n=15) | 2,893.1 |
+| dtr-fa5 | built-in | 2,376.0 (n=11) | 2,880.5 (n=17) | 2,881.5 |
+| dtr-fc5 | standalone | 2,394.7 (n=10) | 2,891.3 (n=16) | 2,891.4 |
+| dtr-fc10 | standalone | 2,375.3 (n=13) | 2,896.8 (n=17) | 2,897.5 |
+
+Every boot that reached Training wrote `hook_lock_skipped=0`; the `fc` boots
+`imgui_host_clients=1 declared=1 declarations=1 plugins=21 index=paged`. No
+console log has a `panic`, `abort`, `crash` or `Unmapped` line. Boot to boot in
+one setup the settled reading moved 12.3 MiB (fa) and 5.5 MiB (fc); the means
+differ by +7.4 MiB (fc 2,894.1, fa 2,886.7), inside that spread, and the
+standalone's image is about 0.9 MiB resident. Every boot passed 5/5 rows with the
+CPU coin placed (`pair_ok`). Boots refused by the Surface's memory floor while
+other lanes compiled (fa3, fa4, fc6-fc8) and fc9 (the CSS hand did not reach the
+CPU tile) gave no reading.
+
+**Eden release-candidate pair (`drc-a1` XPS / `drc-b2` Yoga, LAN Quickplay,
+both instances `7d0c1c68` through `9c411083` with the card's plugins and the tile
+cursor (21), the GDB stub on before `game.load`, TLS off, volume 0; rows in
+`eden/rc-pair/`).** 8/8 rows on each instance. External host accepted on both;
+the final `imgui_*` lines equal a = b (29 lines, counters excluded,
+`status_diff.py`); index paged; "テスト" in the dynamic glyph set and the Opp line
+drawn as `Opp:Æsir テスト`; L3 + R3 changed no Deluxe view; the waiting room read
+`quickplay/training`, both battles `quickplay/singles` from load to results with
+no demotion; `hook_lock_skipped=0`; `sync_end frame=7542` (time-out) and the
+sudden death `frame=968`, `desync_seen=0` on both, both fighters acting
+(`battle_self`). Match memory (median MiB): a 2,339.3, b 2,329.4. No console log
+has a `panic`, `abort`, `crash` or `Unmapped` line.
+
+**Not run:** Eden trace points (they need the GDB stub off), so the FindGlyph and
+pad-poll traces of the imgui-parity rows; a console run; Elite Smash. Not tagged
+or released.
+
 ## Unreleased (`4573890`, after the 0.10.5 card build) — an online battle is not demoted before the latency mark: source, host gates and Eden — 2026-11-13
 
 **The defect.** In Eden LAN Quickplay the battle read `offline/singles` for most
