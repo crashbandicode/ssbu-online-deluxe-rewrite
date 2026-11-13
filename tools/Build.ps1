@@ -10,6 +10,18 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
+# Free disk before a build (ssbu-mod-playbook WORKFLOW, "Build caches and disk"): stop below 40 GB.
+function Get-FreeBytes([string]$Path) {
+    if ($IsWindows) {
+        return [IO.DriveInfo]::new([IO.Path]::GetPathRoot((Resolve-Path -LiteralPath $Path).Path)).AvailableFreeSpace
+    }
+    return [int64]((& df -B1 --output=avail $Path | Select-Object -Last 1).Trim())
+}
+$freeBytes = Get-FreeBytes $root
+if ($freeBytes -lt 40GB) {
+    throw "Only $([math]::Round($freeBytes / 1GB, 1)) GiB free under $root; the build needs at least 40 GiB. Delete finished build products first."
+}
+Write-Output "free disk: $([math]::Round($freeBytes / 1GB, 1)) GiB under $root"
 $cargoDirectory = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.cargo/bin'
 $env:PATH = $cargoDirectory + [IO.Path]::PathSeparator + $env:PATH
 Push-Location -LiteralPath $root

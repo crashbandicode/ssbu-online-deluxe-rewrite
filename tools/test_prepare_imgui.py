@@ -183,6 +183,16 @@ def main() -> int:
                 raise SystemExit("symlink removal deleted the target")
         finally:
             module.WORK_TREE = saved
+        # The disk floor stops a build before Docker runs; it passes when the space is there.
+        try:
+            module.require_free_disk(Path(temporary), minimum=1 << 62)
+        except SystemExit as exc:
+            if "GiB free" not in str(exc):
+                raise
+        else:
+            raise SystemExit("an impossible disk floor was accepted")
+        if module.require_free_disk(Path(temporary), minimum=1) < 1:
+            raise SystemExit("free disk not reported")
     print("repo candidate checks passed")
     return 0
 

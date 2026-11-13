@@ -251,12 +251,25 @@ def install_verified(staging: Path, dest_dir: Path, pin: dict, force: bool, orig
     print(f"verified and installed {target}")
 
 
+MIN_FREE_BYTES = 40 * 1024**3
+
+
+def require_free_disk(path: Path, minimum: int = MIN_FREE_BYTES) -> int:
+    """Stop before a build below 40 GiB free (ssbu-mod-playbook WORKFLOW, "Build caches and disk")."""
+    free = shutil.disk_usage(path).free
+    if free < minimum:
+        raise SystemExit(f"only {free / 1024**3:.1f} GiB free under {path}; a build needs {minimum / 1024**3:.0f} GiB")
+    print(f"free disk: {free / 1024**3:.1f} GiB under {path}")
+    return free
+
+
 def build_from_source(upstream: Path | None, dest_dir: Path, pin: dict, force: bool) -> int:
     if not force and destination_verified(dest_dir, pin):
         print(f"already prepared: {dest_dir / ARCHIVE_NAME}")
         return 0
     if pin["status"] != "ready":
         raise SystemExit("refusing to build while the archive pin is not ready")
+    require_free_disk(ROOT)
     source_tree = upstream if upstream is not None else ensure_upstream(pin)
     require_identity(source_tree, pin)
     work = prepare_work(source_tree, pinned_patch(pin))

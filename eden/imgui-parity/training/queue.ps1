@@ -2,6 +2,7 @@ param([Parameter(Mandatory)][string]$Variants, [int]$Attempts = 2, [int]$GapSeco
 # One Surface slot only (primary's order, 13:52Z): lane 1 (display :141, gdb 6571, labels imp-*), one boot at a time,
 # and a gap after every release before the next claim so a waiting lane can get in.
 $ErrorActionPreference = 'Continue'
+. "$PSScriptRoot/../guard.ps1"
 $root = '/tmp/opencode/imgui-parity'
 $qlog = "$root/queue-l1.log"
 function Next-Label([string]$v) {
@@ -22,7 +23,7 @@ foreach ($v in $Variants.Split(',')) {
         Wait-OwnBootsDone
         $label = Next-Label $v
         "$(Get-Date -AsUTC -Format s)Z start $label (variant $v, lane 1, attempt $try)" | Add-Content $qlog
-        & /usr/bin/pwsh -NoLogo -NoProfile -NonInteractive -File "$root/run_variant.ps1" -Variant $v -Label $label -Lane 1
+        Invoke-Guarded 4G 4500 /usr/bin/pwsh -NoLogo -NoProfile -NonInteractive -File "$PSScriptRoot/run_variant.ps1" -Variant $v -Label $label -Lane 1
         $receipt = "/home/intpa/eden-runs/$label/out/hang-after.json"
         $ok = (Test-Path $receipt) -and ((Get-Content $receipt -Raw | ConvertFrom-Json).status -eq 'PASS')
         "$(Get-Date -AsUTC -Format s)Z end $label training=$ok" | Add-Content $qlog
