@@ -25,6 +25,7 @@ less memory. [Status and version history](docs/STATUS.md).
 > **Install only this NRO.** It replaces the original Online Deluxe fork,
 > SsbuSync and the PIA manager, so remove all three. If SsbuSync is still
 > loaded, Deluxe switches its hooks off and you are playing the old fork.
+> ImGui is built in, so you don't need `libimgui_smash.nro` for Deluxe.
 > [Install guide](docs/INSTALL.md)
 
 ## What it does
