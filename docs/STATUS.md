@@ -25,7 +25,7 @@ Publication routing: `origin` is Forgejo
 (`git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite`), authoritative
 and public; `github` is a downstream mirror that is not pushed automatically.
 Nothing is pushed without the operator's explicit permission. Forgejo
-releases carry the NRO and its SHA-256 manifest (see [Current: 0.9.0](#current-090)).
+releases carry the NRO and its SHA-256 manifest (see [Current release: 0.10.4](#current-release-0104)).
 
 Evidence levels used below: **host** = Rust host tests, clippy with warnings
 denied, the no-default-features build and the Skyline release build;
@@ -64,7 +64,29 @@ the operator's Switch, recorded with its build hash in [VALIDATION.md](VALIDATIO
 | Coverage build | Cargo feature `coverage`, raw profile writer, event code 109, manual snapshots from the Debug view (0.5.2; since 0.10.5 that needs `debug_view=on`) | Eden only. 2026-10-17 trace: 1,192 instrumented functions, 1,047 executed, 145 never executed. 2026-10-18 LAN Online run (two modded peers, NSO scenes only): 893 executed, 299 never executed, 12 functions new against the 10-17 report; [DEBUGGING.md](DEBUGGING.md) |
 | Removed in 0.5.4 | The opt-in peer observer, FPS++ (emulator-only diagnostic), the Gigaflare DRS trigger, five opt-in diagnostics, 21 helpers without a production caller; `peer_observer=` and `fps_boost=` are ignored legacy keys. Per-file reduction: `src/` 22,253 → 15,332 production lines (−31.1 %) | Host gates on every step; Eden latency, quota frame-rate, capture and plugin-page passes on the candidate. Console: the 0.5.4 first boot is the acceptance test. [FPS boost history](FPS_BOOST_INVESTIGATION.md) |
 
-## Current: 0.9.0
+## Current release: 0.10.4
+
+Tagged `v0.10.4` on 2026-11-13 at `21c0009`, the build that ran on the
+operator's Switch on 2026-11-10 (firmware 23.0.1, Atmosphère 1.12.1; the
+plugin's logs on the card name build `0.10.4-21c0009d228c-1794336309`). Its
+manifest is the first with `runtime_tested=true`. 0.10.3 was not released.
+
+- **Opponent names in any language.** The overlay adds the console's system
+  fonts after JetBrains Mono's ASCII subset, so Æ, ø, kana, kanji and Hangul
+  draw their own glyphs. An undecodable character costs that character, not
+  the name.
+- **Memory.** Latin letters are drawn once. Other characters are kept only
+  while on screen. ImGui's glyph index is paged (about 25 KB with a Japanese
+  or Korean name, against up to 336 KB unpaged). The font texture is 256 KiB.
+- **Where it was tested.** Eden `dun-x6` and `dun-x8` exercised the new
+  fonts. The console run had a standalone `libimgui_smash.nro` on the card,
+  with which Deluxe doesn't start its own ImGui, so it didn't.
+
+Details: [Validation](VALIDATION.md) and
+[ImGui dependency](IMGUI_DEPENDENCY.md). 0.10.0–0.10.2 are on the Forgejo
+releases page; 0.10.5 is on the card but not released.
+
+## 0.9.0
 
 Tagged `v0.9.0` on 2026-10-31. It releases the `fix/lobby-practice-window`
 work that has run on the operator's Switch as candidate `3ea3c49` since

@@ -1,5 +1,42 @@
 # Validation record
 
+## 0.10.4 — release assets and the console run — 2026-11-13
+
+**Console.** Build `0.10.4-21c0009d228c-1794336309` (NRO `70a2931e…`)
+ran on the operator's Switch on 2026-11-10: firmware 23.0.1, Atmosphère
+1.12.1, Smash 13.0.5.
+- **Install:** on 2026-11-10 at 14:53 EST (19:53Z), over DBI USB MTP. The
+  plugin read back with those bytes, and 0.10.3's `9cb4f8ff…` was kept as the
+  rollback.
+- **Logs:** the plugin's `install.log`, `events.log`, `renderer-status.txt`
+  and their `.previous` copies on the card name that build. They were written
+  between 17:31 and 19:59 EST that day and read from the card on 2026-11-13.
+- **The fonts weren't on the console path.** The card also held a standalone
+  `libimgui_smash.nro` (`d8e987fe…`). With one loaded, Deluxe doesn't start
+  its own ImGui (`src/imgui_host.rs` `select_imgui_host`), so the new fonts
+  and the paged index weren't exercised on the console; `dun-x6` and `dun-x8`
+  below exercised them in Eden.
+- The card has had 0.10.5 since 2026-11-11.
+
+**Release.** Tag `v0.10.4` (annotated `0caec443…`, commit `21c0009d`) was
+built again from a clean clone with the release procedure.
+- **Build:** `cargo skyline build --release` with the pinned toolchain,
+  `SOURCE_DATE_EPOCH=1794336309` and the pinned ImGui archive `26ea2c3b…`,
+  then `tools/package_debug.py`.
+- **The NRO matched:** byte-identical to the console-tested `70a2931e…`, to
+  the card install's copy, and to the stage file read back from the card.
+- **The ELF didn't** (`2bd6b85b…`, against the Eden build's `13c775fc…`). Its
+  debug information names the target directory.
+- **[Forgejo release 666](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.10.4)**
+  carries three assets, each downloaded without authentication and matched:
+  - the NRO, 1,183,744 bytes;
+  - `manifest.json` (schema 1, `runtime_tested=true` with a
+    `runtime_evidence` object), SHA-256
+    `cc67e183aa11198ef8468c94d9767a0ba898d6e6c7f3b1560f2085676542f13d`;
+  - `SHA256SUMS.txt`, SHA-256
+    `9591a73440f9ecb0c88d6dcfce27392a1eab50ff7bc7cdddb8c1a0fcd00135ca`.
+- 0.10.3 was not released.
+
 ## 0.10.5 — plugin shortcut conflicts: source and host gates — 2026-11-11
 
 Build `0.10.5-e46f455f4041-1794441042` from `e46f455` (clean tree): NRO
