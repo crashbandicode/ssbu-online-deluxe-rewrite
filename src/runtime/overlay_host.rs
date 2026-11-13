@@ -10,6 +10,10 @@
 //! run only after `igSetCurrentContext` on this NRO's cimgui, using the
 //! context pointer the standalone passes in. `ig*` are direct links into this
 //! NRO's compiled cimgui. They are not dynamic exports of this NRO.
+//! A standalone that exports them (imgui-smash 1.2.0) is also told, before it
+//! creates its context, that this NRO reads the paged codepoint index, so its
+//! fonts index glyphs as the embedded host's do; and its counters are read
+//! into `renderer-status.txt` as the embedded host's are.
 //! `LookupSymbol` is not used for them: a standalone copy can export the same
 //! names, and the first hit would be that other module.
 //!
@@ -70,6 +74,19 @@ extern "C" {
 const SETUP_EXPORT: &[u8] = b"imgui_setup_context_export\0";
 const GET_CONTEXT_EXPORT: &[u8] = b"imgui_get_context_export\0";
 const DRAW_WRAPPER: &[u8] = b"imgui_smash_add_on_draw_frame_wrapper\0";
+// Optional, imgui-smash 1.2.0 on; used only when bound to the same standalone
+// as the setup export. The declaration tells that host this NRO's compiled
+// ImGui reads the paged codepoint index (the pinned archive carries
+// 0001-paged-codepoint-index.patch, the same reader the embedded host uses).
+const DECLARE_PAGED_READER: &[u8] = b"imgui_smash_declare_paged_index_reader_v1\0";
+const HOST_CLIENTS_EXPORT: &[u8] = b"imgui_smash_host_clients_v1\0";
+const FONT_STATS_EXPORT: &[u8] = b"imgui_smash_font_stats_wrapper\0";
+const FONT_DYNAMIC_SET_EXPORT: &[u8] = b"imgui_smash_font_dynamic_set_wrapper\0";
+const DRAW_STATS_EXPORT: &[u8] = b"imgui_smash_draw_stats_wrapper\0";
+const FRAME_GUARD_STATS_EXPORT: &[u8] = b"imgui_smash_frame_guard_stats_wrapper\0";
+const SITE_PAGED_READER: u64 = 6;
+
+type DeclarePagedReader = unsafe extern "C" fn(*const c_void) -> u32;
 
 const FALLBACK_DISPLAY: (f32, f32) = (1280.0, 720.0);
 const SITE_BOOTSTRAP: u64 = 0x200;
@@ -90,6 +107,74 @@ static LOGGER_GUARD: AtomicBool = AtomicBool::new(false);
 static DRAW: AtomicUsize = AtomicUsize::new(0);
 static EXTERNAL_CONTEXT: AtomicUsize = AtomicUsize::new(0);
 static GET_CONTEXT: AtomicUsize = AtomicUsize::new(0);
+/// The standalone's counter getters, 0 when absent: font, dynamic set, draw,
+/// frame guard, host clients.
+static EXTERNAL_STATS: [AtomicUsize; 5] = [
+    AtomicUsize::new(0),
+    AtomicUsize::new(0),
+    AtomicUsize::new(0),
+    AtomicUsize::new(0),
+    AtomicUsize::new(0),
+];
+
+/// Addresses of a standalone host's counter getters (all four, and the
+/// optional host-clients record), tied to the host's own text.
+pub(super) struct ExternalStats {
+    pub font: usize,
+    pub dynamic: usize,
+    pub draw: usize,
+    pub guard: usize,
+    pub clients: Option<usize>,
+}
+
+pub(super) fn external_stats() -> Option<ExternalStats> {
+    if STATE.load(Ordering::Acquire) != STATE_EXTERNAL {
+        return None;
+    }
+    let [font, dynamic, draw, guard, clients] =
+        EXTERNAL_STATS.each_ref().map(|slot| slot.load(Ordering::Acquire));
+    (font != 0 && dynamic != 0 && draw != 0 && guard != 0).then_some(ExternalStats {
+        font,
+        dynamic,
+        draw,
+        guard,
+        clients: (clients != 0).then_some(clients),
+    })
+}
+
+/// An optional export of the standalone at `host_base`; anything else (absent,
+/// another module, not tied to a header) is treated as absent.
+fn host_export(name: &[u8], host_base: usize) -> Option<usize> {
+    match locate_export(name) {
+        Export::Bound(address, image) if image.base == host_base => Some(address),
+        _ => None,
+    }
+}
+
+/// Before the standalone creates its context: declare this NRO a paged-index
+/// reader, and keep the counter getters for `renderer-status.txt`.
+fn bind_external_extras(host_base: usize) {
+    if let Some(declare) = host_export(DECLARE_PAGED_READER, host_base) {
+        let result = unsafe {
+            let declare: DeclarePagedReader = std::mem::transmute(declare);
+            declare(external_draw as *const c_void)
+        };
+        record(Code::Compatibility, SITE_PAGED_READER, u64::from(result));
+        logging::startup_phase(&format!(
+            "overlay_host_external_paged_reader {}",
+            crate::imgui_host::paged_reader_result(result)
+        ));
+    }
+    for (slot, name) in EXTERNAL_STATS.iter().zip([
+        FONT_STATS_EXPORT,
+        FONT_DYNAMIC_SET_EXPORT,
+        DRAW_STATS_EXPORT,
+        FRAME_GUARD_STATS_EXPORT,
+        HOST_CLIENTS_EXPORT,
+    ]) {
+        slot.store(host_export(name, host_base).unwrap_or(0), Ordering::Release);
+    }
+}
 
 /// The callable `nvnBootstrapLoader` had before this NRO's hook: Skyline's
 /// relocation trampoline for a stock entry, or the previous plugin's handler
@@ -447,6 +532,10 @@ pub(super) fn install(draw: unsafe extern "C" fn()) -> bool {
     let setup = locate_export(SETUP_EXPORT);
     let draw_wrapper = locate_export(DRAW_WRAPPER);
     let get_context = locate_export(GET_CONTEXT_EXPORT);
+    let host_base = match &setup {
+        Export::Bound(_, image) => Some(image.base),
+        _ => None,
+    };
     let (setup_addr, draw_addr, get_addr, choice) = match (&setup, &draw_wrapper, &get_context) {
         (Export::Absent, Export::Absent, Export::Absent) => (
             None,
@@ -499,6 +588,9 @@ pub(super) fn install(draw: unsafe extern "C" fn()) -> bool {
             DRAW.store(draw as usize, Ordering::Release);
             if let Some(getter) = get_addr {
                 GET_CONTEXT.store(getter, Ordering::Release);
+            }
+            if let Some(base) = host_base {
+                bind_external_extras(base);
             }
             unsafe {
                 let setup: SetupExport = std::mem::transmute(setup_addr);

@@ -208,6 +208,128 @@ pub fn font_status_lines(stats: &FontStats, wrote: bool) -> String {
     )
 }
 
+/// `ImguiSmashDrawStats` version 1 (`include/imgui_smash_draw_stats.h`).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct DrawStats {
+    pub version: u32,
+    pub size: u32,
+    pub submitted: u64,
+    pub reused: u64,
+    pub pending_skips: u64,
+    pub failed: u64,
+    pub max_command_bytes: u64,
+    pub max_control_bytes: u64,
+    pub geometry_skips: u64,
+    pub command_overflow_skips: u64,
+}
+
+/// `ImguiSmashFrameGuardStats` version 1 (`src/imgui_backend/frame_guard.hpp`).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct FrameGuardStats {
+    pub version: u32,
+    pub size: u32,
+    pub accepted: u64,
+    pub busy_skips: u64,
+}
+
+const _: () = assert!(std::mem::size_of::<DrawStats>() == 72);
+const _: () = assert!(std::mem::size_of::<FrameGuardStats>() == 24);
+
+/// Which backend the overlay's counters come from: this NRO's own copy, or a
+/// standalone host Deluxe draws through (read through its exported getters).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StatsHost {
+    Embedded,
+    External,
+}
+
+/// The renderer lines of `renderer-status.txt`. Both hosts run the same
+/// archive, so the same counters give the same lines; only the first names
+/// the host.
+pub fn renderer_status_lines(host: StatsHost, draw: &DrawStats, guard: &FrameGuardStats) -> String {
+    format!(
+        "imgui_stats={}\n\
+         imgui_frame_accepted={}\n\
+         imgui_frame_busy={}\n\
+         imgui_draw_submitted={}\n\
+         imgui_draw_reused={}\n\
+         imgui_draw_pending={}\n\
+         imgui_draw_failed={}\n\
+         imgui_draw_geometry={}\n\
+         imgui_draw_overflow={}\n\
+         imgui_draw_max_command={}\n\
+         imgui_draw_max_control={}",
+        match host {
+            StatsHost::Embedded => "embedded",
+            StatsHost::External => "external",
+        },
+        guard.accepted,
+        guard.busy_skips,
+        draw.submitted,
+        draw.reused,
+        draw.pending_skips,
+        draw.failed,
+        draw.geometry_skips,
+        draw.command_overflow_skips,
+        draw.max_command_bytes,
+        draw.max_control_bytes,
+    )
+}
+
+/// `ImguiSmashHostClients` version 1 from a standalone host
+/// (`imgui_smash_host_clients_v1`, imgui-smash 1.2.0): how it chose its
+/// fonts' codepoint index from the plugins that can read its context.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct HostClients {
+    pub version: u32,
+    pub size: u32,
+    pub clients: u32,
+    pub declared_clients: u32,
+    pub declarations: u32,
+    pub decided: u32,
+    pub paged: u32,
+    pub plugins_seen: u32,
+}
+
+pub const HOST_CLIENTS_VERSION: u32 = 1;
+const _: () = assert!(std::mem::size_of::<HostClients>() == 32);
+
+/// The `imgui_host_clients` line: the standalone's clients, how many declared
+/// that their ImGui reads the paged index, and the index it chose.
+pub fn host_clients_line(record: &HostClients, wrote: bool) -> String {
+    let layout = record.version == HOST_CLIENTS_VERSION
+        && record.size as usize == std::mem::size_of::<HostClients>();
+    if !wrote || !layout || record.decided == 0 {
+        return format!(
+            "imgui_host_clients=unread version={} size={}",
+            record.version, record.size
+        );
+    }
+    format!(
+        "imgui_host_clients={} declared={} declarations={} plugins={} index={}",
+        record.clients,
+        record.declared_clients,
+        record.declarations,
+        record.plugins_seen,
+        if record.paged != 0 { "paged" } else { "dense" },
+    )
+}
+
+/// What `imgui_smash_declare_paged_index_reader_v1` answered, for the
+/// install log: 1 recorded before the host chose its index, 2 after it (no
+/// effect), 0 not tied to a loaded plugin.
+pub fn paged_reader_result(result: u32) -> &'static str {
+    match result {
+        1 => "recorded",
+        2 => "late",
+        0 => "unbound",
+        _ => "unknown",
+    }
+}
+
 /// The `imgui_font_dynamic_set` line: the dynamic codepoints in the atlas
 /// (`codepoints`, of `total`; -1 while the archive was changing it).
 pub fn font_dynamic_line(codepoints: &[u32], total: i32) -> String {
@@ -305,6 +427,101 @@ mod tests {
             font_status_lines(&v2, true),
             "imgui_font_stats=unread version=2 size=128"
         );
+    }
+
+    /// One table of counters through the embedded and the external host: the
+    /// renderer lines are the same but for the line that names the host.
+    #[test]
+    fn external_and_embedded_hosts_write_the_same_status_lines() {
+        let cases = [
+            (DrawStats::default(), FrameGuardStats::default()),
+            (
+                DrawStats {
+                    version: 1,
+                    size: 72,
+                    submitted: 10_416,
+                    reused: 10_408,
+                    pending_skips: 1,
+                    failed: 0,
+                    max_command_bytes: 676,
+                    max_control_bytes: 120,
+                    geometry_skips: 2,
+                    command_overflow_skips: 3,
+                },
+                FrameGuardStats {
+                    version: 1,
+                    size: 24,
+                    accepted: 10_416,
+                    busy_skips: 4,
+                },
+            ),
+        ];
+        for (draw, guard) in cases {
+            let embedded = renderer_status_lines(StatsHost::Embedded, &draw, &guard);
+            let external = renderer_status_lines(StatsHost::External, &draw, &guard);
+            let (first_embedded, rest_embedded) = embedded.split_once('\n').unwrap();
+            let (first_external, rest_external) = external.split_once('\n').unwrap();
+            assert_eq!(first_embedded, "imgui_stats=embedded");
+            assert_eq!(first_external, "imgui_stats=external");
+            assert_eq!(rest_embedded, rest_external);
+            assert!(rest_external.starts_with(&format!(
+                "imgui_frame_accepted={}\nimgui_frame_busy={}\nimgui_draw_submitted={}\n",
+                guard.accepted, guard.busy_skips, draw.submitted
+            )));
+            assert!(rest_external.ends_with(&format!(
+                "imgui_draw_max_command={}\nimgui_draw_max_control={}",
+                draw.max_command_bytes, draw.max_control_bytes
+            )));
+        }
+    }
+
+    #[test]
+    fn host_clients_line_reports_the_standalones_choice() {
+        let record = HostClients {
+            version: HOST_CLIENTS_VERSION,
+            size: 32,
+            clients: 1,
+            declared_clients: 1,
+            declarations: 1,
+            decided: 1,
+            paged: 1,
+            plugins_seen: 21,
+        };
+        assert_eq!(
+            host_clients_line(&record, true),
+            "imgui_host_clients=1 declared=1 declarations=1 plugins=21 index=paged"
+        );
+        let dense = HostClients {
+            clients: 2,
+            paged: 0,
+            ..record
+        };
+        assert_eq!(
+            host_clients_line(&dense, true),
+            "imgui_host_clients=2 declared=1 declarations=1 plugins=21 index=dense"
+        );
+        assert!(host_clients_line(&record, false).starts_with("imgui_host_clients=unread"));
+        let undecided = HostClients {
+            decided: 0,
+            ..record
+        };
+        assert!(host_clients_line(&undecided, true).starts_with("imgui_host_clients=unread"));
+        let other = HostClients {
+            version: 2,
+            ..record
+        };
+        assert_eq!(
+            host_clients_line(&other, true),
+            "imgui_host_clients=unread version=2 size=32"
+        );
+    }
+
+    #[test]
+    fn paged_reader_results_are_named() {
+        assert_eq!(paged_reader_result(1), "recorded");
+        assert_eq!(paged_reader_result(2), "late");
+        assert_eq!(paged_reader_result(0), "unbound");
+        assert_eq!(paged_reader_result(7), "unknown");
     }
 
     #[test]
