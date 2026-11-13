@@ -53,19 +53,26 @@ observation, not a universal performance guarantee.
 
 ## How Auto knows it is online
 
-The online context comes from the game's scene entries (main menu, Online →
-Smash, background matchmaking, arena, local wireless, stage setup, character
-select). Main-menu entry keeps a stored Quickplay, because background
-matchmaking passes through the main menu and starts the match from there
-(0.4.2). A Quickplay that reaches a Singles/Doubles stage without the game's
-online-latency hook firing within five seconds is demoted to Offline. A match
-the online-latency hook reaches while the scene hooks still say Offline counts
-as online for Auto (0.4.1). Since 0.10.2 a stage load whose scene words name
-online Quickplay or Elite Smash (`auto_policy::is_online_stage`) makes an
-Offline connection Quickplay, because the menu hooks miss some entries:
-Elite Smash on the console reached its waiting room and every battle with the
-connection still Offline. Event log code 107 records these connection
-decisions and code 30 each change of the online context; see
+The online context comes from the game's scene entries (main menu, arena,
+local wireless, stage setup, character select); every hook's connection write
+goes through `auto_policy::entry_connection`. Main-menu entry keeps a stored
+Quickplay, because background matchmaking passes through the main menu and
+starts the match from there (0.4.2). A Quickplay that reaches a
+Singles/Doubles stage without the game's online-latency hook firing within
+five seconds is demoted to Offline. A match the online-latency hook reaches
+while the scene hooks still say Offline counts as online for Auto (0.4.1).
+Since 0.10.2 a stage load whose scene words name online Quickplay or Elite
+Smash (`auto_policy::is_online_stage`) makes an Offline connection Quickplay,
+because the menu hooks miss some entries: Elite Smash on the console reached
+its waiting room and every battle with the connection still Offline. Since
+`1173bea` (after the 0.10.5 card build) the fork's two Quickplay menu sites
+(`0x22da160`, `0x22da090`) write no connection: `0x22da160` is a
+scene-factory entry that the offline Games & More flow reaches too, which made
+offline Training read `quickplay/training`. Quickplay now comes from the
+stage's words and the latency mark, and a stage in the game's Training mode
+(`is_training_mode`, not the waiting room's practice) is offline whatever a
+hook stored (`auto_policy::stage_connection`). Event log code 107 records these
+connection decisions and code 30 each change of the online context; see
 [Debugging](DEBUGGING.md).
 
 ## Present at the flush (0.4.0)

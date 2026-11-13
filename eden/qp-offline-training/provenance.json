@@ -1,0 +1,86 @@
+{
+ "run": "qpt-y1",
+ "host": "yoga",
+ "runner": {
+  "path": "/home/intpa/ssbu-mod-playbook/tools/eden-runner/runner.py",
+  "sha256": "e008a79013750ac63023cca306debafa3c6b372e610eafa52fabc1bd3144c05c"
+ },
+ "rows_folder": {
+  "gdb-nohold.txt": "d380552d68792232ead19cec82401acbce24d87ab13a4b1b737c86ffbcd19d95",
+  "gdb-port-a.txt": "125633e128c3037c5d977b0955c757942855dc6e58da4411bde30d5e44799266",
+  "gdb-port-b.txt": "4a2eab1669e2ffdcc4ba9cef420c67f424fe2469fccaba542c01dd87df531294",
+  "gdb_rc11.py": "09ba34782f72295f177558c25843f58fb63264c50bef2146474e4b4e60c5a1b4",
+  "gdbdump.py": "73d53876d6eb54a8bb867e97962901f104f58cb774beea5a21bd8e818de14b73",
+  "make/make_config_qpt.py": "3b80b0ffddd60a6d88bf48944107f2c96eff32a35042cc5fc5ce1146a0da6e76",
+  "make/make_rows_qpt.py": "2791bde37cac6845ad4efd168d02a0ebab2ce3c087f0bb23caad2af66ab14776",
+  "make/make_sidebar_ref.py": "cb855a163dc6be91a05a435b628b99d28a6b01392d2ecce59d0ac0989704d19a",
+  "make/provenance_qpt.py": "c1aebe50bf12ed4dacbc88fdc84dc7a5f8b546e8aadbce774e344589d9b1727f",
+  "qp_steps.py": "8ac6f78713058f6adc4de871914454be79b5f3f163dcd9621a1624ad50735240",
+  "refs/css.png": "a7a15642548952e4e263e42d467542b2877576cac4785061c21988e6cd7c0b76",
+  "refs/gm-header.png": "a0d3d1858a34d78a445b4e09225eeed88a9f84b740a122f516df900066e90238",
+  "refs/gm.png": "598fb34e257948310719d358efbd6ba1b09ff8038425b58a156a3d8758241600",
+  "refs/leave-battle-tab.png": "d4527e6e0de84a14bcbfd5b11b35852fb8eea3de9bcb8f1bf4936054bd62aafe",
+  "refs/main-sidebar.png": "f4f12740f83027b29a6906b5e5f3d57459bb8f58b6c9064e7f1fb008badd5fb6",
+  "refs/main.png": "902628cebd8620847be44e41a826046740f495ca0dfa7e78d8482c43c0da1bdc",
+  "refs/online-menu-roi.png": "34a845b1c6b6d087e85ca87b3da3e3c6c5250a4804e5913142392244439bc641",
+  "refs/quickplay-menu-roi.png": "901ebd27ee19bcd2d8d84e0192e6b20160f489e8d471562394fa185862f83f29",
+  "refs/ready-banner-roi.png": "18b0c2ae137dca481cbcf5149b2864b3addc96356e2c5c38a82326051801ecef",
+  "refs/stage.png": "99e7013e2be97b8173498e36a9b0e3b849c4e403bd239f1febda185470617033",
+  "refs/waiting-menu.png": "a252bc5f94d1dcd71a0cf9b41a2df6a94345cf4c1631cb137ec5a574a541e6da",
+  "rows.json": "14dc05ac2f369922b8c349cfaf493c6a8ba612813e94ee72e70c5650cbdb247c",
+  "segments/attract-cancel.edenmacro.json": "1b506dbfc689e79e8bfca69b74274ab674b91ac8359219a1a4c95faa81aae70f",
+  "segments/enter-training.edenmacro.json": "7cdd035473160fec1a0e8c601c05f599f5b21556ac1cb4479b358c629e05b5c1",
+  "segments/main-stage.edenmacro.json": "ce6714b44f34f04cacd0d17454e4773c8906d289e5a37e34c606c604e6e4acfb",
+  "segments/pick.edenmacro.json": "aa7177b16f3c04163c79e3faac2cc3f5ba6ea52ab569c5a0d2d6c5e5acf7ca02",
+  "segments/quit-confirm.edenmacro.json": "6fc21293dea72efe1bfb888735d8a62d8a6754d8a1855e8bbcde9af08e24080b",
+  "segments/quit-focus.edenmacro.json": "281999e46939ca06c960cef0108b28672c611435d33260ddeddfc6c9dd475b46",
+  "segments/stage-css.edenmacro.json": "240249606f15207106e4cc654cc3ee173efa97d51ea276586c82e6c7c438db74",
+  "segments/tile-up.edenmacro.json": "281878f3b0c24b0a8703890518e1579cdc5aa1946320754da05605fbebe954eb",
+  "segments/to-css.edenmacro.json": "df589d123449a453b70525e393591b2a95249bc8d55470402985236df774a4d5",
+  "segments/to-online.edenmacro.json": "d52590537267a9aa817e3d7e8969fde0d70e38ca93cf36a5ca616ba8d4678858",
+  "segments/to-quickplay.edenmacro.json": "4db24aee967ca0721918af0291deb53cbefdc07ce4485cf8d423401a5bc63acc"
+ },
+ "reused_from": {
+  "gdb_rc11.py, gdbdump.py": "the integration lane rows (/tmp/opencode/imgui-parity/stage-a/rows-hang, staged by make_hang.py)",
+  "segments/to-online, to-quickplay, to-css, tile-up, pick": "eden/unicode-label/segments (dun-x6, ims-x1)",
+  "segments/quit-focus, quit-confirm": "the integration lane rows",
+  "segments/attract-cancel, main-stage, stage-css, enter-training; refs/stage.png, css.png": "the playbook library (tools/eden-runner/library)",
+  "refs/main.png, online-menu-roi.png, quickplay-menu-roi.png, ready-banner-roi.png, waiting-menu.png, leave-battle-tab.png": "ims-x1 rows (quickplay-cancel-fix)",
+  "refs/main-sidebar.png": "make/make_sidebar_ref.py from an ims-x1 main-menu frame",
+  "refs/gm-header.png": "make/make_header_ref.py from a qpt-y1 Games & More frame"
+ },
+ "instances": {
+  "a": {
+   "app": {
+    "path": "/home/intpa/Applications/Eden-GIF/20261113-973abf9c2e3f-unmapped-stop-lan2c-svc-x8-x17-gdbstub-2f315fc4b7d9/Eden.AppImage",
+    "sha256": "2f315fc4b7d9658afef84f4ba3cb80a3d0b33292eaef66a802ef837222a247b9"
+   },
+   "plugins": [
+    {
+     "path": "/home/intpa/deluxe-unicode-names-work/qp-fix/eden-inputs/libssbu_desync_detector.nro",
+     "sha256": "92fbcf849c196dd7e6e00b737eb6544b8ae09f56c153f0db7257b47fa64a3f1f"
+    },
+    {
+     "path": "/home/intpa/deluxe-unicode-names-work/qp-fix/eden-inputs/libssbu_tile_cursor.nro",
+     "sha256": "b8313ca2e66a52f1bcfc4afc764df1b7cdc5aee7e194bdea671cea02746934bc"
+    },
+    {
+     "path": "/home/intpa/deluxe-unicode-names-work/qp-fix/builds/1173bea/2278c03db0935d4e/libssbu_online_deluxe_rewrite.nro",
+     "sha256": "2278c03db0935d4ee227012c5faefb5179233fe65b8a2e1dbd4805294e6ca3bf"
+    }
+   ],
+   "files": [
+    {
+     "path": "/home/intpa/deluxe-unicode-names-work/qp-fix/eden-inputs/profiles-aesir.dat",
+     "sha256": "2d311dde0c3b0052f6e9acffbdf939f41ebf75ca805825e20beb8fbd39b8424a",
+     "to": "user/nand/system/save/8000000000000010/su/avators/profiles.dat"
+    },
+    {
+     "path": "/home/intpa/deluxe-unicode-names-work/qp-fix/eden-inputs/deluxe-config.ini",
+     "sha256": "5f597d1738efdbb7cb3ef8290e3068651c5b381868a1ec7d9a09ef606a94f63e",
+     "to": "user/sdmc/ultimate/ssbu_online_deluxe_rewrite/config.ini"
+    }
+   ]
+  }
+ }
+}

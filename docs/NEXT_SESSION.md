@@ -384,7 +384,13 @@ documentation of the delivered Eden build is under
   instruction-word guards to every fork-derived address. Meanwhile arena and
   Background matches are classified through `stage_setup` and `mark_match`.
   Evidence (Eden only) is in the 2026-10-18 entry of
-  [VALIDATION.md](VALIDATION.md).
+  [VALIDATION.md](VALIDATION.md). On 2026-11-13 Eden `docs-rs7` (an offline
+  Training run) logged `0x22d9fa0` during Training: the connection read
+  `arena/training`, and the next offline stage (melee `0x1c`, mode
+  `0x04050000`) ran as `arena/singles`, which the five-second stale check
+  (Quickplay only) does not demote. Since `1173bea` a Training-mode stage resets
+  such an Arena to Offline; a non-Training offline stage after the stray write
+  still reads Arena until the main menu.
 - Follow-ups for the declined-rematch work (0.5.5): instrument the station-left
   hook (`.text+0x15f240`) with an event code per leave, accepted or dropped,
   carrying the leave's protocol id, the RTT table's protocol and the station

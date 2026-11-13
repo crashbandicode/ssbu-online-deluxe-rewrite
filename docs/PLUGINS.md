@@ -89,7 +89,12 @@ with no retry. 0.8.0 also accepts revision 5 ([below](#status-cells-080)). A plu
 scopes its behaviour to online play reads
 `deluxe_plugin_sdk::host_online_context()` instead of hooking the game's
 scene sites itself: it returns the host's ready / online / match / training
-bits, or `None` when Deluxe is absent or older than 0.5.0.
+bits, or `None` when Deluxe is absent or older than 0.5.0. Until `1173bea`
+(unreleased, after the 0.10.5 card build) the online bit was also set from the
+Games & More menu through offline Training (a fork Quickplay menu site fires
+there); since then it is set by an online stage, the online-latency mark, a
+Quickplay kept through the main menu, an arena or a local-wireless room, and a
+stage in the game's Training mode clears it.
 
 Plugins that put rows in Deluxe's window:
 

@@ -1,5 +1,83 @@
 # Validation record
 
+## Unreleased (`1173bea`, after the 0.10.5 card build) — offline Training is offline: source, host gates and Eden — 2026-11-13
+
+**The defect.** Games & More → Training ran as `quickplay/training`. Both console
+boots of 2026-11-13 logged it (0.10.4 `21c0009`, 0.10.5 `a88d659`;
+`hang-trace.log` `offline/inactive -> quickplay/inactive -> quickplay/training`,
+stage logs `000549`–`000551` with `connection=quickplay`), and so did Eden
+`imp-a3` on 0.10.5 the same day.
+- **The hook.** Event 30 `a=1` and code 73 `0x10003` came from `0x22da160`, the
+  fork's Quickplay site. It is a scene-factory entry (`mov w1, #0xf0; bl …`,
+  object vtable `0x50bad50` in 13.0.5 `main`) that the offline Games & More flow
+  builds too; the 0.4.2 entry below already saw it fire there in Eden.
+- **Why it stayed.** The main menu keeps a stored Quickplay (0.4.2), and stage
+  setup wrote only the status. Its one connection write was the 0.10.2 promotion,
+  and the stale check covers only Singles/Doubles. The Training stage's own
+  words (melee `0x20`, mode `0x04040000`, code 116) went unused.
+- **What acted on it.** The exported online context (`ONLINE` with
+  `TRAINING`), FX Control's Online scope on the menus and the character select
+  (not in Training, which it excludes), ZL+D-pad edits through the native CSS
+  pane on the Training character select, the window's right-hand placement
+  there, event 107 `a=1` at the next main menu, the first five seconds of a later
+  offline Singles/Doubles under Auto (Quickplay profile, then 107 `a=2`), and
+  the labels in `hang-trace.log`, the stage-log header and `renderer-status.txt`.
+  Auto in Training, manual modes, the cleanup hold, the input buffer, PIA RTT,
+  the peer exchange, Stealth, Streamer, dispatcher backoff, `hoc_oc=online`
+  (the Pia-sample session), CPU Pilot, TrainingRooms and the counterpick plugin
+  don't read the connection.
+
+**The change (`1173bea`).** `auto_policy::entry_connection` is the one contract
+for every scene hook's connection write. The two Quickplay menu sites
+(`0x22da160`, `0x22da090`) write none and log event 107 `a=6`; their install
+guards, the native-scene drop and the Inactive status stay.
+`auto_policy::stage_connection` lets the stage's words decide: an online
+Quickplay or Elite stage promotes an Offline connection as in 0.10.2 (`a=4`),
+and a stage in the game's Training mode (`is_training_mode()`, not the waiting
+room's practice) makes any stored connection Offline (`a=5`, `b` = the old
+connection). Unchanged: the main menu's Quickplay hold, the stale check, the
+latency mark. Deliberate difference from the fork, recorded in
+[Fork parity](FORK_PARITY.md#deliberate-differences): where the console fires
+`0x22da160` on Online → Smash (seen once, 2026-10-14), that menu and the first
+Quickplay character select now read offline/inactive until the waiting room
+loads, as on the console's Elite path and in Eden LAN Online.
+
+**Gates.** `cargo test` (343 unit and 23 integration tests; 7 new, among them
+`games_and_more_training_is_offline_training`,
+`waiting_room_training_during_a_quickplay_search_is_quickplay_training`,
+`the_main_menu_during_a_live_search_keeps_quickplay`); seeding either old
+behaviour (the menu site writing Quickplay, or no Training demotion) fails
+them. `cargo clippy --all-targets -- -D warnings` and `cargo skyline clippy --
+-- -D warnings`, each with and without `diag`; `cargo build
+--no-default-features`; `tools/Build.ps1 -Package`: build
+`0.10.5-1173bead82fa-1794575569`, NRO
+`2278c03db0935d4ee227012c5faefb5179233fe65b8a2e1dbd4805294e6ca3bf`
+(1,187,840 bytes, resident 1,228,800); diagnostic build `c3d34849…`.
+
+**Eden `qpt-y1` (the Yoga, one instance, the GDB stub on, LAN Quickplay, 1x,
+volume 0; rows in `eden/qp-offline-training/`).** All 7 rows passed, four of
+them after same-boot fixes to the rows and hooks. From `events.log` and
+`hang-trace.log` of that boot:
+- **Games & More → Training, fresh boot:** 107 `a=6 b=0x22da160` (the site fired
+  and wrote nothing), then `offline/inactive -> offline/training t=789.944`; code
+  116 melee `0x20` mode `0x04040000`; `000023-training-134.log`:
+  `connection=offline`.
+- **The Quickplay waiting room during a search:** 107 `a=4 b=0x7010101`,
+  code 116 melee `0x0d` lobby, `offline/training -> quickplay/training
+  t=876.213`; `000024-training-137.log`: `connection=quickplay`. (The Quickplay
+  character select before it read `offline/training`: the CSS status follows
+  `is_training_mode()`, still true after Training, as the 0.4.2 entry noted.)
+- **Training after that search:** Leave Battle, then the main menu kept
+  Quickplay (107 `a=1`); Games & More (107 `a=6`), then the Training stage: 107
+  `a=5 b=0x3`, code 30 `a=0` from `0x25d9288`, `quickplay/inactive ->
+  offline/training t=1071.391`; `000025-training-134.log`: `connection=offline`.
+- The console log has no `panic`, `abort`, `crash` or `Unmapped` line. Down
+  restored and verified the profile and released the claim.
+
+**Not run:** a LAN pair with a matched battle (no non-Surface host had two free
+slots; `rows-pair.json` is ready), Elite Smash, and any console run. Not
+tagged or released.
+
 ## 0.10.5 — ImGui re-pin to the standalone 1.1.0's archive: gates and Eden — 2026-11-13
 
 Build `0.10.5-9c994bf68aae-1794571432` from `9c994bf` (`SOURCE_DATE_EPOCH`

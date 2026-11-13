@@ -1,0 +1,403 @@
+{
+ "about": "Deluxe qp-fix 1173bea (NRO 2278c03d, build 0.10.5-1173bead82fa-1794575569) on one LAN Quickplay instance, the detector and the tile cursor beside it, the GDB stub on: offline Training through Games & More on a fresh boot, out to the main menu, the Quickplay waiting room during a search, then Training after that search.",
+ "game_id": "01006A800016E000",
+ "scope": "connection= in hang-trace.log and matches/ for offline Training and the waiting room",
+ "start": "frontend-ready",
+ "on_failure": "stop",
+ "setup": [
+  {
+   "state": "one Eden frontend up, game not loaded, the GDB stub set on (defer_load)",
+   "via": "hook",
+   "ref": "gdb_rc11.py gdb_on with gdb-port-a.txt and gdb-nohold.txt"
+  },
+  {
+   "state": "the main menu, Smash focused",
+   "via": "hook",
+   "ref": "qp_steps.py to_main; main gate recover attract-cancel"
+  },
+  {
+   "state": "offline Training through Games & More, P1 on tile 0",
+   "via": "segment",
+   "ref": "library main-stage, stage-css, enter-training; qp_steps.py _css_to_tile0"
+  },
+  {
+   "state": "out of Training to the main menu, Smash focused",
+   "via": "segment",
+   "ref": "segments quit-focus, quit-confirm (the integration lane); qp_steps.py exit_training, _back_to_main"
+  },
+  {
+   "state": "searching in the Quickplay waiting room",
+   "via": "segment",
+   "ref": "segments to-online, to-quickplay, to-css, tile-up, pick (eden/unicode-label); qp_steps.py qp_waiting"
+  },
+  {
+   "state": "Leave Battle, main menu, Training",
+   "via": "hook",
+   "ref": "qp_steps.py training_after_qp"
+  }
+ ],
+ "segments": {
+  "to-online": {
+   "file": "segments/to-online.edenmacro.json",
+   "sha256": "d52590537267a9aa817e3d7e8969fde0d70e38ca93cf36a5ca616ba8d4678858",
+   "cap": 60
+  },
+  "to-quickplay": {
+   "file": "segments/to-quickplay.edenmacro.json",
+   "sha256": "4db24aee967ca0721918af0291deb53cbefdc07ce4485cf8d423401a5bc63acc",
+   "cap": 40
+  },
+  "to-css": {
+   "file": "segments/to-css.edenmacro.json",
+   "sha256": "df589d123449a453b70525e393591b2a95249bc8d55470402985236df774a4d5",
+   "cap": 60
+  },
+  "tile-up": {
+   "file": "segments/tile-up.edenmacro.json",
+   "sha256": "281878f3b0c24b0a8703890518e1579cdc5aa1946320754da05605fbebe954eb",
+   "cap": 20
+  },
+  "pick": {
+   "file": "segments/pick.edenmacro.json",
+   "sha256": "aa7177b16f3c04163c79e3faac2cc3f5ba6ea52ab569c5a0d2d6c5e5acf7ca02",
+   "cap": 20
+  },
+  "attract-cancel": {
+   "file": "segments/attract-cancel.edenmacro.json",
+   "sha256": "1b506dbfc689e79e8bfca69b74274ab674b91ac8359219a1a4c95faa81aae70f",
+   "cap": 30,
+   "from_library": "attract-cancel"
+  },
+  "main-stage": {
+   "file": "segments/main-stage.edenmacro.json",
+   "sha256": "ce6714b44f34f04cacd0d17454e4773c8906d289e5a37e34c606c604e6e4acfb",
+   "cap": 60,
+   "from_library": "main-stage"
+  },
+  "stage-css": {
+   "file": "segments/stage-css.edenmacro.json",
+   "sha256": "240249606f15207106e4cc654cc3ee173efa97d51ea276586c82e6c7c438db74",
+   "cap": 30,
+   "from_library": "stage-css"
+  },
+  "enter-training": {
+   "file": "segments/enter-training.edenmacro.json",
+   "sha256": "7cdd035473160fec1a0e8c601c05f599f5b21556ac1cb4479b358c629e05b5c1",
+   "cap": 30,
+   "from_library": "enter-training"
+  },
+  "quit-focus": {
+   "file": "segments/quit-focus.edenmacro.json",
+   "sha256": "281999e46939ca06c960cef0108b28672c611435d33260ddeddfc6c9dd475b46",
+   "cap": 20
+  },
+  "quit-confirm": {
+   "file": "segments/quit-confirm.edenmacro.json",
+   "sha256": "6fc21293dea72efe1bfb888735d8a62d8a6754d8a1855e8bbcde9af08e24080b",
+   "cap": 20
+  }
+ },
+ "gates": {
+  "loaded": {
+   "library": "loaded"
+  },
+  "installed": {
+   "kind": "log",
+   "source": "detector_log",
+   "whole_file": true,
+   "cap": 120,
+   "pattern": "plugin=ssbu-desync-detector/\\S+ [^\\n]*heap_allocations=0"
+  },
+  "deluxe-embedded": {
+   "kind": "log",
+   "source": "deluxe_install",
+   "whole_file": true,
+   "cap": 120,
+   "pattern": "overlay_host_ready"
+  },
+  "deluxe-build": {
+   "kind": "log",
+   "source": "deluxe_events",
+   "whole_file": true,
+   "cap": 60,
+   "pattern": "Deluxe rewrite 0\\.10\\.5-1173bead82fa-"
+  },
+  "main": {
+   "kind": "image",
+   "roi": [
+    150,
+    265,
+    450,
+    335
+   ],
+   "tolerance": 8,
+   "cap": 45,
+   "reference_is_roi": true,
+   "frame": [
+    1280,
+    674
+   ],
+   "scale": "fit",
+   "recover": "attract-cancel",
+   "recover_times": 4,
+   "reference": "refs/main.png",
+   "sha256": "902628cebd8620847be44e41a826046740f495ca0dfa7e78d8482c43c0da1bdc"
+  },
+  "stage": {
+   "kind": "image",
+   "roi": [
+    110,
+    445,
+    290,
+    495
+   ],
+   "tolerance": 8,
+   "cap": 45,
+   "reference_is_roi": true,
+   "frame": [
+    1280,
+    720
+   ],
+   "scale": "fit",
+   "reference": "refs/stage.png",
+   "sha256": "99e7013e2be97b8173498e36a9b0e3b849c4e403bd239f1febda185470617033"
+  },
+  "css": {
+   "kind": "image",
+   "roi": [
+    55,
+    55,
+    675,
+    155
+   ],
+   "tolerance": 8,
+   "cap": 60,
+   "reference_is_roi": true,
+   "frame": [
+    1280,
+    720
+   ],
+   "scale": "fit",
+   "reference": "refs/css.png",
+   "sha256": "a7a15642548952e4e263e42d467542b2877576cac4785061c21988e6cd7c0b76"
+  },
+  "online-menu": {
+   "kind": "image",
+   "roi": [
+    40,
+    5,
+    300,
+    45
+   ],
+   "tolerance": 8,
+   "cap": 40,
+   "reference_is_roi": true,
+   "frame": [
+    1280,
+    674
+   ],
+   "scale": "fit",
+   "reference": "refs/online-menu-roi.png",
+   "sha256": "34a845b1c6b6d087e85ca87b3da3e3c6c5250a4804e5913142392244439bc641"
+  },
+  "quickplay-menu": {
+   "kind": "image",
+   "roi": [
+    40,
+    5,
+    300,
+    45
+   ],
+   "tolerance": 8,
+   "cap": 40,
+   "reference_is_roi": true,
+   "frame": [
+    1280,
+    674
+   ],
+   "scale": "fit",
+   "reference": "refs/quickplay-menu-roi.png",
+   "sha256": "901ebd27ee19bcd2d8d84e0192e6b20160f489e8d471562394fa185862f83f29"
+  },
+  "css-tile": {
+   "kind": "log",
+   "source": "tile_log",
+   "pattern": "settled screen=css at=(\\d+) hovered=\\1\\b",
+   "cap": 40
+  },
+  "ready-banner-any": {
+   "kind": "image",
+   "roi": [
+    200,
+    110,
+    600,
+    240
+   ],
+   "tolerance": 40,
+   "cap": 30,
+   "reference_is_roi": true,
+   "frame": [
+    1280,
+    674
+   ],
+   "scale": "fit",
+   "reference": "refs/ready-banner-roi.png",
+   "sha256": "18b0c2ae137dca481cbcf5149b2864b3addc96356e2c5c38a82326051801ecef"
+  }
+ },
+ "rows": [
+  {
+   "id": "q00-load",
+   "start": "frontend-ready",
+   "end": "loaded",
+   "on_failure": "stop",
+   "budget_min": 5,
+   "steps": [
+    {
+     "run": "gdb_rc11.py:gdb_on",
+     "check": true,
+     "on": "a"
+    },
+    {
+     "call": "game.load",
+     "params": {
+      "path": "@game"
+     },
+     "job_cap": 240,
+     "on": "a"
+    },
+    {
+     "run": "gdb_rc11.py:gdb_kick",
+     "check": true,
+     "on": "a"
+    },
+    {
+     "gate": "loaded",
+     "on": "a"
+    },
+    {
+     "gate": "installed",
+     "on": "a"
+    },
+    {
+     "gate": "deluxe-embedded",
+     "on": "a"
+    },
+    {
+     "gate": "deluxe-build",
+     "on": "a"
+    },
+    {
+     "reason": "other plugins finish booting",
+     "wait_ms": 15000
+    },
+    {
+     "shot": "boot",
+     "on": "a"
+    }
+   ]
+  },
+  {
+   "id": "q01-main",
+   "on": "a",
+   "start": "loaded",
+   "end": "main",
+   "on_failure": "stop",
+   "budget_min": 2,
+   "steps": [
+    {
+     "run": "qp_steps.py:to_main",
+     "check": true,
+     "on": "a"
+    },
+    {
+     "gate": "main",
+     "on": "a"
+    }
+   ]
+  },
+  {
+   "id": "rA-offline-training",
+   "on": "a",
+   "start": "main",
+   "end": "a-training",
+   "on_failure": "stop",
+   "budget_min": 5,
+   "steps": [
+    {
+     "run": "qp_steps.py:offline_training",
+     "on": "a",
+     "check": true
+    }
+   ]
+  },
+  {
+   "id": "rX-exit-training",
+   "on": "a",
+   "start": "a-training",
+   "end": "main",
+   "on_failure": "stop",
+   "budget_min": 3,
+   "steps": [
+    {
+     "run": "qp_steps.py:exit_training",
+     "on": "a",
+     "check": true
+    }
+   ]
+  },
+  {
+   "id": "rB-waiting-room",
+   "on": "a",
+   "start": "main",
+   "end": "a-waiting",
+   "on_failure": "continue",
+   "budget_min": 5,
+   "steps": [
+    {
+     "run": "qp_steps.py:qp_waiting",
+     "on": "a",
+     "check": true
+    }
+   ]
+  },
+  {
+   "id": "rD-training-after-qp",
+   "on": "a",
+   "start": "a-waiting",
+   "start_gate": "loaded",
+   "recover": [],
+   "end": "a-training",
+   "on_failure": "continue",
+   "budget_min": 6,
+   "steps": [
+    {
+     "run": "qp_steps.py:training_after_qp",
+     "on": "a",
+     "check": true
+    }
+   ]
+  },
+  {
+   "id": "z-a",
+   "on": "a",
+   "start": "a-training",
+   "start_gate": "loaded",
+   "recover": [],
+   "end": "a-training",
+   "budget_min": 1,
+   "steps": [
+    {
+     "run": "gdb_rc11.py:z_stub",
+     "on": "a",
+     "check": true
+    },
+    {
+     "run": "qp_steps.py:final_evidence",
+     "on": "a",
+     "check": true
+    }
+   ]
+  }
+ ]
+}

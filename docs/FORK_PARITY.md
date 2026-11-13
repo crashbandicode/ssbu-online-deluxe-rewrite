@@ -417,7 +417,13 @@ Match class (`net/mod.rs`, all installed at `:374-390`):
 
 - Quickplay: `0x22da160`, `0x22da090`. Arena menu: `0x22d9fa0`. Arena room:
   `0x1887b1c` / `0x18881f0`. Local wireless: `0x1bd45e0` stores `OnlineLocal`
-  and does not become Quickplay.
+  and does not become Quickplay. **Deliberate difference, `1173bea`
+  (2026-11-13):** the rewrite's two Quickplay sites write no connection
+  (`auto_policy::entry_connection`, code 107 `a=6`). `0x22da160` is a
+  scene-factory entry (`mov w1, #0xf0; bl …`, object vtable `0x50bad50`) that
+  the offline Games & More flow reaches too: both console boots of 2026-11-13
+  and Eden since 2026-10-14 logged it on the way to Training, which then ran as
+  `quickplay/training` with `connection=quickplay` in its stage log.
 - Main menu `0x235aaa0` resets to Offline unless status is already Quickplay.
   The rewrite reset unconditionally until 0.4.1, which lost the connection
   when background matchmaking passed through the main menu (console
@@ -443,7 +449,12 @@ Match class (`net/mod.rs`, all installed at `:374-390`):
   `a=4`). Unlike the fork's fallback this is read from the game, not assumed,
   and it covers the waiting room too: in a 0.10.1 console log read on
   2026-11-02, Elite Smash ran its waiting room and six battles without either
-  Quickplay hook firing.
+  Quickplay hook firing. Since `1173bea` it is the only source of a stored
+  Quickplay besides the main menu's hold, and a stage in the game's Training
+  mode (`is_training_mode`, melee `0x20`; not the waiting room's practice) makes
+  any stored connection Offline (`auto_policy::stage_connection`, code 107
+  `a=5`), so Games & More → Training reads `offline/training` even after a
+  Quickplay session kept through the main menu.
 - LDN host forces the CSS pane count to 2 once (`0x1a26200`, `:155-166`).
 - LDN initialize/scan hooks only count networks (`net/ldn/mod.rs:41-42`).
 - CSS `0x1a12f60` writes the native banner when online and the 300-frame
@@ -500,7 +511,7 @@ retained. Auto's target and the renderer's committed state are distinct.
 | Stealth | Default On; suppress owned beacon and custom payload, retain receive; latched per connection, menu changes persist and show reconnect notice | Host-tested; Off interoperability and pending-On behavior observed on `410ac1f7`; fresh-On d9 suppressed its beacon with zero custom writes; saved Off stayed pending until reconnect |
 | Peer cycling | Bounded station selection using one identity snapshot for name/interface/settings/ping | 9e9 cycled two remote identities correctly in a three-station lobby; no three-station match completed |
 | Streamer | Since 0.9.0 L+R+X with the TV framed on the Settings You row (ZR+Left/Right moves the frame); ZR+Y in 0.7.0–0.8.1, a menu row plus the fork-style chord through 0.6.2; hides all remote rows and ping, persists to INI | d9 exact menu-saved INI reload and menu/chord privacy passed |
-| Connection / match classification | Quickplay, Arena and Local stay distinct; fighter count classifies doubles; Training/result-stage rules retained | Stage/context guards required. Since 0.4.1 the latency mark changes Auto's effective connection without rewriting the stored one (`Scene::marked_online`); since 0.4.2 main-menu entry keeps a stored Quickplay and the diagnostics poll demotes an unmarked Singles/Doubles stage to Offline after five seconds (`offline_match_due`). **Deliberate difference, 0.8.1:** the mark used to survive until the connection became Offline, so after one marked Quickplay match the stale check never re-armed and a later offline match stayed Quickplay; now a Singles/Doubles stage entered after the shared online session ended (no Pia RTT sample for 15 s) drops the carried mark and proves itself again (`carried_mark_expired`, event 107 `a=3`). Back-to-back online matches keep it. Host-tested; the 0.8.1 console log of 2026-10-28 shows event 107 `a=3` dropping the mark on an offline Doubles stage after an online match ([Validation](VALIDATION.md)) |
+| Connection / match classification | Quickplay, Arena and Local stay distinct; fighter count classifies doubles; Training/result-stage rules retained | Stage/context guards required. Since 0.4.1 the latency mark changes Auto's effective connection without rewriting the stored one (`Scene::marked_online`); since 0.4.2 main-menu entry keeps a stored Quickplay and the diagnostics poll demotes an unmarked Singles/Doubles stage to Offline after five seconds (`offline_match_due`). **Deliberate difference, 0.8.1:** the mark used to survive until the connection became Offline, so after one marked Quickplay match the stale check never re-armed and a later offline match stayed Quickplay; now a Singles/Doubles stage entered after the shared online session ended (no Pia RTT sample for 15 s) drops the carried mark and proves itself again (`carried_mark_expired`, event 107 `a=3`). Back-to-back online matches keep it. Host-tested; the 0.8.1 console log of 2026-10-28 shows event 107 `a=3` dropping the mark on an offline Doubles stage after an online match ([Validation](VALIDATION.md)). **Deliberate difference, `1173bea`:** the Quickplay menu sites write no connection and a Training-mode stage is offline (event 107 `a=5`/`a=6`; "Match class" above) |
 | Horizon-OC online-only profile (0.8.1) | No fork equivalent. **Added by this rewrite:** a client of the game-aware hoc-clk fork that lets Smash's saved Horizon-OC profile apply only during an online session (`hoc_oc=online`, You-line clock mark toggled by ZR+L3 in 0.8.1 and by L+R+X with the clock framed since 0.9.0). It sends no clock value and never reads or writes Horizon-OC's `config.ini`; outside a session Horizon-OC falls back to its own global profile or stock. No game hook: its own thread, sm and hoc:clk IPC, and Pia sample counters that already existed | Host-tested; operator-confirmed on console with candidate `788537d` (90 s hold), event log read back. The 0.8.1 release ran on the console on 2026-10-28: the clock went grey about 15 s after an online match and stayed green through rematches ([Validation](VALIDATION.md)) |
 | Resolution and DRS | Committed profile plus explicit platform table; guarded resolution function/register/crop path | Console-policy Eden full-Gigaflare scaling and restoration passed for Less/Ultra/Doubles while that trigger existed; Vanilla stays off; b19 title fullscreen-crop reset fixed |
 | Cut-in scaler | Bounded visual resolution reports driven by the guarded fighter Main and cut-in sites | Two approximate callback-count gates passed; Luigi Up-B cut-in scaling/restoration passed |
@@ -536,6 +547,16 @@ reinstall hooks and never patch SGPO's `0x374812c` neighborhood.
   stored connection; since 0.4.1 Auto (and FX until 0.5.0) treat a stage the
   online-latency hook reached as online (`Scene::marked_online`,
   `effective_connection`).
+- Since `1173bea` (2026-11-13) the fork's Quickplay menu sites (`0x22da160`,
+  `0x22da090`) write no connection, and a stage in the game's Training mode is
+  offline whatever a hook stored ("Match class" above). The fork set
+  `OnlineQuickPlay` at those sites, so offline Training through Games & More
+  read as Quickplay. Before the waiting room loads, the Online menus and the
+  first Quickplay character select now read offline/inactive where the console
+  fired `0x22da160` there (seen once, 2026-10-14): the window sits left, the
+  native CSS pane takes no ZL edit on that first visit, and the exported
+  context is not online. That was already the behaviour on the console's Elite
+  path and in Eden LAN Online, where the site never fired.
 - Since 0.5.6 the default Vanilla is Vanilla+: it presents at the flush where
   the fork and the game present after the next CPU update. `vanilla_plus=false`
   (or L+R+X) restores the game's own order.
