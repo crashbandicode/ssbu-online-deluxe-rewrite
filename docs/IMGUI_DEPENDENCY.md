@@ -166,6 +166,11 @@ of the pinned commit; rootless Podman in place of Docker) gave the same bytes.
 | `97ca947` | Swapchain texture-table guard (`overlay_texture_policy.hpp`): `nvnWindowBuilderSetTextures` copies at most three texture pointers into the backend's table (the old `memcpy` copied any count into three entries) and still passes the native count and pointer on; every table replacement drops the current index; the acquire wrapper publishes an index only after a successful acquire whose index fits the table, and returns the native result (it returned nothing before); the overlay draws only with an accepted index. | With at most three textures and successful acquires, the overlay draws as before. Otherwise it skips the frame instead of reading or writing past the table. Deluxe's own `nvnWindowAcquireTexture` wrapper (`src/runtime/nvn.rs` `window_acquire`) sits above the backend's and returns nothing, as before, so the result the game sees is unchanged. |
 | `c27ab7e` | L3 + R3 toggles ImGui gamepad navigation only after `imgui_smash_set_gamepad_nav_toggle(true)`. The flag starts false (`InputHelper.cpp`), `nav_toggle::next` keeps navigation off while it is false, and the backend passes the pad to ImGui (`updateGamepad`) only while navigation is on. | Deluxe doesn't call that function or read `imgui_smash/config.ini`, so L3 + R3 no longer turns ImGui gamepad navigation on (with `26ea2c3b` it did). Deluxe's windows are created with `NoNavInputs` and `NoNavFocus` (`src/runtime/imgui.rs` `WINDOW_FLAGS`) and Deluxe reads the pad itself through `nn::hid`, so no window of Deluxe's used ImGui navigation; ImGui just stops receiving pad input after the chord. |
 
+In Eden (`ims-x1`, [Validation](VALIDATION.md)) both hosts drew the opponent
+label `Æsir テスト` with each character's own glyph: 0.10.4 drawing in the
+standalone 1.1.0, and this pin's built-in ImGui. After L3 + R3, neither called
+`updateGamepad`.
+
 ## Preparing the archive
 
 Docker and Git are required for a source build. The script uses the pinned

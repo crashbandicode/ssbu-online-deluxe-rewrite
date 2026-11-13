@@ -1,5 +1,57 @@
 # Validation record
 
+## 0.10.5 — ImGui re-pin to the standalone 1.1.0's archive: gates and Eden — 2026-11-13
+
+Build `0.10.5-9c994bf68aae-1794571432` from `9c994bf` (`SOURCE_DATE_EPOCH`
+1794571432): NRO **1,187,840 bytes**, SHA-256
+`aee7f4118e3a515668879e37bc0acd8b6e17f574f77d132f563a19950c396f24`. It pins
+imgui-smash `main` `f9844e9`, archive `c1e4471b…` (14,820,452 bytes): the
+source of 0.10.4's `9405a49` plus the fork's `97ca947` and `c27ab7e`, and the
+archive the fork's standalone 1.1.0 links ([ImGui dependencies](IMGUI_DEPENDENCY.md)).
+`prepare_imgui.py`'s commands, run on a clone of `f9844e9` from Forgejo with
+rootless Podman in place of Docker, built those bytes.
+
+**Gates:** `cargo clippy --all-targets -- -D warnings`, `cargo build
+--no-default-features`, `cargo test` (336 unit and 23 integration tests),
+`cargo skyline clippy -- -- -D warnings`, `tools/test_prepare_imgui.py`,
+`tools/Build.ps1 -Package` and the diagnostic build (`92874b88…`).
+
+**Run `ims-x1` (the Surface): a ran 0.10.4 (`70a2931e`) with the standalone
+imgui-smash 1.1.0 (`4d8ea566`), b ran this build without a standalone.** LAN
+Online Quickplay, TLS off, 1x, volume 0, the detector and the tile cursor on
+both, both profiles named `Æsir テスト`; rows in `eden/imgui-standalone/`.
+All 11 rows passed; `n1-menu-b` passed on its retry in the same boot, after a
+fix to the hook's own frame check.
+- **Which ImGui.** a: `install.log` `overlay_host_external_ready`,
+  `events.log` code 16 `0x5 0x4b3f` (19263), `imgui_stats=not_embedded`. b:
+  `overlay_host_ready`, `imgui_stats=embedded` with the `imgui_font_*` lines.
+- **The labels.** Both Opp lines read `Æsir テスト`. A `FindGlyph` trace saw
+  416 (a) and 435 (b) draws of each of Æ, テ, ス and ト, every one the
+  character's own glyph.
+- **b's fonts.** In the match: dynamic set U+30B9 U+30C6 U+30C8,
+  `imgui_font_index=paged pages=3`, 25,096 bytes. After it: one rebuild,
+  dynamic set `none`, 17,840 bytes (2 pages).
+- **b's menu.** Four L+R+Down chords gave Settings → Performance → Window
+  Options → hidden → Settings (code 23 each); no plugin page, as no plugin
+  with rows or a page was installed. Down selected NetLatency, ZR+Right logged
+  code 8 with the buffer 0, ZR+Left logged Auto, Up returned to You.
+- **L3 + R3.** After the chord and D-pad Down and Up, a trace saw the pad poll
+  (`InputHelper::updatePadState`) and no call of
+  `ImguiNvnBackend::updateGamepad`, on b's built-in ImGui and on a's
+  standalone: gamepad navigation stayed off.
+- **The match.** `sync_end frame=7542 desync_seen=0` and a second session
+  (`kind=1 frame=1998`) with `desync_seen=0` on both; Rematch No on both. No
+  unmapped access, and no `panic`, `abort`, `crash` or `Unmapped` line in
+  either console log.
+- **Memory.** `hang-trace.log` heartbeats, `mem_used` (the whole process),
+  as logged: the last one on the Quickplay menu before the character select,
+  2,118,103,040 bytes on a (`t=154.089`) and 2,110,042,112 on b (`t=113.051`);
+  the last one in the match, 2,172,825,600 (a, `t=376.879`) and 2,164,174,848
+  (b, `t=377.328`). The two instances also ran different Deluxe builds.
+  `eden/imgui-standalone/make/heartbeat_scenes.py` lists them per scene.
+
+Not run on a console. Not tagged or released.
+
 ## 0.10.4 — release assets and the console run — 2026-11-13
 
 **Console.** Build `0.10.4-21c0009d228c-1794336309` (NRO `70a2931e…`)

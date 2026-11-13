@@ -1,0 +1,126 @@
+{
+ "run": "ims-x1",
+ "runner": {
+  "path": "/home/intpa/ssbu-mod-playbook/tools/eden-runner/runner.py",
+  "sha256": "e008a79013750ac63023cca306debafa3c6b372e610eafa52fabc1bd3144c05c"
+ },
+ "rows_folder": {
+  "deluxe_steps.py": "5e7d5b8c2536250edf2d7652e2b39c501f3edf0f9e71ab82ecf03a6d831ab2e4",
+  "ims_steps.py": "d65c7859b8e7ff696a132ea178c837ef1d227ca3de9605b9132e69399f7ddd84",
+  "make/make_config_ims.py": "d40fede8b22337296b3a6f12f4c2c727688522ba1d7ef364c0d00fc71827c557",
+  "make/make_rows_ims.py": "c297230a66ac6e8b5edcc87fdfdf751ee0e95d3ce279f7c85741ed8c27e3f214",
+  "make/make_segments_ims.py": "8028cbbeab85804ec84f6100270e86e9baa71b9dd99072cee6a181358e7859c6",
+  "provenance.json": "c091a9a2620dcf72da8f0f4c29e489d461595b311183bb7f0bf54f660d6d7e0e",
+  "refs/css-quickplay.png": "98f65bb06afb7c73071a3a2f092932178184298ce364519c8f8614518b6fa644",
+  "refs/leave-battle-tab.png": "d4527e6e0de84a14bcbfd5b11b35852fb8eea3de9bcb8f1bf4936054bd62aafe",
+  "refs/main.png": "902628cebd8620847be44e41a826046740f495ca0dfa7e78d8482c43c0da1bdc",
+  "refs/online-menu-roi.png": "34a845b1c6b6d087e85ca87b3da3e3c6c5250a4804e5913142392244439bc641",
+  "refs/online-menu.png": "2f4d98fd992d0bf622806cd7d3bd1442754940dd5d4296ce41dfee089bf3bcc9",
+  "refs/quickplay-menu-roi.png": "901ebd27ee19bcd2d8d84e0192e6b20160f489e8d471562394fa185862f83f29",
+  "refs/quickplay-menu.png": "4bf9d8236d2630faa734950587817c432e478e0b2d2b6396f2de6b7015ff070f",
+  "refs/ready-banner-roi.png": "18b0c2ae137dca481cbcf5149b2864b3addc96356e2c5c38a82326051801ecef",
+  "refs/ready-banner.png": "a70e14b154caa901a65a3d2f0dcac1d852a9635372103097dd67791b256900be",
+  "refs/rematch-dialog.png": "7b17ea2ffc148fbd831746ee5fa50ae4a9baa959dd38a34dcf29bc7b3ec2b061",
+  "refs/waiting-menu.png": "a252bc5f94d1dcd71a0cf9b41a2df6a94345cf4c1631cb137ec5a574a541e6da",
+  "rows.json": "4da32314226ac80c966b7d8b2892a34d8137525623e8ad84bf4ada991366d466",
+  "segments/dpad-down.edenmacro.json": "44a755ca279b7cab8cb4dff4994308ae1671e8ebbb7a8e943c644db04e9e4443",
+  "segments/dpad-up.edenmacro.json": "83708ed609d78985ce499fffdf0c2992766da3244e63659391ea9ac8691dba8c",
+  "segments/l3-r3.edenmacro.json": "4173e92524a6afb11ecca3b7df3285f1e9900d7ea134259a0dfdf22d8236b047",
+  "segments/open-deluxe.edenmacro.json": "b8e281835025f76eaf3c010e33032f1f5479203e5f4edd5a658b210b7b2fa4a0",
+  "segments/pick.edenmacro.json": "aa7177b16f3c04163c79e3faac2cc3f5ba6ea52ab569c5a0d2d6c5e5acf7ca02",
+  "segments/ready.edenmacro.json": "a66184f087ac3841bbecd7198f2adbc20ffab73d18c1ba2a84edecc4027c7ede",
+  "segments/tile-up.edenmacro.json": "281878f3b0c24b0a8703890518e1579cdc5aa1946320754da05605fbebe954eb",
+  "segments/to-css.edenmacro.json": "df589d123449a453b70525e393591b2a95249bc8d55470402985236df774a4d5",
+  "segments/to-online.edenmacro.json": "d52590537267a9aa817e3d7e8969fde0d70e38ca93cf36a5ca616ba8d4678858",
+  "segments/to-quickplay.edenmacro.json": "4db24aee967ca0721918af0291deb53cbefdc07ce4485cf8d423401a5bc63acc",
+  "segments/zr-left.edenmacro.json": "7c24166f7d420f1379d83392fc7ac89a7656478fe165689be996382e077b6443",
+  "segments/zr-right.edenmacro.json": "3c7d4809c74132b4deba75f2c71c37ecc41e706e8e49e7f5553c3bc90ea40da9",
+  "steps.py": "db917b88a6e2d73662ab02edae499f0531fa0d7a72ad4253371941554d6b1bbf"
+ },
+ "instances": {
+  "a": {
+   "app": {
+    "path": "/home/intpa/Applications/Eden-GIF/20261104-1961a200485e-unmapped-stop-0c7f89f711d6/Eden.AppImage",
+    "sha256": "0c7f89f711d6df37df2243928a92e789aaee319c81d0647a0b8e5b2df9975476"
+   },
+   "plugins": [
+    {
+     "path": "/home/intpa/deluxe-unicode-names-work/eden/inputs/libssbu_desync_detector.nro",
+     "sha256": "92fbcf849c196dd7e6e00b737eb6544b8ae09f56c153f0db7257b47fa64a3f1f"
+    },
+    {
+     "path": "/home/intpa/deluxe-unicode-names-work/eden/inputs/libssbu_tile_cursor.nro",
+     "sha256": "b8313ca2e66a52f1bcfc4afc764df1b7cdc5aee7e194bdea671cea02746934bc"
+    },
+    {
+     "path": "/home/intpa/smash-training-lobby/artifacts/imgui-standalone-1.1.0/eden-inputs/a/libssbu_online_deluxe_rewrite.nro",
+     "sha256": "70a2931e2c76869d8163b0bc4997ebe592e86af254220811a6c9467a05337b36"
+    },
+    {
+     "path": "/home/intpa/smash-training-lobby/artifacts/imgui-standalone-1.1.0/eden-inputs/a/libimgui_smash.nro",
+     "sha256": "4d8ea5669802a35657df2375e05eda5db6c652a78ba627336b37091e8ed973ce"
+    }
+   ],
+   "files": [
+    {
+     "path": "/home/intpa/deluxe-unicode-names-work/eden/inputs/profiles-aesir.dat",
+     "sha256": "2d311dde0c3b0052f6e9acffbdf939f41ebf75ca805825e20beb8fbd39b8424a",
+     "to": "user/nand/system/save/8000000000000010/su/avators/profiles.dat"
+    },
+    {
+     "path": "/home/intpa/deluxe-unicode-names-work/eden/inputs/deluxe-config.ini",
+     "sha256": "5f597d1738efdbb7cb3ef8290e3068651c5b381868a1ec7d9a09ef606a94f63e",
+     "to": "user/sdmc/ultimate/ssbu_online_deluxe_rewrite/config.ini"
+    }
+   ],
+   "symbols": [
+    {
+     "module": "libssbu_online_deluxe_rewrite.nro",
+     "elf": "/home/intpa/deluxe-unicode-names-work/builds/after-21c0009/libssbu_online_deluxe_rewrite.elf"
+    },
+    {
+     "module": "libimgui_smash.nro",
+     "elf": "/home/intpa/smash-training-lobby/artifacts/imgui-standalone-1.1.0/eden-inputs/a/libimgui_smash.elf"
+    }
+   ]
+  },
+  "b": {
+   "app": {
+    "path": "/home/intpa/Applications/Eden-GIF/20261104-1961a200485e-unmapped-stop-0c7f89f711d6/Eden.AppImage",
+    "sha256": "0c7f89f711d6df37df2243928a92e789aaee319c81d0647a0b8e5b2df9975476"
+   },
+   "plugins": [
+    {
+     "path": "/home/intpa/deluxe-unicode-names-work/eden/inputs/libssbu_desync_detector.nro",
+     "sha256": "92fbcf849c196dd7e6e00b737eb6544b8ae09f56c153f0db7257b47fa64a3f1f"
+    },
+    {
+     "path": "/home/intpa/deluxe-unicode-names-work/eden/inputs/libssbu_tile_cursor.nro",
+     "sha256": "b8313ca2e66a52f1bcfc4afc764df1b7cdc5aee7e194bdea671cea02746934bc"
+    },
+    {
+     "path": "/home/intpa/smash-training-lobby/artifacts/imgui-standalone-1.1.0/eden-inputs/b/libssbu_online_deluxe_rewrite.nro",
+     "sha256": "aee7f4118e3a515668879e37bc0acd8b6e17f574f77d132f563a19950c396f24"
+    }
+   ],
+   "files": [
+    {
+     "path": "/home/intpa/deluxe-unicode-names-work/eden/inputs/profiles-aesir.dat",
+     "sha256": "2d311dde0c3b0052f6e9acffbdf939f41ebf75ca805825e20beb8fbd39b8424a",
+     "to": "user/nand/system/save/8000000000000010/su/avators/profiles.dat"
+    },
+    {
+     "path": "/home/intpa/deluxe-unicode-names-work/eden/inputs/deluxe-config.ini",
+     "sha256": "5f597d1738efdbb7cb3ef8290e3068651c5b381868a1ec7d9a09ef606a94f63e",
+     "to": "user/sdmc/ultimate/ssbu_online_deluxe_rewrite/config.ini"
+    }
+   ],
+   "symbols": [
+    {
+     "module": "libssbu_online_deluxe_rewrite.nro",
+     "elf": "/home/intpa/smash-training-lobby/artifacts/imgui-standalone-1.1.0/eden-inputs/b/libssbu_online_deluxe_rewrite.elf"
+    }
+   ]
+  }
+ }
+}
