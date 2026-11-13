@@ -9,8 +9,8 @@
 use super::{auto_driver, hooks::preflight, memory, pia_rtt, record, renderer, settings, Code};
 use crate::menu::NativeSurface;
 use crate::native_banner::{
-    self, FontMetrics, PaneKind, PaneLink, RemoteLine, Style, Styled, ARENA_ROOM_NAME,
-    CSS_BACKGROUND_STEPS, CSS_TITLE_WALK, TEXT_CAP,
+    self, Field, FontMetrics, Latency, PaneKind, PaneLink, PaneName, PaneText, RemoteLine, RoomId,
+    ShortField, Style, ARENA_ROOM_NAME, CSS_BACKGROUND_STEPS, CSS_TITLE_WALK, TEXT_CAP,
 };
 use skyline::hooks::{getRegionAddress, InlineCtx, Region};
 use skyline::nn::ui2d::{Material, MaterialFlags, Pane, PaneFlag, PaneNode, TextBox, TextBoxFlag};
@@ -52,12 +52,13 @@ const _: () = assert!(std::mem::offset_of!(PaneNode, prev) == 0);
 #[skyline::from_offset(0x37a28a0)]
 fn set_text_string(pane: *mut Pane, text: *const u8);
 
-/// One pane whose game text and style were captured this scene.
+/// One pane whose game text and style were captured this scene. Its text is
+/// [`BannerState::texts`] at the slot's index.
 struct Slot {
     address: u64,
     vtable: u64,
-    name: String,
-    captured: Styled,
+    name: PaneName,
+    style: Style,
     /// Our telemetry was the last thing written; Streamer restores once.
     applied: bool,
     logged: bool,
@@ -67,13 +68,18 @@ struct Slot {
 struct ArenaPane {
     address: usize,
     vtable: u64,
-    name: String,
-    room: String,
+    name: PaneName,
+    room: RoomId,
 }
 
 struct BannerState {
     generation: u64,
     slots: [Option<Slot>; 4],
+    /// Each slot's captured game text. Pane texts are kept here, in the
+    /// static state, and never on a hook's stack (0.10.7).
+    texts: [PaneText; 4],
+    /// The pane text `paint_one` reads this call.
+    current: PaneText,
     arena: Option<ArenaPane>,
     /// CSS title background address and whether the game showed it.
     background: Option<(u64, bool)>,
@@ -85,10 +91,27 @@ impl BannerState {
         Self {
             generation,
             slots: [const { None }; 4],
+            texts: [const { PaneText::new() }; 4],
+            current: PaneText::new(),
             arena: None,
             background: None,
             arena_reject_logged: false,
         }
+    }
+
+    /// [`Self::empty`] in place: the state holds whole pane texts, too large
+    /// to build on a hook's stack (0.10.7).
+    fn reset(&mut self, generation: u64) {
+        self.generation = generation;
+        for slot in &mut self.slots {
+            *slot = None;
+        }
+        for text in &mut self.texts {
+            text.clear();
+        }
+        self.arena = None;
+        self.background = None;
+        self.arena_reject_logged = false;
     }
 }
 
@@ -183,7 +206,7 @@ unsafe fn deluxe_rewrite_local_count(_: &InlineCtx) {
         return;
     };
     sync_generation(&mut state);
-    let telemetry = text.as_deref().map(|text| (text, None));
+    let telemetry = text.as_ref().map(|text| (text.as_str(), None));
     paint_one(&mut state, pane, PaneKind::Local, telemetry, 0);
 }
 
@@ -197,7 +220,7 @@ pub(super) fn drop_scene() {
     OPEN_LOGGED.store(u64::MAX, Ordering::Relaxed);
     let generation = SCENE_GEN.fetch_add(1, Ordering::Release) + 1;
     if let Ok(mut state) = STATE.try_lock() {
-        *state = BannerState::empty(generation);
+        state.reset(generation);
     }
 }
 
@@ -223,7 +246,7 @@ unsafe fn deluxe_rewrite_arena_room_init(ctx: &InlineCtx) {
     let Some(name) = checked_pane(address).and_then(|pane| unsafe { pane_name(&*pane) }) else {
         return;
     };
-    if name != ARENA_ROOM_NAME {
+    if name.as_str() != ARENA_ROOM_NAME {
         note_arena_name(&mut state, &name);
         return;
     }
@@ -250,14 +273,14 @@ unsafe fn deluxe_rewrite_arena_room_update(_: &InlineCtx) {
     let pane =
         open_pane(arena.address, PaneKind::Arena, ARENA_UPDATE as u64).filter(|pane| unsafe {
             (**pane).pane.vtable == arena.vtable
-                && pane_name(&(**pane).pane).as_deref() == Some(arena.name.as_str())
+                && pane_name(&(**pane).pane).is_some_and(|name| name == arena.name)
         });
     let Some(pane) = pane else {
         state.arena = None;
         return;
     };
     note_surface(NativeSurface::Arena);
-    let room = arena.room.clone();
+    let room = arena.room;
     if room.is_empty() {
         note_reject(ARENA_UPDATE as u64, REJECT_ROOM);
         return;
@@ -308,7 +331,7 @@ unsafe fn paint_css(arg: u64) {
 
 /// One frame's status text. `None` in Streamer.
 struct Telemetry {
-    text: String,
+    text: native_banner::StatusText,
     ping: Option<[u8; 4]>,
     remote_lines: u8,
 }
@@ -337,7 +360,10 @@ fn telemetry(room: Option<&str>) -> Option<Telemetry> {
     })
 }
 
-fn css_remote() -> (Vec<RemoteLine>, Option<[u8; 4]>) {
+/// Remote lines a pane can show.
+type Remotes = crate::fixed::FixedVec<RemoteLine, { native_banner::ARENA_REMOTE_CAP as usize }>;
+
+fn css_remote() -> (Remotes, Option<[u8; 4]>) {
     let frame = crate::peer_transport::peer_frame();
     let identity = crate::peer_transport::display_identity(frame.selection);
     let ping = crate::pia_rtt::present_published(identity, &pia_rtt::current_publication());
@@ -345,19 +371,21 @@ fn css_remote() -> (Vec<RemoteLine>, Option<[u8; 4]>) {
     if !crate::peer_transport::station_connected(frame.selection)
         || !super::pia_rtt::station_live(frame.selection)
     {
-        return (Vec::new(), color);
+        return (Remotes::new(), color);
     }
-    (vec![remote_line(&frame.peer, ping.opponent)], color)
+    let mut lines = Remotes::new();
+    lines.push(remote_line(&frame.peer, ShortField::from(ping.opponent.as_str())));
+    (lines, color)
 }
 
-fn arena_remotes() -> (Vec<RemoteLine>, Option<[u8; 4]>) {
+fn arena_remotes() -> (Remotes, Option<[u8; 4]>) {
     let (_, roster) = crate::peer_transport::banner_peers();
     if roster.busy {
-        return (Vec::new(), None);
+        return (Remotes::new(), None);
     }
     let board = pia_rtt::current_board();
-    let mut listed = Vec::new();
-    let mut lines = Vec::new();
+    let mut listed = crate::fixed::FixedVec::<u8, 32>::new();
+    let mut lines = Remotes::new();
     for peer in roster.peers.iter().take(usize::from(roster.len)) {
         let (Some(index), true) = (peer.station, peer.known) else {
             continue;
@@ -365,7 +393,7 @@ fn arena_remotes() -> (Vec<RemoteLine>, Option<[u8; 4]>) {
         listed.push(index);
         let presented = crate::pia_rtt::present_station(&board, index);
         let suffix = native_banner::interface_suffix(peer.interface);
-        lines.push(remote_line(peer, format!("{}{suffix}", presented.opponent)));
+        lines.push(remote_line(peer, crate::fixed!("{}{suffix}", presented.opponent)));
     }
     let color = crate::pia_rtt::aggregate_stability(&board, &listed)
         .map(crate::pia_rtt::ping_rgba)
@@ -374,12 +402,14 @@ fn arena_remotes() -> (Vec<RemoteLine>, Option<[u8; 4]>) {
 }
 
 /// Blank fields become `status_text`'s fallbacks (`Unavailable`, `---`).
-fn remote_line(peer: &crate::peer_transport::ShownPeer, ping: String) -> RemoteLine {
-    let known = |text: &str| if peer.known { text } else { "" }.to_owned();
+fn remote_line(peer: &crate::peer_transport::ShownPeer, ping: ShortField) -> RemoteLine {
+    let known = |text| if peer.known { text } else { "" };
     RemoteLine {
-        name: known(crate::peer_transport::name_label(&peer.name, peer.name_len).unwrap_or("")),
-        profile: known(peer.settings),
-        latency: crate::peer_transport::remote_latency_label(peer.latency),
+        name: Field::from(known(
+            crate::peer_transport::name_label(&peer.name, peer.name_len).unwrap_or(""),
+        )),
+        profile: ShortField::from(known(peer.settings)),
+        latency: Latency::from(crate::peer_transport::remote_latency_label(peer.latency).as_str()),
         ping,
     }
 }
@@ -432,11 +462,12 @@ unsafe fn paint_one(
         note_reject(site, REJECT_PANE);
         return;
     };
-    let Some(current) = read_current(&*pane) else {
+    if !read_current(&*pane, &mut state.current) {
         note_reject(site, REJECT_TEXT);
         return;
-    };
-    let game_text = !current.is_empty() && !native_banner::is_our_text(&current);
+    }
+    let current = state.current.as_str();
+    let game_text = !current.is_empty() && !native_banner::is_our_text(current);
     let same = |slot: &Slot| slot.address == address && slot.vtable == vtable && slot.name == name;
     let found = state
         .slots
@@ -455,36 +486,42 @@ unsafe fn paint_one(
             state.slots[index] = Some(Slot {
                 address,
                 vtable,
-                name: name.clone(),
-                captured: Styled {
-                    text: String::new(),
-                    style: Style {
-                        font: capture_font(&*pane),
-                        colors: (*pane).text_colors,
-                        material: material(&*pane, false)
-                            .map(|material| (*material).m_colors.byte_color),
-                        pos_y: pos_y.filter(|y| y.is_finite()),
-                    },
+                name,
+                style: Style {
+                    font: capture_font(&*pane),
+                    colors: (*pane).text_colors,
+                    material: material(&*pane, false)
+                        .map(|material| (*material).m_colors.byte_color),
+                    pos_y: pos_y.filter(|y| y.is_finite()),
                 },
                 applied: false,
                 logged: false,
             });
+            state.texts[index].clear();
             index
         }
     };
-    let Some(slot) = state.slots[index].as_mut() else {
+    let BannerState {
+        slots,
+        texts,
+        current,
+        ..
+    } = state;
+    let (Some(slot), Some(saved)) = (slots[index].as_mut(), texts.get_mut(index)) else {
         return;
     };
     if game_text {
-        slot.captured.text.clone_from(&current);
+        saved.clear();
+        saved.push_str(current);
     }
-    let ours = native_banner::is_our_text(&current) || slot.applied;
-    let Some(write) = native_banner::paint(&slot.captured, ours, telemetry, kind, remote_lines)
+    let ours = native_banner::is_our_text(current) || slot.applied;
+    let Some(write) =
+        native_banner::paint_parts(saved, &slot.style, ours, telemetry, kind, remote_lines)
     else {
         return;
     };
     slot.applied = telemetry.is_some();
-    let wrote = current == write.text || write_text(&mut *pane, &write.text);
+    let wrote = current.as_str() == write.text || write_text(&mut *pane, write.text);
     if !wrote && telemetry.is_some() {
         note_reject(site, REJECT_FIT);
         return;
@@ -606,7 +643,8 @@ unsafe fn setter_available() -> bool {
     words_ok(SET_TEXT, &SETTER_WORDS) && preflight(SET_TEXT)
 }
 
-unsafe fn read_current(tb: &TextBox) -> Option<String> {
+/// The pane's text into `out`; `false` when it cannot be read whole.
+unsafe fn read_current(tb: &TextBox, out: &mut PaneText) -> bool {
     let cap = usize::from(tb.text_buf_len);
     let declared = usize::from(tb.text_len);
     if tb.text_buf.is_null()
@@ -615,7 +653,7 @@ unsafe fn read_current(tb: &TextBox) -> Option<String> {
         || declared > cap
         || declared > TEXT_CAP
     {
-        return None;
+        return false;
     }
     let scan = if declared == 0 {
         cap.min(TEXT_CAP)
@@ -626,18 +664,18 @@ unsafe fn read_current(tb: &TextBox) -> Option<String> {
     if !(tb.text_buf as usize).is_multiple_of(unit)
         || !memory::accessible(tb.text_buf as usize, scan * unit, false)
     {
-        return None;
+        return false;
     }
     if tb.is_utf8 {
         let bytes = std::slice::from_raw_parts(tb.text_buf as *const u8, scan);
-        native_banner::decode_utf8_capped(bytes)
+        native_banner::decode_utf8_into(bytes, out)
     } else {
         let units = std::slice::from_raw_parts(tb.text_buf as *const u16, scan);
-        native_banner::decode_utf16_capped(units)
+        native_banner::decode_utf16_into(units, out)
     }
 }
 
-unsafe fn read_room_id(address: usize) -> Option<String> {
+unsafe fn read_room_id(address: usize) -> Option<RoomId> {
     if !address.is_multiple_of(2)
         || !memory::accessible(address, native_banner::ROOM_ID_UNITS * 2, false)
     {
@@ -711,8 +749,8 @@ fn capture_font(tb: &TextBox) -> Option<FontMetrics> {
     native_banner::metrics_plausible(&metrics).then_some(metrics)
 }
 
-fn pane_name(pane: &Pane) -> Option<String> {
-    native_banner::decode_name(&pane.name).map(str::to_owned)
+fn pane_name(pane: &Pane) -> Option<PaneName> {
+    native_banner::decode_name(&pane.name).map(PaneName::from)
 }
 
 unsafe fn read_ptr(address: usize) -> Option<usize> {
@@ -751,7 +789,7 @@ unsafe fn words_ok(site: usize, words: &[u32]) -> bool {
 fn sync_generation(state: &mut BannerState) {
     let generation = SCENE_GEN.load(Ordering::Acquire);
     if state.generation != generation {
-        *state = BannerState::empty(generation);
+        state.reset(generation);
     }
 }
 

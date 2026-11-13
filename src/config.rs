@@ -88,7 +88,7 @@ impl Platform {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Config {
     /// -1 means Auto; explicit values must be in 0..=25.
     pub input_buffer: i8,
@@ -191,12 +191,19 @@ pub struct HiddenPages {
 /// Own pages left out of the window cycle one by one (`hide_plugin_pages`,
 /// 0.10.0): a comma list of plugin ids, sorted and without duplicates. An id
 /// whose plugin is not installed is kept, so the page stays hidden when the
-/// plugin returns.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct PluginPages(Vec<String>);
+/// plugin returns. Fixed capacity (0.10.7: the window edits it inside the
+/// present hook): [`PAGE_IDS_MAX`] ids of at most the ABI's id length; a file
+/// that lists more fails to parse, and an edit past it is dropped.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PluginPages(crate::fixed::FixedVec<PageId, PAGE_IDS_MAX>);
+
+/// Own pages `hide_plugin_pages` can name: every registered plugin's, and as
+/// many again for plugins not installed now.
+pub const PAGE_IDS_MAX: usize = 2 * deluxe_plugin_abi::MAX_PLUGINS;
+pub type PageId = crate::fixed::FixedStr<{ deluxe_plugin_abi::MAX_ID_LEN }>;
 
 impl PluginPages {
-    pub const EMPTY: Self = Self(Vec::new());
+    pub const EMPTY: Self = Self(crate::fixed::FixedVec::new());
 
     pub fn contains(&self, id: &str) -> bool {
         self.0.binary_search_by(|entry| entry.as_str().cmp(id)).is_ok()
@@ -207,19 +214,25 @@ impl PluginPages {
     }
 
     /// A plugin whose id is `none` cannot be listed: the key would read as
-    /// the empty list.
-    fn insert(&mut self, id: &str) {
+    /// the empty list. `false` when the id is too long or the list is full.
+    fn insert(&mut self, id: &str) -> bool {
         if id == "none" {
-            return;
+            return true;
+        }
+        if id.len() > deluxe_plugin_abi::MAX_ID_LEN || self.0.len() == PAGE_IDS_MAX {
+            return self.contains(id);
         }
         if let Err(at) = self.0.binary_search_by(|entry| entry.as_str().cmp(id)) {
-            self.0.insert(at, id.to_owned());
+            self.0.push(PageId::from(id));
+            self.0[at..].rotate_right(1);
         }
+        true
     }
 
     fn remove(&mut self, id: &str) {
         if let Ok(at) = self.0.binary_search_by(|entry| entry.as_str().cmp(id)) {
-            self.0.remove(at);
+            self.0[at..].rotate_left(1);
+            self.0.pop();
         }
     }
 
@@ -234,7 +247,9 @@ impl PluginPages {
             if id == "none" || !deluxe_plugin_abi::valid_id(id.as_bytes()) || pages.contains(id) {
                 return None;
             }
-            pages.insert(id);
+            if !pages.insert(id) {
+                return None;
+            }
         }
         Some(pages)
     }
@@ -243,7 +258,7 @@ impl PluginPages {
         if self.0.is_empty() {
             "none".to_owned()
         } else {
-            self.0.join(",")
+            self.0.iter().map(PageId::as_str).collect::<Vec<_>>().join(",")
         }
     }
 }
@@ -1073,7 +1088,7 @@ mod tests {
         // After hoc_oc, which is also written only when set.
         let both = Config {
             hoc_oc: OcMode::Online,
-            ..config.clone()
+            ..config
         };
         assert!(both
             .serialize()

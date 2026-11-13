@@ -31,6 +31,26 @@ pub const PANE_SCAN_MAX: usize = TEXT_CAP + 1;
 const _: () = assert!(TEXT_CAP == 698);
 const _: () = assert!(PANE_SCAN_MAX <= 1024);
 
+/// Pane text as UTF-8: [`TEXT_CAP`] UTF-16 units decode to at most three bytes each.
+pub type PaneText = crate::fixed::FixedStr<{ 3 * TEXT_CAP }>;
+/// Our status text, marker included.
+pub type StatusText = crate::fixed::FixedStr<TEXT_CAP>;
+/// The text handed to the setter, NUL included.
+pub type SetterText = crate::fixed::FixedStr<{ TEXT_CAP + 1 }>;
+/// A pane name ([`decode_name`]: at most 24 bytes).
+pub type PaneName = crate::fixed::FixedStr<24>;
+/// An arena room id: at most [`ROOM_ID_UNITS`] units.
+pub type RoomId = crate::fixed::FixedStr<{ 3 * ROOM_ID_UNITS }>;
+/// One field of a remote line, before [`status_text`] cleans and cuts it.
+pub type Field = crate::fixed::FixedStr<64>;
+/// A latency label (`Auto (4f)`, `-1`..`9`).
+pub type Latency = crate::fixed::FixedStr<16>;
+/// A remote line's profile or ping before [`status_text`] cuts it (both are
+/// cut to fewer bytes than this).
+pub type ShortField = crate::fixed::FixedStr<32>;
+/// One remote line of [`status_text`]: newline, name, profile, latency, ping.
+type RemoteText = crate::fixed::FixedStr<{ REMOTE_LINE_MAX + 8 }>;
+
 /// Local-wireless update site. Words are the clean 13.0.5 entry from the pane probe.
 pub const LOCAL_UPDATE: usize = 0x1bd7a80;
 pub const LOCAL_UPDATE_WORDS: [u32; 4] = [0x3600_00a0, 0xf940_c268, 0xb942_5517, 0x3700_08f6];
@@ -117,9 +137,9 @@ pub struct Style {
 
 /// Pane text with its style: the game's own, captured once per pane identity
 /// and scene, or what [`paint`] decides to write.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Styled {
-    pub text: String,
+    pub text: PaneText,
     pub style: Style,
 }
 
@@ -133,28 +153,28 @@ pub fn arena_pos_y(displayed_remote_count: u8) -> f32 {
 
 /// `Auto`, or `Auto (4f)` once the online-latency hook has seen the frame
 /// count the game chose for this session (0.6.2); a manual buffer is its number.
-pub fn local_latency_label(buffer: i8, auto_frames: Option<u8>) -> String {
+pub fn local_latency_label(buffer: i8, auto_frames: Option<u8>) -> Latency {
     match (buffer, auto_frames) {
-        (-1, Some(frames)) => format!("Auto ({frames}f)"),
-        (-1, None) => "Auto".to_owned(),
-        _ => buffer.to_string(),
+        (-1, Some(frames)) => crate::fixed!("Auto ({frames}f)"),
+        (-1, None) => Latency::from("Auto"),
+        _ => crate::fixed!("{buffer}"),
     }
 }
 
 /// Local-wireless lobby text: the input buffer behind the marker, so the
 /// game's own count (which can be the same digit) is told apart from ours.
 /// That pane is a digit wide, so Auto stays `Auto` here.
-pub fn local_lobby_text(buffer: i8) -> String {
-    format!("{MARKER}{}", local_latency_label(buffer, None))
+pub fn local_lobby_text(buffer: i8) -> crate::fixed::FixedStr<24> {
+    crate::fixed!("{MARKER}{}", local_latency_label(buffer, None))
 }
 
 /// One remote line. Fields already belong to the same station.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RemoteLine {
-    pub name: String,
-    pub profile: String,
-    pub latency: String,
-    pub ping: String,
+    pub name: Field,
+    pub profile: ShortField,
+    pub latency: Latency,
+    pub ping: ShortField,
 }
 
 /// Marker, the room line when there is a room, the local line, then each
@@ -165,27 +185,29 @@ pub fn status_text(
     you_profile: &str,
     you_latency: &str,
     remotes: &[RemoteLine],
-) -> (String, u8) {
+) -> (StatusText, u8) {
     let profile = field(you_profile, "---", YOU_PROFILE_MAX);
     let latency = field(you_latency, "---", YOU_LATENCY_MAX);
     let room = field(room.unwrap_or(""), "", ROOM_LINE_MAX - 10);
-    let head = (!room.is_empty()).then(|| format!("ROOM ID: {room}\n"));
-    let mut body = format!("{}You: {profile} | {latency}", head.unwrap_or_default());
-    let cap = TEXT_CAP - MARKER_BYTES;
+    let mut body: StatusText = crate::fixed!("{MARKER}");
+    if !room.is_empty() {
+        let _ = std::fmt::Write::write_fmt(&mut body, format_args!("ROOM ID: {room}\n"));
+    }
+    let _ = std::fmt::Write::write_fmt(&mut body, format_args!("You: {profile} | {latency}"));
     let mut shown = 0u8;
     for remote in remotes.iter().take(usize::from(ARENA_REMOTE_CAP)) {
         let name = field(&remote.name, "Unavailable", ARENA_NAME_MAX);
         let profile = field(&remote.profile, "---", ARENA_PROFILE_MAX);
         let latency = field(&remote.latency, "---", ARENA_LATENCY_MAX);
         let ping = field(&remote.ping, "---", ARENA_PING_MAX);
-        let line = format!("\n{name}: {profile} | {latency} ({ping})");
-        if body.len() + line.len() > cap {
+        let line: RemoteText = crate::fixed!("\n{name}: {profile} | {latency} ({ping})");
+        if body.len() + line.len() > TEXT_CAP {
             break;
         }
         body.push_str(&line);
         shown += 1;
     }
-    (format!("{MARKER}{}", cap_str(&body, cap)), shown)
+    (body, shown)
 }
 
 pub fn is_our_text(text: &str) -> bool {
@@ -212,26 +234,38 @@ pub fn ping_bytes(color: PingRgba) -> [u8; 4] {
 /// written with the fork font and material on the CSS titles, the saved font
 /// and the fork material on the arena, and no style change on the lobby pane;
 /// the text colour is the ping colour when there is one.
-pub fn paint(
-    saved: &Styled,
+pub fn paint<'a>(
+    saved: &'a Styled,
     ours: bool,
-    telemetry: Option<(&str, Option<[u8; 4]>)>,
+    telemetry: Option<(&'a str, Option<[u8; 4]>)>,
     kind: PaneKind,
     remote_lines: u8,
-) -> Option<Styled> {
-    if saved.text.is_empty() || is_our_text(&saved.text) {
+) -> Option<Write<'a>> {
+    paint_parts(&saved.text, &saved.style, ours, telemetry, kind, remote_lines)
+}
+
+/// [`paint`] with the captured text and style held apart.
+pub fn paint_parts<'a>(
+    saved_text: &'a str,
+    saved_style: &Style,
+    ours: bool,
+    telemetry: Option<(&'a str, Option<[u8; 4]>)>,
+    kind: PaneKind,
+    remote_lines: u8,
+) -> Option<Write<'a>> {
+    if saved_text.is_empty() || is_our_text(saved_text) {
         return None;
     }
     let (text, ping) = match telemetry {
-        None if ours => (saved.text.as_str(), None),
+        None if ours => (saved_text, None),
         Some((text, ping)) if is_our_text(text) && text.len() <= TEXT_CAP => (text, ping),
         _ => return None,
     };
     let restore = telemetry.is_none();
     let arena = kind == PaneKind::Arena;
     let styled = kind != PaneKind::Local;
-    let font = saved.style.font.filter(|_| styled);
-    let material = saved.style.material.filter(|_| styled);
+    let font = saved_style.font.filter(|_| styled);
+    let material = saved_style.material.filter(|_| styled);
     let telemetry_y = (arena && !restore).then(|| arena_pos_y(remote_lines));
     let style = Style {
         font: font.map(|font| {
@@ -241,7 +275,7 @@ pub fn paint(
                 TELEMETRY_FONT
             }
         }),
-        colors: ping.map_or(saved.style.colors, |color| [color, color]),
+        colors: ping.map_or(saved_style.colors, |color| [color, color]),
         material: material.map(|material| {
             if restore {
                 material
@@ -249,16 +283,20 @@ pub fn paint(
                 TELEMETRY_MATERIAL
             }
         }),
-        pos_y: saved
-            .style
+        pos_y: saved_style
             .pos_y
             .filter(|_| arena && restore)
             .or(telemetry_y),
     };
-    Some(Styled {
-        text: text.to_owned(),
-        style,
-    })
+    Some(Write { text, style })
+}
+
+/// What [`paint`] writes: the captured or the telemetry text, borrowed (a
+/// pane text is too large to copy on a hook's stack), and the style.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Write<'a> {
+    pub text: &'a str,
+    pub style: Style,
 }
 
 /// NUL-terminated pane name of 1–24 ASCII word characters.
@@ -274,24 +312,60 @@ fn capped_end(len: usize, terminator: Option<usize>) -> Option<usize> {
     terminator.filter(|end| len <= PANE_SCAN_MAX && *end <= TEXT_CAP)
 }
 
-pub fn decode_utf8_capped(bytes: &[u8]) -> Option<String> {
-    let end = capped_end(bytes.len(), bytes.iter().position(|byte| *byte == 0))?;
-    std::str::from_utf8(&bytes[..end]).ok().map(str::to_owned)
+pub fn decode_utf8_capped(bytes: &[u8]) -> Option<PaneText> {
+    let mut out = PaneText::new();
+    decode_utf8_into(bytes, &mut out).then_some(out)
 }
 
-pub fn decode_utf16_capped(units: &[u16]) -> Option<String> {
-    let end = capped_end(units.len(), units.iter().position(|unit| *unit == 0))?;
-    String::from_utf16(&units[..end]).ok()
+pub fn decode_utf16_capped(units: &[u16]) -> Option<PaneText> {
+    let mut out = PaneText::new();
+    decode_utf16_into(units, &mut out).then_some(out)
+}
+
+/// [`decode_utf8_capped`] into `out` (a hook's buffer, not its stack);
+/// `false`, with `out` unspecified, where that returns `None`.
+pub fn decode_utf8_into(bytes: &[u8], out: &mut PaneText) -> bool {
+    let Some(end) = capped_end(bytes.len(), bytes.iter().position(|byte| *byte == 0)) else {
+        return false;
+    };
+    let Ok(text) = std::str::from_utf8(&bytes[..end]) else {
+        return false;
+    };
+    out.clear();
+    out.push_str(text)
+}
+
+/// [`decode_utf16_capped`] into `out`, as [`decode_utf8_into`].
+pub fn decode_utf16_into(units: &[u16], out: &mut PaneText) -> bool {
+    let Some(end) = capped_end(units.len(), units.iter().position(|unit| *unit == 0)) else {
+        return false;
+    };
+    utf16_into(&units[..end], out)
+}
+
+/// Valid UTF-16 as UTF-8 into `out`; `false` when invalid or too long.
+fn utf16_into<const N: usize>(units: &[u16], out: &mut crate::fixed::FixedStr<N>) -> bool {
+    out.clear();
+    for ch in char::decode_utf16(units.iter().copied()) {
+        match ch {
+            Ok(ch) if out.push(ch) => {}
+            _ => return false,
+        }
+    }
+    true
 }
 
 /// Arena room id is at most five UTF-16 units. Invalid sequences are absent.
-pub fn decode_room_id(units: &[u16]) -> Option<String> {
+pub fn decode_room_id(units: &[u16]) -> Option<RoomId> {
     let units = Some(units).filter(|units| (1..=ROOM_ID_UNITS).contains(&units.len()))?;
     let end = units
         .iter()
         .position(|unit| *unit == 0)
         .unwrap_or(units.len());
-    let text = String::from_utf16(&units[..end]).ok()?;
+    let mut text = RoomId::new();
+    if !utf16_into(&units[..end], &mut text) {
+        return None;
+    }
     (!text.is_empty() && !text.chars().any(char::is_control)).then_some(text)
 }
 
@@ -319,11 +393,14 @@ pub fn main_image_vtable(vtable: u64, entry: u64, text: u64, rodata: u64, data_e
 
 /// The 13.0.5 UTF-8 setter only decodes 1–3 byte sequences. A 4-byte scalar
 /// makes it read past the terminating NUL, so those scalars are removed first.
-pub fn setter_utf8(text: &str) -> Option<String> {
+pub fn setter_utf8(text: &str) -> Option<SetterText> {
     if text.is_empty() || text.len() > TEXT_CAP || text.bytes().any(|byte| byte == 0) {
         return None;
     }
-    let cleaned: String = text.chars().filter(|ch| ch.len_utf8() < 4).collect();
+    let mut cleaned = SetterText::new();
+    for ch in text.chars().filter(|ch| ch.len_utf8() < 4) {
+        cleaned.push(ch);
+    }
     (!cleaned.is_empty()).then_some(cleaned)
 }
 
@@ -337,11 +414,19 @@ pub fn name_words(name: &str) -> (u64, u64) {
 
 /// Control characters and the marker removed, `fallback` when nothing is
 /// left, then cut to `max_bytes` on a char boundary.
-fn field(value: &str, fallback: &str, max_bytes: usize) -> String {
+fn field(value: &str, fallback: &str, max_bytes: usize) -> Field {
     let clean = |ch: &char| !ch.is_control() && *ch != MARKER;
-    let cleaned: String = value.chars().filter(clean).collect();
-    let text = Some(cleaned.as_str()).filter(|text| !text.is_empty());
-    cap_str(text.unwrap_or(fallback), max_bytes).to_owned()
+    let mut cleaned = Field::new();
+    for ch in value.chars().filter(clean) {
+        if cleaned.len() + ch.len_utf8() > max_bytes {
+            break;
+        }
+        cleaned.push(ch);
+    }
+    if cleaned.is_empty() && !value.chars().any(|ch| clean(&ch)) {
+        return Field::from(cap_str(fallback, max_bytes));
+    }
+    cleaned
 }
 
 fn cap_str(text: &str, max_bytes: usize) -> &str {
@@ -359,10 +444,10 @@ mod tests {
 
     fn remote(name: &str, profile: &str, latency: &str, ping: &str) -> RemoteLine {
         RemoteLine {
-            name: name.to_owned(),
-            profile: profile.to_owned(),
-            latency: latency.to_owned(),
-            ping: ping.to_owned(),
+            name: name.into(),
+            profile: profile.into(),
+            latency: latency.into(),
+            ping: ping.into(),
         }
     }
 
@@ -378,7 +463,7 @@ mod tests {
 
     fn saved(text: &str, pos_y: Option<f32>) -> Styled {
         Styled {
-            text: text.to_owned(),
+            text: text.into(),
             style: Style {
                 font: Some(game_font()),
                 colors: [[9, 9, 9, 9], [1, 2, 3, 4]],
@@ -389,13 +474,13 @@ mod tests {
     }
 
     /// A telemetry write of `text` on `kind`, colour optional.
-    fn write(
-        saved: &Styled,
-        text: &str,
+    fn write<'a>(
+        saved: &'a Styled,
+        text: &'a str,
         ping: Option<[u8; 4]>,
         kind: PaneKind,
         lines: u8,
-    ) -> Styled {
+    ) -> Write<'a> {
         paint(saved, false, Some((text, ping)), kind, lines).unwrap()
     }
 
@@ -415,7 +500,7 @@ mod tests {
         let masked = [remote("", "", "", "")];
         let (text, _) = status_text(None, "", "", &masked);
         assert_eq!(text, "\u{200B}You: --- | ---\nUnavailable: --- | --- (---)");
-        let two = [one[0].clone(), remote("Bob", "LLUltra", "---", "---")];
+        let two = [one[0], remote("Bob", "LLUltra", "---", "---")];
         let (arena, shown) = status_text(Some("AB12"), "Auto:Van", "Auto", &two);
         assert_eq!(shown, 2);
         assert_eq!(
@@ -501,7 +586,7 @@ mod tests {
         assert_eq!((local.style.font, local.style.material), (None, None));
         assert_eq!(local.style.colors, original.style.colors);
         assert_eq!(local.style.pos_y, None);
-        let mut no_font = original.clone();
+        let mut no_font = original;
         no_font.style.font = None;
         assert_eq!(
             write(&no_font, &telemetry, None, PaneKind::Css, 0)
@@ -515,7 +600,8 @@ mod tests {
     fn streamer_restores_once_while_ours_shows_and_bad_text_leaves_the_pane() {
         let original = saved("Online", Some(-40.0));
         let restored = paint(&original, true, None, PaneKind::Arena, 3).unwrap();
-        assert_eq!(restored, saved("Online", Some(-40.0)));
+        let expected = saved("Online", Some(-40.0));
+        assert_eq!((restored.text, restored.style), (expected.text.as_str(), expected.style));
         let css = paint(&original, true, None, PaneKind::Css, 0).unwrap();
         assert_eq!(css.style.pos_y, None);
         assert_eq!(css.style.font, Some(game_font()));
@@ -545,16 +631,16 @@ mod tests {
         long_name[25] = 0;
         assert_eq!(decode_name(&long_name), None);
         assert_eq!(decode_utf8_capped(&[0xff, 0]), None);
-        assert_eq!(decode_utf8_capped(b"Online\0xx"), Some("Online".to_owned()));
+        assert_eq!(decode_utf8_capped(b"Online\0xx").as_deref(), Some("Online"));
         assert_eq!(decode_utf8_capped(&[b'A'; PANE_SCAN_MAX + 1]), None);
         let mut long = vec![b'A'; TEXT_CAP + 1];
         long.push(0);
         assert_eq!(decode_utf8_capped(&long), None);
         assert_eq!(decode_utf16_capped(&[0xD800, 0]), None);
         let ok = [b'O' as u16, b'k' as u16, 0];
-        assert_eq!(decode_utf16_capped(&ok), Some("Ok".to_owned()));
+        assert_eq!(decode_utf16_capped(&ok).as_deref(), Some("Ok"));
         let room = [b'A' as u16, b'1' as u16, 0, 0, 0];
-        assert_eq!(decode_room_id(&room), Some("A1".to_owned()));
+        assert_eq!(decode_room_id(&room).as_deref(), Some("A1"));
         assert_eq!(decode_room_id(&[0xD800, 0, 0, 0, 0]), None);
         assert_eq!(decode_room_id(&[b'A' as u16; 6]), None);
         assert_eq!(decode_room_id(&[0; 5]), None);
@@ -563,8 +649,8 @@ mod tests {
 
     #[test]
     fn setter_text_drops_four_byte_scalars_and_rejects_nul() {
-        assert_eq!(setter_utf8("AB12"), Some("AB12".to_owned()));
-        assert_eq!(setter_utf8("A\u{1F600}B"), Some("AB".to_owned()));
+        assert_eq!(setter_utf8("AB12").as_deref(), Some("AB12"));
+        assert_eq!(setter_utf8("A\u{1F600}B").as_deref(), Some("AB"));
         assert_eq!(setter_utf8("\u{1F600}"), None);
         assert_eq!(setter_utf8(""), None);
         assert_eq!(setter_utf8("A\0B"), None);

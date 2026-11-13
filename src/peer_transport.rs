@@ -219,11 +219,11 @@ pub struct PeerFrame {
 }
 
 /// Player Info text. Streamer draws a blank instead of calling this.
-pub fn remote_latency_label(latency: RemoteLatency) -> String {
+pub fn remote_latency_label(latency: RemoteLatency) -> crate::fixed::Label {
     match latency {
-        RemoteLatency::Unknown => "---".to_owned(),
-        RemoteLatency::Auto => "Auto".to_owned(),
-        RemoteLatency::Buffer(value) => value.to_string(),
+        RemoteLatency::Unknown => crate::fixed::Label::from("---"),
+        RemoteLatency::Auto => crate::fixed::Label::from("Auto"),
+        RemoteLatency::Buffer(value) => crate::fixed!("{value}"),
     }
 }
 

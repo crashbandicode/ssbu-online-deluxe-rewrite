@@ -389,17 +389,18 @@ pub(super) fn publish() {
     }
 }
 
-pub(super) fn status_label() -> String {
+pub(super) fn status_label() -> crate::fixed::Label {
+    use crate::fixed::Label;
     match OUTCOME.load(Ordering::Acquire) {
-        1 if !super::backoff_enabled() => "Off (ini)".to_string(),
-        1 if !ELIGIBLE.load(Ordering::Acquire) => "Armed".to_string(),
+        1 if !super::backoff_enabled() => Label::from("Off (ini)"),
+        1 if !ELIGIBLE.load(Ordering::Acquire) => Label::from("Armed"),
         1 => crate::dispatcher_backoff::status_label(
             true,
             Some(RATE.load(Ordering::Relaxed)),
             LAST_NS.load(Ordering::Relaxed),
         ),
-        2 => "External".to_string(),
-        3 => "Unavailable".to_string(),
-        _ => "Off".to_string(),
+        2 => Label::from("External"),
+        3 => Label::from("Unavailable"),
+        _ => Label::from("Off"),
     }
 }

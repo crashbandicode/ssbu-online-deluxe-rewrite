@@ -58,8 +58,8 @@ impl HocState {
 
     /// `none`, or the installed parts joined with `+`: `kip`, `clk`,
     /// `smash` (a profile for this title), `uncapped`.
-    pub fn label(self) -> String {
-        let parts: Vec<&str> = [
+    pub fn label(self) -> crate::fixed::Label {
+        let parts: crate::fixed::FixedVec<&str, 4> = [
             (self.kip, "kip"),
             (self.autostart, "clk"),
             (self.title_profile, "smash"),
@@ -69,9 +69,9 @@ impl HocState {
         .filter_map(|(on, name)| on.then_some(name))
         .collect();
         if parts.is_empty() {
-            "none".to_owned()
+            crate::fixed::Label::from("none")
         } else {
-            parts.join("+")
+            crate::fixed::join(&parts, "+")
         }
     }
 }
@@ -139,13 +139,13 @@ pub const fn classify(mhz: u32) -> Class {
 }
 
 /// Performance-row text: `1021 MHz stock, HOC none` / `1783 MHz OC, HOC kip+clk+smash`.
-pub fn status_label(mhz: u32, hoc: HocState) -> String {
-    let clock = match classify(mhz) {
-        Class::Unknown => "--- MHz".to_owned(),
-        Class::Stock => format!("{mhz} MHz stock"),
-        Class::Oc => format!("{mhz} MHz OC"),
+pub fn status_label(mhz: u32, hoc: HocState) -> crate::fixed::Line {
+    let clock: crate::fixed::Label = match classify(mhz) {
+        Class::Unknown => crate::fixed::Label::from("--- MHz"),
+        Class::Stock => crate::fixed!("{mhz} MHz stock"),
+        Class::Oc => crate::fixed!("{mhz} MHz OC"),
     };
-    format!("{clock}, HOC {}", hoc.label())
+    crate::fixed!("{clock}, HOC {}", hoc.label())
 }
 
 /// `# key=value` lines for the capture headers (no trailing newline).

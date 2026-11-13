@@ -68,15 +68,15 @@ pub fn memory_fields(memory: Option<Memory>) -> String {
 }
 
 /// Overlay row: used / total MiB and what is left.
-pub fn memory_label(memory: Option<Memory>) -> String {
+pub fn memory_label(memory: Option<Memory>) -> crate::fixed::Label {
     match memory {
-        Some(m) => format!(
+        Some(m) => crate::fixed!(
             "{:.1}/{:.1} MiB, free {:.1}",
             m.used as f64 / MIB,
             m.total as f64 / MIB,
             m.total.saturating_sub(m.used) as f64 / MIB
         ),
-        None => "Unavailable".to_string(),
+        None => crate::fixed::Label::from("Unavailable"),
     }
 }
 

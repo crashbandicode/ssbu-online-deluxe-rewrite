@@ -143,20 +143,20 @@ impl MoveSet {
         Ok(Self(set))
     }
 
-    pub fn serialize(self) -> String {
+    pub fn serialize(self) -> crate::fixed::Line {
         if self.is_empty() {
-            return "none".to_owned();
+            return crate::fixed::Line::from("none");
         }
         if self == Self::all() {
-            return "all".to_owned();
+            return crate::fixed::Line::from("all");
         }
-        MOVES
+        let names: crate::fixed::FixedVec<&str, 32> = MOVES
             .iter()
             .enumerate()
             .filter(|(index, _)| self.contains(*index))
             .map(|(_, entry)| entry.name)
-            .collect::<Vec<_>>()
-            .join(",")
+            .collect();
+        crate::fixed::join(&names, ",")
     }
 
     /// The enabled catalog entry that owns this fighter kind and status.
@@ -232,15 +232,15 @@ pub fn parse_threshold(text: &str) -> Result<u16, String> {
     Ok(hundredths as u16)
 }
 
-pub fn format_threshold(hundredths: u16) -> String {
+pub fn format_threshold(hundredths: u16) -> crate::fixed::FixedStr<8> {
     let whole = hundredths / 100;
     let rest = hundredths % 100;
     if rest == 0 {
-        format!("{whole}")
+        crate::fixed!("{whole}")
     } else if rest.is_multiple_of(10) {
-        format!("{whole}.{}", rest / 10)
+        crate::fixed!("{whole}.{}", rest / 10)
     } else {
-        format!("{whole}.{rest:02}")
+        crate::fixed!("{whole}.{rest:02}")
     }
 }
 

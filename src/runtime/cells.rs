@@ -7,6 +7,7 @@ use super::imgui::*;
 
 /// One column: its heading, whether the plugin reported it ready (a check;
 /// anything else is a cross) and the color of the mark (`None` is text color).
+#[derive(Clone, Copy)]
 pub(super) struct CellDraw<'a> {
     pub label: &'a str,
     pub ok: bool,

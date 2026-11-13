@@ -142,13 +142,17 @@ pub fn decide(policy: Policy, snapshot: &Snapshot, streak: &mut Streak) -> Resul
 }
 
 /// Overlay label: sleeps per second and the last sleep length.
-pub fn status_label(installed: bool, sleeps_per_second: Option<u32>, last_ns: u32) -> String {
+pub fn status_label(
+    installed: bool,
+    sleeps_per_second: Option<u32>,
+    last_ns: u32,
+) -> crate::fixed::Label {
     if !installed {
-        return "Off".to_string();
+        return crate::fixed::Label::from("Off");
     }
     match sleeps_per_second {
-        Some(rate) if rate > 0 => format!("{rate}/s {} us", last_ns / 1000),
-        _ => "Idle".to_string(),
+        Some(rate) if rate > 0 => crate::fixed!("{rate}/s {} us", last_ns / 1000),
+        _ => crate::fixed::Label::from("Idle"),
     }
 }
 

@@ -129,17 +129,16 @@ pub(super) fn saved_render_mode() -> crate::config::RenderMode {
 /// Plugin threads only: it waits for `PLUGIN_PAGES`. The window, which runs
 /// inside the present hook, uses [`try_settings_with_pages`].
 pub(super) fn settings_with_pages() -> Config {
-    let plugin_pages = PLUGIN_PAGES
+    let plugin_pages = *PLUGIN_PAGES
         .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .clone();
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     settings_with(plugin_pages)
 }
 
 /// [`settings_with_pages`] for the window, or `None` while a plugin thread
 /// holds `PLUGIN_PAGES` (the window then keeps the pages it last read).
 pub(super) fn try_settings_with_pages() -> Option<Config> {
-    let plugin_pages = crate::hook_lock::try_take(&PLUGIN_PAGES)?.clone();
+    let plugin_pages = *crate::hook_lock::try_take(&PLUGIN_PAGES)?;
     Some(settings_with(plugin_pages))
 }
 
@@ -151,8 +150,7 @@ pub(super) fn settings_with(plugin_pages: crate::config::PluginPages) -> Config 
     }
 }
 
-/// Single settings for hook paths, which never build a [`Config`] (its plugin
-/// page list is a `Vec`, and dropping one reaches the allocator).
+/// Single settings for hook paths that need one value, not a whole [`Config`].
 pub(super) fn input_buffer() -> i8 {
     INPUT_BUFFER.load(Ordering::Acquire)
 }
@@ -258,7 +256,7 @@ pub(super) fn stealth() -> bool {
 pub(super) fn publish(config: &Config) {
     *PLUGIN_PAGES
         .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner) = config.plugin_pages.clone();
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = config.plugin_pages;
     publish_atomics(config);
 }
 
@@ -268,7 +266,7 @@ pub(super) fn try_publish(config: &Config) -> bool {
     let Some(mut pages) = crate::hook_lock::try_take(&PLUGIN_PAGES) else {
         return false;
     };
-    *pages = config.plugin_pages.clone();
+    *pages = config.plugin_pages;
     drop(pages);
     publish_atomics(config);
     true

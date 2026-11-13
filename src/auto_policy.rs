@@ -491,26 +491,26 @@ pub fn profile_row_label(
     selected: RenderMode,
     requested: RenderMode,
     vanilla_plus: bool,
-) -> String {
+) -> crate::fixed::Label {
     if auto_profile && !ready {
-        return "Auto (unavailable)".to_owned();
+        return crate::fixed::Label::from("Auto (unavailable)");
     }
     let plus = if vanilla_plus { "+" } else { "" };
     if auto_profile {
         match requested {
-            RenderMode::Vanilla => format!("Auto:Van{plus}"),
-            other => auto_choice_label(other).to_owned(),
+            RenderMode::Vanilla => crate::fixed!("Auto:Van{plus}"),
+            other => crate::fixed::Label::from(auto_choice_label(other)),
         }
     } else if requested == RenderMode::Vanilla && selected != RenderMode::Vanilla {
         // Cleanup hold: after a match, Training or the Smash menu the renderer
         // stays on Vanilla until a newer explicit selection or the next match.
         // Show what is live, marked, instead of the saved choice (2026-10-14
         // hardware report: banner said LessLag while the renderer ran Vanilla).
-        format!("Vanilla{plus}*")
+        crate::fixed!("Vanilla{plus}*")
     } else if selected == RenderMode::Vanilla {
-        format!("Vanilla{plus}")
+        crate::fixed!("Vanilla{plus}")
     } else {
-        selected.label().to_owned()
+        crate::fixed::Label::from(selected.label())
     }
 }
 

@@ -92,15 +92,18 @@ pub fn next_view(
 
 /// The own pages' plugin ids in cycle order (0.10.0): what the Window
 /// page's own-page rows edit and [`own_pages_hidden`] reads.
-pub fn own_page_ids(plugins: &[std::sync::Arc<crate::plugin_api::Plugin>]) -> Vec<&str> {
+pub fn own_page_ids<P: crate::plugin_api::PluginRef>(plugins: &[P]) -> OwnPages<&str> {
     crate::plugin_api::page_plugins(plugins)
-        .into_iter()
-        .map(|index| plugins[index].id.as_str())
+        .iter()
+        .map(|&index| plugins[index].id.as_str())
         .collect()
 }
 
+/// One entry per own page (at most one per plugin).
+pub type OwnPages<T> = crate::fixed::FixedVec<T, { deluxe_plugin_abi::MAX_PLUGINS }>;
+
 /// Whether each own page is out of the cycle, in cycle order (0.10.0).
-pub fn own_pages_hidden(config: &Config, ids: &[&str]) -> Vec<bool> {
+pub fn own_pages_hidden(config: &Config, ids: &[&str]) -> OwnPages<bool> {
     ids.iter().map(|id| config.own_page_hidden(id)).collect()
 }
 
@@ -177,6 +180,9 @@ pub struct Overlay {
     pub you_focus: YouIcon,
     previous_buttons: u64,
     latch: CommandLatch,
+    /// The plugin page's rows while a press is handled (0.10.7): kept here,
+    /// with the window's state, rather than on the present hook's stack.
+    page_rows: crate::plugin_api::PageRows,
 }
 
 /// The hold that unlocks a native pane edit (character select, window
@@ -306,14 +312,13 @@ impl Overlay {
         if shoulders && buttons & (ZL | ZR) == 0 && pressed & X != 0 {
             if matches!(self.view, View::Plugins | View::PluginPage) {
                 let page = (self.view == View::PluginPage).then_some(self.page);
-                let snapshot = plugins.snapshot();
-                let rows = crate::plugin_api::rows_for(&snapshot, page);
+                let snapshot = plugins.snapshot_ref();
+                crate::plugin_api::rows_into(&snapshot, page, &mut self.page_rows);
+                let rows = &self.page_rows;
                 self.plugin_row =
-                    crate::plugin_api::move_selection(&snapshot, &rows, self.plugin_row, 0);
-                if let Some(crate::plugin_api::PageRow::Option { plugin, option }) =
-                    rows.get(self.plugin_row)
-                {
-                    plugins.activate(*plugin, *option);
+                    crate::plugin_api::move_selection(&snapshot, rows, self.plugin_row, 0);
+                if let Some((plugin, option)) = rows.get(self.plugin_row).and_then(|row| row.option_of()) {
+                    plugins.activate(plugin, option);
                 }
                 return false;
             }
@@ -367,7 +372,7 @@ impl Overlay {
         let command = self.latch.sample(buttons);
         if let Some(command) = command {
             let previous = (self.view, self.page);
-            let snapshot = plugins.snapshot();
+            let snapshot = plugins.snapshot_ref();
             let own = own_page_ids(&snapshot);
             // L+R+Minus is also TrainingRooms' menu shortcut and L+R+Plus the
             // game's pause; L+R+A+Plus is the game's replay Quit (0.10.5).
@@ -401,8 +406,9 @@ impl Overlay {
             // Plugin rows never touch `Config`; the plugin owns the change.
             // Group and header rows never hold the selection.
             let page = (self.view == View::PluginPage).then_some(self.page);
-            let snapshot = plugins.snapshot();
-            let rows = crate::plugin_api::rows_for(&snapshot, page);
+            let snapshot = plugins.snapshot_ref();
+            crate::plugin_api::rows_into(&snapshot, page, &mut self.page_rows);
+            let rows = &self.page_rows;
             let direction: i8 = if selection_held(buttons) {
                 0
             } else if pressed & UP != 0 {
@@ -413,17 +419,15 @@ impl Overlay {
                 0
             };
             self.plugin_row =
-                crate::plugin_api::move_selection(&snapshot, &rows, self.plugin_row, direction);
+                crate::plugin_api::move_selection(&snapshot, rows, self.plugin_row, direction);
             if direction == 0
                 && pressed & (UP | DOWN) == 0
                 && !chord
                 && pressed & (LEFT | RIGHT) != 0
                 && (!self.edit_hold || edit_modifier(buttons))
             {
-                if let Some(crate::plugin_api::PageRow::Option { plugin, option }) =
-                    rows.get(self.plugin_row)
-                {
-                    plugins.step(*plugin, *option, if pressed & LEFT != 0 { -1 } else { 1 });
+                if let Some((plugin, option)) = rows.get(self.plugin_row).and_then(|row| row.option_of()) {
+                    plugins.step(plugin, option, if pressed & LEFT != 0 { -1 } else { 1 });
                 }
             }
             return false;
@@ -500,11 +504,11 @@ impl Overlay {
         } else {
             return false;
         };
-        let snapshot = plugins.snapshot();
+        let snapshot = plugins.snapshot_ref();
         let own = if self.view == View::Window {
             own_page_ids(&snapshot)
         } else {
-            Vec::new()
+            OwnPages::new()
         };
         let gate = self.row_gate(own.len());
         self.menu.handle_rows(action, config, gate, &own)
@@ -648,7 +652,7 @@ mod tests {
             debug_view: true,
             ..Config::default()
         };
-        let mut config = on.clone();
+        let mut config = on;
         // ZL+ZR is not a window chord any more (0.5.3).
         ui.poll(ZL | ZR | DOWN, &mut config);
         assert_eq!(ui.view, View::Hidden);
@@ -674,7 +678,7 @@ mod tests {
         };
         for modifier in [1 << 10, 1 << 11] {
             let mut ui = Overlay::default();
-            let mut config = on.clone();
+            let mut config = on;
             ui.poll(ZL | ZR | modifier, &mut config);
             assert_eq!(ui.view, View::Hidden, "triggers never open Debug");
             ui.poll(0, &mut config);
@@ -682,7 +686,7 @@ mod tests {
         for chord in [L | R] {
             for modifier in [1 << 10, 1 << 11] {
                 let mut ui = Overlay::default();
-                let mut config = on.clone();
+                let mut config = on;
                 ui.poll(chord | DOWN, &mut config);
                 assert_eq!(ui.view, View::Settings);
                 ui.poll(chord, &mut config);
@@ -743,7 +747,7 @@ mod tests {
             debug_view: true,
             ..Config::default()
         };
-        let mut config = on.clone();
+        let mut config = on;
         // Hardware order: Down lands first, the bumpers a frame later.
         ui.poll(DOWN, &mut config);
         assert_eq!(ui.view, View::Hidden);
@@ -1433,7 +1437,7 @@ mod tests {
                     oc_available: true,
                     ..Overlay::default()
                 };
-                let mut config = base.clone();
+                let mut config = base;
                 // 0.9.0: ZR+X, ZR+Y and ZR+L3 are retired everywhere.
                 for buttons in [X, Y, ZR | X, ZR | Y, ZR | STICK_L, ZL | X, ZL | ZR | X] {
                     assert!(!ui.poll(buttons, &mut config));
@@ -1476,7 +1480,7 @@ mod tests {
         let mut config = Config::default();
         // On NetProfile the chord flips Vanilla+.
         assert!(ui.poll(L | R | X, &mut config));
-        let flipped = config.clone();
+        let flipped = config;
         assert_eq!(flipped.vanilla_plus, !Config::default().vanilla_plus);
         // With R held, Up moves nothing (0.10.5).
         assert!(!ui.poll(L | R | X | UP, &mut config));
@@ -1554,7 +1558,7 @@ mod tests {
         assert!(config.vanilla_plus);
         ui.poll(0, &mut config);
         // X alone, or with one bumper, is the game's button.
-        let before = config.clone();
+        let before = config;
         assert!(!ui.poll(X, &mut config));
         assert!(!ui.poll(L | X, &mut config));
         assert_eq!(config, before);
@@ -1582,7 +1586,7 @@ mod tests {
                 ..Config::default()
             };
             for step in 1..=3 {
-                let before = config.clone();
+                let before = config;
                 assert!(ui.poll(L | R | X, &mut config));
                 let next = order[(start + step) % 3];
                 assert_eq!(config.ultra_resolution, next);
@@ -1599,7 +1603,7 @@ mod tests {
                     crate::menu::profile_action(&before, &config),
                     crate::menu::ProfileAction::Unchanged
                 );
-                let advanced = config.clone();
+                let advanced = config;
                 assert!(!ui.poll(L | R | X, &mut config));
                 assert_eq!(config, advanced);
                 assert!(!ui.poll(L | R, &mut config));
@@ -1660,7 +1664,7 @@ mod tests {
                 assert_eq!(config.ultra_resolution, resolution);
                 assert_eq!(config.render_mode, mode);
                 assert_eq!(config.auto_profile, auto);
-                let toggled = config.clone();
+                let toggled = config;
                 assert!(!ui.poll(L | R | X, &mut config));
                 assert_eq!(config, toggled);
                 ui.poll(0, &mut config);
@@ -1686,7 +1690,7 @@ mod tests {
             ..Config::default()
         };
         let mut ui = on_profile();
-        let mut config = base.clone();
+        let mut config = base;
         assert!(!ui.poll(L | R | ZL | X, &mut config));
         ui.poll(0, &mut config);
         assert!(!ui.poll(L | R | ZR | X, &mut config));
@@ -1736,7 +1740,7 @@ mod tests {
             },
             ..Overlay::default()
         };
-        let mut config = base.clone();
+        let mut config = base;
         // On You (0.9.0) the chord toggles the focused mode, not the LLUltra
         // resolution; X pressed before the shoulders is not an edge.
         assert!(!ui.poll(X, &mut config));
@@ -1792,7 +1796,7 @@ mod tests {
                 platform,
                 ..Config::default()
             };
-            let before = config.clone();
+            let before = config;
             assert!(!ui.poll(L | R | ZL | X, &mut config));
             ui.poll(0, &mut config);
             assert!(!ui.poll(L | R | ZR | X, &mut config));
@@ -1838,7 +1842,7 @@ mod tests {
         ));
         assert_eq!(config.input_buffer, 1);
         ui.poll_native(0, &mut config, css);
-        let before = config.clone();
+        let before = config;
         assert!(!ui.poll_native(L | R | RIGHT, &mut config, css));
         assert_eq!(config, before);
         assert!(!ui.poll_native(L | R | UP, &mut config, css));
@@ -2185,7 +2189,7 @@ mod tests {
             ..Config::default()
         };
         let mut ui = Overlay::default();
-        let mut config = on.clone();
+        let mut config = on;
         assert!(!ui.poll(L | R | A | PLUS, &mut config));
         assert_eq!(ui.view, View::Hidden);
         // Releasing A with Plus still held is not a new command.

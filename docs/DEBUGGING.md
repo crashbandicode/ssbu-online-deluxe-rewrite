@@ -346,9 +346,29 @@ update that gave up. Any value above 0 is worth a look.
   - No wait (lock, condvar, `Once` waiter, parker, sleep, channel, Horizon
     wait) is reachable from any hook root. The dispatcher backoff's timed
     sleep is allowed by name.
-  - No allocation or print is reachable from a per-frame root.
-  - The ImGui window and the three native banner text hooks still allocate.
-    It lists them by name.
+  - No allocation or print is reachable from a per-frame root. Since 0.10.7
+    this includes the ImGui window (`draw`) and the three native banner text
+    hooks; there are no exemptions.
+
+**Text on hook paths (0.10.7):** window rows, labels and pane text are
+fixed-capacity (`src/fixed.rs`: `FixedStr`, `FixedVec`, the `fixed!` macro).
+Text past a buffer is cut at a character boundary and a list past its
+capacity drops items. Neither is an error, and both are counted
+(`fixed::truncated()`). The large buffers do not live on the hook's stack:
+- the window's row lists are in a static scratch that only `draw` takes;
+- the plugin page's rows are kept in the `Overlay`;
+- pane texts are kept in the banner's static state.
+
+Static stack, measured with `stack_depth.py entry`, release, 0.10.6 → 0.10.7:
+
+| Root | 0.10.6 | 0.10.7 |
+| --- | --- | --- |
+| `draw` | 10,576 B | 14,928 B |
+| `deluxe_rewrite_css_banner` | 9,968 B | 13,792 B |
+| `deluxe_rewrite_arena_room_update` | 9,968 B | 13,760 B |
+| `deluxe_rewrite_local_count` | 2,304 B | 4,256 B |
+
+These are lower bounds: indirect calls are not followed.
 
 ## Coverage build (0.5.2)
 

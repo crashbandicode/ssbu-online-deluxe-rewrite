@@ -70,15 +70,6 @@ ALLOWED_WAITS = {
         "it waits on no other thread",
 }
 
-# Per-frame roots that build text for the screen and still allocate: (name, why). The allocation check reports them
-# by name instead of failing; each is a known item to move to fixed buffers, not a permission.
-TEXT_ROOTS = {
-    "draw": "the ImGui window: its rows and labels are Strings while the window is open",
-    "deluxe_rewrite_local_count": "native banner: the local lobby count text",
-    "deluxe_rewrite_css_banner": "native banner: the CSS peer lines",
-    "deluxe_rewrite_arena_room_update": "native banner: the arena peer lines",
-}
-
 # Roots that run once per install, per scene or per connection event, not every frame: (name, why). The wait check
 # still covers them; only the allocation check skips them.
 ONE_SHOT = {
@@ -292,31 +283,23 @@ def main():
     by_name = {}
     for addr, node in nodes.items():
         by_name.setdefault(node["name"], addr)
-    roots, frame_roots, text_roots, missing = {}, {}, {}, []
+    roots, frame_roots, missing = {}, {}, []
     for pattern, label in wanted:
         found = [addr for name, addr in by_name.items() if pattern.match(name)]
         if not found:
             missing.append(label)
         for addr in found:
             roots[addr] = label
-            if label in TEXT_ROOTS:
-                text_roots[addr] = label
-            elif label not in ONE_SHOT:
+            if label not in ONE_SHOT:
                 frame_roots[addr] = label
     if len(roots) < 40:
         print(f"only {len(roots)} roots found in {elf}; missing {missing}")
         sys.exit(2)
     waits, reached = check("wait", nodes, roots, WAITS, lambda label, name: (label, name) in ALLOWED_WAITS, paths)
     allocs, frame_reached = check("alloc", nodes, frame_roots, ALLOC, lambda label, name: False, paths)
-    text = []
-    for root, label in sorted(text_roots.items(), key=lambda kv: kv[1]):
-        if any(ALLOC.search(nodes[a]["name"]) for a in reach(nodes, root)):
-            text.append(label)
     print(f"{len(roots)} hook roots, {reached} reachable functions, {waits} forbidden waits "
           f"({len(ALLOWED_WAITS)} allowed by name); {len(frame_roots)} per-frame roots, {frame_reached} reachable, "
           f"{allocs} allocation or print")
-    for label in text:
-        print(f"TEXT {label} allocates: {TEXT_ROOTS[label]}")
     if missing:
         print(f"roots not in this ELF (cfg'd out or inlined): {', '.join(sorted(set(missing)))}")
     sys.exit(1 if waits or allocs else 0)

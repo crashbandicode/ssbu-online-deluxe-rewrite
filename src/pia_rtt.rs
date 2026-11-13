@@ -210,7 +210,7 @@ pub fn present_published(identity: RttIdentity, shown: &Shown<Publication>) -> P
 
 fn blank_ping() -> PresentedPing {
     PresentedPing {
-        opponent: "---".to_owned(),
+        opponent: crate::fixed::Label::from("---"),
         performance: None,
         color: None,
         detail: "no peer",
@@ -817,10 +817,10 @@ pub fn expire_publication(published: Publication, now_tick: u64, epoch: u64) -> 
 }
 
 /// One draw's ping cells. Colour is present only for a measured peer.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PresentedPing {
-    pub opponent: String,
-    pub performance: Option<String>,
+    pub opponent: crate::fixed::Label,
+    pub performance: Option<crate::fixed::Label>,
     pub color: Option<PingRgba>,
     pub detail: &'static str,
 }
@@ -836,8 +836,8 @@ impl PresentedPing {
             };
         };
         Self {
-            opponent: format!("{ms}ms"),
-            performance: Some(format!("{ms} ms")),
+            opponent: crate::fixed!("{ms}ms"),
+            performance: Some(crate::fixed!("{ms} ms")),
             color: publication
                 .peer()
                 .map(|(stability, _)| ping_rgba(stability)),

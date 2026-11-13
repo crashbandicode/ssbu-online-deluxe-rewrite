@@ -24,12 +24,12 @@ pub(super) fn load() {
 
 /// The name the opponent label shows now: `own` until the feed is loaded and
 /// the label has shown a live opponent, then the feed's schedule.
-pub(super) fn label(own: &str, live: bool) -> String {
+pub(super) fn label(own: &str, live: bool) -> crate::fixed::Label {
     let Some(Some(feed)) = FEED.get() else {
-        return own.to_owned();
+        return crate::fixed::Label::from(own);
     };
     if !live {
-        return own.to_owned();
+        return crate::fixed::Label::from(own);
     }
     let now = unsafe { skyline::nn::os::GetSystemTick() as u64 }.max(1);
     let started = match STARTED.compare_exchange(0, now, Ordering::AcqRel, Ordering::Acquire) {
@@ -45,5 +45,5 @@ pub(super) fn label(own: &str, live: bool) -> String {
             label_feed::dynamic_chars(name) as u64,
         );
     }
-    name.to_owned()
+    crate::fixed::Label::from(name)
 }

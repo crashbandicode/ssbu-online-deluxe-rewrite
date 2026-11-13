@@ -57,16 +57,14 @@ pub fn name<'a>(feed: &'a Feed, index: usize, own: &'a str) -> &'a str {
 /// Distinct characters of `name` outside the overlay's static glyph set
 /// (ASCII, Latin-1 Supplement, Latin Extended-A): the dynamic glyphs it needs.
 pub fn dynamic_chars(name: &str) -> usize {
-    let mut chars: Vec<char> = name
-        .chars()
-        .filter(|c| {
+    // First occurrences only, without a list: the draw calls this (0.10.7).
+    name.char_indices()
+        .filter(|(_, c)| {
             let c = u32::from(*c);
             !(c <= 0x7E || (0xA0..=0x17F).contains(&c))
         })
-        .collect();
-    chars.sort_unstable();
-    chars.dedup();
-    chars.len()
+        .filter(|(at, c)| !name[..*at].contains(*c))
+        .count()
 }
 
 #[cfg(test)]

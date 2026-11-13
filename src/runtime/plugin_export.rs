@@ -53,7 +53,7 @@ unsafe extern "C" fn register(desc: *const abi::PluginDesc) -> i32 {
 /// temp-rename-backup path Deluxe uses for `config.ini`.
 pub(super) fn flush_persistence() {
     for write in crate::plugin_api::REGISTRY.take_writes() {
-        let path = std::path::Path::new(&write.path);
+        let path = std::path::Path::new(write.path.as_str());
         let result = (|| -> std::io::Result<()> {
             if let Some(parent) = path.parent() {
                 std::fs::create_dir_all(parent)?;

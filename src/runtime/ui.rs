@@ -1,15 +1,16 @@
 //! Fork-style global Player Info window. This window does not write panes.
 use super::{cells, imgui::*, input, overlay_host, record, Code};
 use crate::hoc_game_aware::{Indicator, MarkTone};
+use crate::fixed::{FixedStr, FixedVec, Label, Line};
 use crate::menu::{
-    mark_editing, net_profile_value, opp_line, perf_footer, strip_line, strip_segments, you_line,
-    Cell, ProfileAction, Row, YouIcon, HINT_LINE, MARK_SLOT,
+    each_strip_segment, mark_editing, net_profile_value, opp_line, perf_footer, strip_line,
+    you_line, Cell, ProfileAction, Row, RowValue, Rows, StripText, YouIcon, HINT_LINE, MARK_SLOT,
+    ROWS_MAX,
 };
-use crate::overlay::{FrameTimes, Overlay, View};
+use crate::overlay::{FrameTimes, OwnPages, Overlay, View};
 use crate::pia_rtt::PresentedPing;
-use crate::plugin_api::{
-    cell_group, page_plugins, rows_for, selectable, PageRow, Registry, RowKind,
-};
+use crate::plugin_api::{cell_group, page_plugins, rows_into, selectable, Registry, RowKind};
+use std::fmt::Write as _;
 use std::time::Instant;
 
 struct UiState {
@@ -35,7 +36,47 @@ const TABLE_WINDOW: usize = 10;
 
 /// The strip's first line (`rows` as coloured segments, or plain text in a
 /// colour when there are none) and its second line.
-type Strip = (Vec<Row>, String, Option<Vec4>, String);
+type Strip<'a> = (&'a [Row], Line, Option<Vec4>, StripSecond);
+
+/// The strip's second line: the `Opp` line and the timing, or the facts.
+type StripSecond = FixedStr<512>;
+
+/// The colour of each row's value, `None` for its tone's.
+type Colors = FixedVec<Option<Vec4>, ROWS_MAX>;
+
+/// One draw's row lists (0.10.7): fixed, and static rather than on the
+/// present hook's stack, where they would take some 30 KB. Only `draw` takes
+/// it, while it holds [`UI`], so taking it never fails.
+struct Scratch {
+    /// The plugin page's rows, all of them ([`crate::plugin_api::rows_into`]).
+    all: crate::plugin_api::PageRows,
+    page: PluginPage,
+    /// The Settings, Window or Debug rows of the table, or what the strip
+    /// shortens.
+    rows: Rows,
+    colors: Colors,
+    /// The strip's own rows.
+    strip: Rows,
+}
+
+static SCRATCH: crate::hook_lock::TryLock<Scratch> = crate::hook_lock::TryLock::new(Scratch {
+    all: FixedVec::new(),
+    page: PluginPage {
+        title: Label::new(),
+        rows: Rows::new(),
+        total: 0,
+        page_index: 1,
+        pages: 1,
+    },
+    rows: Rows::new(),
+    colors: Colors::new(),
+    strip: Rows::new(),
+});
+
+/// Performance facts: `(label, value)`, at most nine (the table's).
+type Facts = FixedVec<(&'static str, Fact), 9>;
+/// One fact's value; the longest is every DRS move by name.
+type Fact = FixedStr<192>;
 
 /// The window's state as of the last draw (0.10.5):
 /// `overlay::pack_overlay_state` of the view's flags and the draw's tick.
@@ -186,9 +227,9 @@ unsafe fn focus_frame(origin: Vec2, from: (f32, f32), to: (f32, f32)) {
 }
 
 /// What the game-aware gate shows for `config` right now (0.8.1).
-fn oc_indicator(config: &crate::config::Config) -> Indicator {
+fn oc_indicator(mode: crate::config::OcMode) -> Indicator {
     crate::hoc_game_aware::indicator(
-        config.hoc_oc,
+        mode,
         super::hoc_client::capability(),
         super::pia_rtt::ready(),
         super::hoc_client::applying(),
@@ -366,7 +407,7 @@ fn tone_color(tone: u8) -> Option<Vec4> {
 }
 
 /// The strip's timing line and its colour: grey until a frame time exists.
-fn timing_line(frames: &FrameTimes) -> (String, Vec4) {
+fn timing_line(frames: &FrameTimes) -> (Line, Vec4) {
     let history = crate::overlay::FRAME_HISTORY;
     let mean = frames.average();
     let latest = (frames.count > 0).then(|| frames.values[(frames.next + history - 1) % history]);
@@ -381,8 +422,8 @@ fn timing_line(frames: &FrameTimes) -> (String, Vec4) {
 /// One window row. `value` empty is a label-only row.
 fn entry(label: &str, value: &str, selected: bool) -> Row {
     Row {
-        label: label.to_owned(),
-        value: value.to_owned(),
+        label: Label::from(label),
+        value: RowValue::from(value),
         selected,
         ..Row::default()
     }
@@ -391,41 +432,39 @@ fn entry(label: &str, value: &str, selected: bool) -> Row {
 /// Facts the Performance table (`strip` false: long labels, the DRS move and
 /// adaptive detail, backoff, memory and clock) and the in-match strip (`strip`
 /// true: short labels and one `Adp` field) read from the same sources.
-fn perf_facts(width: f32, height: f32, strip: bool) -> Vec<(&'static str, String)> {
-    let on_off = |on: bool| if on { "On" } else { "Off" }.to_owned();
+fn perf_facts(width: f32, height: f32, strip: bool) -> Facts {
+    let on_off = |on: bool| if on { "On" } else { "Off" };
     let label = |long: &'static str, short: &'static str| if strip { short } else { long };
     let resolution = crate::resolution::status()
         .unwrap_or_else(|| crate::resolution::Policy::initial().status());
     let fighter = super::fighter_main::view();
-    let settings = super::settings();
+    let (moves, adaptive) = (super::drs_moves(), super::adaptive_settings());
     let counters = crate::perf_scaler::global().counters();
     let armed = crate::resolution::triggers_available(fighter.callback_armed, fighter.count_only);
     let triggers = if armed { "Available" } else { "Unavailable" };
     let applied = crate::resolution::applied_label(resolution.applied);
-    let mut facts = vec![
-        (label("Resolution", "Res"), applied.to_owned()),
-        ("DRS", on_off(resolution.dynamic)),
-        (label("Triggers", "Trig"), triggers.to_owned()),
-    ];
-    let adaptive = &settings.drs_adaptive;
+    let mut facts = Facts::new();
+    facts.push((label("Resolution", "Res"), Fact::from(applied)));
+    facts.push(("DRS", Fact::from(on_off(resolution.dynamic))));
+    facts.push((label("Triggers", "Trig"), Fact::from(triggers)));
     if !strip {
-        facts.push(("DRS moves", drs_moves_label(&settings, counters)));
-        facts.push(("DRS adaptive", drs_adaptive_label(&settings, counters)));
-    } else if !settings.drs_moves.is_empty() || adaptive.enabled {
+        facts.push(("DRS moves", drs_moves_label(moves, counters)));
+        facts.push(("DRS adaptive", drs_adaptive_label(&adaptive, counters)));
+    } else if !moves.is_empty() || adaptive.enabled {
         let active = counters.adaptive_active || counters.move_active.is_some();
         let mark = if active { "*" } else { "" };
-        facts.push(("Adp", format!("{}{mark}", on_off(adaptive.enabled))));
+        facts.push(("Adp", crate::fixed!("{}{mark}", on_off(adaptive.enabled))));
     }
     if width.is_finite() && height.is_finite() && width > 0.0 && height > 0.0 {
-        facts.push((label("Output", "Out"), format!("{width:.0}x{height:.0}")));
+        facts.push((label("Output", "Out"), crate::fixed!("{width:.0}x{height:.0}")));
     }
     if !strip {
         let (mhz, hoc) = (super::clock_probe::mhz(), super::clock_probe::hoc());
         let memory = crate::hang_trace::memory_label(super::hang_trace::memory());
-        facts.push(("Backoff", super::dispatcher_backoff::status_label()));
-        facts.push(("Memory", memory));
-        let mut clock = crate::clock_probe::status_label(mhz, hoc);
-        if let Some(gate) = oc_indicator(&settings).label() {
+        facts.push(("Backoff", Fact::from(super::dispatcher_backoff::status_label().as_str())));
+        facts.push(("Memory", Fact::from(memory.as_str())));
+        let mut clock = Fact::from(crate::clock_probe::status_label(mhz, hoc).as_str());
+        if let Some(gate) = oc_indicator(super::hoc_oc()).label() {
             clock.push_str(", ");
             clock.push_str(gate);
         }
@@ -458,16 +497,22 @@ unsafe fn performance(
         igTableNextColumn();
         paint_text(label, ping.and_then(ping_color));
     }
-    for (label, value) in perf_facts(width, height, false) {
-        wrapped_row(label, &value);
+    for (label, value) in perf_facts(width, height, false).iter() {
+        wrapped_row(label, value);
     }
     let mean = frames.average();
     let color = frame_color(mean);
-    let fps = mean.map_or("---".to_owned(), |ms| format!("{:.0}", 1000.0 / ms));
+    let fps: Label = match mean {
+        Some(ms) => crate::fixed!("{:.0}", 1000.0 / ms),
+        None => Label::from("---"),
+    };
     igPushStyleColor_Vec4(TEXT, color);
     row("FPS", &fps);
     igPopStyleColor(1);
-    let label = mean.map_or("---\0".to_owned(), |ms| format!("{ms:.2} ms\0"));
+    let label: Label = match mean {
+        Some(ms) => crate::fixed!("{ms:.2} ms\0"),
+        None => Label::from("---\0"),
+    };
     if !graph {
         igPushStyleColor_Vec4(TEXT, color);
         row("FrameTime", label.trim_end_matches('\0'));
@@ -503,31 +548,31 @@ unsafe fn performance(
 /// Debug-view text for the 0.5.2 move table: the enabled set, and the move
 /// currently holding a report when there is one.
 fn drs_moves_label(
-    settings: &crate::config::Config,
+    moves: crate::drs_triggers::MoveSet,
     counters: crate::perf_scaler::TriggerCounters,
-) -> String {
-    if settings.drs_moves.is_empty() {
-        return "Off".to_owned();
+) -> Fact {
+    if moves.is_empty() {
+        return Fact::from("Off");
     }
-    let moves = settings.drs_moves.serialize();
+    let moves = moves.serialize();
     let table = &crate::drs_triggers::MOVES;
     let holding = counters
         .move_active
         .and_then(|index| table.get(usize::from(index)));
-    holding.map_or(moves.clone(), |entry| {
-        format!("{moves} ({} active)", entry.name)
-    })
+    match holding {
+        Some(entry) => crate::fixed!("{moves} ({} active)", entry.name),
+        None => Fact::from(moves.as_str()),
+    }
 }
 
 /// Debug-view text for the adaptive trigger: threshold and frame counts, and
 /// whether it currently holds a report.
 fn drs_adaptive_label(
-    settings: &crate::config::Config,
+    adaptive: &crate::drs_triggers::AdaptiveSettings,
     counters: crate::perf_scaler::TriggerCounters,
-) -> String {
-    let adaptive = &settings.drs_adaptive;
+) -> Fact {
     if !adaptive.enabled {
-        return "Off".to_owned();
+        return Fact::from("Off");
     }
     let threshold = crate::drs_triggers::format_threshold(adaptive.threshold_hundredths_ms);
     let active = if counters.adaptive_active {
@@ -536,7 +581,7 @@ fn drs_adaptive_label(
         ""
     };
     let (trigger, release) = (adaptive.trigger_frames, adaptive.release_frames);
-    format!("{threshold} ms, {trigger}/{release} frames{active}")
+    crate::fixed!("{threshold} ms, {trigger}/{release} frames{active}")
 }
 
 /// Peer facts of one draw, shared by the Settings, Performance and Debug views.
@@ -558,12 +603,13 @@ struct Frame {
     editing: bool,
     privacy: Privacy,
     /// The Window page's own-page rows; empty on every other view.
-    own_pages: Vec<OwnPageRow>,
+    own_pages: OwnPages<OwnPageRow>,
 }
 
 /// One own page on the Window page (0.10.0).
+#[derive(Clone, Copy)]
 struct OwnPageRow {
-    label: String,
+    label: FixedStr<{ deluxe_plugin_abi::MAX_LABEL_LEN }>,
     hidden: bool,
 }
 
@@ -586,16 +632,18 @@ fn short_label(label: &str) -> Option<&'static str> {
 /// while the peer shows (selectable: Left/Right cycles the station), then
 /// the match-time rows NetLatency, NetProfile with the engine status folded
 /// in. Privacy is drawn as You-line icons; UltraRes is part of NetProfile.
-/// Returns the rows, the
-/// colour of each value (the `Opp` line takes the ping's stability colour)
-/// and the strip's second-line facts (the `Opp` line).
+/// Fills `rows` and the
+/// colour of each value (the `Opp` line takes the ping's stability colour);
+/// returns the strip's second-line fact (the `Opp` line).
 fn settings_rows(
     config: &crate::config::Config,
     selected: usize,
     peers: &PeerFacts,
     scene: &super::auto_driver::Snapshot,
     editing: bool,
-) -> (Vec<Row>, Vec<Option<Vec4>>, Vec<String>) {
+    rows: &mut Rows,
+    colors: &mut Colors,
+) -> Option<StripText> {
     use crate::menu::{ROW_NET_LATENCY, ROW_NET_PROFILE, ROW_PEER, ROW_YOU};
     let peer = &peers.frame.peer;
     let name = crate::peer_transport::name_label(&peer.name, peer.name_len);
@@ -618,7 +666,8 @@ fn settings_rows(
     let interface = super::connection_transport::local_interface_label();
     let buffer =
         crate::native_banner::local_latency_label(config.input_buffer, super::auto_buffer());
-    let (mut rows, mut colors) = (Vec::new(), Vec::new());
+    rows.clear();
+    colors.clear();
     let mut push = |label: &str, row: Option<usize>, value: &str, color: Option<Vec4>| {
         colors.push(color);
         rows.push(entry(label, value, row == Some(selected)));
@@ -648,28 +697,26 @@ fn settings_rows(
     );
     // You uses face-button shortcuts, not Left/Right edits of its summary text.
     mark_editing(&mut rows[1..], editing);
-    let facts = rows
-        .iter()
-        .filter(|row| row.label == "Opp")
+    rows.iter()
+        .find(|row| row.label == "Opp")
         .map(|row| strip_line(std::slice::from_ref(row)))
-        .collect();
-    (rows, colors, facts)
 }
 
 /// The Window page (0.6.0): the page toggles, PerfView and Hints, the rows
 /// that configure the window itself and until 0.5.7 sat at the bottom of
 /// Settings. Since 0.10.0 each own page has its own row, titled with its
 /// plugin's label, between PluginsPage and PerfPage.
-fn window_rows(frame: &Frame, menu: &crate::menu::Menu) -> Vec<Row> {
+fn window_rows(frame: &Frame, menu: &crate::menu::Menu, rows: &mut Rows) {
     use crate::menu::{ROW_HINTS, ROW_PAGE_OWN, ROW_PAGE_PERF, ROW_PAGE_PLUGINS, ROW_PERF_VIEW};
     let (config, selected) = (&frame.config, menu.selected);
     let (page, hide) = (crate::config::page_label, &config.hide_pages);
     let own_row = menu.own_row.min(frame.own_pages.len().saturating_sub(1));
-    let mut rows = vec![entry(
+    rows.clear();
+    rows.push(entry(
         "PluginsPage",
         page(hide.plugins),
         selected == ROW_PAGE_PLUGINS,
-    )];
+    ));
     rows.extend(frame.own_pages.iter().enumerate().map(|(index, own)| {
         entry(
             &own.label,
@@ -690,8 +737,7 @@ fn window_rows(frame: &Frame, menu: &crate::menu::Menu) -> Vec<Row> {
         ),
         entry("Hints", page(!config.hints), selected == ROW_HINTS),
     ]);
-    mark_editing(&mut rows, frame.editing);
-    rows
+    mark_editing(rows, frame.editing);
 }
 
 /// Under the Settings table (0.6.0): the one-line performance footer in the
@@ -728,11 +774,11 @@ unsafe fn footer(frames: &FrameTimes, config: &crate::config::Config, perf: bool
 /// The drawn part of the shared Plugins page (`page` None) or one own page.
 struct PluginPage {
     /// The own page's plugin label, or `Plugins`.
-    title: String,
+    title: Label,
     /// The rows around the selection: a group row or header is label-only,
     /// an option row carries the plugin's current value. The vertical table
     /// adds `...` markers where the list continues past either end.
-    rows: Vec<Row>,
+    rows: Rows,
     total: usize,
     /// One-based strip page and page count.
     page_index: usize,
@@ -740,22 +786,26 @@ struct PluginPage {
 }
 
 /// Builds the window of `size` rows around `selected` (`paged` for the
-/// strip). Only the windowed options are asked for `current`, once per frame;
-/// headers are never asked.
+/// strip) into `out`, with every row of the page in `all`. Only the windowed
+/// options are asked for `current`, once per frame; headers are never asked.
 fn plugin_rows(
     registry: &Registry,
     page: Option<usize>,
     selected: usize,
     size: usize,
     paged: bool,
-) -> PluginPage {
-    let plugins = registry.snapshot();
+    all: &mut crate::plugin_api::PageRows,
+    out: &mut PluginPage,
+) {
+    let plugins = registry.snapshot_ref();
     let own = page.and_then(|page| page_plugins(&plugins).get(page).copied());
-    let title = own.map_or("Plugins".to_owned(), |index| plugins[index].label.clone());
-    let all = rows_for(&plugins, page);
+    out.title = Label::from(own.map_or("Plugins", |index| plugins[index].label.as_str()));
+    rows_into(&plugins, page, all);
+    let all = &*all;
     let (start, end, page_index, pages) =
-        crate::menu::plugin_window(&plugins, &all, selected, size, paged);
-    let mut rows = Vec::with_capacity(end - start + 2);
+        crate::menu::plugin_window(&plugins, all, selected, size, paged);
+    let rows = &mut out.rows;
+    rows.clear();
     if !paged && all.is_empty() {
         rows.push(entry("Plugins", "none registered", false));
     }
@@ -767,14 +817,12 @@ fn plugin_rows(
         let row = all[index];
         // A run of status cells is one entry (one table); the window never
         // cuts it, so the index jumps to the end of the run.
-        if let Some((first, last)) = cell_group(&plugins, &all, index) {
+        if let Some((first, last)) = cell_group(&plugins, all, index) {
             let cells = (first..last)
-                .filter_map(|at| match all[at] {
-                    PageRow::Option { plugin, option } => Some(Cell {
-                        label: plugins[plugin].options[option].label.clone(),
-                        tone: registry.value(plugin, &plugins[plugin], option).tone,
-                    }),
-                    PageRow::Group(_) => None,
+                .filter_map(|at| all[at].option_of())
+                .map(|(plugin, option)| Cell {
+                    label: FixedStr::from(plugins[plugin].options[option].label.as_str()),
+                    tone: registry.value(plugin, plugins[plugin], option).tone,
                 })
                 .collect();
             rows.push(Row {
@@ -784,23 +832,23 @@ fn plugin_rows(
             index = last;
             continue;
         }
-        rows.push(match row {
-            PageRow::Group(plugin) => entry(&plugins[plugin].label, "", false),
-            PageRow::Option { plugin, option } => {
+        rows.push(match row.option_of() {
+            None => entry(&plugins[row.plugin()].label, "", false),
+            Some((plugin, option)) => {
                 let spec = &plugins[plugin].options[option];
                 if spec.kind == RowKind::Header {
                     entry(&spec.label, "", false)
                 } else {
-                    let value = registry.value(plugin, &plugins[plugin], option);
+                    let value = registry.value(plugin, plugins[plugin], option);
                     Row {
-                        label: spec.label.clone(),
-                        value: value.label,
+                        label: Label::from(spec.label.as_str()),
+                        value: RowValue::from(value.label.as_str()),
                         tone: value.tone,
                         pending: value.pending,
                         // Only an editable row can hold the cursor, so a
                         // passive status row is never highlighted.
                         selected: index == selected && selectable(&plugins, row),
-                        cells: Vec::new(),
+                        cells: FixedVec::new(),
                     }
                 }
             }
@@ -810,38 +858,33 @@ fn plugin_rows(
     if !paged && end < all.len() {
         rows.push(entry("...", "", false));
     }
-    PluginPage {
-        title,
-        rows,
-        total: all.len(),
-        page_index,
-        pages,
-    }
+    out.total = all.len();
+    out.page_index = page_index;
+    out.pages = pages;
 }
 
-fn debug_rows(peers: &PeerFacts) -> Vec<Row> {
+fn debug_rows(peers: &PeerFacts, rows: &mut Rows) {
     let commit = &crate::build_info::GIT_COMMIT[..crate::build_info::GIT_COMMIT.len().min(12)];
     let tracker = if super::online::ready() {
         "Ready"
     } else {
         "Unavailable"
     };
-    let mut rows = vec![
-        ("Build", commit.to_owned()),
-        ("Renderer", super::renderer::mode().label().to_owned()),
-        ("Online tracker", tracker.to_owned()),
-        ("Engine", super::renderer::status().to_owned()),
-        ("Timing", super::capture::status().to_owned()),
-    ];
+    rows.clear();
+    let mut push = |label: &str, value: &str| {
+        rows.push(entry(label, value, false));
+    };
+    push("Build", commit);
+    push("Renderer", super::renderer::mode().label());
+    push("Online tracker", tracker);
+    push("Engine", super::renderer::status());
+    push("Timing", super::capture::status());
     if peers.show_remote {
-        rows.push(("Ping detail", peers.ping.detail.to_owned()));
+        push("Ping detail", peers.ping.detail);
     }
-    rows.push(("Capture", "L+R+Up (30 s)".to_owned()));
-    rows.push(("CSS capture", super::capture::css_label()));
-    rows.push(("Match capture", super::capture::match_label()));
-    rows.into_iter()
-        .map(|(label, value)| entry(label, &value, false))
-        .collect()
+    push("Capture", "L+R+Up (30 s)");
+    push("CSS capture", &super::capture::css_label());
+    push("Match capture", &super::capture::match_label());
 }
 
 /// The vertical table: `rows` in two columns. A label-only row shows its
@@ -862,7 +905,7 @@ unsafe fn draw_table(
     // selection; see `crate::menu::label_column_width`. One font size of
     // allowance covers the cell padding on both sides of each column.
     let pad = igGetFontSize();
-    let widest = |text: &dyn Fn(&Row) -> String| {
+    let widest = |text: &dyn Fn(&Row) -> Line| {
         rows.iter()
             .filter(|row| row.cells.is_empty())
             .map(|row| cells::text_width(&text(row)))
@@ -872,10 +915,10 @@ unsafe fn draw_table(
         label_width,
         widest(&|row| {
             let indent = if row.value.is_empty() { "" } else { indent };
-            format!("> {indent}{}", row.label)
+            crate::fixed!("> {indent}{}", row.label)
         }) + pad,
         widest(&|row| {
-            format!(
+            crate::fixed!(
                 "{}{}",
                 row.value,
                 if row.pending { " (pending)" } else { "" }
@@ -885,6 +928,8 @@ unsafe fn draw_table(
     );
     // A status-cell row ends the two-column table, draws its own table, and the
     // rows after it continue in a new two-column table with a distinct ImGui id.
+    // `id` is a NUL-terminated ASCII literal.
+    let base = std::str::from_utf8(&id[..id.len() - 1]).unwrap_or("");
     let mut parts = 0usize;
     let mut open = false;
     for (index, row) in rows.iter().enumerate() {
@@ -893,9 +938,8 @@ unsafe fn draw_table(
                 igEndTable();
                 open = false;
             }
-            let mut cell_id = id[..id.len() - 1].to_vec();
-            cell_id.extend_from_slice(format!("#cells{index}\0").as_bytes());
-            let draws: Vec<cells::CellDraw> = row
+            let cell_id: FixedStr<64> = crate::fixed!("{base}#cells{index}\0");
+            let draws: FixedVec<cells::CellDraw, { deluxe_plugin_abi::MAX_CELL_RUN }> = row
                 .cells
                 .iter()
                 .map(|cell| cells::CellDraw {
@@ -904,16 +948,16 @@ unsafe fn draw_table(
                     color: tone_color(cell.tone),
                 })
                 .collect();
-            cells::table(&cell_id, &draws);
+            cells::table(cell_id.as_bytes(), &draws);
             continue;
         }
         if !open {
-            let mut part_id = id[..id.len() - 1].to_vec();
-            if parts > 0 {
-                part_id.extend_from_slice(format!("#part{parts}").as_bytes());
-            }
-            part_id.push(0);
-            if !begin_table(&part_id, label_width) {
+            let part_id: FixedStr<64> = if parts > 0 {
+                crate::fixed!("{base}#part{parts}\0")
+            } else {
+                crate::fixed!("{base}\0")
+            };
+            if !begin_table(part_id.as_bytes(), label_width) {
                 return;
             }
             parts += 1;
@@ -923,10 +967,12 @@ unsafe fn draw_table(
         igTableNextColumn();
         let mark = if row.selected { "> " } else { "" };
         if row.value.is_empty() {
-            text(&format!("{mark}{}", row.label));
+            let shown: Line = crate::fixed!("{mark}{}", row.label);
+            text(&shown);
             continue;
         }
-        text(&format!("{mark}{indent}{}", row.label));
+        let shown: Line = crate::fixed!("{mark}{indent}{}", row.label);
+        text(&shown);
         if row.label == "You" {
             if let Some(privacy) = privacy {
                 igSameLine(0.0, igGetFontSize() * 0.25);
@@ -941,7 +987,8 @@ unsafe fn draw_table(
         // Wrap at the column's end: a long `Opp` line (name, profile, buffer,
         // ping, interface) takes a second line instead of being clipped.
         igPushTextWrapPos(0.0);
-        paint_text(&format!("{}{pending}", row.value), color);
+        let shown: Line = crate::fixed!("{}{pending}", row.value);
+        paint_text(&shown, color);
         igPopTextWrapPos();
     }
     if open {
@@ -964,21 +1011,19 @@ unsafe fn draw_strip((rows, plain, color, second): &Strip, privacy: Option<(Priv
     if rows.is_empty() {
         paint_text(plain, *color);
     }
-    for (index, (segment, tone)) in strip_segments(rows).iter().enumerate() {
-        if index > 0 {
+    let mut first = true;
+    each_strip_segment(rows, |segment, tone| {
+        if !first {
             igSameLine(0.0, 0.0);
         }
+        first = false;
         if segment == MARK_SLOT {
             // A status cell's mark: a check for the ready tone, else a cross.
-            cells::mark(
-                *tone == deluxe_plugin_abi::TONE_OK,
-                tone_color(*tone),
-                false,
-            );
+            cells::mark(tone == deluxe_plugin_abi::TONE_OK, tone_color(tone), false);
         } else {
-            paint_text(segment, tone_color(*tone));
+            paint_text(segment, tone_color(tone));
         }
-    }
+    });
     if !second.is_empty() {
         text(second);
     }
@@ -987,23 +1032,33 @@ unsafe fn draw_strip((rows, plain, color, second): &Strip, privacy: Option<(Priv
 
 /// Input, native-pad gating, profile actions, `publish`, the plugin
 /// reconcile and the chord records of one draw. Returns what the window shows.
-unsafe fn poll(ui: &mut UiState, sample: input::Sample) -> Frame {
-    let buttons = sample.buttons;
-    // The draw runs inside the present hook, so `hide_plugin_pages` is only
-    // tried: a frame that finds it busy keeps the last pages, and an edit that
-    // could not be published stays the window's configuration until it is.
-    let mut config = if let Some(waiting) = ui.unpublished.take() {
+/// This frame's configuration. The draw runs inside the present hook, so
+/// `hide_plugin_pages` is only tried: a frame that finds it busy keeps the
+/// last pages, and an edit that could not be published stays the window's
+/// configuration until it is. Not inlined: its `Config` temporaries stay out
+/// of `poll`'s frame (0.10.7).
+#[inline(never)]
+fn window_config(ui: &mut UiState) -> crate::config::Config {
+    if let Some(waiting) = ui.unpublished.take() {
         if !super::try_publish(&waiting) {
-            ui.unpublished = Some(waiting.clone());
+            ui.unpublished = Some(waiting);
         }
         waiting
     } else if let Some(current) = super::try_settings_with_pages() {
-        ui.pages = current.plugin_pages.clone();
+        ui.pages = current.plugin_pages;
         current
     } else {
-        super::settings_with(ui.pages.clone())
-    };
-    let saved = config.clone();
+        super::settings_with(ui.pages)
+    }
+}
+
+// Not inlined: its temporaries would otherwise stay reserved in `draw`'s
+// frame under every ImGui call (0.10.7).
+#[inline(never)]
+unsafe fn poll(ui: &mut UiState, sample: input::Sample) -> Frame {
+    let buttons = sample.buttons;
+    let mut config = window_config(ui);
+    let saved = crate::menu::ProfileChoiceBits::of(&config);
     let previous_view = ui.controls.view;
     let command_edge = ui.controls.command_edge(buttons);
     let (surface_gen, surface_kind) = super::native_banner::surface_sample();
@@ -1023,9 +1078,9 @@ unsafe fn poll(ui: &mut UiState, sample: input::Sample) -> Frame {
     ui.controls.edit_hold = true;
     // The OC icon is a You focus stop, and L+R+X can change `hoc_oc`, only
     // while its clock shows: the game-aware fork answered (0.9.0).
-    ui.controls.oc_available = oc_indicator(&config).mark().is_some();
+    ui.controls.oc_available = oc_indicator(config.hoc_oc).mark().is_some();
     if ui.controls.poll_native(buttons, &mut config, native) {
-        match crate::menu::profile_action(&saved, &config) {
+        match crate::menu::profile_action_from(saved, &config) {
             ProfileAction::EnableAuto => {
                 crate::set_auto_profile(true);
             }
@@ -1036,9 +1091,9 @@ unsafe fn poll(ui: &mut UiState, sample: input::Sample) -> Frame {
             ProfileAction::Unchanged => {}
         }
         if super::try_publish(&config) {
-            ui.pages = config.plugin_pages.clone();
+            ui.pages = config.plugin_pages;
         } else {
-            ui.unpublished = Some(config.clone());
+            ui.unpublished = Some(config);
         }
         // `a` carried the FX mode until 0.5.0 and is always 0 now.
         record(Code::MenuChanged, 0, config.input_buffer as i64 as u64);
@@ -1071,7 +1126,7 @@ unsafe fn poll(ui: &mut UiState, sample: input::Sample) -> Frame {
     let own_pages = if view == View::Window {
         own_page_rows(&config)
     } else {
-        Vec::new()
+        OwnPages::new()
     };
     if matches!(view, View::Settings | View::Window) {
         // The `Opp` line is a stop only while it shows (0.6.0: Streamer hides
@@ -1107,7 +1162,7 @@ unsafe fn poll(ui: &mut UiState, sample: input::Sample) -> Frame {
         show_remote,
         ping,
     };
-    let oc = oc_indicator(&config).mark();
+    let oc = oc_indicator(config.hoc_oc).mark();
     let you_selected = view == View::Settings
         && ui.controls.menu.open
         && ui.controls.menu.selected == crate::menu::ROW_YOU;
@@ -1131,24 +1186,23 @@ unsafe fn poll(ui: &mut UiState, sample: input::Sample) -> Frame {
 
 /// The Window page's own-page rows (0.10.0): each own page's plugin label
 /// and whether it is out of the cycle, in cycle order.
-fn own_page_rows(config: &crate::config::Config) -> Vec<OwnPageRow> {
-    let snapshot = crate::plugin_api::REGISTRY.snapshot();
+fn own_page_rows(config: &crate::config::Config) -> OwnPages<OwnPageRow> {
+    let snapshot = crate::plugin_api::REGISTRY.snapshot_ref();
     crate::plugin_api::page_plugins(&snapshot)
-        .into_iter()
-        .map(|index| OwnPageRow {
-            label: snapshot[index].label.clone(),
+        .iter()
+        .map(|&index| OwnPageRow {
+            label: FixedStr::from(snapshot[index].label.as_str()),
             hidden: config.own_page_hidden(&snapshot[index].id),
         })
         .collect()
 }
 
-unsafe extern "C" fn draw() {
-    let sample = input::read();
-    super::capture::observe(sample.buttons);
-    let Ok(mut guard) = UI.try_lock() else {
-        return;
-    };
-    let ui = guard.get_or_insert_with(|| UiState {
+/// The first draw's state, built outside `draw`'s frame: it holds the
+/// window's row buffers, which `draw` must not reserve stack for (0.10.7).
+#[cold]
+#[inline(never)]
+fn init_ui(slot: &mut Option<UiState>) {
+    *slot = Some(UiState {
         controls: Overlay::default(),
         frames: FrameTimes::default(),
         previous_frame: None,
@@ -1158,6 +1212,20 @@ unsafe extern "C" fn draw() {
         pages: crate::config::PluginPages::EMPTY,
         unpublished: None,
     });
+}
+
+unsafe extern "C" fn draw() {
+    let sample = input::read();
+    super::capture::observe(sample.buttons);
+    let Ok(mut guard) = UI.try_lock() else {
+        return;
+    };
+    if guard.is_none() {
+        init_ui(&mut guard);
+    }
+    let Some(ui) = guard.as_mut() else {
+        return;
+    };
     let sampled = ui.count.is_multiple_of(300);
     if sampled {
         record(Code::OverlayEntered, ui.count, ui.controls.view as u64);
@@ -1171,6 +1239,9 @@ unsafe extern "C" fn draw() {
     }
     let frame = poll(ui, sample);
     let view = ui.controls.view;
+    let Ok(mut scratch) = SCRATCH.try_lock() else {
+        return;
+    };
     OVERLAY_STATE.store(
         crate::overlay::pack_overlay_state(
             crate::overlay::overlay_flags(view),
@@ -1181,7 +1252,7 @@ unsafe extern "C" fn draw() {
     if view == View::Hidden {
         hidden_window();
     } else {
-        draw_window(ui, view, &frame);
+        draw_window(ui, view, &frame, &mut scratch);
     }
     if sampled {
         record(Code::OverlayExited, ui.count, view as u64);
@@ -1192,13 +1263,18 @@ unsafe extern "C" fn draw() {
 /// facts; the Window fields with the timing line; the plugin page with
 /// `title p/N` and the timing line; or the timing line over the short
 /// performance facts.
-fn strip_lines(
+#[allow(clippy::too_many_arguments)]
+#[inline(never)]
+fn strip_lines<'a>(
     ui: &UiState,
     view: View,
     frame: &Frame,
-    page: Option<&PluginPage>,
+    page: Option<&'a PluginPage>,
     display: Vec2,
-) -> Strip {
+    rows: &mut Rows,
+    colors: &mut Colors,
+    strip: &'a mut Rows,
+) -> Strip<'a> {
     let peers = &frame.peers;
     let (timing, color) = timing_line(&ui.frames);
     let selected = ui.controls.menu.selected;
@@ -1206,48 +1282,60 @@ fn strip_lines(
         |row: &Row| short_label(&row.label).map(|short| entry(short, &row.value, row.selected));
     match (view, page) {
         (View::Settings, _) => {
-            let (rows, _, mut facts) =
-                settings_rows(&frame.config, selected, peers, &frame.scene, frame.editing);
-            if frame.privacy.reconnect {
-                facts.push("* Stealth: reconnect".to_owned());
+            let config = &frame.config;
+            let opp = settings_rows(config, selected, peers, &frame.scene, frame.editing, rows, colors);
+            let mut facts: FixedVec<&str, 3> = FixedVec::new();
+            if let Some(opp) = &opp {
+                facts.push(opp);
             }
-            facts.push(timing);
+            if frame.privacy.reconnect {
+                facts.push("* Stealth: reconnect");
+            }
+            facts.push(&timing);
+            strip.clear();
+            strip.extend(rows.iter().filter_map(short));
             (
-                rows.iter().filter_map(short).collect(),
-                String::new(),
+                strip,
+                Line::new(),
                 None,
-                facts.join("   "),
+                crate::fixed::join(&facts, "   "),
             )
         }
         (View::Window, _) => {
             // An own page's row keeps its plugin label (0.10.0).
-            let rows = window_rows(frame, &ui.controls.menu);
+            window_rows(frame, &ui.controls.menu, rows);
+            strip.clear();
+            strip.extend(rows.iter().map(|row| short(row).unwrap_or(*row)));
             (
-                rows.iter()
-                    .map(|row| short(row).unwrap_or_else(|| row.clone()))
-                    .collect(),
-                String::new(),
+                strip,
+                Line::new(),
                 None,
-                timing,
+                StripSecond::from(timing.as_str()),
             )
         }
         (View::Plugins | View::PluginPage, Some(page)) => {
-            let plain = format!("{}: none registered", page.title);
-            let second = format!(
+            let plain = crate::fixed!("{}: none registered", page.title);
+            let second = crate::fixed!(
                 "{} {}/{}   {timing}",
                 page.title, page.page_index, page.pages
             );
-            (page.rows.clone(), plain, None, second)
+            (&page.rows, plain, None, second)
         }
         _ => {
-            let facts = perf_facts(display.x, display.y, true).into_iter();
-            let mut details: Vec<String> = facts
-                .map(|(label, value)| format!("{label}:{value}"))
-                .collect();
-            if peers.show_remote {
-                details.push(format!("Ping:{}", peers.ping.opponent));
+            let mut details = StripSecond::new();
+            for (label, value) in perf_facts(display.x, display.y, true).iter() {
+                if !details.is_empty() {
+                    details.push_str("   ");
+                }
+                let _ = write!(details, "{label}:{value}");
             }
-            (Vec::new(), timing, Some(color), details.join("   "))
+            if peers.show_remote {
+                if !details.is_empty() {
+                    details.push_str("   ");
+                }
+                let _ = write!(details, "Ping:{}", peers.ping.opponent);
+            }
+            (&[], timing, Some(color), details)
         }
     }
 }
@@ -1255,6 +1343,7 @@ fn strip_lines(
 /// The vertical tables of `view`. Settings ends with the one-line performance
 /// footer and the hint line, Window with the hint line (0.6.0); Debug and
 /// Performance end with the frame-time block.
+#[allow(clippy::too_many_arguments)]
 unsafe fn draw_tables(
     ui: &UiState,
     view: View,
@@ -1262,26 +1351,28 @@ unsafe fn draw_tables(
     page: Option<&PluginPage>,
     scale: Vec2,
     display: Vec2,
+    rows: &mut Rows,
+    colors: &mut Colors,
 ) {
     let peers = &frame.peers;
     let selected = ui.controls.menu.selected;
     match (view, page) {
         (View::Settings, _) => {
-            let (rows, colors, _) =
-                settings_rows(&frame.config, selected, peers, &frame.scene, frame.editing);
+            let config = &frame.config;
+            settings_rows(config, selected, peers, &frame.scene, frame.editing, rows, colors);
             draw_table(
                 b"conn_player_info\0",
                 110.0 * scale.x,
-                &rows,
+                rows,
                 "",
-                Some(&colors),
+                Some(colors),
                 Some(frame.privacy),
             );
             return footer(&ui.frames, &frame.config, true, frame.privacy.reconnect);
         }
         (View::Window, _) => {
-            let rows = window_rows(frame, &ui.controls.menu);
-            draw_table(b"deluxe_window\0", 110.0 * scale.x, &rows, "", None, None);
+            window_rows(frame, &ui.controls.menu, rows);
+            draw_table(b"deluxe_window\0", 110.0 * scale.x, rows, "", None, None);
             return footer(&ui.frames, &frame.config, false, false);
         }
         (View::Plugins | View::PluginPage, Some(page)) => {
@@ -1296,14 +1387,10 @@ unsafe fn draw_tables(
                 None,
             );
         }
-        (View::Debug, _) => draw_table(
-            b"deluxe_debug\0",
-            100.0 * scale.x,
-            &debug_rows(peers),
-            "",
-            None,
-            None,
-        ),
+        (View::Debug, _) => {
+            debug_rows(peers, rows);
+            draw_table(b"deluxe_debug\0", 100.0 * scale.x, rows, "", None, None);
+        }
         _ => {}
     }
     let ping = peers.show_remote.then_some(&peers.ping);
@@ -1313,9 +1400,44 @@ unsafe fn draw_tables(
     );
 }
 
+/// The strip's font size for `configured` width. `you` (Settings) is whether
+/// the OC clock shows. Not inlined: its line buffers are not kept reserved
+/// while the window draws.
+#[inline(never)]
+fn strip_font_size(
+    (rows, plain, _, second): &Strip,
+    you: Option<bool>,
+    configured: f32,
+    scale: Vec2,
+) -> f32 {
+    let mut first = if rows.is_empty() {
+        StripText::from(plain.as_str())
+    } else {
+        strip_line(rows)
+    };
+    if let Some(oc) = you {
+        // Conservative text-width allowance for the You label and
+        // two one-em icons, including the optional reconnect marker,
+        // plus the OC clock while it shows (both modes since 0.9.0).
+        let clock = if oc { "[ ] " } else { "" };
+        first = crate::fixed!(">You: [ ] [ ] {clock}*   {first}");
+    }
+    crate::menu::compact_font_size(&first, second, configured, scale.x, scale.y)
+}
+
 /// Positions, sizes and titles the visible window, then draws the view's
 /// body: the compact strip in a ready match, or the vertical tables.
-unsafe fn draw_window(ui: &UiState, view: View, frame: &Frame) {
+// Not inlined, like `poll`: the two are `draw`'s deep paths, and each one's
+// frame should not sit under the other's calls.
+#[inline(never)]
+unsafe fn draw_window(ui: &UiState, view: View, frame: &Frame, scratch: &mut Scratch) {
+    let Scratch {
+        all,
+        page: page_buffer,
+        rows,
+        colors,
+        strip,
+    } = scratch;
     let (width, height) = overlay_host::display_size();
     let display = Vec2 {
         x: width,
@@ -1351,7 +1473,7 @@ unsafe fn draw_window(ui: &UiState, view: View, frame: &Frame) {
         )
     };
     let own = (view == View::PluginPage).then_some(ui.controls.page);
-    let page = matches!(view, View::Plugins | View::PluginPage).then(|| {
+    let page = if matches!(view, View::Plugins | View::PluginPage) {
         let size = if compact { STRIP_PAGE } else { TABLE_WINDOW };
         plugin_rows(
             &crate::plugin_api::REGISTRY,
@@ -1359,9 +1481,18 @@ unsafe fn draw_window(ui: &UiState, view: View, frame: &Frame) {
             ui.controls.plugin_row,
             size,
             compact,
-        )
-    });
-    let strip = compact.then(|| strip_lines(ui, view, frame, page.as_ref(), display));
+            all,
+            page_buffer,
+        );
+        Some(&*page_buffer)
+    } else {
+        None
+    };
+    let strip = if compact {
+        Some(strip_lines(ui, view, frame, page, display, rows, colors, strip))
+    } else {
+        None
+    };
     igSetNextWindowPos(Vec2 { x, y: 0.0 }, ALWAYS, Vec2::default());
     // Let ImGui fit compact rows to content; `configured` remains the
     // positioning and adaptive-font width bound. Zero height requests the
@@ -1379,38 +1510,22 @@ unsafe fn draw_window(ui: &UiState, view: View, frame: &Frame) {
         };
         igPushStyleVar_Vec2(WINDOW_PADDING, padding);
     }
-    let font_size = strip
-        .as_ref()
-        .map_or(16.0 * scale.y, |(rows, plain, _, second)| {
-            let mut first = if rows.is_empty() {
-                plain.clone()
-            } else {
-                strip_line(rows)
-            };
-            if view == View::Settings {
-                // Conservative text-width allowance for the You label and
-                // two one-em icons, including the optional reconnect marker,
-                // plus the OC clock while it shows (both modes since 0.9.0).
-                let clock = if frame.privacy.oc.is_some() {
-                    "[ ] "
-                } else {
-                    ""
-                };
-                first = format!(">You: [ ] [ ] {clock}*   {first}");
-            }
-            crate::menu::compact_font_size(&first, second, configured, scale.x, scale.y)
-        });
+    let font_size = strip.as_ref().map_or(16.0 * scale.y, |strip| {
+        let you = (view == View::Settings).then_some(frame.privacy.oc.is_some());
+        strip_font_size(strip, you, configured, scale)
+    });
     igPushFont(std::ptr::null_mut(), font_size);
     // An own page is titled with its plugin's label. The `##` suffix keeps
     // ImGui's window identity stable across plugins with the same label.
     let own_title = page
-        .as_ref()
         .filter(|_| own.is_some() && !compact)
         .map(|page| &page.title);
-    let page_title = own_title
-        .and_then(|title| std::ffi::CString::new(format!("{title}##deluxe_plugin_page")).ok());
+    let page_title = own_title.and_then(|title| {
+        let named: FixedStr<80> = crate::fixed!("{title}##deluxe_plugin_page");
+        named.with_nul::<80>()
+    });
     let title: *const std::ffi::c_char = match &page_title {
-        Some(title) => title.as_ptr(),
+        Some(title) => title.as_ptr().cast(),
         None if compact => c"##deluxe_match_strip".as_ptr(),
         None if view == View::Window => c"Window Options##deluxe_player_info".as_ptr(),
         None => c"Player Info".as_ptr(),
@@ -1425,7 +1540,7 @@ unsafe fn draw_window(ui: &UiState, view: View, frame: &Frame) {
                     ui.controls.menu.selected == crate::menu::ROW_YOU,
                 )),
             ),
-            None => draw_tables(ui, view, frame, page.as_ref(), scale, display),
+            None => draw_tables(ui, view, frame, page, scale, display, rows, colors),
         }
     }
     igEnd();

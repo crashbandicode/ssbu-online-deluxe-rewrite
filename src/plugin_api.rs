@@ -84,15 +84,26 @@ pub struct Plugin {
 }
 
 /// One queued `key=value` write into a plugin's INI, drained by the runtime's
-/// background thread. Same path and key coalesce to the newest value.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// background thread. Same path and key coalesce to the newest value. Fixed
+/// size (0.10.7): the window queues it inside the present hook.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PersistWrite {
     pub plugin: usize,
     pub option: usize,
-    pub path: String,
-    pub key: String,
-    pub value: String,
+    pub path: crate::fixed::FixedStr<{ abi::MAX_PATH_LEN }>,
+    pub key: crate::fixed::FixedStr<{ abi::MAX_ID_LEN }>,
+    pub value: crate::fixed::FixedStr<{ abi::MAX_VALUE_LEN }>,
 }
+
+/// Registered plugins, borrowed for one frame (hooks: no reference counts).
+pub type Plugins<'a> = crate::fixed::FixedVec<&'a Plugin, { abi::MAX_PLUGINS }>;
+/// Requests answered `Pending` the host tracks at once.
+const PENDING_MAX: usize = 64;
+/// INI writes queued between two drains of the background thread.
+const WRITES_MAX: usize = 32;
+/// Every row a page can have: a group row and every option of every plugin.
+pub const PAGE_ROWS_MAX: usize = abi::MAX_PLUGINS * (1 + abi::MAX_OPTIONS);
+pub type PageRows = crate::fixed::FixedVec<PageRow, PAGE_ROWS_MAX>;
 
 impl Plugin {
     /// Asks the plugin for the option's current choice index.
@@ -154,9 +165,9 @@ pub struct StepResult {
 }
 
 /// Displayed value of one option.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ValueText {
-    pub label: String,
+    pub label: crate::fixed::Label,
     /// A `Pending` request has not yet become the plugin's current answer.
     pub pending: bool,
     /// `TONE_*` byte for the displayed choice; neutral for `Unavailable`.
@@ -183,9 +194,9 @@ pub struct Registry {
 struct Book {
     /// `(plugin, option, choice)` of requests answered `Pending` and not yet
     /// seen in the plugin's live value.
-    pending: Vec<(usize, usize, usize)>,
+    pending: crate::fixed::FixedVec<(usize, usize, usize), PENDING_MAX>,
     last_step: Option<StepResult>,
-    writes: Vec<PersistWrite>,
+    writes: crate::fixed::FixedVec<PersistWrite, WRITES_MAX>,
 }
 
 impl Drop for Registry {
@@ -445,9 +456,9 @@ impl Registry {
             slots: [const { AtomicPtr::new(std::ptr::null_mut()) }; abi::MAX_PLUGINS],
             count: AtomicUsize::new(0),
             book: crate::hook_lock::TryLock::new(Book {
-                pending: Vec::new(),
+                pending: crate::fixed::FixedVec::new(),
                 last_step: None,
-                writes: Vec::new(),
+                writes: crate::fixed::FixedVec::new(),
             }),
         }
     }
@@ -464,7 +475,25 @@ impl Registry {
             .book
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        std::mem::take(&mut book.writes)
+        let writes = book.writes.to_vec();
+        book.writes.clear();
+        writes
+    }
+
+    /// The plugin in slot `index`, borrowed: hooks take no reference count,
+    /// so no hook can drop the last one. A set slot keeps its plugin for the
+    /// registry's life.
+    pub fn plugin_ref(&self, index: usize) -> Option<&Plugin> {
+        let raw = self.slots.get(index)?.load(Ordering::Acquire);
+        // SAFETY: a set slot holds one `Arc::into_raw` reference that is only
+        // released by `Drop`, which needs `&mut self`.
+        unsafe { raw.as_ref() }
+    }
+
+    /// [`Self::snapshot`] for hooks: borrowed, in a fixed list.
+    pub fn snapshot_ref(&self) -> Plugins<'_> {
+        let count = self.count.load(Ordering::Acquire).min(abi::MAX_PLUGINS);
+        (0..count).filter_map(|i| self.plugin_ref(i)).collect()
     }
 
     fn plugin_at(&self, index: usize) -> Option<Arc<Plugin>> {
@@ -541,16 +570,18 @@ impl Registry {
     pub fn value(&self, plugin_index: usize, plugin: &Plugin, option: usize) -> ValueText {
         let Some(spec) = plugin.options.get(option) else {
             return ValueText {
-                label: "Unavailable".to_owned(),
+                label: crate::fixed::Label::from("Unavailable"),
                 pending: false,
                 tone: abi::TONE_NEUTRAL,
             };
         };
         let current = plugin.current(option);
         ValueText {
-            label: current
-                .and_then(|index| spec.choices.get(index).cloned())
-                .unwrap_or_else(|| "Unavailable".to_owned()),
+            label: crate::fixed::Label::from(
+                current
+                    .and_then(|index| spec.choices.get(index))
+                    .map_or("Unavailable", String::as_str),
+            ),
             pending: self
                 .try_book()
                 .and_then(|book| book.pending_for(plugin_index, option))
@@ -566,7 +597,7 @@ impl Registry {
         if direction == 0 {
             return None;
         }
-        let plugin = self.plugin_at(plugin_index)?;
+        let plugin = self.plugin_ref(plugin_index)?;
         let spec = plugin.options.get(option)?;
         if !spec.editable() {
             return None;
@@ -591,7 +622,7 @@ impl Registry {
         let still_pending = status == RequestStatus::Pending && requested != current;
         book.set_pending(plugin_index, option, still_pending.then_some(requested));
         if status == RequestStatus::Applied {
-            book.queue_persist(plugin_index, &plugin, option, requested);
+            book.queue_persist(plugin_index, plugin, option, requested);
         }
         let result = StepResult {
             plugin: plugin_index,
@@ -610,7 +641,7 @@ impl Registry {
     /// pending request is left alone, and so is every row while the other
     /// side holds the bookkeeping.
     pub fn activate(&self, plugin_index: usize, option: usize) -> Option<StepResult> {
-        let plugin = self.plugin_at(plugin_index)?;
+        let plugin = self.plugin_ref(plugin_index)?;
         let mut book = self.try_book()?;
         if !plugin.options.get(option)?.editable() || book.pending_for(plugin_index, option).is_some()
         {
@@ -645,14 +676,17 @@ impl Registry {
         if book.pending.is_empty() {
             return;
         }
-        let pending = book.pending.clone();
-        for (plugin_index, option, choice) in pending {
-            let Some(plugin) = self.plugin_at(plugin_index) else {
-                continue;
-            };
-            if plugin.current(option) == Some(choice) {
-                book.set_pending(plugin_index, option, None);
-                book.queue_persist(plugin_index, &plugin, option, choice);
+        let mut index = 0;
+        while let Some(&(plugin_index, option, choice)) = book.pending.get(index) {
+            let applied = self
+                .plugin_ref(plugin_index)
+                .filter(|plugin| plugin.current(option) == Some(choice));
+            match applied {
+                Some(plugin) => {
+                    book.set_pending(plugin_index, option, None);
+                    book.queue_persist(plugin_index, plugin, option, choice);
+                }
+                None => index += 1,
             }
         }
     }
@@ -684,16 +718,16 @@ impl Book {
         };
         self.writes
             .retain(|w| !(w.path == *path && w.key == spec.config_key));
+        let value = match spec.values.as_ref().and_then(|values| values.get(choice)) {
+            Some(value) => crate::fixed::FixedStr::from(value.as_str()),
+            None => crate::fixed!("{choice}"),
+        };
         self.writes.push(PersistWrite {
             plugin: plugin_index,
             option,
-            path: path.clone(),
-            key: spec.config_key.clone(),
-            value: spec
-                .values
-                .as_ref()
-                .and_then(|values| values.get(choice).cloned())
-                .unwrap_or_else(|| choice.to_string()),
+            path: crate::fixed::FixedStr::from(path.as_str()),
+            key: crate::fixed::FixedStr::from(spec.config_key.as_str()),
+            value,
         });
     }
 }
@@ -707,20 +741,54 @@ pub fn wrap(index: usize, direction: i8, count: usize) -> usize {
     (index.min(count - 1) as i64 + i64::from(direction)).rem_euclid(count as i64) as usize
 }
 
-/// One row of the Plugins page or an own page.
+/// One row of the Plugins page or an own page. Indices fit a byte
+/// ([`abi::MAX_PLUGINS`], [`abi::MAX_OPTIONS`]), so a whole page's rows fit a
+/// fixed list (0.10.7).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PageRow {
     /// A plugin's label heading its options on the shared page. Never selected.
-    Group(usize),
+    Group(u8),
     Option {
-        plugin: usize,
-        option: usize,
+        plugin: u8,
+        option: u8,
     },
 }
 
+impl PageRow {
+    pub fn group(plugin: usize) -> Self {
+        Self::Group(plugin as u8)
+    }
+
+    pub fn option(plugin: usize, option: usize) -> Self {
+        Self::Option {
+            plugin: plugin as u8,
+            option: option as u8,
+        }
+    }
+
+    /// `(plugin, option)` of an option row.
+    pub fn option_of(self) -> Option<(usize, usize)> {
+        match self {
+            Self::Option { plugin, option } => Some((usize::from(plugin), usize::from(option))),
+            Self::Group(_) => None,
+        }
+    }
+
+    pub fn plugin(self) -> usize {
+        match self {
+            Self::Option { plugin, .. } | Self::Group(plugin) => usize::from(plugin),
+        }
+    }
+}
+
+/// A registered plugin as hooks (`&Plugin`) or plugin threads and tests
+/// (`Arc<Plugin>`) hold it.
+pub trait PluginRef: std::ops::Deref<Target = Plugin> {}
+impl<T: std::ops::Deref<Target = Plugin>> PluginRef for T {}
+
 /// Indices of the plugins that asked for their own page, in registration
 /// order: the window cycle visits them after the shared Plugins page.
-pub fn page_plugins(plugins: &[Arc<Plugin>]) -> Vec<usize> {
+pub fn page_plugins<P: PluginRef>(plugins: &[P]) -> crate::fixed::FixedVec<usize, { abi::MAX_PLUGINS }> {
     plugins
         .iter()
         .enumerate()
@@ -730,38 +798,49 @@ pub fn page_plugins(plugins: &[Arc<Plugin>]) -> Vec<usize> {
 }
 
 /// Whether any plugin shows on the shared Plugins page.
-pub fn has_shared_rows(plugins: &[Arc<Plugin>]) -> bool {
+pub fn has_shared_rows<P: PluginRef>(plugins: &[P]) -> bool {
     plugins.iter().any(|entry| !entry.own_page)
 }
 
 /// Rows of a view. The shared page (`None`) has a `Group` row per plugin
 /// that did not ask for its own page, followed by its options; own page
 /// `Some(i)` (indexing [`page_plugins`]) has that plugin's options alone.
-pub fn rows_for(plugins: &[Arc<Plugin>], page: Option<usize>) -> Vec<PageRow> {
+pub fn rows_for<P: PluginRef>(plugins: &[P], page: Option<usize>) -> PageRows {
+    let mut rows = PageRows::new();
+    rows_into(plugins, page, &mut rows);
+    rows
+}
+
+/// [`rows_for`] into `rows`, for a caller that keeps the list off its stack.
+pub fn rows_into<P: PluginRef>(plugins: &[P], page: Option<usize>, rows: &mut PageRows) {
+    rows.clear();
     let options = |plugin: usize| {
-        (0..plugins[plugin].options.len()).map(move |option| PageRow::Option { plugin, option })
+        (0..plugins[plugin].options.len().min(abi::MAX_OPTIONS))
+            .map(move |option| PageRow::option(plugin, option))
     };
     match page {
-        None => plugins
-            .iter()
-            .enumerate()
-            .filter(|(_, entry)| !entry.own_page)
-            .flat_map(|(plugin, _)| std::iter::once(PageRow::Group(plugin)).chain(options(plugin)))
-            .collect(),
-        Some(page) => page_plugins(plugins)
-            .get(page)
-            .map(|plugin| options(*plugin).collect())
-            .unwrap_or_default(),
+        None => rows.extend(
+            plugins
+                .iter()
+                .enumerate()
+                .filter(|(_, entry)| !entry.own_page)
+                .flat_map(|(plugin, _)| std::iter::once(PageRow::group(plugin)).chain(options(plugin))),
+        ),
+        Some(page) => {
+            if let Some(&plugin) = page_plugins(plugins).get(page) {
+                rows.extend(options(plugin));
+            }
+        }
     }
 }
 
 /// Whether Up/Down may land on `row`: only an editable option. Group,
 /// header, status and cell rows never hold the cursor, so a page with no
 /// editable option highlights nothing.
-pub fn selectable(plugins: &[Arc<Plugin>], row: PageRow) -> bool {
-    match row {
-        PageRow::Group(_) => false,
-        PageRow::Option { plugin, option } => plugins
+pub fn selectable<P: PluginRef>(plugins: &[P], row: PageRow) -> bool {
+    match row.option_of() {
+        None => false,
+        Some((plugin, option)) => plugins
             .get(plugin)
             .and_then(|entry| entry.options.get(option))
             .is_none_or(PluginOption::editable),
@@ -771,22 +850,20 @@ pub fn selectable(plugins: &[Arc<Plugin>], row: PageRow) -> bool {
 /// The half-open range of `rows` forming the cell table that contains
 /// `index`: its consecutive cell options of one plugin. `None` when the row
 /// is not a cell.
-pub fn cell_group(
-    plugins: &[Arc<Plugin>],
+pub fn cell_group<P: PluginRef>(
+    plugins: &[P],
     rows: &[PageRow],
     index: usize,
 ) -> Option<(usize, usize)> {
-    let is_cell = |row: &PageRow| match *row {
-        PageRow::Option { plugin, option } => plugins
-            .get(plugin)
-            .and_then(|entry| entry.options.get(option))
-            .is_some_and(|spec| spec.kind == RowKind::Cell),
-        PageRow::Group(_) => false,
+    let is_cell = |row: &PageRow| {
+        row.option_of().is_some_and(|(plugin, option)| {
+            plugins
+                .get(plugin)
+                .and_then(|entry| entry.options.get(option))
+                .is_some_and(|spec| spec.kind == RowKind::Cell)
+        })
     };
-    let owner = |row: &PageRow| match *row {
-        PageRow::Option { plugin, .. } => Some(plugin),
-        PageRow::Group(_) => None,
-    };
+    let owner = |row: &PageRow| row.option_of().map(|(plugin, _)| plugin);
     let row = rows.get(index)?;
     if !is_cell(row) {
         return None;
@@ -806,8 +883,8 @@ pub fn cell_group(
 /// `selected` clamped into `rows` and moved forward onto a selectable row,
 /// then stepped by `direction` (-1, 0, +1) with wrap, skipping group and
 /// header rows. A list without a selectable row behaves like [`wrap`].
-pub fn move_selection(
-    plugins: &[Arc<Plugin>],
+pub fn move_selection<P: PluginRef>(
+    plugins: &[P],
     rows: &[PageRow],
     selected: usize,
     direction: i8,
@@ -1068,7 +1145,7 @@ mod tests {
     ];
 
     fn option(plugin: usize, option: usize) -> PageRow {
-        PageRow::Option { plugin, option }
+        PageRow::option(plugin, option)
     }
 
     #[test]
@@ -1153,7 +1230,7 @@ mod tests {
         assert!(page_plugins(&plugins).is_empty());
         // The shared page heads each plugin's options with a group row.
         assert_eq!(
-            rows_for(&plugins, None),
+            rows_for(&plugins, None).to_vec(),
             vec![
                 PageRow::Group(0),
                 option(0, 0),
@@ -1372,7 +1449,7 @@ mod tests {
         assert_eq!(
             registry.value(0, &plugin, 0),
             ValueText {
-                label: "Off".to_owned(),
+                label: "Off".into(),
                 pending: false,
                 tone: abi::TONE_NEUTRAL,
             }
@@ -1427,7 +1504,7 @@ mod tests {
         assert_eq!(
             registry.value(0, &plugins[0], 0),
             ValueText {
-                label: "On".to_owned(),
+                label: "On".into(),
                 pending: true,
                 tone: abi::TONE_NEUTRAL,
             }
@@ -1446,7 +1523,7 @@ mod tests {
         assert_eq!(
             registry.value(0, &plugins[0], 0),
             ValueText {
-                label: "Auto".to_owned(),
+                label: "Auto".into(),
                 pending: false,
                 tone: abi::TONE_NEUTRAL,
             }
@@ -1578,16 +1655,16 @@ mod tests {
                 PersistWrite {
                     plugin: 0,
                     option: 0,
-                    path: "sd:/ultimate/replay/config.ini".to_owned(),
-                    key: "record_enabled".to_owned(),
-                    value: "on".to_owned(),
+                    path: "sd:/ultimate/replay/config.ini".into(),
+                    key: "record_enabled".into(),
+                    value: "on".into(),
                 },
                 PersistWrite {
                     plugin: 0,
                     option: 1,
-                    path: "sd:/ultimate/replay/config.ini".to_owned(),
-                    key: "quality".to_owned(),
-                    value: "2".to_owned(),
+                    path: "sd:/ultimate/replay/config.ini".into(),
+                    key: "quality".into(),
+                    value: "2".into(),
                 },
             ]
         );
@@ -1603,9 +1680,9 @@ mod tests {
             vec![PersistWrite {
                 plugin: 2,
                 option: 0,
-                path: "sd:/ultimate/later/config.ini".to_owned(),
-                key: "record_enabled".to_owned(),
-                value: "on".to_owned(),
+                path: "sd:/ultimate/later/config.ini".into(),
+                key: "record_enabled".into(),
+                value: "on".into(),
             }]
         );
         // Satisfied once: no second write and nothing left pending.
@@ -2061,9 +2138,9 @@ mod tests {
             vec![PersistWrite {
                 plugin: 0,
                 option: 0,
-                path: "sd:/ultimate/smash_replay_to_mp4/config.ini".to_owned(),
-                key: "enabled".to_owned(),
-                value: "on".to_owned(),
+                path: "sd:/ultimate/smash_replay_to_mp4/config.ini".into(),
+                key: "enabled".into(),
+                value: "on".into(),
             }]
         );
         assert_eq!(
@@ -2114,7 +2191,7 @@ mod tests {
         assert_eq!(wrap(3, 1, 4), 0);
         assert_eq!(wrap(9, 1, 4), 0);
         assert_eq!(wrap(2, 0, 4), 2);
-        assert_eq!(move_selection(&[], &[], 3, 1), 0);
+        assert_eq!(move_selection::<&Plugin>(&[], &[], 3, 1), 0);
         // Headers and group rows are skipped in both directions and never
         // hold a clamped selection. The FX descriptor on the shared page.
         let registry = Registry::new();
@@ -2219,7 +2296,7 @@ mod tests {
             GROUPED.values[2].store(2, Ordering::Relaxed);
             GROUPED.requests.lock().unwrap().clear();
             // The own page has no group row; the shared page has none of its rows.
-            assert_eq!(page_plugins(&plugins), vec![0]);
+            assert_eq!(page_plugins(&plugins).to_vec(), vec![0]);
             assert!(!has_shared_rows(&plugins));
             assert!(rows_for(&plugins, None).is_empty());
             let rows = rows_for(&plugins, Some(0));

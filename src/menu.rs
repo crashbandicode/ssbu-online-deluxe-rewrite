@@ -181,14 +181,15 @@ pub fn compact_strip(shape: MenuShape, view: InfoView) -> bool {
 }
 
 /// One drawn window row. The vertical table and the compact strip draw the
-/// same list, for Settings cells and plugin rows alike.
+/// same list, for Settings cells and plugin rows alike. Fixed size (0.10.7):
+/// the window builds its rows inside the present hook.
 #[cfg(any(target_os = "switch", test))]
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) struct Row {
-    pub label: String,
+    pub label: crate::fixed::Label,
     /// Empty for a label-only row (a plugin group or header); choice labels
     /// are never empty.
-    pub value: String,
+    pub value: RowValue,
     /// `deluxe_plugin_abi::TONE_*` of the value text.
     pub tone: u8,
     pub pending: bool,
@@ -196,16 +197,32 @@ pub(crate) struct Row {
     /// A run of plugin status cells drawn as one table (headings separated
     /// by bars, a check or cross centered beneath each). Empty for every
     /// other row; when set, `label` and `value` are empty.
-    pub cells: Vec<Cell>,
+    pub cells: crate::fixed::FixedVec<Cell, { deluxe_plugin_abi::MAX_CELL_RUN }>,
 }
+
+/// A row's value: a plugin choice, or a summary line such as `Opp` (a long
+/// peer name, profile, buffer, ping and interface).
+#[cfg(any(target_os = "switch", test))]
+pub(crate) type RowValue = crate::fixed::FixedStr<128>;
+
+/// The rows one view draws: Settings, Window (one row per own page), Debug,
+/// or a plugin page's window. Rows past it are dropped and counted.
+#[cfg(target_os = "switch")]
+pub(crate) const ROWS_MAX: usize = 24;
+#[cfg(target_os = "switch")]
+pub(crate) type Rows = crate::fixed::FixedVec<Row, ROWS_MAX>;
+
+/// One unwrapped strip line, as [`strip_line`] joins it.
+#[cfg(any(target_os = "switch", test))]
+pub(crate) type StripText = crate::fixed::FixedStr<1024>;
 
 /// One column of a status-cell table. `tone` is the plugin's ready/not-ready
 /// contract: `TONE_OK` draws a check mark, any other tone a cross in that
 /// tone's color. No value text is shown.
 #[cfg(any(target_os = "switch", test))]
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) struct Cell {
-    pub label: String,
+    pub label: crate::fixed::FixedStr<{ deluxe_plugin_abi::MAX_LABEL_LEN }>,
     pub tone: u8,
 }
 
@@ -220,8 +237,8 @@ pub(crate) const MARK_SLOT: &str = "\u{1}";
 /// the passive rows (status, cell, header) after the last selectable row, since
 /// the cursor can never reach a page that holds only those.
 #[cfg(any(target_os = "switch", test))]
-pub(crate) fn plugin_window(
-    plugins: &[std::sync::Arc<crate::plugin_api::Plugin>],
+pub(crate) fn plugin_window<P: crate::plugin_api::PluginRef>(
+    plugins: &[P],
     rows: &[crate::plugin_api::PageRow],
     selected: usize,
     size: usize,
@@ -254,45 +271,51 @@ pub(crate) fn plugin_window(
 /// its label alone, without the colon. Concatenating the texts gives
 /// [`strip_line`] exactly, so font fitting can use the joined string.
 #[cfg(any(target_os = "switch", test))]
-pub(crate) fn strip_segments(rows: &[Row]) -> Vec<(String, u8)> {
-    let mut segments = Vec::with_capacity(rows.len() * 3);
+pub(crate) fn each_strip_segment(rows: &[Row], mut segment: impl FnMut(&str, u8)) {
+    type Segment = crate::fixed::FixedStr<160>;
+    let neutral = deluxe_plugin_abi::TONE_NEUTRAL;
     for (index, row) in rows.iter().enumerate() {
         if index > 0 {
-            segments.push(("   ".to_owned(), deluxe_plugin_abi::TONE_NEUTRAL));
+            segment("   ", neutral);
         }
         if !row.cells.is_empty() {
             for (cell, entry) in row.cells.iter().enumerate() {
                 if cell > 0 {
-                    segments.push((FACT_SEPARATOR.to_owned(), deluxe_plugin_abi::TONE_NEUTRAL));
+                    segment(FACT_SEPARATOR, neutral);
                 }
-                segments.push((format!("{}:", entry.label), deluxe_plugin_abi::TONE_NEUTRAL));
-                segments.push((MARK_SLOT.to_owned(), entry.tone));
+                let label: Segment = crate::fixed!("{}:", entry.label);
+                segment(&label, neutral);
+                segment(MARK_SLOT, entry.tone);
             }
             continue;
         }
         if row.value.is_empty() {
-            segments.push((row.label.clone(), deluxe_plugin_abi::TONE_NEUTRAL));
+            segment(&row.label, neutral);
             continue;
         }
-        segments.push((
-            format!("{}{}:", if row.selected { ">" } else { "" }, row.label),
-            deluxe_plugin_abi::TONE_NEUTRAL,
-        ));
-        segments.push((
-            format!("{}{}", row.value, if row.pending { "~" } else { "" }),
-            row.tone,
-        ));
+        let label: Segment = crate::fixed!("{}{}:", if row.selected { ">" } else { "" }, row.label);
+        segment(&label, neutral);
+        let value: Segment = crate::fixed!("{}{}", row.value, if row.pending { "~" } else { "" });
+        segment(&value, row.tone);
     }
+}
+
+/// [`each_strip_segment`] as a list.
+#[cfg(test)]
+pub(crate) fn strip_segments(rows: &[Row]) -> Vec<(String, u8)> {
+    let mut segments = Vec::new();
+    each_strip_segment(rows, |text, tone| segments.push((text.to_owned(), tone)));
     segments
 }
 
 /// One unwrapped strip line of `rows`.
 #[cfg(any(target_os = "switch", test))]
-pub(crate) fn strip_line(rows: &[Row]) -> String {
-    strip_segments(rows)
-        .into_iter()
-        .map(|(text, _)| text)
-        .collect()
+pub(crate) fn strip_line(rows: &[Row]) -> StripText {
+    let mut line = StripText::new();
+    each_strip_segment(rows, |text, _| {
+        line.push_str(text);
+    });
+    line
 }
 
 /// Rows shown around `selected`: with `paged`, the page of `size` rows that
@@ -327,27 +350,35 @@ pub(crate) fn window(
 }
 
 #[cfg(any(target_os = "switch", test))]
-pub(crate) fn compact_timing_bar(milliseconds: Option<f32>) -> String {
+pub(crate) fn compact_timing_bar(milliseconds: Option<f32>) -> crate::fixed::FixedStr<16> {
     let Some(milliseconds) = milliseconds.filter(|value| value.is_finite() && *value > 0.0) else {
-        return "[no data]".to_owned();
+        return crate::fixed::FixedStr::from("[no data]");
     };
     const SEGMENTS: usize = 10;
     let filled = ((milliseconds / 35.0).clamp(0.0, 1.0) * SEGMENTS as f32).round() as usize;
-    format!("[{}{}]", "#".repeat(filled), "-".repeat(SEGMENTS - filled))
+    let mut bar = crate::fixed::FixedStr::from("[");
+    for segment in 0..SEGMENTS {
+        bar.push(if segment < filled { '#' } else { '-' });
+    }
+    bar.push(']');
+    bar
 }
 
 #[cfg(any(target_os = "switch", test))]
-pub(crate) fn compact_timing_line(average_ms: Option<f32>, latest_ms: Option<f32>) -> String {
+pub(crate) fn compact_timing_line(
+    average_ms: Option<f32>,
+    latest_ms: Option<f32>,
+) -> crate::fixed::Line {
     match (
         average_ms.filter(|value| value.is_finite() && *value > 0.0),
         latest_ms.filter(|value| value.is_finite() && *value > 0.0),
     ) {
-        (Some(mean), Some(latest)) => format!(
+        (Some(mean), Some(latest)) => crate::fixed!(
             "FPS:{:.1}  FT:{latest:.2}ms  AVG:{mean:.2}ms  {}",
             1000.0 / mean,
             compact_timing_bar(Some(latest))
         ),
-        _ => "FPS:---  FT:---  [no data]".to_owned(),
+        _ => crate::fixed::Line::from("FPS:---  FT:---  [no data]"),
     }
 }
 
@@ -392,20 +423,20 @@ pub(crate) const FACT_SEPARATOR: &str = " | ";
 /// Facts joined with [`FACT_SEPARATOR`]; an unknown fact (`---` or empty) is
 /// left out rather than shown as a placeholder.
 #[cfg(any(target_os = "switch", test))]
-fn join_facts(facts: &[&str]) -> String {
-    facts
+fn join_facts(facts: &[&str]) -> RowValue {
+    let known: crate::fixed::FixedVec<&str, 8> = facts
         .iter()
         .filter(|fact| !fact.is_empty() && **fact != "---")
         .copied()
-        .collect::<Vec<_>>()
-        .join(FACT_SEPARATOR)
+        .collect();
+    crate::fixed::join(&known, FACT_SEPARATOR)
 }
 
 /// The `You` summary line of the Settings page (0.6.0): profile, input
 /// buffer, local interface. Its selection enables the privacy icon shortcuts;
 /// the rows below it control peer selection, latency and profile.
 #[cfg(any(target_os = "switch", test))]
-pub(crate) fn you_line(profile: &str, buffer: &str, interface: &str) -> String {
+pub(crate) fn you_line(profile: &str, buffer: &str, interface: &str) -> RowValue {
     join_facts(&[profile, buffer, interface])
 }
 
@@ -420,7 +451,7 @@ pub(crate) fn opp_line(
     latency: &str,
     ping: &str,
     interface: &str,
-) -> String {
+) -> RowValue {
     join_facts(&[name, settings, latency, ping, interface])
 }
 
@@ -428,11 +459,11 @@ pub(crate) fn opp_line(
 /// row is gone): `LessLag | Swap`. An empty status, or the `Vanilla` status
 /// that only says no render-opts profile is armed, leaves the profile alone.
 #[cfg(any(target_os = "switch", test))]
-pub(crate) fn net_profile_value(profile: &str, status: &str) -> String {
+pub(crate) fn net_profile_value(profile: &str, status: &str) -> RowValue {
     if status.is_empty() || status == "Vanilla" {
-        profile.to_owned()
+        RowValue::from(profile)
     } else {
-        format!("{profile}{FACT_SEPARATOR}{status}")
+        crate::fixed!("{profile}{FACT_SEPARATOR}{status}")
     }
 }
 
@@ -440,14 +471,14 @@ pub(crate) fn net_profile_value(profile: &str, status: &str) -> String {
 /// mean frame time, the applied internal resolution and the DRS state. The
 /// full block and the plot live on the Performance page.
 #[cfg(any(target_os = "switch", test))]
-pub(crate) fn perf_footer(mean_ms: Option<f32>, resolution: &str, drs: bool) -> String {
+pub(crate) fn perf_footer(mean_ms: Option<f32>, resolution: &str, drs: bool) -> crate::fixed::Line {
     let drs = if drs { "DRS on" } else { "DRS off" };
     match mean_ms.filter(|value| value.is_finite() && *value > 0.0) {
-        Some(ms) => format!(
+        Some(ms) => crate::fixed!(
             "{:.1} fps{FACT_SEPARATOR}{ms:.2} ms{FACT_SEPARATOR}{resolution}{FACT_SEPARATOR}{drs}",
             1000.0 / ms
         ),
-        None => format!(
+        None => crate::fixed!(
             "--- fps{FACT_SEPARATOR}--- ms{FACT_SEPARATOR}{resolution}{FACT_SEPARATOR}{drs}"
         ),
     }
@@ -472,7 +503,7 @@ pub(crate) fn mark_editing(rows: &mut [Row], editing: bool) {
         .iter_mut()
         .filter(|row| row.selected && !row.value.is_empty())
     {
-        row.value = format!("< {} >", row.value);
+        row.value = crate::fixed!("< {} >", row.value);
     }
 }
 
@@ -499,13 +530,13 @@ pub fn profile_choice(config: &Config) -> ProfileChoice {
 /// Local profile text shared by the window and native banner. Console Ultra
 /// suffixes name the saved base resolution, not a new renderer or the current
 /// DRS level. Auto and the post-match Vanilla cleanup label retain their meaning.
-pub fn profile_label(config: &Config, ready: bool, requested: RenderMode) -> String {
+pub fn profile_label(config: &Config, ready: bool, requested: RenderMode) -> crate::fixed::Label {
     if !config.auto_profile
         && config.platform == Platform::Console
         && config.render_mode == RenderMode::LessLagUltra
         && requested != RenderMode::Vanilla
     {
-        config.ultra_resolution.profile_label().to_owned()
+        crate::fixed::Label::from(config.ultra_resolution.profile_label())
     } else {
         crate::auto_policy::profile_row_label(
             config.auto_profile,
@@ -518,7 +549,30 @@ pub fn profile_label(config: &Config, ready: bool, requested: RenderMode) -> Str
 }
 
 pub fn profile_action(before: &Config, after: &Config) -> ProfileAction {
-    if before.auto_profile == after.auto_profile && before.render_mode == after.render_mode {
+    profile_action_from(ProfileChoiceBits::of(before), after)
+}
+
+/// The two settings [`profile_action`] compares, kept instead of a whole
+/// `Config` across one window edit (0.10.7: the window runs in the present
+/// hook and keeps its stack small).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ProfileChoiceBits {
+    pub auto_profile: bool,
+    pub render_mode: RenderMode,
+}
+
+impl ProfileChoiceBits {
+    pub fn of(config: &Config) -> Self {
+        Self {
+            auto_profile: config.auto_profile,
+            render_mode: config.render_mode,
+        }
+    }
+}
+
+/// [`profile_action`] from the settings saved before the edit.
+pub fn profile_action_from(before: ProfileChoiceBits, after: &Config) -> ProfileAction {
+    if before == ProfileChoiceBits::of(after) {
         return ProfileAction::Unchanged;
     }
     if after.auto_profile {
@@ -960,7 +1014,7 @@ mod tests {
         let mut config = Config::default();
         assert!(config.auto_profile);
         assert_eq!(config.render_mode, RenderMode::Vanilla);
-        let before = config.clone();
+        let before = config;
         assert!(menu.handle(Action::Right, &mut config));
         assert!(!config.auto_profile);
         assert_eq!(config.render_mode, RenderMode::Vanilla);
@@ -976,7 +1030,7 @@ mod tests {
         assert!(menu.handle(Action::Right, &mut config));
         assert_eq!(config.render_mode, RenderMode::LessLagDoubles);
         assert_eq!(config.ultra_resolution, UltraResolution::P576);
-        let saved = config.clone();
+        let saved = config;
         assert!(menu.handle(Action::Right, &mut config));
         assert!(config.auto_profile);
         assert_eq!(config.render_mode, saved.render_mode);
@@ -992,7 +1046,7 @@ mod tests {
         config.render_mode = RenderMode::DoublesCore;
         assert!(menu.handle(Action::Left, &mut config));
         assert_eq!(config.render_mode, RenderMode::Vanilla);
-        let stealth_only = config.clone();
+        let stealth_only = config;
         config.stealth = !config.stealth;
         assert_eq!(
             profile_action(&stealth_only, &config),
@@ -1055,7 +1109,7 @@ mod tests {
                         input_buffer: 4,
                         ..Config::default()
                     };
-                    let before = config.clone();
+                    let before = config;
                     assert!(apply_native_edges(
                         &mut config,
                         NativeSurface::Css,
@@ -1078,7 +1132,7 @@ mod tests {
                             ..before
                         }
                     );
-                    let away = config.clone();
+                    let away = config;
                     assert!(edit_profile(&mut config, -direction));
                     assert_eq!(
                         profile_action(&away, &config),
@@ -1111,7 +1165,7 @@ mod tests {
             ultra_resolution: UltraResolution::P1080,
             ..Config::default()
         };
-        let before = config.clone();
+        let before = config;
         assert!(!edit_profile(&mut config, 0));
         assert_eq!(config, before);
     }
@@ -1489,7 +1543,7 @@ mod tests {
         assert_eq!(menu.selected, ROW_YOU);
         // You is always reachable, including without a peer. Privacy has no
         // separate rows; the optional Opp selector returns on a join.
-        let before = config.clone();
+        let before = config;
         assert!(!menu.handle_peers(Action::Left, &mut config, false));
         assert!(!menu.handle_peers(Action::Right, &mut config, false));
         assert_eq!(config, before, "You has no Left/Right value edit");
@@ -1594,8 +1648,8 @@ mod tests {
 
     fn strip_row(label: &str, value: &str, selected: bool) -> Row {
         Row {
-            label: label.to_owned(),
-            value: value.to_owned(),
+            label: label.into(),
+            value: value.into(),
             selected,
             ..Row::default()
         }
@@ -1724,7 +1778,7 @@ mod tests {
     fn status_page() -> (
         crate::plugin_api::Registry,
         Vec<std::sync::Arc<crate::plugin_api::Plugin>>,
-        Vec<crate::plugin_api::PageRow>,
+        crate::plugin_api::PageRows,
     ) {
         use crate::plugin_api::testing::{
             descriptor_with, fake_current, fake_request, FakePlugin, Persist,
@@ -1904,7 +1958,7 @@ mod tests {
                 .iter()
                 .zip(tones)
                 .map(|(label, tone)| Cell {
-                    label: (*label).to_owned(),
+                    label: (*label).into(),
                     tone,
                 })
                 .collect(),

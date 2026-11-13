@@ -199,30 +199,31 @@ pub(super) fn status() -> &'static str {
 }
 
 /// Debug row `CSS capture`.
-pub(super) fn css_label() -> String {
+pub(super) fn css_label() -> crate::fixed::Line {
+    use crate::fixed::Line;
     let hooks = super::css_capture::hooks();
     if flags() & FLAG_CSS == 0 {
         return match hooks {
-            0 => "Off (no CAPTURE_CSS)".to_string(),
-            hooks => format!("Hooks {hooks:#x} for CAPTURE_MATCH; not arming"),
+            0 => Line::from("Off (no CAPTURE_CSS)"),
+            hooks => crate::fixed!("Hooks {hooks:#x} for CAPTURE_MATCH; not arming"),
         };
     }
     match hooks {
-        super::css_capture::HOOKS_ALL => format!(
+        super::css_capture::HOOKS_ALL => crate::fixed!(
             "Armed; {} capture(s) on CSS entry",
             CSS_ARMED.load(Ordering::Relaxed)
         ),
-        0 => "Unavailable (words differ)".to_string(),
-        hooks => format!("Partial {hooks:#x}; not arming"),
+        0 => Line::from("Unavailable (words differ)"),
+        hooks => crate::fixed!("Partial {hooks:#x}; not arming"),
     }
 }
 
 /// Debug row `Match capture`.
-pub(super) fn match_label() -> String {
+pub(super) fn match_label() -> crate::fixed::Line {
     if flags() & FLAG_MATCH == 0 {
-        return "Off (no CAPTURE_MATCH)".to_string();
+        return crate::fixed::Line::from("Off (no CAPTURE_MATCH)");
     }
-    format!(
+    crate::fixed!(
         "Armed; {} capture(s) on stage entry, {} ended",
         MATCH_ARMED.load(Ordering::Relaxed),
         MATCH_ENDS.load(Ordering::Relaxed)

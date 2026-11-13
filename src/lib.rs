@@ -9,6 +9,7 @@ mod connection_transport;
 pub mod coverage_profile;
 pub mod diagnostics;
 pub mod dispatcher_backoff;
+pub mod fixed;
 pub mod hoc_game_aware;
 pub mod hook_chain;
 pub mod hook_lock;

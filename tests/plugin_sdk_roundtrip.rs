@@ -13,6 +13,10 @@ mod plugin_api;
 #[path = "../src/hook_lock.rs"]
 #[allow(dead_code)]
 mod hook_lock;
+#[path = "../src/fixed.rs"]
+#[allow(dead_code, unused_macros)]
+#[macro_use]
+mod fixed;
 
 use plugin_api::{
     has_shared_rows, move_selection, page_plugins, rows_for, selectable, PageRow, Registry,
@@ -123,7 +127,7 @@ fn sdk_registration_reaches_the_host_registry_and_edits_round_trip() {
     assert!(has_shared_rows(&plugins));
     assert_eq!(rows_for(&plugins, None).len(), 4);
     assert_eq!(rows_for(&plugins, None)[0], PageRow::Group(0));
-    assert_eq!(page_plugins(&plugins), vec![1]);
+    assert_eq!(page_plugins(&plugins).to_vec(), vec![1]);
     assert_eq!(rows_for(&plugins, Some(0)).len(), 3);
     assert_eq!(rows_for(&plugins, Some(1)).len(), 0);
     // Tones, the read-only status row and the page flag arrive in one call.
