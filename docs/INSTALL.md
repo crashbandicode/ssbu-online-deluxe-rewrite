@@ -77,8 +77,13 @@ patch. The source, build recipe and digest are in [ImGui dependencies](IMGUI_DEP
 
 ## Elite Legal Stages
 
-Its stage filtering applies to **NSO** online matches, not offline ones; offline stages staying unrestricted is
-expected. Emulator tests don't cover NSO matchmaking or its stage filter.
+A separate plugin ([Legal Stages + Loser Counterpick](https://git.syntaxbyexample.com/intpa/elite-stages-counterpick))
+whose settings page, **Stages + Counterpick**, appears in Deluxe's window.
+- Its **legal stage pool** narrows the stages the game may pick to the ones you check; it never adds a stage.
+- Its optional **counterpick** acts only on an accepted online 1v1 rematch under your Preferred Rules.
+
+What it does, how it was tested and what isn't proven yet are in its own
+[README](https://git.syntaxbyexample.com/intpa/elite-stages-counterpick#legal-stages--loser-counterpick).
 
 ## Eden
 
