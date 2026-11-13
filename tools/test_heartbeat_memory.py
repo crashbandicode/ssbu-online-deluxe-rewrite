@@ -1,6 +1,6 @@
 import unittest
 
-from heartbeat_memory import MIB, compare, phases, table
+from heartbeat_memory import MIB, compare, phases, scenes, scenes_table, table
 
 
 def beat(t, scene, used_mib, css=0):
@@ -71,6 +71,24 @@ class HeartbeatMemoryTest(unittest.TestCase):
     def test_a_file_without_heartbeats_is_refused(self):
         with self.assertRaises(ValueError):
             phases("build=test\n")
+        with self.assertRaises(ValueError):
+            scenes("build=test\n")
+
+    def test_scene_runs_split_on_scene_and_css_in_file_order(self):
+        runs = scenes(SAMPLE)
+        self.assertEqual([(r["scene"], r["css"], r["n"]) for r in runs], [
+            ("offline/inactive", 0, 4),
+            ("quickplay/inactive", 0, 1),
+            ("quickplay/inactive", 1, 2),
+            ("quickplay/inactive", 0, 1),
+            ("quickplay/training", 0, 4),
+            ("quickplay/inactive", 1, 1),
+        ])
+        self.assertEqual(runs[2], {"scene": "quickplay/inactive", "css": 1, "t_start": 131.0, "t_end": 136.0,
+                                   "n": 2, "min": 2380.0, "median": 2385.0, "max": 2390.0})
+        self.assertEqual(runs[4]["median"], 2881.0)
+        self.assertIn("| quickplay/training | 0 | 142.0-170.0 | 2,881.0 | 2,600.0-2,884.0 | 4 |",
+                      scenes_table("a", runs))
 
 
 def _used_mib(line):

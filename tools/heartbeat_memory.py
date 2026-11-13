@@ -11,6 +11,9 @@ Phases, from each file's own scene lines:
     python3 -I tools/heartbeat_memory.py a=<hang-trace.log> b=<hang-trace.log> ... [--ref a] [--json]
 
 With several labelled files, each phase's median is also given against the reference label (default: the first).
+
+`--scenes` lists instead each run of consecutive heartbeats with one scene and css flag (for an online match: the
+Quickplay CSS, the match, the CSS after it), with the start and end times and min/median/max.
 """
 import argparse
 import json
@@ -72,6 +75,29 @@ def phases(text, menu_window=30.0, settle=15.0):
     return out
 
 
+def scenes(text):
+    """Runs of consecutive heartbeats with the same scene and css flag, in file order."""
+    beats, _ = parse(text)
+    if not beats:
+        raise ValueError("no heartbeat lines")
+    runs = []
+    for t, scene, css, used in beats:
+        if runs and runs[-1]["scene"] == scene and runs[-1]["css"] == css:
+            runs[-1]["t_end"] = t
+            runs[-1]["used"].append(used)
+        else:
+            runs.append({"scene": scene, "css": css, "t_start": t, "t_end": t, "used": [used]})
+    return [{**{k: v for k, v in run.items() if k != "used"}, **summary(run["used"])} for run in runs]
+
+
+def scenes_table(label, runs):
+    lines = [f"{label}:", "| scene | css | t | median | min-max | n |", "| --- | --- | --- | --- | --- | --- |"]
+    for run in runs:
+        lines.append(f"| {run['scene']} | {run['css']} | {run['t_start']:.1f}-{run['t_end']:.1f} | {run['median']:,.1f} "
+                     f"| {run['min']:,.1f}-{run['max']:,.1f} | {run['n']} |")
+    return "\n".join(lines)
+
+
 def compare(results, ref):
     """Each phase's median minus the reference's, in MiB (None where either side has no heartbeat)."""
     deltas = {}
@@ -119,14 +145,20 @@ def main(argv=None):
     parser.add_argument("--menu-window", type=float, default=30.0)
     parser.add_argument("--settle", type=float, default=15.0)
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--scenes", action="store_true", help="per scene run instead of the Training phases")
     args = parser.parse_args(argv)
-    results = {}
+    texts = {}
     for item in args.logs:
         label, sep, path = item.partition("=")
         if not sep:
             raise SystemExit(f"{item}: expected label=path")
         with open(path, encoding="utf-8", errors="replace") as handle:
-            results[label] = phases(handle.read(), args.menu_window, args.settle)
+            texts[label] = handle.read()
+    if args.scenes:
+        runs = {label: scenes(text) for label, text in texts.items()}
+        print(json.dumps(runs, indent=1) if args.json else "\n\n".join(scenes_table(k, v) for k, v in runs.items()))
+        return 0
+    results = {label: phases(text, args.menu_window, args.settle) for label, text in texts.items()}
     ref = args.ref or next(iter(results))
     deltas = compare(results, ref)
     if args.json:
