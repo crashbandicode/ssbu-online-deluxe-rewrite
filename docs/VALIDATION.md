@@ -1,5 +1,50 @@
 # Validation record
 
+## 0.10.7 (`dab8772`, rc.13 branch) — fixed-capacity text: the window and the banner hooks no longer allocate: gates, ELF check and the RC pair — 2026-11-13
+
+**The change (`dab8772`).**
+- The ImGui window (`draw`) and the native banner text hooks (`deluxe_rewrite_local_count`, `deluxe_rewrite_css_banner`, `deluxe_rewrite_arena_room_update`) build their text in fixed buffers (`src/fixed.rs`).
+- Text past a buffer is cut at a character boundary and counted. It is not an error.
+- `hide_plugin_pages` holds at most 32 ids. A file listing more fails to parse, as a file with an invalid id already did.
+- `tools/hook_wait_check.py` no longer exempts these four roots. Details and the stack table are in `docs/DEBUGGING.md`.
+
+**Failing first, on `9d59c66`.** With the four roots checked like every other per-frame root, the ELF check exits 1 on the `9d59c66` tree's ELF: 4 allocation sinks (`format_inner`, `free`, `malloc`, `posix_memalign`) over 35 per-frame roots.
+
+**Gates on `dab8772` (nice 19 / ionice 3, memory/time guard).**
+- `cargo test`: 361 unit tests, then 8 and 34 integration tests, passed.
+- Clippy with warnings denied passed with and without `diag`, for both `cargo clippy --all-targets` and `cargo skyline clippy`.
+- `cargo build --no-default-features` passed.
+- `ssbu-mod-playbook` compliance (`13b2e83`, `--base fdb002e`) fails the same rows as `d8a6909`, none new.
+
+**Build.**
+- Release: build `0.10.7-dab8772c3f96-1794609413`, NRO `bcdcc7b235552e50c006c5d787a85176631e1306341cb568dcd810a4c0e5109b` (1,282,048 bytes).
+- Diag: NRO `1ed85979…` (1,286,144 bytes).
+- `tools/hook_wait_check.py` on both: 58 hook roots and 0 forbidden waits (one allowed by name). 35 per-frame roots, all four text roots included, and 0 allocation or print.
+- On the first diag build, `label_feed::dynamic_chars`, which runs in the diag build's draw, still collected a `Vec`. It now counts without allocating.
+- Static stack (`stack_depth.py entry`, release; lower bounds):
+
+  | Root | 0.10.6 | `dab8772` |
+  | --- | --- | --- |
+  | `draw` | 10,576 B | 14,928 B |
+  | `deluxe_rewrite_css_banner` | 9,968 B | 13,792 B |
+  | `deluxe_rewrite_arena_room_update` | 9,968 B | 13,760 B |
+  | `deluxe_rewrite_local_count` | 2,304 B | 4,256 B |
+
+**Eden RC pair (`drc13-a2` XPS, `drc13-b2` Yoga, 2026-11-13 22:40–22:52Z).**
+- Setup: the same as `drc13-a1`/`b1` below, with the release NRO above. a has the card's 19 plugins plus the tile cursor, with the built-in ImGui. b has 21 plugins, with the standalone imgui-smash 1.2.0. Volume 0, and the GDB stub was on before `game.load`. Each host ran one Eden of this pair; the Yoga also ran another lane's single slot.
+- Rows: all 8 passed on each instance. The CSS row exercises the CSS banner.
+- Match logs 000023 to 000025 carry this build.
+- The desync detector:
+  - its two `sync_end` lines read `desync_seen=0`, at frames 7542 and 892 on both sides;
+  - `fault_words` are 0;
+  - the match row reports `desync_free: true`.
+- `hook_lock_skipped=0` in every `renderer-status.txt` taken, on both instances.
+- The post-run status files have the same keys as `drc13-a1`/`b1` (117 for a, 118 for b).
+- The consoles have no panic, abort, crash or Unmapped line. The grep hits are the Eden build's path (`unmapped-stop`) and the rows' own text, as in the previous pair. Both claims were released.
+- Not yet reported: `fixed::truncated()`, the count of cut text, is not written to the status file.
+- Evidence: `artifacts/deluxe-2/eden/drc13-{a,b}2` and `status-diff-drc13t.txt` in the operator's evidence root.
+- Not run on the console.
+
 ## 0.10.7 (`d8a6909`, rc.13 branch) — no game hook waits, no per-frame hook allocates: gates, ELF check and the RC pair — 2026-11-13
 
 **The change (`d8a6909`).** The four locks that only game threads still took after
