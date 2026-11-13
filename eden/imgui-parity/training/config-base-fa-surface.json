@@ -1,0 +1,320 @@
+{
+ "owner": "OpenCode deluxe-imgui-parity",
+ "label": "imp-base-fa",
+ "host": "surface",
+ "hostname": "ubuntu-surface",
+ "ledger": "/tmp/deluxe-surface-1007/OWNER-COORDINATION.md",
+ "display_helper": {
+  "path": "/home/intpa/eden-nso-autolan/live-tools/display-rootful.ps1",
+  "sha256": "a930b7a6dcb6c7401afb8bbbb2c918ee9b09219a1cd64b4af862938c094e2cff"
+ },
+ "work_root": "/home/intpa/eden-runs/imp-base/work",
+ "state_dir": "/home/intpa/eden-runs/imp-base/state",
+ "pair_authorized": true,
+ "defer_load": true,
+ "runtime": 3600,
+ "socket_cap": 90,
+ "load_cap": 180,
+ "stop_cap": 30,
+ "force_cap": 30,
+ "authorization": "imgui-parity (Deluxe lane coordinator 2026-11-13; worker of the Deluxe lane): step 1/4 memory readings, variant fa: the card's plugin set as at the hang (TR rc.11 release e9e18b00, Deluxe 0.10.5 c37ee0ff) with libimgui_smash.nro absent, the card's TR and plugin files, one instance on the Surface, main menu -> Training with Game & Watch vs CPU Ganondorf (the integration lane's hang.py), muted (volume 0), the GDB stub on before game.load. No card; nothing pushed.",
+ "runner": {
+  "path": "/home/intpa/pb-int-13b2e83/tools/eden-runner/runner.py",
+  "sha256": "e008a79013750ac63023cca306debafa3c6b372e610eafa52fabc1bd3144c05c"
+ },
+ "instances": [
+  {
+   "key": "diag",
+   "display": ":141",
+   "source": "/home/intpa/trainingrooms-eden-lead-astra4/profiles/g",
+   "app": {
+    "path": "/home/intpa/Applications/Eden-GIF/20261113-973abf9c2e3f-unmapped-stop-lan2c-svc-x8-x17-gdbstub-2f315fc4b7d9/Eden.AppImage",
+    "sha256": "2f315fc4b7d9658afef84f4ba3cb80a3d0b33292eaef66a802ef837222a247b9"
+   },
+   "game": "/home/intpa/eden-assets/games/01006A800016E000/base/Super Smash Bros. Ultimate [01006A800016E000]+[v13.0.3+ 9DLC][US](nsw2u.com).xci",
+   "plugins": [
+    {
+     "path": "/home/intpa/eden-runs/inputs-imp/fa/plugins/libarcropolis.nro",
+     "sha256": "ac3e05a38944af6c62a21321b66ca2f0d13468cf5fd0c57697b7fa8ed04dc220",
+     "name": "libarcropolis.nro"
+    },
+    {
+     "path": "/home/intpa/eden-runs/inputs-imp/fa/plugins/libcss_preserve.nro",
+     "sha256": "82862d00139bfeaf67cc922c90b285fbe71378a78fedec7e6eeb6d4a7ef8d4f9",
+     "name": "libcss_preserve.nro"
+    },
+    {
+     "path": "/home/intpa/eden-runs/inputs-imp/fa/plugins/libelite_rematch.nro",
+     "sha256": "4f13fd146a0b87a288df7a63823966a49d1f08afa6d69fd6a37dbe0bf62618db",
+     "name": "libelite_rematch.nro"
+    },
+    {
+     "path": "/home/intpa/eden-runs/inputs-imp/fa/plugins/libelite_stages_counterpick.nro",
+     "sha256": "584a3699185e984324281f4d8518ea3a03830606a135889cea2daf6ba74f0db2",
+     "name": "libelite_stages_counterpick.nro"
+    },
+    {
+     "path": "/home/intpa/eden-runs/inputs-imp/fa/plugins/libgsp_visualizer.nro",
+     "sha256": "879ef69bb186f07b1c7be0b93fb570a92b81522fcfd9b5ee301984c82b64d348",
+     "name": "libgsp_visualizer.nro"
+    },
+    {
+     "path": "/home/intpa/eden-runs/inputs-imp/fa/plugins/libinstant_back.nro",
+     "sha256": "5f8d090b549533b7af3f8d2e202a525b957582ce0538c457029a47c08233d176",
+     "name": "libinstant_back.nro"
+    },
+    {
+     "path": "/home/intpa/eden-runs/inputs-imp/fa/plugins/libmemory_guard.nro",
+     "sha256": "b2de129af559c303dfa40635b37cd40f160635385d4d8a73b6dda45172c0990d",
+     "name": "libmemory_guard.nro"
+    },
+    {
+     "path": "/home/intpa/eden-runs/inputs-imp/fa/plugins/libnro_hook.nro",
+     "sha256": "ca7aec03aee49fea539dcb92569fea5bc5389f77377ba2a30e4d0b7ebd0255e6",
+     "name": "libnro_hook.nro"
+    },
+    {
+     "path": "/home/intpa/eden-runs/inputs-imp/fa/plugins/libparam_hook.nro",
+     "sha256": "3ed7a2945084176cbb7742d99878f1e8d3a0992feb0fef74be2cfbc68ac8fb88",
+     "name": "libparam_hook.nro"
+    },
+    {
+     "path": "/home/intpa/eden-runs/inputs-imp/fa/plugins/libquickplay_cancel_fix.nro",
+     "sha256": "d69f11cf17c618a11b86ee7373c5b786af0d53222dce0a8cb998da6bbe1da9e8",
+     "name": "libquickplay_cancel_fix.nro"
+    },
+    {
+     "path": "/home/intpa/eden-runs/inputs-imp/fa/plugins/libsmash_gamepad_overlay.nro",
+     "sha256": "5ab98bdf12a5f1cb1c7a1bb6694fc9e5c98a8eb758c7b6b5193f72b8d184767a",
+     "name": "libsmash_gamepad_overlay.nro"
+    },
+    {
+     "path": "/home/intpa/eden-runs/inputs-imp/fa/plugins/libsmash_replay_to_mp4.nro",
+     "sha256": "c3873f120e4c760df3bea051652daa20bd1d0cd3a9b319865f7e6ba507f429d0",
+     "name": "libsmash_replay_to_mp4.nro"
+    },
+    {
+     "path": "/home/intpa/eden-runs/inputs-imp/fa/plugins/libssbu_cpu_pilot.nro",
+     "sha256": "abd305e61d54179f030ec8813bcb95295e7c18a1c4beb79962a4bee4e12085c0",
+     "name": "libssbu_cpu_pilot.nro"
+    },
+    {
+     "path": "/home/intpa/eden-runs/inputs-imp/fa/plugins/libssbu_desync_detector.nro",
+     "sha256": "36027bb7690114a91a1358133e503a58c73ce059139a33b60011b72e6e71aa6c",
+     "name": "libssbu_desync_detector.nro"
+    },
+    {
+     "path": "/home/intpa/eden-runs/inputs-imp/fa/plugins/libssbu_online_deluxe_rewrite.nro",
+     "sha256": "2085fd047805eab1685e88256dd71011565fdc790934989fdda38ffdacd2842c",
+     "name": "libssbu_online_deluxe_rewrite.nro"
+    },
+    {
+     "path": "/home/intpa/eden-runs/inputs-imp/fa/plugins/libssbu_quiet_elite_switch.nro",
+     "sha256": "c65d9cc26d4d31c96dfb9022eee11ea4986c2cd6905bd34ba04e25d33a0954fd",
+     "name": "libssbu_quiet_elite_switch.nro"
+    },
+    {
+     "path": "/home/intpa/eden-runs/inputs-imp/fa/plugins/libssbu_refresh_clock.nro",
+     "sha256": "1246f448fcd42092423ff9df51b7eaade806f95ec3da460ba51cf8f2576ff3c0",
+     "name": "libssbu_refresh_clock.nro"
+    },
+    {
+     "path": "/home/intpa/eden-runs/inputs-imp/fa/plugins/libssbu_stall_press_carry.nro",
+     "sha256": "749ed165c6b941dd6cd99a797bd1b987ec2b3dfd8ab7732afe6b53773d44c656",
+     "name": "libssbu_stall_press_carry.nro"
+    },
+    {
+     "path": "/home/intpa/eden-runs/inputs-imp/fa/plugins/libtraining_rooms.nro",
+     "sha256": "e9e18b00bc47a8359fdecccea9d17d08267bb21adea73f43db8bf53f6c400bf5",
+     "name": "libtraining_rooms.nro"
+    },
+    {
+     "path": "/home/intpa/trainingrooms-eden-pkg6/nro/aid/libssbu_tile_cursor.nro",
+     "sha256": "b8313ca2e66a52f1bcfc4afc764df1b7cdc5aee7e194bdea671cea02746934bc"
+    }
+   ],
+   "files": [
+    {
+     "path": "/home/intpa/smash-training-lobby/tmp-pkg4/rc-replay-inputs/nand/user/save/0000000000000000/D5D8291B55A016597329A04D037CD073/01006A800016E000/save_data/mii/mii_13348.bin",
+     "sha256": "a2a3d3c3c6c36d5894e35594079de406f0d9db80785aaf612bc406ffeb5bc2f7",
+     "to": "user/nand/user/save/0000000000000000/D5D8291B55A016597329A04D037CD073/01006A800016E000/save_data/mii/mii_13348.bin"
+    },
+    {
+     "path": "/home/intpa/smash-training-lobby/tmp-pkg4/rc-replay-inputs/nand/user/save/0000000000000000/D5D8291B55A016597329A04D037CD073/01006A800016E000/save_data/mii/mii_2622.bin",
+     "sha256": "5b9630472916a14f047a32a26ec14f99e1728852d5b898e46e3fc62ec731c4f4",
+     "to": "user/nand/user/save/0000000000000000/D5D8291B55A016597329A04D037CD073/01006A800016E000/save_data/mii/mii_2622.bin"
+    },
+    {
+     "path": "/home/intpa/smash-training-lobby/tmp-pkg4/rc-replay-inputs/nand/user/save/0000000000000000/D5D8291B55A016597329A04D037CD073/01006A800016E000/save_data/mii/mii_3137.bin",
+     "sha256": "ca5ddf724a10ffde5fee57347077487d2762e04b17c79503e82b8168baf9e240",
+     "to": "user/nand/user/save/0000000000000000/D5D8291B55A016597329A04D037CD073/01006A800016E000/save_data/mii/mii_3137.bin"
+    },
+    {
+     "path": "/home/intpa/smash-training-lobby/tmp-pkg4/rc-replay-inputs/nand/user/save/0000000000000000/D5D8291B55A016597329A04D037CD073/01006A800016E000/save_data/mii/mii_4155.bin",
+     "sha256": "bdc9bb78e90134482bbaf1dc2770c1f20ac1ec10c6f26da8dc00be01077a3707",
+     "to": "user/nand/user/save/0000000000000000/D5D8291B55A016597329A04D037CD073/01006A800016E000/save_data/mii/mii_4155.bin"
+    },
+    {
+     "path": "/home/intpa/smash-training-lobby/tmp-pkg4/rc-replay-inputs/nand/user/save/0000000000000000/D5D8291B55A016597329A04D037CD073/01006A800016E000/save_data/replay/replay20261021144543.bin",
+     "sha256": "086fdfca30b33c3751e6c767da4a8fea0d0a119914b40a74b4698878d878a99e",
+     "to": "user/nand/user/save/0000000000000000/D5D8291B55A016597329A04D037CD073/01006A800016E000/save_data/replay/replay20261021144543.bin"
+    },
+    {
+     "path": "/home/intpa/smash-training-lobby/tmp-pkg4/rc-replay-inputs/nand/user/save/0000000000000000/D5D8291B55A016597329A04D037CD073/01006A800016E000/save_data/replay/replay20261021231623.bin",
+     "sha256": "a1a58ee057970ea4861e94e8e9a228928d267ed5d187a3d7f059da4ca1024455",
+     "to": "user/nand/user/save/0000000000000000/D5D8291B55A016597329A04D037CD073/01006A800016E000/save_data/replay/replay20261021231623.bin"
+    },
+    {
+     "path": "/home/intpa/smash-training-lobby/tmp-pkg4/rc-replay-inputs/nand/user/save/0000000000000000/D5D8291B55A016597329A04D037CD073/01006A800016E000/save_data/replay/replay20261021234010.bin",
+     "sha256": "83e49dbda90732e9de07c6834ae2125c7837a307bf719b4ad616727eb6996ee7",
+     "to": "user/nand/user/save/0000000000000000/D5D8291B55A016597329A04D037CD073/01006A800016E000/save_data/replay/replay20261021234010.bin"
+    },
+    {
+     "path": "/home/intpa/smash-training-lobby/tmp-pkg4/rc-replay-inputs/nand/user/save/0000000000000000/D5D8291B55A016597329A04D037CD073/01006A800016E000/save_data/replay/replay2026102202654.bin",
+     "sha256": "d6b98c9e84932eaf6e78e1276cc063d1da337daaadca12bad7d666bd0797a0da",
+     "to": "user/nand/user/save/0000000000000000/D5D8291B55A016597329A04D037CD073/01006A800016E000/save_data/replay/replay2026102202654.bin"
+    },
+    {
+     "path": "/home/intpa/smash-training-lobby/tmp-pkg4/rc-replay-inputs/nand/user/save/0000000000000000/D5D8291B55A016597329A04D037CD073/01006A800016E000/save_data/replay/replay2026102211720.bin",
+     "sha256": "549dc26b2ef895666b08c5c7c6d17510787294f938ee3f564aca7fcacf5645ed",
+     "to": "user/nand/user/save/0000000000000000/D5D8291B55A016597329A04D037CD073/01006A800016E000/save_data/replay/replay2026102211720.bin"
+    },
+    {
+     "path": "/home/intpa/smash-training-lobby/tmp-pkg4/rc-replay-inputs/nand/user/save/0000000000000000/D5D8291B55A016597329A04D037CD073/01006A800016E000/save_data/replay/replay202610221348.bin",
+     "sha256": "9daa07714a30005cd006713e0132638afd0a707aad6f67f58ac4cca681ee4d14",
+     "to": "user/nand/user/save/0000000000000000/D5D8291B55A016597329A04D037CD073/01006A800016E000/save_data/replay/replay202610221348.bin"
+    },
+    {
+     "path": "/home/intpa/smash-training-lobby/tmp-pkg4/rc-replay-inputs/nand/user/save/0000000000000000/D5D8291B55A016597329A04D037CD073/01006A800016E000/save_data/replay/replay20261024134613.bin",
+     "sha256": "9e54fc7a5d031bd4ce9b3ebd347f2352a04034ef6e948fb41b0d6c56b3c8f493",
+     "to": "user/nand/user/save/0000000000000000/D5D8291B55A016597329A04D037CD073/01006A800016E000/save_data/replay/replay20261024134613.bin"
+    },
+    {
+     "path": "/home/intpa/smash-training-lobby/tmp-pkg4/rc-replay-inputs/nand/user/save/0000000000000000/D5D8291B55A016597329A04D037CD073/01006A800016E000/save_data/replay/replay20261024135922.bin",
+     "sha256": "178bb5a97fd5dca71058b77817b4e2162febf0dabe8a16beab676f239fdae2b2",
+     "to": "user/nand/user/save/0000000000000000/D5D8291B55A016597329A04D037CD073/01006A800016E000/save_data/replay/replay20261024135922.bin"
+    },
+    {
+     "path": "/home/intpa/smash-training-lobby/tmp-pkg4/rc-replay-inputs/nand/user/save/0000000000000000/D5D8291B55A016597329A04D037CD073/01006A800016E000/save_data/spirits/spirits_param.bin",
+     "sha256": "30e14955ebf1352266dc2ff8067e68104607e750abb9d3b36582b8af909fcb58",
+     "to": "user/nand/user/save/0000000000000000/D5D8291B55A016597329A04D037CD073/01006A800016E000/save_data/spirits/spirits_param.bin"
+    },
+    {
+     "path": "/home/intpa/smash-training-lobby/artifacts/trainingrooms-lead-astra4/rc8/runtime/yoga-pair/pair-p4-02/p4r-01-user-save/0000000000000000/D5D8291B55A016597329A04D037CD073/01006A800016E000/save_data/system_data.bin",
+     "sha256": "c0e78477d76d9423abb2aab3cab359b3909e92334cd015e921b9fed9ef79423e",
+     "to": "user/nand/user/save/0000000000000000/D5D8291B55A016597329A04D037CD073/01006A800016E000/save_data/system_data.bin"
+    },
+    {
+     "path": "/home/intpa/smash-training-lobby/tmp-pkg4/rc-replay-inputs/nand/system/save/8000000000000010/su/avators/profiles.dat",
+     "sha256": "ce6e8ae62814ec12e11f9ffbe0a307c98e5f7835057227f0e985180bcbe40986",
+     "to": "user/nand/system/save/8000000000000010/su/avators/profiles.dat"
+    },
+    {
+     "path": "/home/intpa/smash-training-lobby/tmp-pkg4/rc-replay-inputs/nand/system/save/8000000000000010/su/avators/00c8ea0d-06ed-3c84-f215-52394c2672f3.jpg",
+     "sha256": "fb8398632ecd7c0ee27c323cb419c98e7fdbcf2e96cd3e37ab640e6a85bde829",
+     "to": "user/nand/system/save/8000000000000010/su/avators/00c8ea0d-06ed-3c84-f215-52394c2672f3.jpg"
+    },
+    {
+     "path": "/home/intpa/smash-training-lobby/tmp-pkg4/rc-replay-inputs/nand/system/save/8000000000000030/MiiDatabase.dat",
+     "sha256": "0ea8ec2006cdb1069da2ae440c018cda36c43a4341b7be5834497864c02736bd",
+     "to": "user/nand/system/save/8000000000000030/MiiDatabase.dat"
+    },
+    {
+     "path": "/home/intpa/eden-runs/inputs-imp/fa/qt-diag.ini",
+     "sha256": "102f3a87f8efcbf94554027a7553be355fb809d04c287be3e30f276b5857c2dc",
+     "to": "user/config/qt-config.ini"
+    },
+    {
+     "path": "/home/intpa/eden-runs/inputs-imp/fa/files/TrainingRooms/settings.json",
+     "sha256": "3b4623d99308fc9721f75385935e8c1c752c28f170684ea6e0e1eeb66dc17011",
+     "to": "user/sdmc/ultimate/TrainingRooms/settings.json"
+    },
+    {
+     "path": "/home/intpa/eden-runs/inputs-imp/fa/files/TrainingRooms/cycle_preload.ini",
+     "sha256": "e90a0dfedf738ee7131cd651969f99ebf8f454904ad7a64ff0c3a993b3e46216",
+     "to": "user/sdmc/ultimate/TrainingRooms/cycle_preload.ini"
+    },
+    {
+     "path": "/home/intpa/eden-runs/inputs-imp/fa/files/TrainingRooms/save_states.json",
+     "sha256": "2a28c5db9618ae05208c1b6b981fd14bdc585ef21fb65517e51b1207db0232fc",
+     "to": "user/sdmc/ultimate/TrainingRooms/save_states.json"
+    },
+    {
+     "path": "/home/intpa/eden-runs/inputs-imp/fa/files/TrainingRooms/recording-index.json",
+     "sha256": "444cbbf312d2fc571478820f889dd2be476382abfed0b1c85661fd1951df3d19",
+     "to": "user/sdmc/ultimate/TrainingRooms/recording-index.json"
+    },
+    {
+     "path": "/home/intpa/eden-runs/inputs-imp/fa/files/TrainingRooms/migration.json",
+     "sha256": "751351c9602f44f62b2d87e5758b72094b7437655f39be78da01434a1f8bb63b",
+     "to": "user/sdmc/ultimate/TrainingRooms/migration.json"
+    },
+    {
+     "path": "/home/intpa/eden-runs/inputs-imp/fa/files/TrainingRooms/button_config.ini",
+     "sha256": "8f00c3ffdad7ecb2610570277ab20fbfacdc8c78c05b1296e2bc0f74c8af830f",
+     "to": "user/sdmc/ultimate/TrainingRooms/button_config.ini"
+    },
+    {
+     "path": "/home/intpa/eden-runs/inputs-imp/fa/files/TrainingRooms/mii-presets.json",
+     "sha256": "f4a8d92ab324f329e465832ac7da4c28ebd21489c38e97a816a2f326937632a4",
+     "to": "user/sdmc/ultimate/TrainingRooms/mii-presets.json"
+    },
+    {
+     "path": "/home/intpa/eden-runs/inputs-imp/fa/files/TrainingRooms/replay_capture.ini",
+     "sha256": "eef7f69a49d2bf4654db519dbc741f2ffd7232e0ab2a4c59b1fc0a8ad683d1eb",
+     "to": "user/sdmc/ultimate/TrainingRooms/replay_capture.ini"
+    },
+    {
+     "path": "/home/intpa/eden-runs/inputs-imp/fa/files/TrainingRooms/saves/slot-1-2026-11-10.json",
+     "sha256": "a58f0b5ba2cc06af6639897d118642f443eb691e2f8b14c11d7b1613a66556d8",
+     "to": "user/sdmc/ultimate/TrainingRooms/saves/slot-1-2026-11-10.json"
+    },
+    {
+     "path": "/home/intpa/eden-runs/inputs-imp/fa/files/ssbu_online_deluxe_rewrite/config.ini",
+     "sha256": "0434c1f8d0242732fc8f2a67fa5d5289a8b6bcb42cdcbb5b868e0b42cd4adb8e",
+     "to": "user/sdmc/ultimate/ssbu_online_deluxe_rewrite/config.ini"
+    },
+    {
+     "path": "/home/intpa/eden-runs/inputs-imp/fa/files/ssbu_fx_control/config.ini",
+     "sha256": "62666d4a6567feff3d4dd79ca37f795ede9be5645f84413e2276fc4e9dabdb05",
+     "to": "user/sdmc/ultimate/ssbu_fx_control/config.ini"
+    },
+    {
+     "path": "/home/intpa/eden-runs/inputs-imp/fa/files/ssbu-cpu-pilot/config.ini",
+     "sha256": "a003b56d566bc52a48c3599c2923753c8f57250f6545360e043a14e958b723b0",
+     "to": "user/sdmc/ultimate/ssbu-cpu-pilot/config.ini"
+    },
+    {
+     "path": "/home/intpa/eden-runs/inputs-imp/fa/files/quickplay-cancel-fix/config.ini",
+     "sha256": "8d982f4b7f7f669af93699ec91cf9f38295f1328d08e4fa639da3536529bd0e1",
+     "to": "user/sdmc/ultimate/quickplay-cancel-fix/config.ini"
+    },
+    {
+     "path": "/home/intpa/eden-runs/inputs-imp/fa/files/mods/smash-gamepad-overlay/config.json",
+     "sha256": "c6bd8231e0206e1b9b0228413c9729bff011c13af9bcdfa309836c5b89f4439f",
+     "to": "user/sdmc/ultimate/mods/smash-gamepad-overlay/config.json"
+    }
+   ],
+   "sources": {
+    "events_log": "user/sdmc/ultimate/TrainingRooms/events.log",
+    "tile_log": "user/sdmc/ultimate/ssbu-tile-cursor/events.log",
+    "gates": {
+     "beside": "diag_log",
+     "name": "practice-gates.log"
+    }
+   }
+  }
+ ],
+ "eden_settings": {
+  "core.resolution_setup": 3
+ },
+ "playbook": {
+  "root": "/home/intpa/ssbu-mod-playbook",
+  "commit": "13b2e83"
+ },
+ "rows": {
+  "path": "/home/intpa/eden-runs/hang-card-r5/rows/rows.json",
+  "sha256": "a6a4e200fa4e2d46ceb4c3f193ebaeb056d263171d8a039fdc4c4f24742d1814"
+ },
+ "ledger_ssh": "memento-claw-yoga-ubuntu"
+}

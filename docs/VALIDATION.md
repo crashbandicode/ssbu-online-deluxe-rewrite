@@ -78,6 +78,40 @@ them after same-boot fixes to the rows and hooks. From `events.log` and
 slots; `rows-pair.json` is ready), Elite Smash, and any console run. Not
 tagged or released.
 
+## 0.10.5 — the reuse path with the standalone imgui-smash 1.2.0: gates and Eden — 2026-11-13
+
+Build `0.10.5-6c05693130a4-1794576222` from `6c05693` (`SOURCE_DATE_EPOCH` 1794576222): NRO SHA-256
+`2085fd047805eab1685e88256dd71011565fdc790934989fdda38ffdacd2842c`, the same archive pin (`c1e4471b…`). On the
+External path it declares itself a paged-index reader to the standalone and writes the standalone's font and
+renderer counters with the built-in host's formatter ([ImGui dependencies](IMGUI_DEPENDENCY.md)).
+
+**Gates:** `cargo clippy --all-targets -- -D warnings`, `cargo build --no-default-features`, `cargo test` (339 unit
+and 23 integration tests), `cargo skyline clippy -- -- -D warnings` with and without the diagnostic features,
+`tools/Build.ps1 -Package`, the diagnostic build, the `tools/` tests (35, one skipped, at `ddcf04f`).
+
+**Runs `imp-oppa9`/`imp-oppb9` and `imp-oppa10`/`imp-oppb10`: one LAN Quickplay match each, instance a on the XPS
+with the standalone imgui-smash 1.2.0 (`fbd07016` in pair 9, `9c411083` in pair 10), instance b on the Yoga without
+it.** Same Deluxe build, detector and tile cursor on both, both profiles named `Æsir テスト`, Eden 2f315fc4; rows
+and configs in `eden/imgui-parity/`. 10 of 10 rows passed on each instance in both pairs.
+- **Which ImGui.** a: `install.log` `overlay_host_external_paged_reader recorded`, `overlay_host_external_ready`,
+  `imgui_stats=external`, `imgui_host_clients=1 declared=1 declarations=1 plugins=4 index=paged`. b:
+  `overlay_host_ready`, `imgui_stats=embedded`.
+- **Fonts and renderer.** Every `imgui_font_*` line equal on a and b at the end of each run: atlas 512x256 bpp=1,
+  texture 262,144 bytes, `imgui_font_index=paged pages=2`, 17,840 bytes, 321 static glyphs, 6 shared fonts, one
+  rebuild; `imgui_draw_max_command=868`, `imgui_draw_max_control=120`, no failed, pending or overflowed draw.
+- **The labels.** Both Opp lines read `Æsir テスト`; a `FindGlyph` trace saw each of Æ, テ, ス and ト drawn with
+  its own glyph and no fallback (pair 9: 233 draws each on a, 313 on b; pair 10: 144 and 281).
+- **L3 + R3.** The pad poll ran in `libimgui_smash.nro` on a and in this NRO on b, 5 entries each, and
+  `ImguiNvnBackend::updateGamepad` never ran on either: gamepad navigation stayed off on both.
+- **The match.** Pair 9: `sync_end frame=7521 desync_seen=0` on both (b hosted). Pair 10: `frame=7542` and a second
+  session `frame=1863`, `desync_seen=0` on both (a hosted). Rematch No on both. No unmapped access and no `panic`,
+  `abort`, `crash` or `Unmapped` line in any console log.
+- **Memory** (`tools/heartbeat_memory.py --scenes`, MiB, median of the match's heartbeats): pair 9 a 2,062.7,
+  b 2,071.7; pair 10 a 2,051.6, b 2,041.2. The session host is the higher one in both pairs; averaged over the two
+  role assignments, the instance with the standalone is 0.7 MiB above the one without, the size of the
+  standalone's image (950,272 bytes resident). In both pairs the scene read `offline/singles` for most of the
+  online match on the built-in host too; that classification is not affected by the standalone.
+
 ## 0.10.5 — ImGui re-pin to the standalone 1.1.0's archive: gates and Eden — 2026-11-13
 
 Build `0.10.5-9c994bf68aae-1794571432` from `9c994bf` (`SOURCE_DATE_EPOCH`

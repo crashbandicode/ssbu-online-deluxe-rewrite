@@ -1,0 +1,597 @@
+"""Deluxe Unicode opponent label: Eden step hooks (tools/eden-runner StepContext).
+
+Both instances run Online Deluxe and both profiles are named "Æsir テスト", so each label shows the other's name:
+a runs the build before the fix (effbaa0), b the fix (0.10.3, 6732f29). The label is the Opp line of Deluxe's match
+strip. A guest trace on ImFontBaked::FindGlyph (the call ImFont::RenderText makes for every character it draws) shows,
+per character, whether the label drew that character's own glyph or the font's fallback glyph.
+
+Navigation reuses quickplay-cancel-fix's steps.py unchanged (copied from /home/intpa/eden-runs/qcf-srm02/rows, sha256
+in rows.json "about"), called through `qcf` with a context whose image compare also tries the half-size compare the
+runner uses for "scale": "fit" gates: QCF's references were taken at 0.5x and these boots render at 1x.
+"""
+import importlib.util
+import json
+import re
+import time
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+MODULE = 'libssbu_online_deluxe_rewrite.nro'
+FIND_GLYPH = '_ZN11ImFontBaked9FindGlyphEt'
+GLYPHS_DATA, FALLBACK_INDEX, GLYPH_SIZE = 56, 64, 44   # ImFontBaked::Glyphs.Data, FallbackGlyphIndex; sizeof(ImFontGlyph)
+LABEL = 'Æsir テスト'
+LABEL_CODEPOINTS = [ord(c) for c in LABEL if ord(c) >= 0x80]   # Æ テ ス ト
+
+
+# --- QCF's navigation through a half-size-aware image compare ---------------------------------------------------------
+
+def _load_qcf():
+    spec = importlib.util.spec_from_file_location('qcf_steps', HERE / 'steps.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _half_aware_diff(runner_cls):
+    def diff(path_a, path_b, roi, b_is_roi=False):
+        from PIL import Image
+        full = runner_cls.compare_region(path_a, path_b, roi, b_is_roi)[0]
+        with Image.open(path_a) as a, Image.open(path_b) as b:
+            region = a.convert('RGB').crop(tuple(roi))
+            other = b.convert('RGB') if b_is_roi else b.convert('RGB').crop(tuple(roi))
+            if region.size != other.size:
+                return full
+            small = (max(1, region.size[0] // 2), max(1, region.size[1] // 2))
+            half = runner_cls._mean_diff(region.resize(small, Image.Resampling.BILINEAR),
+                                         other.resize(small, Image.Resampling.BILINEAR))
+        return min(full, half)
+    return diff
+
+
+class _RunnerView:
+    def __init__(self, runner):
+        self._runner = runner
+        self.roi_diff = _half_aware_diff(type(runner))
+
+    def __getattr__(self, name):
+        return getattr(self._runner, name)
+
+
+class _CtxView:
+    def __init__(self, ctx):
+        self._ctx = ctx
+        self.runner = _RunnerView(ctx.runner)
+
+    def __getattr__(self, name):
+        return getattr(self._ctx, name)
+
+
+def qcf(ctx, fn, **args):
+    """Call quickplay-cancel-fix's steps.py function `fn` on this instance."""
+    return getattr(_load_qcf(), fn)(_CtxView(ctx), **args)
+
+
+# --- helpers ------------------------------------------------------------------------------------------------------
+
+def _save(ctx, name, data):
+    path = Path(ctx.row_dir) / f'{name}.json'
+    path.write_text(json.dumps(data, indent=1, ensure_ascii=False) + '\n')
+    ctx.log({name: data if len(json.dumps(data)) < 2000 else str(path)})
+    return data
+
+
+def _size(path):
+    try:
+        return Path(path).stat().st_size
+    except OSError:
+        return 0
+
+
+def _records(path, start):
+    out = []
+    try:
+        with open(path, 'rb') as f:
+            f.seek(start)
+            text = f.read().decode(errors='replace')
+    except OSError:
+        return out
+    for line in text.splitlines():
+        try:
+            out.append(json.loads(line))
+        except ValueError:
+            continue
+    return out
+
+
+def _int(value):
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    try:
+        return int(str(value), 0)
+    except ValueError:
+        return None
+
+
+def _capture(record, index):
+    caps = record.get('captures') or []
+    if index >= len(caps):
+        return None
+    cap = caps[index]
+    return _int(cap.get('value') if cap.get('value') is not None else cap.get('hex'))
+
+
+# --- rows -----------------------------------------------------------------------------------------------------------
+
+def open_window(ctx, tag='open'):
+    """L+R+Down in one frame (segment open-deluxe) opens Deluxe's Player Info window, hidden at boot, on Settings.
+    Passes when the frame changed in the left or right window column; keeps both frames."""
+    before = ctx.shot(f'{tag}-before')
+    ctx.play('open-deluxe')
+    time.sleep(2.0)
+    after = ctx.shot(f'{tag}-after')
+    diff = ctx.runner.roi_diff
+    regions = {'left': [0, 0, 420, 400], 'right': [860, 0, 1280, 400]}
+    diffs = {name: round(diff(str(after), str(before), roi), 2) for name, roi in regions.items()}
+    out = _save(ctx, f'{tag}-{ctx.on}', {'before': str(before), 'after': str(after), 'diffs': diffs})
+    if max(diffs.values()) < 3.0:
+        raise RuntimeError(f'{ctx.on}: no window appeared after L+R+Down: {diffs}')
+    return out
+
+
+def refocus(ctx, back=False, tag='refocus'):
+    """dun-x1: each L+R+Down chord's D-pad Down also moved the Quickplay menu's focus from Solo to Preferred Rules
+    (and b's to-css then opened the rules). B leaves the rules editor; Up returns the focus to Solo."""
+    if back:
+        ctx.press('b', 120)
+        time.sleep(2.5)
+    ctx.press('up', 120)
+    time.sleep(1.0)
+    return {'back': back, 'shot': str(ctx.shot(tag))}
+
+
+def _mean(path, box):
+    from PIL import Image, ImageStat
+    with Image.open(path) as im:
+        return [round(x) for x in ImageStat.Stat(im.convert('RGB').crop(tuple(box))).mean]
+
+
+def to_solo(ctx, tries=6):
+    """dun-x1 m1: a's single Up tap did not move the focus, and to-css opened the Preferred Rules editor. Leaves the
+    editor with B while the Quickplay header is not shown, then D-pad Up (segment dpad-up) until Solo has the focus.
+    Focus by colour, measured on this run's frames (evidence/dun-x1 mid1-mid3): the Solo tile's top edge
+    [228,86,578,94] is green (18,153,30) when focused and grey (166,173,177) otherwise; the Preferred Rules box's top
+    edge [330,440,890,448] is light grey (242) unless it is focused (blue mean under 100)."""
+    diff = _half_aware_diff(type(ctx.runner))
+    looks = []
+    for i in range(tries):
+        ctx.check_stop()
+        shot = ctx.shot(f'solo-look-{i}')
+        header = round(diff(str(shot), str(HERE / 'refs' / 'quickplay-menu.png'), [40, 5, 300, 45]), 2)
+        solo, rules = _mean(shot, [228, 86, 578, 94]), _mean(shot, [330, 440, 890, 448])
+        looks.append({'shot': str(shot), 'header': header, 'solo': solo, 'rules': rules})
+        if header > 8:
+            ctx.press('b', 150)
+            time.sleep(2.5)
+            continue
+        if solo[1] > 120 and solo[0] < 80:
+            return _save(ctx, f'to-solo-{ctx.on}', {'looks': looks})
+        ctx.play('dpad-up')
+        time.sleep(1.5)
+    _save(ctx, f'to-solo-{ctx.on}', {'looks': looks})
+    raise RuntimeError(f'{ctx.on}: Solo not focused after {tries} looks: {looks[-1]}')
+
+
+def hide_window(ctx, chords=3):
+    """Settings -> Performance -> Window Options -> hidden (three L+R+Down chords, as d02 did), so the window no
+    longer covers the waiting-menu checks. Keeps the frame after."""
+    for _ in range(chords):
+        ctx.check_stop()
+        ctx.play('open-deluxe')
+        time.sleep(1.0)
+    return {'chords': chords, 'shot': str(ctx.shot('hidden'))}
+
+
+def arm_label_trace(ctx, max_hits=4000):
+    """Arms FindGlyph for non-ASCII codepoints (x1 >= 0x80) with its return. Entry captures Glyphs.Data and
+    FallbackGlyphIndex, so each return tells whether the fallback glyph came back."""
+    params = {'target': f'{MODULE}!{FIND_GLYPH}', 'registers': ['x0', 'x1'],
+              'captures': [{'expression': f'x0+{GLYPHS_DATA}', 'type': 'u64'},
+                           {'expression': f'x0+{FALLBACK_INDEX}', 'type': 'i32'}],
+              'condition': 'x1 >= 0x80', 'on_return': True, 'rate_limit': 2000, 'max_hits': max_hits}
+    trace = ctx.instance.get('trace_jsonl')
+    start = _size(trace)
+    point = ctx.call('trace.arm', params)
+    return _save(ctx, f'arm-{ctx.on}', {'point': point, 'trace': trace, 'start': start, 'params': params})
+
+
+def _point_id(ctx):
+    found = sorted(Path(ctx.row_dir).glob(f'arm-{ctx.on}.json'))
+    if not found:
+        raise RuntimeError(f'{ctx.on}: arm_label_trace did not run in this row')
+    data = json.loads(found[-1].read_text())
+    point = data.get('point')
+    pid = point.get('id') if isinstance(point, dict) else point
+    return str(pid), data['trace'], data['start']
+
+
+def _classify(records, pid):
+    """(codepoint -> {'own': n, 'fallback': n}, samples): entries paired with their returns per thread."""
+    open_entry, counts, samples = {}, {}, []
+    for r in records:
+        if str(r.get('point_id')) != pid:
+            continue
+        thread = r.get('thread_id')
+        if r.get('event') == 'entry':
+            regs = r.get('registers') or {}
+            code = (_int(regs.get('x1')) or 0) & 0xFFFF
+            open_entry[thread] = (code, _capture(r, 0), _capture(r, 1), r.get('frame'))
+        elif r.get('event') == 'return' and thread in open_entry:
+            code, data, index, frame = open_entry.pop(thread)
+            ret = _int((r.get('registers') or {}).get('x0'))
+            if code < 0x80 or data is None or index is None or ret is None:
+                continue
+            fallback = ret == data + index * GLYPH_SIZE
+            tally = counts.setdefault(f'U+{code:04X}', {'own': 0, 'fallback': 0})
+            tally['fallback' if fallback else 'own'] += 1
+            if len(samples) < 24:
+                samples.append({'codepoint': f'U+{code:04X}', 'frame': frame, 'glyphs': hex(data),
+                                'fallback_index': index, 'returned': hex(ret), 'fallback': fallback})
+    return counts, samples
+
+
+def label_glyphs(ctx, expect, cap_s=90, settle_s=3.0, active=False):
+    """Waits until the label's non-ASCII characters (Æ テ ス ト) have been drawn, then checks the glyph each one
+    drew: expect "fallback" (the build before the fix) or "own" (the fix; the last draws of each character, after
+    any first-load growth of the glyph table). Disarms the point and keeps the classification and samples. With
+    `active`, both fighters keep moving meanwhile (Quickplay drops a player idle for about 30 s)."""
+    pid, trace, start = _point_id(ctx)
+    wanted = [f'U+{c:04X}' for c in LABEL_CODEPOINTS]
+    began = time.monotonic()
+    counts, samples = {}, []
+    wait = (lambda s: _sleep_active(ctx, s)) if active else time.sleep
+    while time.monotonic() - began < cap_s:
+        ctx.check_stop()
+        counts, samples = _classify(_records(trace, start), pid)
+        if all(counts.get(w, {}).get('own', 0) + counts.get(w, {}).get('fallback', 0) >= 3 for w in wanted):
+            wait(settle_s)
+            counts, samples = _classify(_records(trace, start), pid)
+            break
+        wait(1.0)
+    try:
+        ctx.call('trace.disarm', {'id': pid})
+    except RuntimeError as error:
+        ctx.log({'disarm_error': repr(error)})
+    shot = ctx.shot(f'label-{expect}')
+    out = _save(ctx, f'label-{ctx.on}', {'expect': expect, 'label': LABEL, 'counts': counts, 'samples': samples,
+                                         'seconds': round(time.monotonic() - began, 1), 'shot': str(shot)})
+    missing = [w for w in wanted if w not in counts]
+    if missing:
+        raise RuntimeError(f'{ctx.on}: label characters never drawn: {missing}; counts {counts}')
+    if expect == 'fallback':
+        bad = {w: counts[w] for w in wanted if counts[w]['own']}
+    else:
+        bad = {w: counts[w] for w in wanted if counts[w]['own'] == 0}
+    if bad:
+        raise RuntimeError(f'{ctx.on}: expected {expect}, got {bad}')
+    return {'expect': expect, 'counts': {w: counts[w] for w in wanted}}
+
+
+def hold(ctx, seconds=7.0):
+    """Keeps the label on screen for a clip (the fighters stand; under Quickplay's 30 s idle drop)."""
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        ctx.check_stop()
+        time.sleep(0.25)
+    return {'held_s': seconds}
+
+
+def font_stats(ctx, expect_shared=None):
+    """Deluxe's renderer-status.txt imgui_font_* lines (written every 5 s). The fix reports its merged shared fonts,
+    glyphs and atlas bytes; the build before it has no such lines."""
+    path = ctx.instance.get('deluxe_status')
+    text = Path(path).read_text(errors='replace') if path and Path(path).exists() else ''
+    lines = dict(m.groups() for m in re.finditer(r'^(imgui_[a-z_]+)=(.*)$', text, re.M))
+    fonts = {k: v for k, v in lines.items() if k.startswith('imgui_font')}
+    out = _save(ctx, f'font-stats-{ctx.on}', {'file': path, 'fonts': fonts,
+                                              'imgui_stats': lines.get('imgui_stats')})
+    if expect_shared is not None:
+        shared = int(fonts.get('imgui_font_shared', '0') or 0)
+        if expect_shared and shared < 1:
+            raise RuntimeError(f'{ctx.on}: no shared fonts merged: {fonts}')
+        if not expect_shared and fonts:
+            raise RuntimeError(f'{ctx.on}: the build before the fix reported font lines: {fonts}')
+    return out
+
+
+# --- 0.10.3 static/dynamic glyph sets (dun-x2, dun-x3) ------------------------------------------------------------
+
+_QCF = []
+_TICK = [0]
+_LAST_INPUT = [0.0]
+
+
+def _qcf_module():
+    if not _QCF:
+        _QCF.append(_load_qcf())
+    return _QCF[0]
+
+
+def _keep_active(ctx, every_s=0.8):
+    """Varied input on both instances (QCF's _vary_still) at most every `every_s` seconds."""
+    now = time.monotonic()
+    if now - _LAST_INPUT[0] < every_s:
+        return
+    _LAST_INPUT[0] = now
+    for key in ctx.runner.instances:
+        _qcf_module()._vary_still(ctx.runner, key, _TICK[0])
+    _TICK[0] += 1
+
+
+def _sleep_active(ctx, seconds):
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        ctx.check_stop()
+        _keep_active(ctx)
+        _sample_index()
+        time.sleep(0.1)
+
+
+# 0.10.4: the index-bytes trace. While follow_feed runs, every rewrite of the instance's renderer-status.txt (every
+# 5 s) adds a sample: seconds since the feed began, the index mode and pages, index bytes, rebuilds, dynamic glyphs.
+_INDEX_TRACE = {}
+
+
+def _sample_index():
+    trace = _INDEX_TRACE
+    if not trace:
+        return
+    try:
+        mtime = Path(trace['path']).stat().st_mtime
+    except OSError:
+        return
+    if mtime == trace.get('mtime'):
+        return
+    trace['mtime'] = mtime
+    lines = _font_lines(trace['path'])
+    if 'imgui_font_index_bytes' not in lines:
+        return
+    trace['samples'].append({'t': round(time.monotonic() - trace['began'], 1),
+                             'index': lines.get('imgui_font_index', ''),
+                             'index_bytes': int(lines.get('imgui_font_index_bytes', '0') or 0),
+                             'rebuilds': int(lines.get('imgui_font_rebuilds', '0') or 0),
+                             'dynamic_glyphs': int(lines.get('imgui_font_dynamic_glyphs', '0') or 0),
+                             'dynamic_set': lines.get('imgui_font_dynamic_set', '')})
+
+
+def hold_active(ctx, seconds=7.0):
+    """Keeps the label on screen for a clip while both fighters keep moving (no idle drop)."""
+    _sleep_active(ctx, seconds)
+    return {'held_s': seconds}
+
+
+def _dynamic_of(text):
+    """Distinct codepoints of `text` outside the static set (ASCII, Latin-1 Supplement, Latin Extended-A)."""
+    return sorted({ord(c) for c in text if not (ord(c) <= 0x7E or 0xA0 <= ord(c) <= 0x17F)})
+
+
+def _font_lines(path):
+    text = Path(path).read_text(errors='replace') if path and Path(path).exists() else ''
+    return dict(m.groups() for m in re.finditer(r'^(imgui_[a-z_]+)=(.*)$', text, re.M))
+
+
+def _dynamic_set(lines):
+    value = lines.get('imgui_font_dynamic_set', '')
+    return sorted(int(m.group(1), 16) for m in re.finditer(r'U\+([0-9A-F]+)', value))
+
+
+def _fresh_status(ctx, after, cap_s=12.0, active=True):
+    """renderer-status.txt written after `after` (time.time()); Deluxe rewrites it every 5 s."""
+    path = ctx.instance.get('deluxe_status')
+    began = time.monotonic()
+    while time.monotonic() - began < cap_s:
+        ctx.check_stop()
+        try:
+            if Path(path).stat().st_mtime > after:
+                time.sleep(0.3)
+                return path, _font_lines(path)
+        except OSError:
+            pass
+        if active:
+            _sleep_active(ctx, 0.5)
+        else:
+            time.sleep(0.5)
+    raise RuntimeError(f'{ctx.on}: renderer-status.txt not rewritten within {cap_s} s')
+
+
+def _hex(codepoints):
+    return [f'U+{c:04X}' for c in codepoints]
+
+
+def font_sample(ctx, tag, contains=None, absent=None, min_rebuilds=None, active=True, index_mode=None):
+    """A fresh renderer-status.txt: the imgui_font_* lines and the dynamic set. `contains`/`absent` are texts whose
+    non-static characters must / must not be in the dynamic set; `min_rebuilds` the least rebuild count; `index_mode`
+    ("paged"/"dense", 0.10.4) what imgui_font_index must say (0.10.3 has no such line: pass None)."""
+    path, lines = _fresh_status(ctx, time.time(), active=active)
+    fonts = {k: v for k, v in lines.items() if k.startswith('imgui_font')}
+    dynamic = _dynamic_set(lines)
+    out = _save(ctx, f'font-{tag}-{ctx.on}', {'file': path, 'fonts': fonts, 'dynamic': _hex(dynamic)})
+    problems = []
+    if not fonts or 'imgui_font_static_glyphs' not in fonts:
+        problems.append('no static/dynamic font lines')
+    if contains is not None and not set(_dynamic_of(contains)) <= set(dynamic):
+        problems.append(f'{contains!r} not all in the dynamic set')
+    if absent is not None and set(_dynamic_of(absent)) & set(dynamic):
+        problems.append(f'{absent!r} still in the dynamic set')
+    if min_rebuilds is not None and int(fonts.get('imgui_font_rebuilds', '0') or 0) < min_rebuilds:
+        problems.append(f'fewer than {min_rebuilds} rebuilds')
+    if int(fonts.get('imgui_font_misplaced', '0') or 0) != 0:
+        problems.append('a rebuild was requested inside a frame')
+    if index_mode is not None and not fonts.get('imgui_font_index', '').startswith(index_mode):
+        problems.append(f'index is {fonts.get("imgui_font_index")!r}, not {index_mode}')
+    if problems:
+        raise RuntimeError(f'{ctx.on}: {problems}; {fonts}')
+    return out
+
+
+def _feed_events(path, start):
+    """(index, dynamic count) of each code 121 row in Deluxe's events.log after byte `start`."""
+    out = []
+    try:
+        with open(path, 'rb') as f:
+            f.seek(start)
+            text = f.read().decode(errors='replace')
+    except OSError:
+        return out
+    for m in re.finditer(r'^\d+ \d+ 121 0x([0-9a-f]+) 0x([0-9a-f]+)$', text, re.M):
+        out.append((int(m.group(1), 16), int(m.group(2), 16)))
+    return out
+
+
+_FEED = {}
+
+
+def follow_feed(ctx, own, names, settle_s=3.0, trace_s=2.0, cap_s=180, until_phase=None, index_mode=None):
+    """The diag build's label feed on this instance. For each name it shows (code 121 in events.log), after
+    `settle_s` (the old name's grace of 60 frames and the rebuild): first a fresh renderer-status.txt (the dynamic
+    set; marked late if the feed moved on before it was read), then a frame and a FindGlyph trace (the glyph each
+    non-ASCII character drew). Checks per name: every non-ASCII character drew its own glyph; the dynamic set is the
+    name's non-static characters plus what else the window draws (measured on the first name); the previous name's
+    characters left it with a rebuild counted. dun-x3 read the status last and late; this order is dun-x4's.
+
+    0.10.4: `index_mode` ("paged"/"dense") is required of every status read (imgui_font_index), and the index-bytes
+    trace (_INDEX_TRACE) samples every status rewrite. With `until_phase` the call returns once that phase is checked
+    and the next call resumes (so a gif step can wrap one name change); the call without it checks the whole feed."""
+    events = ctx.instance.get('deluxe_events')
+    shown = [own] + list(names)
+    state = _FEED.setdefault(ctx.on, {'phases': [], 'seen': [], 'seen_at': {}, 'extra': None, 'problems': [],
+                                      'began': time.monotonic()})
+    if not _INDEX_TRACE:
+        _INDEX_TRACE.update({'path': ctx.instance.get('deluxe_status'), 'began': state['began'], 'samples': []})
+    phases, seen, problems = state['phases'], state['seen'], state['problems']
+    extra = state['extra']
+    began = time.monotonic()
+    while time.monotonic() - began < cap_s:
+        if until_phase is not None and len(phases) > until_phase:
+            break
+        ctx.check_stop()
+        rows = _feed_events(events, 0)
+        fresh = rows[len(seen):]
+        if not fresh:
+            if seen and seen[-1][0] == 0 and len(seen) > len(names):
+                break
+            _sleep_active(ctx, 0.25)
+            continue
+        for k, (index, dyn_count) in enumerate(fresh):
+            seen.append((index, dyn_count))
+            state['seen_at'][len(seen) - 1] = time.monotonic()
+            name = shown[index] if index < len(shown) else f'?{index}'
+            phase = {'phase': len(seen) - 1, 'index': index, 'name': name, 'event_dynamic_count': dyn_count}
+            if k < len(fresh) - 1:
+                phase['missed'] = True
+                problems.append(f'phase {phase["phase"]} {name!r}: over before it was read')
+                phases.append(phase)
+                continue
+            _sleep_active(ctx, settle_s)
+            _, lines = _fresh_status(ctx, time.time())
+            phase['late'] = len(_feed_events(events, 0)) > len(seen)
+            dynamic = set(_dynamic_set(lines))
+            want = set(_dynamic_of(name))
+            if extra is None and not phase['late']:
+                extra = dynamic - want
+            shot = ctx.shot(f'feed-{len(seen) - 1}-{index}')
+            trace = ctx.instance.get('trace_jsonl')
+            tstart = _size(trace)
+            params = {'target': f'{MODULE}!{FIND_GLYPH}', 'registers': ['x0', 'x1'],
+                      'captures': [{'expression': f'x0+{GLYPHS_DATA}', 'type': 'u64'},
+                                   {'expression': f'x0+{FALLBACK_INDEX}', 'type': 'i32'}],
+                      'condition': 'x1 >= 0x80', 'on_return': True, 'rate_limit': 2000, 'max_hits': 1500}
+            point = ctx.call('trace.arm', params)
+            pid = str(point.get('id') if isinstance(point, dict) else point)
+            _sleep_active(ctx, trace_s)
+            try:
+                ctx.call('trace.disarm', {'id': pid})
+            except RuntimeError as error:
+                ctx.log({'disarm_error': repr(error)})
+            counts, _ = _classify(_records(trace, tstart), pid)
+            wanted_chars = {f'U+{ord(c):04X}' for c in name if ord(c) >= 0x80}
+            phase.update({'shot': str(shot), 'drawn': counts, 'dynamic': _hex(sorted(dynamic)),
+                          'expected_dynamic': _hex(sorted(want | (extra or set()))),
+                          'rebuilds': int(lines.get('imgui_font_rebuilds', '0') or 0),
+                          'texture_bytes': int(lines.get('imgui_font_texture_bytes', '0') or 0),
+                          'index_bytes': int(lines.get('imgui_font_index_bytes', '0') or 0),
+                          'index_mode': lines.get('imgui_font_index', ''),
+                          'static_glyphs': int(lines.get('imgui_font_static_glyphs', '0') or 0)})
+            if index_mode is not None and not phase['index_mode'].startswith(index_mode):
+                problems.append(f'phase {phase["phase"]} {name!r}: index {phase["index_mode"]!r}, not {index_mode}')
+            missing = sorted(wanted_chars - set(counts))
+            fallback = {c: v for c, v in counts.items() if v['fallback']}
+            if missing:
+                problems.append(f'phase {phase["phase"]} {name!r}: not drawn {missing}')
+            if fallback:
+                problems.append(f'phase {phase["phase"]} {name!r}: fallback drawn {fallback}')
+            if phase['late']:
+                problems.append(f'phase {phase["phase"]} {name!r}: status read after the feed moved on')
+            elif extra is None or dynamic != want | extra:
+                problems.append(f'phase {phase["phase"]} {name!r}: dynamic {phase["dynamic"]} != '
+                                f'{phase["expected_dynamic"]}')
+            previous = next((p for p in reversed(phases) if 'rebuilds' in p), None)
+            if previous is not None and not phase['late']:
+                before = set(_dynamic_of(previous['name'])) - want
+                if before & dynamic:
+                    problems.append(f'phase {phase["phase"]} {name!r}: previous name kept '
+                                    f'{_hex(sorted(before & dynamic))}')
+                if before and phase['rebuilds'] <= previous['rebuilds']:
+                    problems.append(f'phase {phase["phase"]} {name!r}: no rebuild after {previous["name"]!r} left')
+            phases.append(phase)
+            state['extra'] = extra
+            if until_phase is not None and len(phases) > until_phase:
+                break
+        if seen and seen[-1][0] == 0 and len(seen) > len(names):
+            break
+    if until_phase is not None:
+        if len(phases) <= until_phase:
+            raise RuntimeError(f'{ctx.on}: phase {until_phase} not reached within {cap_s} s')
+        return {'phases': len(phases), 'until_phase': until_phase}
+    _sample_index()
+    out = _save(ctx, f'feed-{ctx.on}', {'own': own, 'names': names, 'extra': _hex(sorted(extra or [])),
+                                         'phases': phases, 'problems': problems,
+                                         'index_trace': list(_INDEX_TRACE.get('samples', [])),
+                                         'seconds': round(time.monotonic() - state['began'], 1)})
+    _INDEX_TRACE.clear()
+    if len(phases) < len(names) + 2:
+        problems.append(f'only {len(phases)} phases seen')
+    if problems:
+        raise RuntimeError(f'{ctx.on}: {problems}')
+    return {'phases': len(phases), 'extra': _hex(sorted(extra or []))}
+
+
+def feed_wait(ctx, phase, after_s):
+    """Holds, both fighters moving, until `after_s` seconds after follow_feed first saw feed phase `phase` (so a GIF
+    that follows starts a few seconds before the next name)."""
+    at = (_FEED.get(ctx.on) or {}).get('seen_at', {}).get(phase)
+    if at is None:
+        raise RuntimeError(f'{ctx.on}: feed phase {phase} not seen yet')
+    remaining = at + after_s - time.monotonic()
+    if remaining > 0:
+        _sleep_active(ctx, remaining)
+    return {'waited_s': round(max(0.0, remaining), 1)}
+
+
+def feed_switch(ctx, index, hold_s=5.0, cap_s=30.0):
+    """Waits for the feed's next name to be `index` (event 121), then holds `hold_s`: a GIF wrapping this step shows
+    the label changing to it. follow_feed's next call checks that name."""
+    events = ctx.instance.get('deluxe_events')
+    seen = len((_FEED.get(ctx.on) or {}).get('seen', []))
+    began = time.monotonic()
+    while time.monotonic() - began < cap_s:
+        rows = _feed_events(events, 0)
+        if len(rows) > seen:
+            if rows[seen][0] != index:
+                raise RuntimeError(f'{ctx.on}: the feed showed name {rows[seen][0]}, not {index}')
+            waited = round(time.monotonic() - began, 1)
+            _sleep_active(ctx, hold_s)
+            return {'switched_after_s': waited, 'held_s': hold_s}
+        _sleep_active(ctx, 0.1)
+    raise RuntimeError(f'{ctx.on}: feed name {index} not shown within {cap_s} s')

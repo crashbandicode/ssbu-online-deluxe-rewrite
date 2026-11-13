@@ -1,0 +1,126 @@
+{
+  "owner": "OpenCode deluxe-imgui-parity",
+  "label": "imp-opp1",
+  "host": "xps",
+  "hostname": "ubuntu-xps",
+  "ledger": "/tmp/deluxe-surface-1007/OWNER-COORDINATION.md",
+  "ledger_ssh": "memento-claw-yoga-ubuntu",
+  "display_helper": {
+    "path": "/home/intpa/eden-nso-autolan/live-tools/display-rootful.ps1",
+    "sha256": "a930b7a6dcb6c7401afb8bbbb2c918ee9b09219a1cd64b4af862938c094e2cff"
+  },
+  "work_root": "/home/intpa/eden-runs/imp-opp1/work",
+  "state_dir": "/home/intpa/eden-runs/imp-opp1/state",
+  "defer_load": true,
+  "runner": {
+    "path": "/home/intpa/ssbu-mod-playbook/tools/eden-runner/runner.py",
+    "sha256": "e008a79013750ac63023cca306debafa3c6b372e610eafa52fabc1bd3144c05c"
+  },
+  "runtime": 4200,
+  "socket_cap": 90,
+  "load_cap": 180,
+  "stop_cap": 30,
+  "force_cap": 30,
+  "authorization": "imgui-parity split pair (Deluxe lane; primary 13:52Z: one Surface slot, pairs split across hosts): instance a only on the XPS (moved off the Surface: about 5 frames/s there at 14:5xZ); LAN Online Quickplay against the other host's instance; both profiles \"Æsir テスト\"; a = Deluxe 6c05693 through imgui-smash 1.2.0, b = Deluxe 6c05693 built-in; volume 0; tracing on (GDB stub off: trace points). No card; nothing pushed.",
+  "instances": [
+    {
+      "key": "a",
+      "display": ":158",
+      "source": "/home/intpa/trainingrooms-eden-lead-astra4/profiles/g",
+      "app": {
+        "path": "/home/intpa/Applications/Eden-GIF/20261104-1961a200485e-unmapped-stop-0c7f89f711d6/Eden.AppImage",
+        "sha256": "0c7f89f711d6df37df2243928a92e789aaee319c81d0647a0b8e5b2df9975476"
+      },
+      "game": "/home/intpa/eden-assets/games/01006A800016E000/base/Super Smash Bros. Ultimate [01006A800016E000]+[v13.0.3+ 9DLC][US](nsw2u.com).xci",
+      "plugins": [
+        {
+          "path": "/home/intpa/deluxe-unicode-names-work/eden/inputs/libssbu_desync_detector.nro",
+          "sha256": "92fbcf849c196dd7e6e00b737eb6544b8ae09f56c153f0db7257b47fa64a3f1f"
+        },
+        {
+          "path": "/home/intpa/deluxe-unicode-names-work/eden/inputs/libssbu_tile_cursor.nro",
+          "sha256": "b8313ca2e66a52f1bcfc4afc764df1b7cdc5aee7e194bdea671cea02746934bc"
+        },
+        {
+          "path": "/home/intpa/smash-training-lobby/artifacts/imgui-parity/builds/deluxe-6c05693/libssbu_online_deluxe_rewrite.nro",
+          "sha256": "2085fd047805eab1685e88256dd71011565fdc790934989fdda38ffdacd2842c"
+        },
+        {
+          "path": "/home/intpa/smash-training-lobby/artifacts/imgui-parity/builds/imgui-smash-1.2.0-7d0eff5/libimgui_smash.nro",
+          "sha256": "9c411083735a3ccf96b90048c838f7a7e1c1570714101274f3599f2e7a465147"
+        }
+      ],
+      "files": [
+        {
+          "path": "/home/intpa/deluxe-unicode-names-work/eden/inputs/profiles-aesir.dat",
+          "sha256": "2d311dde0c3b0052f6e9acffbdf939f41ebf75ca805825e20beb8fbd39b8424a",
+          "to": "user/nand/system/save/8000000000000010/su/avators/profiles.dat"
+        },
+        {
+          "path": "/home/intpa/deluxe-unicode-names-work/eden/inputs/deluxe-config.ini",
+          "sha256": "5f597d1738efdbb7cb3ef8290e3068651c5b381868a1ec7d9a09ef606a94f63e",
+          "to": "user/sdmc/ultimate/ssbu_online_deluxe_rewrite/config.ini"
+        }
+      ],
+      "sources": {
+        "detector_log": "user/sdmc/ultimate/ssbu-desync-detector/events.log",
+        "tile_log": "user/sdmc/ultimate/ssbu-tile-cursor/events.log",
+        "deluxe_install": "user/sdmc/ultimate/ssbu_online_deluxe_rewrite/install.log",
+        "deluxe_status": "user/sdmc/ultimate/ssbu_online_deluxe_rewrite/renderer-status.txt",
+        "deluxe_events": "user/sdmc/ultimate/ssbu_online_deluxe_rewrite/events.log"
+      },
+      "trace": {
+        "unmapped_access": "log",
+        "symbols": [
+          {
+            "module": "libssbu_online_deluxe_rewrite.nro",
+            "elf": "/home/intpa/smash-training-lobby/artifacts/imgui-parity/builds/deluxe-6c05693/libssbu_online_deluxe_rewrite.elf"
+          },
+          {
+            "module": "libimgui_smash.nro",
+            "elf": "/home/intpa/smash-training-lobby/artifacts/imgui-parity/builds/imgui-smash-1.2.0-7d0eff5/libimgui_smash.elf"
+          }
+        ],
+        "points": [
+          {
+            "target": "main+0x23191bc",
+            "registers": [
+              "x8",
+              "x9"
+            ],
+            "captures": [
+              {
+                "expression": "x20+0x174",
+                "type": "u32"
+              }
+            ]
+          }
+        ]
+      },
+      "eden_settings": {
+        "core.resolution_setup": 3
+      }
+    }
+  ],
+  "rows": {
+    "path": "/home/intpa/eden-runs/imp-split/rows-a/rows.json",
+    "sha256": "e3e5aa91202e82996f22551080597f96d934251830c125ae65230650e907b8f5"
+  },
+  "plugin_swaps": [
+    {
+      "from": "/home/intpa/smash-training-lobby/artifacts/imgui-standalone-1.1.0/eden-inputs/a/libssbu_online_deluxe_rewrite.nro",
+      "from_sha256": "70a2931e2c76869d8163b0bc4997ebe592e86af254220811a6c9467a05337b36",
+      "to": "/home/intpa/smash-training-lobby/artifacts/imgui-parity/builds/deluxe-6c05693/libssbu_online_deluxe_rewrite.nro"
+    },
+    {
+      "from": "/home/intpa/smash-training-lobby/artifacts/imgui-standalone-1.1.0/eden-inputs/b/libssbu_online_deluxe_rewrite.nro",
+      "from_sha256": "aee7f4118e3a515668879e37bc0acd8b6e17f574f77d132f563a19950c396f24",
+      "to": "/home/intpa/smash-training-lobby/artifacts/imgui-parity/builds/deluxe-6c05693/libssbu_online_deluxe_rewrite.nro"
+    },
+    {
+      "from": "/home/intpa/smash-training-lobby/artifacts/imgui-standalone-1.1.0/eden-inputs/a/libimgui_smash.nro",
+      "from_sha256": "4d8ea5669802a35657df2375e05eda5db6c652a78ba627336b37091e8ed973ce",
+      "to": "/home/intpa/smash-training-lobby/artifacts/imgui-parity/builds/imgui-smash-1.2.0-7d0eff5/libimgui_smash.nro"
+    }
+  ]
+}
