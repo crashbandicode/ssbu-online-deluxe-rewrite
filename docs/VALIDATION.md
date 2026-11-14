@@ -1,5 +1,35 @@
 # Validation record
 
+## 0.10.7 (`426184e`, rc.13 branch) — `renderer-status.txt` writes `fixed_truncated=` — 2026-11-14
+
+**The change (`426184e`).** `write_status()` (diagnostics thread, not a hook) writes `fixed_truncated=<n>`, the
+`fixed::truncated()` count, beside `hook_lock_skipped=`. `eden/rc-pair/rc_steps.py` `status()` records it and requires
+the line; `docs/DEBUGGING.md` names it.
+
+**Failing first.** `rc_steps.status()` on `drc13-a2`'s saved `renderer-status-status-end-a.txt` (`dab8772`) fails with
+`no fixed_truncated= line`, and nothing else.
+
+**Gates on `426184e` (nice 19 / ionice 3).**
+- `cargo test`: 361 unit tests, then 8 and 34 integration tests, passed.
+- Clippy with warnings denied passed with and without `diag`, for both `cargo clippy --all-targets` and
+  `cargo skyline clippy`.
+- `cargo build --no-default-features` passed.
+
+**Build.**
+- Release: build `0.10.7-426184eaa77d-1794631186`, NRO `cf16228f0591592fbc47c3e5a360a2b0c6f1c27a5c406b184f09bc6075f2d34c`
+  (1,282,048 bytes).
+- Diag: NRO `0d8a6f7f…` (1,286,144 bytes).
+- `tools/hook_wait_check.py` on both: 58 hook roots and 0 forbidden waits (one allowed by name); 35 per-frame roots and
+  0 allocation or print.
+
+**Eden (`drc13-a4`, XPS, 2026-11-14 ~04:50Z).** One instance with `drc13-a2`'s pins and this release NRO (built-in
+ImGui, the card's plugins plus the tile cursor), volume 0, the GDB stub on before `game.load`. Rows load, main,
+status and z: 4 of 4 passed. The status row read a fresh `renderer-status.txt` with `fixed_truncated=0`,
+`hook_lock_skipped=0`, `imgui_stats=embedded`. Down: `released=True`. (`drc13-a3` before it booted the same build and
+wrote the same keys, but its load gate still pinned `dab8772`'s build string, so its rows did not run.) Evidence:
+`artifacts/deluxe-2/eden/drc13-a{3,4}` in the operator's evidence root.
+- Not run on the console.
+
 ## 0.10.6 release (`v0.10.6` on `10e481f`) — card install and release assets, untested on hardware — 2026-11-13
 
 **Untested on hardware (Eden-tested only; installed on the card, not yet played).** The operator ordered the release at

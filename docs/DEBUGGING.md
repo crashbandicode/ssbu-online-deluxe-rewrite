@@ -354,7 +354,9 @@ update that gave up. Any value above 0 is worth a look.
 fixed-capacity (`src/fixed.rs`: `FixedStr`, `FixedVec`, the `fixed!` macro).
 Text past a buffer is cut at a character boundary and a list past its
 capacity drops items. Neither is an error, and both are counted
-(`fixed::truncated()`). The large buffers do not live on the hook's stack:
+(`fixed::truncated()`, written as `fixed_truncated=` in `renderer-status.txt`;
+above 0 means some text was shown short, so a capacity is worth a look).
+The large buffers do not live on the hook's stack:
 - the window's row lists are in a static scratch that only `draw` takes;
 - the plugin page's rows are kept in the `Overlay`;
 - pane texts are kept in the banner's static state.
