@@ -31,23 +31,28 @@ def _fresh(ctx, cap_s=15.0):
 
 
 def status(ctx, tag='status', plugins=21, host='external'):
-    """A fresh renderer-status.txt: `hook_lock_skipped=<n>` present (release builds write it), and Deluxe drawing
+    """A fresh renderer-status.txt: `hook_lock_skipped=<n>` and `fixed_truncated=<n>` (0.10.7) present (release builds
+    write them; a truncation count is recorded, not failed), and Deluxe drawing
     through the standalone (`host='external'`: `imgui_stats=external`, the host-clients line with index=paged and
     the plugin count) or through its built-in ImGui (`host='embedded'`, as on the card since 0.10.6)."""
     text, fresh = _fresh(ctx)
     Path(ctx.row_dir, f'renderer-status-{tag}-{ctx.on}.txt').write_text(text)
     skipped = re.search(r'^hook_lock_skipped=(\d+)\s*$', text, re.M)
+    truncated = re.search(r'^fixed_truncated=(\d+)\s*$', text, re.M)
     stats = re.search(r'^imgui_stats=(\S+)\s*$', text, re.M)
     clients = re.search(r'^imgui_host_clients=\d+ declared=\d+ declarations=\d+ plugins=(\d+) index=(\w+)\s*$',
                         text, re.M)
     out = _save(ctx, f'{tag}-{ctx.on}', {
         'fresh': fresh, 'hook_lock_skipped': int(skipped.group(1)) if skipped else None,
+        'fixed_truncated': int(truncated.group(1)) if truncated else None,
         'imgui_stats': stats.group(1) if stats else None, 'host_clients': clients.group(0) if clients else None})
     problems = []
     if not fresh:
         problems.append('renderer-status.txt not rewritten within 15 s')
     if skipped is None:
         problems.append('no hook_lock_skipped= line')
+    if truncated is None:
+        problems.append('no fixed_truncated= line')
     if out['imgui_stats'] != host:
         problems.append(f'imgui_stats={out["imgui_stats"]}')
     if host == 'external' and (not clients or clients.group(2) != 'paged' or int(clients.group(1)) != plugins):

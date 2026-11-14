@@ -617,6 +617,7 @@ pub(super) fn write_status() {
             )
         );
         let _ = writeln!(file, "hook_lock_skipped={}", crate::hook_lock::skipped());
+        let _ = writeln!(file, "fixed_truncated={}", crate::fixed::truncated());
         let settings = super::settings();
         let counters = crate::perf_scaler::global().counters();
         let _ = writeln!(
