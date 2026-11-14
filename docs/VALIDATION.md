@@ -1,5 +1,24 @@
 # Validation record
 
+## 0.10.7 release (`v0.10.7` on `426184e`) — card install and release assets, untested on hardware — 2026-11-14
+
+**Untested on hardware (Eden-tested only; installed on the card, not yet played).** The operator's order (relayed
+2026-11-14 12:37Z): "Yes push but say hardware untested".
+
+- **Card install (2026-11-14 08:43Z, the rc.13 card, mounted over USB):** `installed_verified`. The card's NRO read
+  back as `cf16228f…` (1,282,048 bytes), and the card's other plugins and protected files read back unchanged. The
+  receipt is `smash-training-lobby/artifacts/phase23/card-rc13/1-deluxe/deployment.json` in the operator's evidence root.
+- **Not run on the console:** there are no console logs and no logged build id from hardware.
+- **Tag build:** the package's `source.tar.gz` is byte-identical, file for file, to `426184e`'s tree; `main`'s code
+  (`src/`, `Cargo.toml`, `Cargo.lock`, `build.rs`) equals `426184e`'s.
+- **Assets:** made with the release tool's `--untested-on-hardware` mode (the tag build's NRO must be the card
+  readback's bytes; every hardware field reads "not run on hardware").
+  - `libssbu_online_deluxe_rewrite.nro`: `cf16228f0591592fbc47c3e5a360a2b0c6f1c27a5c406b184f09bc6075f2d34c`.
+  - `manifest.json`: `17215b2fe35f1a79f608bc20b52ab6d02c61de148345fee93c0175981cda9f45`, with `runtime_tested=false`.
+  - `SHA256SUMS.txt`: `7551daf4b0c82a14d473bd0ea4ce2b80fb09d43cebf2838b168c0f65cdc26705`.
+- **Releases:** Forgejo and GitHub; every asset is downloaded back and compared after publishing.
+- Eden evidence for this build is the `426184e` entry below.
+
 ## 0.10.7 (`426184e`, rc.13 branch) — `renderer-status.txt` writes `fixed_truncated=` — 2026-11-14
 
 **The change (`426184e`).** `write_status()` (diagnostics thread, not a hook) writes `fixed_truncated=<n>`, the

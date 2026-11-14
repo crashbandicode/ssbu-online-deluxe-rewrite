@@ -2,13 +2,12 @@
 
 > AI-assisted, human-directed and reviewed.
 
-**The latest release, 0.10.6, is untested on hardware (Eden-tested only;
-installed on the card, not yet played).** 0.10.4 is the latest release that
-ran on the operator's **Switch**: on 2026-11-10 with
+**The latest release, 0.10.7, is untested on hardware (Eden-tested only;
+installed on the card, not yet played),** as is 0.10.6. 0.10.4 is the latest
+release that ran on the operator's **Switch**: on 2026-11-10 with
 [Switch firmware 23.0.1][firmware] and [Atmosphère 1.12.1][atmosphere].
 Firmware 23.5.0 and Atmosphère 1.12.2 aren't tested yet.
-`main` is ahead of the release at 0.10.7 (rc.13 work, not released). It is
-Eden-tested and untested on hardware. [Validation](docs/VALIDATION.md).
+[Validation](docs/VALIDATION.md).
 
 A Rust/Skyline rebuild of Online Deluxe for **Super Smash Bros. Ultimate
 13.0.5**, shipped as **one NRO**: lower-latency rendering, a small in-game
@@ -17,7 +16,11 @@ overclocking.
 
 ![The Player Info Settings window: the You row with eye and TV icons, NetLatency and NetProfile](docs/media/settings-window.png)
 
-**[0.10.6 — download NRO and manifest](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.10.6)**
+**[0.10.7 — download NRO and manifest](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.10.7)**
+(untested on hardware): no game hook waits on another thread, and no
+per-frame hook allocates (the window and the game's banner text use
+fixed-capacity buffers).
+[0.10.6](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.10.6)
 (untested on hardware) keeps game hooks from waiting on other plugins.
 Shortcuts no longer collide with TrainingRooms' (no row moves while ZL, ZR, R
 or L is held, and the Debug view needs `debug_view=on`), and offline Training

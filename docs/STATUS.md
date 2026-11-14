@@ -1,10 +1,9 @@
 # Implementation and validation status
 
-Checked on 2026-11-13 against `main` (version 0.10.7, rc.13 work: not released, Eden-tested and untested on hardware)
-and the latest release, **0.10.6**, which is **untested on hardware (Eden-tested only; installed on the card, not yet
-played)**. The version sections below are dated records.
+Checked on 2026-11-14 against `main` and the latest release, **0.10.7**, which is **untested on hardware (Eden-tested
+only; installed on the card, not yet played)**, as is 0.10.6. The version sections below are dated records.
 Exact release/build and console evidence is in
-[VALIDATION.md](VALIDATION.md). Releases: 0.10.6 `10e481f`, 0.10.4 `21c0009`, 0.10.2 `73488c1`,
+[VALIDATION.md](VALIDATION.md). Releases: 0.10.7 `426184e`, 0.10.6 `10e481f`, 0.10.4 `21c0009`, 0.10.2 `73488c1`,
 0.10.1 `03e9d42`, 0.10.0 `89e9b47`, 0.9.0 `d6402b4`, 0.8.1 `84da224`, 0.8.0
 `d92bc3d`, 0.7.0 `9a7f81c`, 0.6.2 `302c095`, 0.6.1 `9d0cec2`, 0.6.0 `a0dc5d6`,
 0.5.7 `282a2df`, 0.5.6 `fb2012a`, 0.5.5 `6a9e61a`, 0.5.4 `a63bc8c`. The rewrite is one Rust/Skyline
@@ -32,7 +31,7 @@ Publication routing: `origin` is Forgejo
 (`git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite`), authoritative
 and public; the GitHub repository is a downstream mirror that is not pushed automatically.
 Nothing is pushed without the operator's explicit permission. Forgejo
-releases carry the NRO and its SHA-256 manifest (see [Current release: 0.10.6](#current-release-0106)).
+releases carry the NRO and its SHA-256 manifest (see [Current release: 0.10.7](#current-release-0107)).
 
 Evidence levels used below: **host** = Rust host tests, clippy with warnings
 denied, the no-default-features build and the Skyline release build;
@@ -71,20 +70,26 @@ the operator's Switch, recorded with its build hash in [VALIDATION.md](VALIDATIO
 | Coverage build | Cargo feature `coverage`, raw profile writer, event code 109, manual snapshots from the Debug view (0.5.2; since 0.10.5 that needs `debug_view=on`) | Eden only. 2026-10-17 trace: 1,192 instrumented functions, 1,047 executed, 145 never executed. 2026-10-18 LAN Online run (two modded peers, NSO scenes only): 893 executed, 299 never executed, 12 functions new against the 10-17 report; [DEBUGGING.md](DEBUGGING.md) |
 | Removed in 0.5.4 | The opt-in peer observer, FPS++ (emulator-only diagnostic), the Gigaflare DRS trigger, five opt-in diagnostics, 21 helpers without a production caller; `peer_observer=` and `fps_boost=` are ignored legacy keys. Per-file reduction: `src/` 22,253 → 15,332 production lines (−31.1 %) | Host gates on every step; Eden latency, quota frame-rate, capture and plugin-page passes on the candidate. Console: the 0.5.4 first boot is the acceptance test. [FPS boost history](FPS_BOOST_INVESTIGATION.md) |
 
-## On `main`: 0.10.7 (rc.13 work, not released)
+## Current release: 0.10.7
 
-**Eden-tested and untested on hardware. There is no tag or release yet.** That
-waits for the operator's rc.13 hardware test.
+**Untested on hardware (Eden-tested only; installed on the card, not yet played).**
+Tagged `v0.10.7` on 2026-11-14 at `426184e` and released on Forgejo and
+GitHub on the operator's order ("push but say hardware untested"). The NRO is
+`cf16228f…`, build `0.10.7-426184eaa77d-1794631186`.
+- It was installed on the operator's card at 08:43Z on 2026-11-14 and read
+  back byte-identical, with the card's other plugins unchanged.
+- It has not run on the console, so its manifest says `runtime_tested=false`
+  and names no logged build.
 - No game hook waits on another thread.
 - No per-frame hook allocates, including the window and the native banner
-  text, which use fixed-capacity buffers.
+  text, which use fixed-capacity buffers; `fixed_truncated=` counts cut text.
 - The ELF check `tools/hook_wait_check.py` holds both rules for every hook.
 
 Details:
-[Validation](VALIDATION.md) (the `dab8772` entry)
+[Validation](VALIDATION.md) (the 0.10.7 entries)
 and [Debugging](DEBUGGING.md).
 
-## Current release: 0.10.6
+## 0.10.6
 
 **Untested on hardware (Eden-tested only; installed on the card, not yet played).**
 Tagged `v0.10.6` on 2026-11-13 at `10e481f` and released on Forgejo and
@@ -129,7 +134,7 @@ Details: [Validation](VALIDATION.md#0104--release-assets-and-the-console-run--20
 held 0.10.5 (`c37ee0ff…`, built from `a88d659`), which is not released and has
 not run on the console, and a 1.0.2 standalone `libimgui_smash.nro`
 (`f72a6b8d…`), also ASCII-only. On 2026-11-13 at 22:09Z the card moved
-to 0.10.6 (`66349759…`).
+to 0.10.6 (`66349759…`), and on 2026-11-14 at 08:43Z to 0.10.7 (`cf16228f…`).
 
 ## 0.10.2
 
