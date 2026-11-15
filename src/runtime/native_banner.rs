@@ -126,6 +126,7 @@ pub(super) fn install() {
             CSS_UPDATE,
         ) {
             skyline::install_hook!(deluxe_rewrite_css_banner);
+            super::game_speed::note_elapsed_css_installed();
         }
         let arena = words_ok(ARENA_INIT, &ARENA_INIT_WORDS)
             && words_ok(ARENA_UPDATE, &ARENA_UPDATE_WORDS)
@@ -227,12 +228,14 @@ pub(super) fn drop_scene() {
 #[skyline::hook(offset = CSS_UPDATE)]
 unsafe fn deluxe_rewrite_css_banner(arg: u64) {
     original!()(arg);
+    super::game_speed::invalidate_elapsed_stage();
     super::capture::note_css_frame();
     paint_css(arg);
 }
 
 #[skyline::hook(offset = ARENA_INIT, inline)]
 unsafe fn deluxe_rewrite_arena_room_init(ctx: &InlineCtx) {
+    super::game_speed::invalidate_elapsed_stage();
     let base = ctx.registers[0].x() as usize;
     let Ok(mut state) = STATE.try_lock() else {
         return;

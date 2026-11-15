@@ -1,5 +1,16 @@
 # Fork feature parity
 
+## Unreleased0.10.8 extension — game speed
+
+The Settings match strip adds a bounded native elapsed-match-time percentage and
+cause hint for current networked battles, including Arena and local wireless.
+This is a rewrite extension with no preserved-fork counterpart. Native banners,
+Auto profile policy and the two-row strip layout are unchanged. The new fact
+joins the existing timing segment. [Native source and provisional behavior](GAME_SPEED.md).
+Host/runtime/media acceptance remains pending on the candidate; the older
+validation claims below retain their original builds and scope.
+
+
 Source of record for the original fork: `reference/quickplay` at `35fdf7cf`
 (see `reference/README.md`). A feature is listed only when an `install()`
 path or an exported function actually registers it. `docs/STATUS.md` is a

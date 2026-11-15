@@ -19,6 +19,10 @@ struct UiState {
     previous_frame: Option<Instant>,
     count: u64,
     previous_timing_buttons: u64,
+    speed: crate::game_speed::SpeedModel,
+    speed_generation: u64,
+    #[cfg(feature = "diag")]
+    speed_trace_tick: u64,
     surface_gen: u64,
     /// `hide_plugin_pages` as last read, for a frame that finds the lock busy.
     pages: crate::config::PluginPages,
@@ -1208,6 +1212,10 @@ fn init_ui(slot: &mut Option<UiState>) {
         previous_frame: None,
         count: 0,
         previous_timing_buttons: 0,
+        speed: crate::game_speed::SpeedModel::new(),
+        speed_generation: 0,
+        #[cfg(feature = "diag")]
+        speed_trace_tick: 0,
         surface_gen: 0,
         pages: crate::config::PluginPages::EMPTY,
         unpublished: None,
@@ -1238,6 +1246,23 @@ unsafe extern "C" fn draw() {
             .push(now.duration_since(previous).as_secs_f32() * 1000.0);
     }
     let frame = poll(ui, sample);
+    let elapsed_tick = skyline::nn::os::GetSystemTick() as u64;
+    let (generation, elapsed_frames) = super::game_speed::elapsed_observation();
+    ui.speed_generation = generation;
+    ui.speed.observe_speed(generation, elapsed_tick, elapsed_frames);
+    #[cfg(feature = "diag")]
+    if elapsed_tick.wrapping_sub(ui.speed_trace_tick)
+        >= crate::game_speed::SPEED_TICKS_PER_SECOND / 10
+    {
+        ui.speed_trace_tick = elapsed_tick;
+        let reading = ui.speed.speed_reading();
+        let percent = reading.and_then(|r| r.percent).unwrap_or(0xff);
+        let cause = reading.map_or(0, |r| r.cause as u64);
+        let packed = u64::from(elapsed_frames.unwrap_or(u32::MAX))
+            | (u64::from(percent) << 32)
+            | (cause << 40);
+        super::RECORDER.record(elapsed_tick, Code::GameSpeedSample, packed, generation);
+    }
     let view = ui.controls.view;
     let Ok(mut scratch) = SCRATCH.try_lock() else {
         return;
@@ -1245,7 +1270,7 @@ unsafe extern "C" fn draw() {
     OVERLAY_STATE.store(
         crate::overlay::pack_overlay_state(
             crate::overlay::overlay_flags(view),
-            skyline::nn::os::GetSystemTick() as u64,
+            elapsed_tick,
         ),
         std::sync::atomic::Ordering::Release,
     );
@@ -1291,7 +1316,11 @@ fn strip_lines<'a>(
             if frame.privacy.reconnect {
                 facts.push("* Stealth: reconnect");
             }
-            facts.push(&timing);
+            let speed_reading = super::game_speed::elapsed_token_visible(ui.speed_generation)
+                .then(|| ui.speed.speed_reading())
+                .flatten();
+            let speed_timing = crate::game_speed::speed_timing_line(&timing, speed_reading);
+            facts.push(&speed_timing);
             strip.clear();
             strip.extend(rows.iter().filter_map(short));
             (

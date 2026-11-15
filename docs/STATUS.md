@@ -1,5 +1,13 @@
 # Implementation and validation status
 
+## 0.10.8 candidate — implementation in progress
+
+The networked Settings match strip now has a native elapsed-match-time game-speed
+fact. Thresholds remain provisional pending paired calibration and review.
+Candidate gates, binary size and runtime/media validation are still pending;
+hardware is untested. See [GAME_SPEED.md](GAME_SPEED.md).
+
+
 Checked on 2026-11-13 against the rc.13 branch (version 0.10.7, not released; `main` is 0.10.6, the release candidate) and the
 latest release, **0.10.4**; the version sections below are dated records.
 Exact release/build and console evidence is in

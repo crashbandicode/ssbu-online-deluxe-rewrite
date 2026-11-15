@@ -13,6 +13,7 @@ mod diag_feed;
 mod dispatcher_backoff;
 mod fighter_main;
 mod fighter_probe;
+mod game_speed;
 mod hang_trace;
 mod hoc_client;
 mod hooks;

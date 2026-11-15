@@ -49,36 +49,42 @@ fn reject_stage() {
 
 #[skyline::hook(offset = 0x235aaa0, inline)]
 unsafe fn deluxe_rewrite_main_menu(_: &InlineCtx) {
+    super::game_speed::invalidate_elapsed_stage();
     super::native_banner::drop_scene();
     auto_driver::note_main_menu(0x235aaa0);
 }
 
 #[skyline::hook(offset = 0x22da160, inline)]
 unsafe fn deluxe_rewrite_quickplay(_: &InlineCtx) {
+    super::game_speed::invalidate_elapsed_stage();
     super::native_banner::drop_scene();
     auto_driver::note_menu_entry(Entry::QuickplayMenu, Some(SceneStatus::Inactive), 0x22da160);
 }
 
 #[skyline::hook(offset = 0x22da090, inline)]
 unsafe fn deluxe_rewrite_background_matchmaking(_: &InlineCtx) {
+    super::game_speed::invalidate_elapsed_stage();
     super::native_banner::drop_scene();
     auto_driver::note_menu_entry(Entry::QuickplayMenu, Some(SceneStatus::Inactive), 0x22da090);
 }
 
 #[skyline::hook(offset = 0x22d9fa0, inline)]
 unsafe fn deluxe_rewrite_arena(_: &InlineCtx) {
+    super::game_speed::invalidate_elapsed_stage();
     super::native_banner::drop_scene();
     auto_driver::note_menu_entry(Entry::ArenaMenu, None, 0x22d9fa0);
 }
 
 #[skyline::hook(offset = 0x1bd45e0, inline)]
 unsafe fn deluxe_rewrite_local_wireless(ctx: &InlineCtx) {
+    super::game_speed::invalidate_elapsed_stage();
     super::native_banner::enter_local_scene(ctx.registers[0].x());
     auto_driver::note_menu_entry(Entry::LocalWireless, Some(SceneStatus::Inactive), 0x1bd45e0);
 }
 
 #[skyline::hook(offset = STAGE_SETUP, inline)]
 unsafe fn deluxe_rewrite_stage_setup(ctx: &InlineCtx) {
+    let speed_ticket = super::game_speed::begin_elapsed_stage();
     super::native_banner::drop_scene();
     let base = ctx.registers[0].x() as usize;
     let Some(stage_addr) = base.checked_add(8) else {
@@ -130,6 +136,7 @@ unsafe fn deluxe_rewrite_stage_setup(ctx: &InlineCtx) {
     record(Code::SceneMode, fields | u64::from(lobby) << 10, word);
     auto_driver::set_scene(None, Some(status), STAGE_SETUP as u64);
     super::capture::note_stage(status);
+    super::game_speed::arm_elapsed_stage(speed_ticket, mode, status);
 }
 
 pub(super) fn install() {
@@ -152,6 +159,7 @@ pub(super) fn install() {
     }
     // A failed guard leaves lobby practice classified as before (bit 9 clear).
     super::scene_mode::init();
+    super::game_speed::init_elapsed_reader();
     skyline::install_hooks!(
         deluxe_rewrite_main_menu,
         deluxe_rewrite_quickplay,
