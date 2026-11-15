@@ -21,8 +21,6 @@ struct UiState {
     previous_timing_buttons: u64,
     speed: crate::game_speed::SpeedModel,
     speed_generation: u64,
-    #[cfg(feature = "diag")]
-    speed_trace_tick: u64,
     surface_gen: u64,
     /// `hide_plugin_pages` as last read, for a frame that finds the lock busy.
     pages: crate::config::PluginPages,
@@ -1214,8 +1212,6 @@ fn init_ui(slot: &mut Option<UiState>) {
         previous_timing_buttons: 0,
         speed: crate::game_speed::SpeedModel::new(),
         speed_generation: 0,
-        #[cfg(feature = "diag")]
-        speed_trace_tick: 0,
         surface_gen: 0,
         pages: crate::config::PluginPages::EMPTY,
         unpublished: None,
@@ -1251,18 +1247,7 @@ unsafe extern "C" fn draw() {
     ui.speed_generation = generation;
     ui.speed.observe_speed(generation, elapsed_tick, elapsed_frames);
     #[cfg(feature = "diag")]
-    if elapsed_tick.wrapping_sub(ui.speed_trace_tick)
-        >= crate::game_speed::SPEED_TICKS_PER_SECOND / 10
-    {
-        ui.speed_trace_tick = elapsed_tick;
-        let reading = ui.speed.speed_reading();
-        let percent = reading.and_then(|r| r.percent).unwrap_or(0xff);
-        let cause = reading.map_or(0, |r| r.cause as u64);
-        let packed = u64::from(elapsed_frames.unwrap_or(u32::MAX))
-            | (u64::from(percent) << 32)
-            | (cause << 40);
-        super::RECORDER.record(elapsed_tick, Code::GameSpeedSample, packed, generation);
-    }
+    trace_game_speed(ui, elapsed_tick, generation, elapsed_frames);
     let view = ui.controls.view;
     let Ok(mut scratch) = SCRATCH.try_lock() else {
         return;
@@ -1282,6 +1267,27 @@ unsafe extern "C" fn draw() {
     if sampled {
         record(Code::OverlayExited, ui.count, view as u64);
     }
+}
+
+/// DIAG-only sampling clock stays out of struct fields: the source hook audit
+/// strips unshipped items/statements, not comma-terminated struct fields.
+#[cfg(feature = "diag")]
+fn trace_game_speed(ui: &UiState, tick: u64, generation: u64, elapsed_frames: Option<u32>) {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static LAST_TICK: AtomicU64 = AtomicU64::new(0);
+    if tick.wrapping_sub(LAST_TICK.load(Ordering::Relaxed))
+        < crate::game_speed::SPEED_TICKS_PER_SECOND / 10
+    {
+        return;
+    }
+    LAST_TICK.store(tick, Ordering::Relaxed);
+    let reading = ui.speed.speed_reading();
+    let percent = reading.and_then(|r| r.percent).unwrap_or(0xff);
+    let cause = reading.map_or(0, |r| r.cause as u64);
+    let packed = u64::from(elapsed_frames.unwrap_or(u32::MAX))
+        | (u64::from(percent) << 32)
+        | (cause << 40);
+    super::RECORDER.record(tick, Code::GameSpeedSample, packed, generation);
 }
 
 /// The ready-match strip of `view`: Settings fields with the `Opp` and timing
