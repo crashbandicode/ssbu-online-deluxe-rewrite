@@ -12,6 +12,13 @@ A Rust/Skyline rebuild of Online Deluxe for **Super Smash Bros. Ultimate
 Player Info window and the fork's character-select and network display. No
 overclocking.
 
+**0.10.8 adds live game speed** beside ping and input buffer in the Settings
+match strip. It shows how quickly native elapsed match time advances, with
+brief hints for sustained slowdown or observed freezes. It covers networked
+battles, including Sudden Death, and stays out of Training and offline play.
+[Release notes](docs/RELEASE_NOTES_0_10_8.md) · [How it is measured](docs/GAME_SPEED.md).
+The 0.10.8 package is prepared for review; **Eden (untested on hardware)**.
+
 ![The Player Info Settings window: the You row with eye and TV icons, NetLatency and NetProfile](docs/media/settings-window.png)
 
 **[0.10.4 — download NRO and manifest](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.10.4)**
@@ -88,7 +95,15 @@ retired 0.8.1 chords and have not been re-recorded for 0.9.0.
 
 In ordinary matches the window becomes a two-row strip at the top left.
 
-![The in-match strip: You with privacy icons, Net and Profile, then the timing values](docs/media/match-strip-closeup.png)
+![Online 0.10.8 match strip with You, Net, Profile, ping, buffer and Game 100%](docs/media/match-strip-closeup.png)
+
+![Real online game speed near 100%, a 92% peer throttle with the delay-too-low hint, then recovery](docs/media/game-speed.gif)
+
+*2026-11-16 UTC, 0.10.8-a4411607be20-1794789531 diagnostic observer;
+Eden (untested on hardware). Three cuts from one real online pair: normal →
+peer speed limit lowered to 92% → restored to 100%. Setup intervals are omitted;
+7.46 s at the actual variable capture cadence (about 3.6 frames/s).*
+[Media provenance](docs/MEDIA_PROVENANCE.md).
 
 On character select, the fork's status line keeps your profile and input
 buffer, plus the opponent's settings and coloured ping while their station is
@@ -126,9 +141,10 @@ Other mods can add rows or a whole page through the exported API and
 [dispatcher backoff](docs/DISPATCHER_BACKOFF.md) and opt-in
 [timing captures](docs/CAPTURES.md).
 
-*These examples are offline Eden captures of 0.7.0 with manual LessLag,
+*The older menu examples above are offline Eden captures of 0.7.0 with manual LessLag,
 `vanilla_plus=false` and the optional FX Control companion. They show the menu,
-not online play, Switch performance or FX's gameplay effects. More in
+not Switch performance or FX's gameplay effects. The 0.10.8 match-strip and
+game-speed examples are the dated online exceptions above. More in
 [Screenshots](docs/SCREENSHOTS.md); sources in
 [Media provenance](docs/MEDIA_PROVENANCE.md).*
 

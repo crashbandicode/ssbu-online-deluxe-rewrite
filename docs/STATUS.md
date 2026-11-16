@@ -1,34 +1,44 @@
 # Implementation and validation status
 
-## 0.10.8 candidate — shipping NO-GO
+## 0.10.8 — release preparation
 
-The original candidate d3f9242 tracks normal-match throttles but its published
-native timer stays 7200 during advancing Sudden Death. The replacement reads
-the current match object's cumulative +0x3dc accumulator, with fresh registry/
-header/type validation around every sample and generation/object reset.
-Implementation is authored; the new source's gates and one all-phase paired
-validation are pending. No all-phase runtime result is claimed.
-The earlier candidate's gates passed and its NRO/header resident sections grew
-4096 bytes over v0.10.7; replacement size is not measured yet.
-Media and final compliance remain pending. Hardware is untested.
-See [GAME_SPEED.md](GAME_SPEED.md).
+The Settings match strip now shows live game speed beside ping and buffer in
+networked battles. It reads the freshly validated current match object's +0x3dc
+cumulative elapsed accumulator, including Sudden Death. It never counts presents.
+[Game speed](GAME_SPEED.md) describes eligibility, smoothing and the bounded hints.
+Hardware is untested; the observed paired mode was Eden LAN Online Quickplay.
 
-Measured normal-time thresholds are implemented: one-second smoothing;
-below 97% for two seconds selects "delay too low"; at least 99% for one
-second clears it; a no-advance gap of at least 100 ms selects "lag spikes"
-for two seconds, taking priority. The 250 ms fast-window below-80% clause
-is removed. No 70% rule was added.
-Steady 80% produced 94/94 false spike hints despite a maximum 41.9 ms flat
-interval. The gap rule caught the 250/500 ms peer pauses (21/23 spike samples);
-it did not catch the 100 ms pause, whose observed flat span was 41 ms after
-network buffering. That outcome is expected. Normal-time calibration:
-A medians 100.393/92.302/80.668%, B 99.988/91.993/80.054%, then recovery.
-Regression cases cover the retained 7200 boundary, steady 80%, 250/500 ms
-gaps, recovery and object replacement; their execution remains pending.
+Source `a4411607be20` passed all eight existing host/Skyline/diag gate steps:
+424 tests, zero failures/ignored, and zero clippy warnings. Production and diag
+static hook checks found no forbidden wait or allocation/print path. NRO file
+size and header resident sections each grew 4096 bytes over v0.10.7; the fixed
+model is 368 bytes by DWARF. This measures binary sections, not emulator RSS.
 
-Shipping requires same-batch native hitlag/+0x3dc proof, normal time through
-Sudden Death, a Sudden Death peer wait/recovery, countdown/GAME exclusion
-and a real rematch/reset, plus the remaining negative and media checks.
+Normal-time calibration medians were A 100.393/92.302/80.668% and
+B 99.988/91.993/80.054%, followed by recovery. Approved thresholds are one-second
+smoothing; below 97% for two seconds selects “delay too low”; at least 99% for one
+second clears it. A no-advance gap of at least 100 ms selects “lag spikes” for two
+seconds and takes priority. The old 250 ms/below-80% clause is removed.
+Steady 80% had produced 94/94 false spike hints despite a maximum 41.9 ms flat
+interval. The gap rule caught the 250/500 ms pauses (21/23 spike samples), and
+did not catch the 100 ms pause whose buffered observed flat span was 41 ms.
+That is expected; these hints do not identify a faulty peer.
+
+The primary accepted same-batch native hitlag (+c 1203→1219), advancing Sudden
+Death (+c 7203→8897, sane 100%/98% strips), normal-time peer-wait stops/recovery,
+and a fresh later match. The later match changed object 77427342368→77168193568
+and reset +c to 6; evidence is `runtime-counter-fix-1/NATIVE-OBJECT-CONTEXT.json`
+and `runtime-counter-fix-1/PARENT-SD-VISUAL-DIAG-REVIEW.json` in the external
+deluxe-gamespeed evidence bundle. This was an observed new-match reset, not an
+executed rematch-yes route. Offline Training proof was
+“primary-waived 01:2xZ: same-batch native hitlag evidence present”.
+
+SD stall: covered by the identical normal-time stall mechanism; not separately run (primary, 03:1xZ, proportional testing)
+
+The remaining SD pair was cancelled before Up. Retained real online frames supply
+the new game-speed GIF/stills and refreshed match-strip group. The final traced compliance report discloses the inherited baseline failures;
+the release package manifest records the rebuilt commit and hashes. No push, tag, release or card
+write precedes primary package review. See [VALIDATION.md](VALIDATION.md).
 
 Checked on 2026-11-13 against the rc.13 branch (version 0.10.7, not released; `main` is 0.10.6, the release candidate) and the
 latest release, **0.10.4**; the version sections below are dated records.

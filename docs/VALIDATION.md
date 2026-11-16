@@ -1,5 +1,98 @@
 # Validation record
 
+## 0.10.8 game speed — 2026-11-16 UTC
+
+Scope: the existing ImGui Settings match strip gains live game speed during
+networked battles. Native source is the current match object's cumulative elapsed
+accumulator +0x3dc, in 60 Hz units, revalidated through the current registry and
+exact header/type before and after each sample. No presentation counts, new hook,
+heap allocation, blocking lock, game write or per-sample I/O is added.
+[Game-speed design](GAME_SPEED.md) · [Release notes](RELEASE_NOTES_0_10_8.md).
+
+Source `a4411607be20a104bd992e0c2428288aa8b5d633` passed all eight unchanged
+gate steps on XPS: host test/clippy/no-default build; production and diag Skyline
+release; host diag clippy; production and diag Skyline clippy. Every step exit
+was checked independently. Tests: 382 library + 8 hook-lock + 34 SDK = **424**
+passed, zero failed/ignored. Clippy emitted zero warnings. The unchanged LLVM21
+hook checker passed production and diag ELFs with zero forbidden wait or
+allocation/print paths. External evidence:
+`counter-fix/gates/a441160/PARENT-CODE-GATES-ACCEPTANCE.json`.
+
+Production build `0.10.8-a4411607be20-1794789468`: NRO SHA-256
+`0434620d4702b8a36104c3b150f1c8c325893d6d2f327eddf1bcb0de7585a226`,
+1,286,144 B. Diagnostic observer `0.10.8-a4411607be20-1794789531`: NRO
+`b1eee4062db3b8672d03f788ddf00e9f6965066ab1a2eff9b1faa6632fb929c6`,
+1,294,336 B. The final docs/media release commit is rebuilt and packaged separately;
+its manifest names that commit. Rust, Cargo/lock/build and native inputs must match
+this tested source byte for byte. Hardware runtime is untested.
+
+Compared with v0.10.7, production file size is **+4096 B** and NRO-header resident
+sections are **1,331,200→1,335,296 B (+4096 B)**. DWARF gives SpeedModel **368 B**.
+These are binary-section measurements, not emulator RSS.
+
+Normal-time paired calibration `runtime-calibration-4/REPORT.md` (generation
+2029) measured medians A 100.393/92.302/80.668% and B
+99.988/91.993/80.054% at normal/92%/80%, then recovery. Primary approved:
+one-second smoothing; below 97% continuously two seconds → delay hint;
+at least 99% one second → sustained recovery; no-advance gap at least 100 ms →
+spike hint for two seconds, with priority. The removed 250 ms/below-80% condition
+had produced 94/94 false spike samples at steady 80% despite a 41.9 ms maximum
+flat interval. The gap-only condition caught 250/500 ms pauses (21/23 spike
+samples), not the 100 ms pause (buffered observed flat span 41 ms), as expected.
+No 70% rule or tolerance adjustment was made.
+
+Accepted all-phase evidence is `runtime-counter-fix-1`, a real LAN Online
+Quickplay pair on XPS/Yoga. Both windows were visually out of attract mode,
+muted and debugger-enabled. Same-batch positive native Stop/Hit/Damage coincided
+with +c 1203→1219. The 16-frame endpoint delta across 15 adjacent hitlag deltas
+is sequential running-read skew, disclosed without tolerance. The primary waived
+the extra offline Training row: “primary-waived 01:2xZ: same-batch native hitlag
+evidence present”. See `PARENT-UNPLANNED-NATIVE-HITLAG.json`.
+
+Later Sudden Death +c advanced 7203→8897 over 250 diagnostic samples.
+In this interval +0x3d8 reset and advanced 3→1697. The distinct
+main+0x52e8b44 mirror had saturated at 7200 in the earlier retained run. Of those samples, 9 were warmup, 217 displayed 100%,
+23 displayed 99% and 1 displayed 95%; causes were none. Reviewed real Sudden
+Death stills independently show A 100%, B 98%, no hint. The fresh later normal
+match changed object 77427342368→77168193568 and restarted +c at 6.
+Evidence: `PARENT-SD-VISUAL-DIAG-REVIEW.json` and
+`NATIVE-OBJECT-CONTEXT.json`. This is observed new-match reset;
+the cancelled explicit rematch-yes route was not run.
+
+SD stall: covered by the identical normal-time stall mechanism; not separately run (primary, 03:1xZ, proportional testing)
+
+The remaining SD pair was cancelled before Up. Normal-time peer stalls and
+recovery exercise the same accumulator/no-advance rule. Countdown/GAME and
+non-networked eligibility are covered by source/host regressions; do not infer
+separate fresh runtime coverage for every Arena/Elite/local-wireless/negative
+scene from the Quickplay pair. Retained earlier timer captures have their
+original lifetime limitations; the current run's brackets and exact 64-byte
+pins supply current-object evidence.
+
+All 16 original runner rows passed; the later contact plan stopped at its
+unbound setup review and was not executed. Its controller phase exit was 1,
+not an all-rows acceptance. Clean Down/release/restore receipts are retained:
+all 638 evidence files verified, 2,016 restored profile files equal, 14 owned
+PIDs absent. A timed-out shutdown required forced SIGKILL; it is not described
+as graceful. Prior setup failures/host-contended windows stay excluded from
+calibration; no threshold absorbed them.
+
+The new [game-speed GIF](media/game-speed.gif), normal/dip/recovered stills and
+refreshed match-strip trio use real retained frames from that same pair.
+Captures requested 10 fps but actually took 8.2–8.4 s per 30 frames.
+The new cut respects source timestamps and omits setup intervals, rather than
+speeding them up. Captions name UTC date/build and **Eden (untested on hardware)**.
+[Media provenance](MEDIA_PROVENANCE.md) records exact inputs, hashes and transforms.
+Retained-media checks run with
+`python3 -I tools/verify_game_speed_release.py . --evidence <bundle> --out <report.json>`.
+Six checks bind GIF delays/source hashes, inventory, references, review chronology
+and the held publication boundary; two tampered source/delay fixtures were rejected.
+Pixel truth and authorization remain explicit human receipts, not script inference.
+This tool is outside the compiled plugin and does not replace the existing gates.
+
+Final compliance discloses inherited failures and hardware/mode limitations;
+no publication or card install is claimed here.
+
 ## 0.10.7 (`dab8772`, rc.13 branch) — fixed-capacity text: the window and the banner hooks no longer allocate: gates, ELF check and the RC pair — 2026-11-13
 
 **The change (`dab8772`).**

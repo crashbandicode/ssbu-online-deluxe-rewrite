@@ -1,4 +1,4 @@
-# Game speed (0.10.8 candidate)
+# Game speed (0.10.8)
 
 The Settings strip in a networked battle shows “Game 100%”, or a lower
 percentage when native elapsed match time advances more slowly than wall
@@ -10,7 +10,8 @@ The readout covers Quickplay, Elite Smash, Arena and local-wireless battles.
 It is absent in Training, waiting-room practice, offline play, character select,
 countdown, GAME/KO, results and menus. It starts as “Game --” while collecting
 the first second, or when current-object validation fails. Native banners are
-unchanged. All-phase runtime acceptance is pending; hardware is untested.
+unchanged. Eden LAN Online Quickplay supplied the paired runtime evidence;
+hardware is untested.
 
 The normal-time paired calibration selected these values:
 
@@ -29,7 +30,7 @@ rendering resumes; the next sample retains the full elapsed interval.
 
 ## Native source and lifecycle
 
-The candidate source is the current 13.0.5 match object's cumulative elapsed
+The source is the current 13.0.5 match object's cumulative elapsed
 accumulator at +0x3dc (timer helper +0xc), in 60 Hz units. Owning update
 main+0x1572540 accumulates the native fractional rate and obeys native pause
 state. This is native elapsed match time, not an unconditional engine-tick
@@ -80,11 +81,29 @@ holds 7200. During normal-time peer waits it stayed flat for at least
 0.406626311 and 1.429811239 seconds, then resumed. Those old captures retained
 an initial pointer and do not prove current-object lifetime or rematch reset.
 
-Earlier hitlag evidence concerns +0x3d8/the mirror, not a simultaneous +0xc
-capture. Direct +0xc hitlag, advancing Sudden Death, a Sudden Death peer wait,
-current-object validation and rematch reset must pass in the next approved
-paired run before shipping. Source regressions are separate from runtime proof.
-See [VALIDATION.md](VALIDATION.md). Hardware is untested.
+The accepted replacement-source run retained same-batch positive native
+Stop/Hit/Damage while +c advanced 1203→1219. The one-frame endpoint difference
+from the 15 adjacent hitlag deltas is sequential-read skew, disclosed without a
+tolerance. The primary waived the separate offline Training probe:
+“primary-waived 01:2xZ: same-batch native hitlag evidence present”.
+
+The later Sudden Death samples advanced +c 7203→8897 over 250 samples.
+In that later interval +0x3d8 restarted at 3 and advanced to 1697; the earlier
+saturated 7200 observation concerned the distinct main+0x52e8b44 mirror. Reviewed stills show Game 100%
+on A and 98% on B without cause text. A fresh later normal match used a changed
+object and restarted +c at 6. Evidence: external
+`runtime-counter-fix-1/PARENT-SD-VISUAL-DIAG-REVIEW.json` and
+`runtime-counter-fix-1/NATIVE-OBJECT-CONTEXT.json`. This proves an
+observed new-match reset; an explicit rematch-yes route was not run.
+
+SD stall: covered by the identical normal-time stall mechanism; not separately run (primary, 03:1xZ, proportional testing)
+
+See [VALIDATION.md](VALIDATION.md) and [media provenance](MEDIA_PROVENANCE.md).
+The new GIF uses three retained cuts at their actual capture cadence, showing
+normal speed, the 92% peer throttle's delay hint, and recovery. Setup intervals
+between cuts are omitted. **Eden (untested on hardware).**
+
+![Online game speed near 100%, then a throttle dip with delay hint, then recovery](media/game-speed.gif)
 
 ## Diagnostic trace
 

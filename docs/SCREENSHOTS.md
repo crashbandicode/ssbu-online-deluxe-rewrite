@@ -1,13 +1,20 @@
 # Screenshots
 
-A short visual tour of the Deluxe window. Every image is a real capture from an
-offline Eden session: most from the 0.7.0 session on 2026-10-24, with the separate
-[FX Control](https://git.syntaxbyexample.com/intpa/ssbu-fx-control) companion
-installed, and the ZR, privacy and Horizon-OC clips and the Clock close-up
-from a 0.8.1-candidate session on 2026-10-27. Both used demonstration settings (manual LessLag,
-`platform=emulator`, `vanilla_plus=false`), not the shipped defaults. Builds,
-encoding and scope are in [Media provenance](MEDIA_PROVENANCE.md); every
-control is in [Controls](CONTROLS.md).
+A short visual tour of the Deluxe window. The online match-strip and game-speed examples were
+captured on **2026-11-16 UTC**, using build
+`0.10.8-a4411607be20-1794789531` in a real paired LAN Online Quickplay match:
+**Eden (untested on hardware)**. The animation retains the measured capture
+timing; it is not an FPS benchmark.
+
+The other examples remain historical offline captures: most from 0.7.0 on
+2026-10-24 with the separate
+[FX Control](https://git.syntaxbyexample.com/intpa/ssbu-fx-control) companion,
+and the ZR, privacy and Horizon-OC clips and Clock close-up from a
+0.8.1-candidate session on 2026-10-27. Those used demonstration settings
+(manual LessLag, `platform=emulator`, `vanilla_plus=false`). The original
+offline match-strip trio is preserved below. Builds, encoding and scope are
+in [Media provenance](MEDIA_PROVENANCE.md); every control is in
+[Controls](CONTROLS.md).
 
 ## Open and cycle the window
 
@@ -104,16 +111,35 @@ This shows the menu edits, not their gameplay effects. See [Plugins](PLUGINS.md)
 
 Training keeps the vertical window at the upper right. In an ordinary match,
 Settings becomes a two-row strip at the top left: You with the privacy icons,
-Net and Profile, then the live timing values and bar.
+Net and Profile, then the live timing values and bar. During an online match,
+the strip also shows the Opp summary and Game speed percentage.
 
-![Compact strip at source-pixel size](media/match-strip-closeup.png)
+![Online match strip with Game 100% at source-pixel size](media/match-strip-closeup.png)
+
+2026-11-16 UTC · build `0.10.8-a4411607be20-1794789531` ·
+Eden (untested on hardware). This is the XPS DIAG observer in the paired match;
+the Yoga peer ran the production build from the same source commit.
 
 | | |
 | --- | --- |
 | ![Training character select with the native status line](media/training-css.png) <br> After Training the native status line reads `You: LessLag \| Auto`. | ![Character select after quitting a match](media/smash-css-after-match.png) <br> After quitting a match it reads `You: Vanilla* \| Auto`: the cleanup hold runs Vanilla for the saved manual LessLag. With the shipped `vanilla_plus=true` the label is `Vanilla+*`. |
 
-With a live peer the strip's second line also carries the Opp summary; this
-offline match has none.
+The online still above shows `Game 100%`. The historical offline screenshots
+below retain their original labels and do not demonstrate online Game speed.
+
+## Live online Game speed
+
+![Live online Game speed: normal, delay dip, recovered](media/game-speed.gif)
+
+2026-11-16 UTC · build `0.10.8-a4411607be20-1794789531` ·
+Eden (untested on hardware). The real paired match shows normal speed,
+a dip while the other peer is limited to 92%, and recovery after restoring
+100%. These are three chronological cuts, 7.46 seconds in total; the setting
+actions and intervening waits are omitted. Capture timing is preserved.
+
+| Normal | Dip | Recovered |
+| --- | --- | --- |
+| ![Game 100%](media/game-speed-normal.png) | ![Game 91%, delay too low](media/game-speed-dip.png) | ![Game 100% after recovery](media/game-speed-recovered.png) |
 
 ## More screenshots
 
@@ -144,9 +170,16 @@ offline match has none.
 
 | | |
 | --- | --- |
-| ![Match with the Settings strip](media/match-settings-strip.png) <br> Pyra against a CPU Mario on Hollow Bastion: `>You:`, `Net:Auto`, `Profile:LessLag \| Active`. | ![Match with the Settings strip, animated](media/match-strip.gif) <br> Six seconds with the Settings strip open. |
+| ![Online match with the Settings strip](media/match-settings-strip.png) <br> Real paired Quickplay: two Sephiroths, Opp summary and `Game 100%`. | ![Online match with the Settings strip, animated](media/match-strip.gif) <br> 3.50 seconds at the measured capture cadence, 1280 pixels wide. 2026-11-16 UTC, build `0.10.8-a4411607be20-1794789531`; Eden (untested on hardware). |
 | ![Match with the Performance strip](media/match-performance.png) <br> Performance uses the compact strip too. | ![Debug table over the pause menu](media/match-debug.png) <br> Debug stays a vertical table; L+R+Plus also opens the game's pause menu. |
 | ![No Contest after quitting](media/results-quit.png) <br> Results after Quit and Yes: No Contest, not a completed match. | |
+
+### Archived offline match strip (0.7.0)
+
+| | |
+| --- | --- |
+| ![Archived offline Settings strip](media/match-settings-strip-v070-offline.png) <br> 2026-10-24: Pyra against CPU Mario on Hollow Bastion, manual LessLag. | ![Archived offline match strip, animated](media/match-strip-v070-offline.gif) <br> Original six-second offline clip. |
+| ![Archived offline strip close-up](media/match-strip-closeup-v070-offline.png) <br> Original source-pixel close-up, without an online peer. | |
 
 Older measurement clips and diagrams keep their original scope; see
 [Media provenance](MEDIA_PROVENANCE.md#historical-media-and-diagrams).
