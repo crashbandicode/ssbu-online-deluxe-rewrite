@@ -2,10 +2,14 @@
 
 > AI-assisted, human-directed and reviewed.
 
-Tested in **Eden** and on the operator's **Switch**: 0.10.4 ran there on
-2026-11-10 with [Switch firmware 23.0.1][firmware] and
-[Atmosphère 1.12.1][atmosphere]. Firmware 23.5.0 and Atmosphère 1.12.2 aren't
-tested yet. [Validation](docs/VALIDATION.md).
+**0.10.8 is released, untested on hardware (Eden-tested only).**
+Card installation is pending; the tag and public release assets follow hardware
+confirmation. 0.10.6 and 0.10.7 were installed on the card but not yet played.
+0.10.4 is the latest release that ran on the operator's **Switch**: on
+2026-11-10 with
+[Switch firmware 23.0.1][firmware] and [Atmosphère 1.12.1][atmosphere].
+Firmware 23.5.0 and Atmosphère 1.12.2 aren't tested yet.
+[Validation](docs/VALIDATION.md).
 
 A Rust/Skyline rebuild of Online Deluxe for **Super Smash Bros. Ultimate
 13.0.5**, shipped as **one NRO**: lower-latency rendering, a small in-game
@@ -17,11 +21,20 @@ match strip. It shows how quickly native elapsed match time advances, with
 brief hints for sustained slowdown or observed freezes. It covers networked
 battles, including Sudden Death, and stays out of Training and offline play.
 [Release notes](docs/RELEASE_NOTES_0_10_8.md) · [How it is measured](docs/GAME_SPEED.md).
-The 0.10.8 package is prepared for review; **Eden (untested on hardware)**.
+The 0.10.8 package passed review; **Eden (untested on hardware)**.
 
 ![The Player Info Settings window: the You row with eye and TV icons, NetLatency and NetProfile](docs/media/settings-window.png)
 
-**[0.10.4 — download NRO and manifest](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.10.4)**
+**[Previous release 0.10.7 — download NRO and manifest](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.10.7)**
+(untested on hardware): no game hook waits on another thread, and no
+per-frame hook allocates (the window and the game's banner text use
+fixed-capacity buffers).
+[0.10.6](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.10.6)
+(untested on hardware) keeps game hooks from waiting on other plugins.
+Shortcuts no longer collide with TrainingRooms' (no row moves while ZL, ZR, R
+or L is held, and the Debug view needs `debug_view=on`), and offline Training
+reads as offline.
+[0.10.4](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.10.4)
 draws opponent names in any language, with the console's own fonts. 0.10.2
 treats an Elite Smash or Quickplay stage as online from its stage load.
 0.10.0 let Window Options show or hide each plugin's own page on its own (one

@@ -22,9 +22,14 @@ Production build `0.10.8-a4411607be20-1794789468`: NRO SHA-256
 `0434620d4702b8a36104c3b150f1c8c325893d6d2f327eddf1bcb0de7585a226`,
 1,286,144 B. Diagnostic observer `0.10.8-a4411607be20-1794789531`: NRO
 `b1eee4062db3b8672d03f788ddf00e9f6965066ab1a2eff9b1faa6632fb929c6`,
-1,294,336 B. The final docs/media release commit is rebuilt and packaged separately;
-its manifest names that commit. Rust, Cargo/lock/build and native inputs must match
-this tested source byte for byte. Hardware runtime is untested.
+1,294,336 B. The final production package was built from
+`e7720fd64c928df2c233d7923a98cb4f35ecacb3`, build
+`0.10.8-e7720fd64c92-1794800172`: NRO SHA-256
+`30cb25ddea78b2f14ec4da0c4a0306fb314eed7a4cafc3a29d17beca72770c33`,
+1,286,144 B. Its manifest keeps `runtime_tested=false`. The following merge
+of the 0.10.6/0.10.7 release history changes only README, STATUS and this record;
+all compiled inputs and the packaged NRO remain byte-identical, so it is not
+rebuilt. Hardware runtime is untested.
 
 Compared with v0.10.7, production file size is **+4096 B** and NRO-header resident
 sections are **1,331,200→1,335,296 B (+4096 B)**. DWARF gives SpeedModel **368 B**.
@@ -92,6 +97,74 @@ This tool is outside the compiled plugin and does not replace the existing gates
 
 Final compliance discloses inherited failures and hardware/mode limitations;
 no publication or card install is claimed here.
+
+## 0.10.7 release (`v0.10.7` on `426184e`) — card install and release assets, untested on hardware — 2026-11-14
+
+**Untested on hardware (Eden-tested only; installed on the card, not yet played).** The operator's order (relayed
+2026-11-14 12:37Z): "Yes push but say hardware untested".
+
+- **Card install (2026-11-14 08:43Z, the rc.13 card, mounted over USB):** `installed_verified`. The card's NRO read
+  back as `cf16228f…` (1,282,048 bytes), and the card's other plugins and protected files read back unchanged. The
+  receipt is `smash-training-lobby/artifacts/phase23/card-rc13/1-deluxe/deployment.json` in the operator's evidence root.
+- **Not run on the console:** there are no console logs and no logged build id from hardware.
+- **Tag build:** the package's `source.tar.gz` is byte-identical, file for file, to `426184e`'s tree; `main`'s code
+  (`src/`, `Cargo.toml`, `Cargo.lock`, `build.rs`) equals `426184e`'s.
+- **Assets:** made with the release tool's `--untested-on-hardware` mode (the tag build's NRO must be the card
+  readback's bytes; every hardware field reads "not run on hardware").
+  - `libssbu_online_deluxe_rewrite.nro`: `cf16228f0591592fbc47c3e5a360a2b0c6f1c27a5c406b184f09bc6075f2d34c`.
+  - `manifest.json`: `17215b2fe35f1a79f608bc20b52ab6d02c61de148345fee93c0175981cda9f45`, with `runtime_tested=false`.
+  - `SHA256SUMS.txt`: `7551daf4b0c82a14d473bd0ea4ce2b80fb09d43cebf2838b168c0f65cdc26705`.
+- **Releases:** Forgejo and GitHub; every asset is downloaded back and compared after publishing.
+- Eden evidence for this build is the `426184e` entry below.
+
+## 0.10.7 (`426184e`, rc.13 branch) — `renderer-status.txt` writes `fixed_truncated=` — 2026-11-14
+
+**The change (`426184e`).** `write_status()` (diagnostics thread, not a hook) writes `fixed_truncated=<n>`, the
+`fixed::truncated()` count, beside `hook_lock_skipped=`. `eden/rc-pair/rc_steps.py` `status()` records it and requires
+the line; `docs/DEBUGGING.md` names it.
+
+**Failing first.** `rc_steps.status()` on `drc13-a2`'s saved `renderer-status-status-end-a.txt` (`dab8772`) fails with
+`no fixed_truncated= line`, and nothing else.
+
+**Gates on `426184e` (nice 19 / ionice 3).**
+- `cargo test`: 361 unit tests, then 8 and 34 integration tests, passed.
+- Clippy with warnings denied passed with and without `diag`, for both `cargo clippy --all-targets` and
+  `cargo skyline clippy`.
+- `cargo build --no-default-features` passed.
+
+**Build.**
+- Release: build `0.10.7-426184eaa77d-1794631186`, NRO `cf16228f0591592fbc47c3e5a360a2b0c6f1c27a5c406b184f09bc6075f2d34c`
+  (1,282,048 bytes).
+- Diag: NRO `0d8a6f7f…` (1,286,144 bytes).
+- `tools/hook_wait_check.py` on both: 58 hook roots and 0 forbidden waits (one allowed by name); 35 per-frame roots and
+  0 allocation or print.
+
+**Eden (`drc13-a4`, XPS, 2026-11-14 ~04:50Z).** One instance with `drc13-a2`'s pins and this release NRO (built-in
+ImGui, the card's plugins plus the tile cursor), volume 0, the GDB stub on before `game.load`. Rows load, main,
+status and z: 4 of 4 passed. The status row read a fresh `renderer-status.txt` with `fixed_truncated=0`,
+`hook_lock_skipped=0`, `imgui_stats=embedded`. Down: `released=True`. (`drc13-a3` before it booted the same build and
+wrote the same keys, but its load gate still pinned `dab8772`'s build string, so its rows did not run.) Evidence:
+`artifacts/deluxe-2/eden/drc13-a{3,4}` in the operator's evidence root.
+- Not run on the console.
+
+## 0.10.6 release (`v0.10.6` on `10e481f`) — card install and release assets, untested on hardware — 2026-11-13
+
+**Untested on hardware (Eden-tested only; installed on the card, not yet played).** The operator ordered the release at
+about 22:57Z: "push everything but note it's untested on hardware".
+
+- **Card install (22:09Z, hekate UMS):** `installed_verified`. The card's NRO read back as `66349759…` (1,191,936
+  bytes), and the card's other plugins and protected files read back unchanged. The receipt is
+  `smash-training-lobby/artifacts/phase23/card-rc12/2-deluxe/deployment.json` in the operator's evidence root.
+- **Not run on the console:** there are no console logs and no logged build id from hardware.
+- **Assets:** made with the release tool's `--untested-on-hardware` mode. It still requires the tag build's NRO to be
+  the card readback's bytes. Its evidence comes from the install receipt alone, and every hardware field reads "not run
+  on hardware".
+  - `libssbu_online_deluxe_rewrite.nro`: `66349759c5d14272e1c87a94302251ac3e434a6b5af6dda65adb8032a9e02b41`.
+  - `manifest.json`: `5fe1f3bbd33251adeedc31582a0f4522a441c41063f12c96f116769d0b68b94b`, with `runtime_tested=false`.
+  - `SHA256SUMS.txt`: `831bdfa4316cf01d6c3bcd82345546ccb9d4a7d1e76782a1d94c02b04980e898`.
+- **Releases:** Forgejo release 673 and GitHub. Every asset was downloaded back (anonymously from Forgejo, with
+  `gh release download` from GitHub) and matched.
+- Eden evidence for this build is the 0.10.6 entry below.
 
 ## 0.10.7 (`dab8772`, rc.13 branch) — fixed-capacity text: the window and the banner hooks no longer allocate: gates, ELF check and the RC pair — 2026-11-13
 
