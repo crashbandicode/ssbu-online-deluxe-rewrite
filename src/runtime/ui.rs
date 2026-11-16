@@ -1243,20 +1243,21 @@ unsafe extern "C" fn draw() {
     }
     let frame = poll(ui, sample);
     let elapsed_tick = skyline::nn::os::GetSystemTick() as u64;
-    let (generation, elapsed_frames) = super::game_speed::elapsed_observation();
+    let (generation, observation) = super::game_speed::elapsed_observation();
     ui.speed_generation = generation;
-    ui.speed.observe_speed(generation, elapsed_tick, elapsed_frames);
+    ui.speed.observe_speed_sample(
+        generation,
+        elapsed_tick,
+        observation.map(|value| value.sample),
+    );
     #[cfg(feature = "diag")]
-    trace_game_speed(ui, elapsed_tick, generation, elapsed_frames);
+    trace_game_speed(ui, elapsed_tick, generation, observation);
     let view = ui.controls.view;
     let Ok(mut scratch) = SCRATCH.try_lock() else {
         return;
     };
     OVERLAY_STATE.store(
-        crate::overlay::pack_overlay_state(
-            crate::overlay::overlay_flags(view),
-            elapsed_tick,
-        ),
+        crate::overlay::pack_overlay_state(crate::overlay::overlay_flags(view), elapsed_tick),
         std::sync::atomic::Ordering::Release,
     );
     if view == View::Hidden {
@@ -1272,7 +1273,12 @@ unsafe extern "C" fn draw() {
 /// DIAG-only sampling clock stays out of struct fields: the source hook audit
 /// strips unshipped items/statements, not comma-terminated struct fields.
 #[cfg(feature = "diag")]
-fn trace_game_speed(ui: &UiState, tick: u64, generation: u64, elapsed_frames: Option<u32>) {
+fn trace_game_speed(
+    ui: &UiState,
+    tick: u64,
+    generation: u64,
+    observation: Option<super::game_speed::ElapsedObservation>,
+) {
     use std::sync::atomic::{AtomicU64, Ordering};
     static LAST_TICK: AtomicU64 = AtomicU64::new(0);
     if tick.wrapping_sub(LAST_TICK.load(Ordering::Relaxed))
@@ -1284,10 +1290,16 @@ fn trace_game_speed(ui: &UiState, tick: u64, generation: u64, elapsed_frames: Op
     let reading = ui.speed.speed_reading();
     let percent = reading.and_then(|r| r.percent).unwrap_or(0xff);
     let cause = reading.map_or(0, |r| r.cause as u64);
-    let packed = u64::from(elapsed_frames.unwrap_or(u32::MAX))
+    let packed = u64::from(observation.map_or(u32::MAX, |value| value.sample.elapsed_frames))
         | (u64::from(percent) << 32)
         | (cause << 40);
     super::RECORDER.record(tick, Code::GameSpeedSample, packed, generation);
+    super::RECORDER.record(
+        tick,
+        Code::GameSpeedSource,
+        observation.map_or(0, |value| value.sample.object_identity),
+        u64::from(observation.map_or(u32::MAX, |value| value.primary_elapsed)),
+    );
 }
 
 /// The ready-match strip of `view`: Settings fields with the `Opp` and timing
@@ -1314,7 +1326,15 @@ fn strip_lines<'a>(
     match (view, page) {
         (View::Settings, _) => {
             let config = &frame.config;
-            let opp = settings_rows(config, selected, peers, &frame.scene, frame.editing, rows, colors);
+            let opp = settings_rows(
+                config,
+                selected,
+                peers,
+                &frame.scene,
+                frame.editing,
+                rows,
+                colors,
+            );
             let mut facts: FixedVec<&str, 3> = FixedVec::new();
             if let Some(opp) = &opp {
                 facts.push(opp);
@@ -1322,37 +1342,35 @@ fn strip_lines<'a>(
             if frame.privacy.reconnect {
                 facts.push("* Stealth: reconnect");
             }
-            let speed_reading = super::game_speed::elapsed_token_visible(ui.speed_generation)
-                .then(|| ui.speed.speed_reading())
-                .flatten();
+            let speed_reading =
+                super::game_speed::elapsed_token_visible(ui.speed_generation).then(|| {
+                    ui.speed
+                        .speed_reading()
+                        .unwrap_or(crate::game_speed::Reading {
+                            percent: None,
+                            cause: crate::game_speed::Cause::None,
+                        })
+                });
             let speed_timing = crate::game_speed::speed_timing_line(&timing, speed_reading);
             facts.push(&speed_timing);
             strip.clear();
             strip.extend(rows.iter().filter_map(short));
-            (
-                strip,
-                Line::new(),
-                None,
-                crate::fixed::join(&facts, "   "),
-            )
+            (strip, Line::new(), None, crate::fixed::join(&facts, "   "))
         }
         (View::Window, _) => {
             // An own page's row keeps its plugin label (0.10.0).
             window_rows(frame, &ui.controls.menu, rows);
             strip.clear();
             strip.extend(rows.iter().map(|row| short(row).unwrap_or(*row)));
-            (
-                strip,
-                Line::new(),
-                None,
-                StripSecond::from(timing.as_str()),
-            )
+            (strip, Line::new(), None, StripSecond::from(timing.as_str()))
         }
         (View::Plugins | View::PluginPage, Some(page)) => {
             let plain = crate::fixed!("{}: none registered", page.title);
             let second = crate::fixed!(
                 "{} {}/{}   {timing}",
-                page.title, page.page_index, page.pages
+                page.title,
+                page.page_index,
+                page.pages
             );
             (&page.rows, plain, None, second)
         }

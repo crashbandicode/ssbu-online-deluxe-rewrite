@@ -1,12 +1,34 @@
 # Implementation and validation status
 
-## 0.10.8 candidate — implementation in progress
+## 0.10.8 candidate — shipping NO-GO
 
-The networked Settings match strip now has a native elapsed-match-time game-speed
-fact. Thresholds remain provisional pending paired calibration and review.
-Candidate gates, binary size and runtime/media validation are still pending;
-hardware is untested. See [GAME_SPEED.md](GAME_SPEED.md).
+The original candidate d3f9242 tracks normal-match throttles but its published
+native timer stays 7200 during advancing Sudden Death. The replacement reads
+the current match object's cumulative +0x3dc accumulator, with fresh registry/
+header/type validation around every sample and generation/object reset.
+Implementation is authored; the new source's gates and one all-phase paired
+validation are pending. No all-phase runtime result is claimed.
+The earlier candidate's gates passed and its NRO/header resident sections grew
+4096 bytes over v0.10.7; replacement size is not measured yet.
+Media and final compliance remain pending. Hardware is untested.
+See [GAME_SPEED.md](GAME_SPEED.md).
 
+Measured normal-time thresholds are implemented: one-second smoothing;
+below 97% for two seconds selects "delay too low"; at least 99% for one
+second clears it; a no-advance gap of at least 100 ms selects "lag spikes"
+for two seconds, taking priority. The 250 ms fast-window below-80% clause
+is removed. No 70% rule was added.
+Steady 80% produced 94/94 false spike hints despite a maximum 41.9 ms flat
+interval. The gap rule caught the 250/500 ms peer pauses (21/23 spike samples);
+it did not catch the 100 ms pause, whose observed flat span was 41 ms after
+network buffering. That outcome is expected. Normal-time calibration:
+A medians 100.393/92.302/80.668%, B 99.988/91.993/80.054%, then recovery.
+Regression cases cover the retained 7200 boundary, steady 80%, 250/500 ms
+gaps, recovery and object replacement; their execution remains pending.
+
+Shipping requires same-batch native hitlag/+0x3dc proof, normal time through
+Sudden Death, a Sudden Death peer wait/recovery, countdown/GAME exclusion
+and a real rematch/reset, plus the remaining negative and media checks.
 
 Checked on 2026-11-13 against the rc.13 branch (version 0.10.7, not released; `main` is 0.10.6, the release candidate) and the
 latest release, **0.10.4**; the version sections below are dated records.

@@ -11,6 +11,8 @@ pub mod diagnostics;
 pub mod dispatcher_backoff;
 pub mod fixed;
 pub mod game_speed;
+#[cfg(any(target_os = "switch", test))]
+mod game_speed_source;
 pub mod hoc_game_aware;
 pub mod hook_chain;
 pub mod hook_lock;

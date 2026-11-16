@@ -235,11 +235,15 @@ pub enum Code {
     /// `b` = its distinct characters outside the overlay's static glyph set.
     LabelFeed = 121,
     /// Diagnostic build only (0.10.8), at most10Hz under the existing UI try-lock.
-    /// Event.tick is the actual SystemTick sample. a bits0..31: native elapsed
-    /// match time (u32::MAX ineligible),32..39: displaypercent(ffwarmup/absent),
-    ///40..41: cause0none/1delay/2spike. b is the current stage generation token.
+    /// Event.tick is the actual SystemTick sample. a bits0..31: native cumulative
+    /// elapsed match time (u32::MAX ineligible),32..39: displaypercent(ffwarmup/absent),
+    ///40..41: cause0none/1delay/2spike. b is the eligible stage generation token (zero ineligible).
     /// No sample is emitted in the product build.
     GameSpeedSample = 122,
+    /// DIAG only, paired with code122 at the same sampled SystemTick.
+    /// a: freshly validated current match-object identity (0 invalid).
+    /// b: its normal-round elapsed timer at+3d8 (u32::MAX invalid).
+    GameSpeedSource = 123,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

@@ -3,8 +3,8 @@
 //! Input frames are the verified native elapsed clock in 60-Hz units, not an
 //! unconditional engine-tick serial. The owner can apply native rate/pause state.
 //! Callers must supply current-stage eligibility and a fresh nonzero generation.
-//! All hint thresholds below are PROVISIONAL pending paired calibration. In
-//! particular, integer clock quantization can classify steady 80% as a spike.
+//! Hints use the paired calibration ruling: sustained slow progress and observed
+//! no-advance gaps are separate; short-window quantization is not a spike.
 
 use crate::fixed::FixedStr;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -13,10 +13,8 @@ pub const SPEED_TICKS_PER_SECOND: u64 = 19_200_000;
 pub const SPEED_NATIVE_SATURATION: u32 = 21_599_999;
 const SPEED_BIN: u64 = SPEED_TICKS_PER_SECOND / 10;
 const SPEED_WINDOW: u64 = SPEED_TICKS_PER_SECOND;
-// Provisional approved design values; paired measurements must precede changes.
-const SPEED_FAST_WINDOW: u64 = SPEED_TICKS_PER_SECOND / 4;
+// Approved paired-calibration ruling, 2026-11-16 (normal-time REPORT af75258f).
 const SPEED_NO_ADVANCE: u64 = SPEED_TICKS_PER_SECOND / 10;
-const SPEED_FAST_PERCENT: u128 = 80;
 const SPEED_LOW_PERCENT: u128 = 97;
 const SPEED_CLEAR_PERCENT: u128 = 99;
 const SPEED_LOW_HOLD: u64 = SPEED_TICKS_PER_SECOND * 2;
@@ -36,6 +34,13 @@ pub struct Reading {
     /// None until one full second of eligible observations has elapsed.
     pub percent: Option<u8>,
     pub cause: Cause,
+}
+
+/// A native clock read bound to its validated current match-object identity.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SpeedSample {
+    pub object_identity: u64,
+    pub elapsed_frames: u32,
 }
 
 pub fn speed_label(reading: Reading) -> FixedStr<48> {
@@ -92,6 +97,7 @@ pub struct SpeedModel {
     count: usize,
     next: usize,
     generation: u64,
+    object_identity: u64,
     start_tick: u64,
     last_tick: u64,
     last_advance: u64,
@@ -111,6 +117,7 @@ impl SpeedModel {
             count: 0,
             next: 0,
             generation: 0,
+            object_identity: 0,
             start_tick: 0,
             last_tick: 0,
             last_advance: 0,
@@ -126,6 +133,29 @@ impl SpeedModel {
 
     pub fn speed_reading(&self) -> Option<Reading> {
         self.reading
+    }
+
+    /// Bind each observation to the validated native object. Replacement resets
+    /// even when the stage token and increasing counter would otherwise agree.
+    pub fn observe_speed_sample(
+        &mut self,
+        generation: u64,
+        tick: u64,
+        sample: Option<SpeedSample>,
+    ) {
+        let Some(sample) = sample.filter(|sample| sample.object_identity != 0) else {
+            *self = Self::new();
+            return;
+        };
+        if sample.object_identity != self.object_identity {
+            *self = Self::new();
+        }
+        self.observe_speed(generation, tick, Some(sample.elapsed_frames));
+        // The primitive can restart the whole model on clock/counter/generation
+        // changes, so restore identity after it, never before it.
+        if self.reading.is_some() {
+            self.object_identity = sample.object_identity;
+        }
     }
 
     /// Observe actual elapsed time, including gaps when the UI could not draw.
@@ -168,11 +198,6 @@ impl SpeedModel {
         // Read references before retaining now: even a long blocked UI gap is
         // measured against the actual preceding observation, never one second
         // invented at the current counter.
-        if let Some(reference) = self.speed_reference(tick, SPEED_FAST_WINDOW) {
-            if Self::speed_below(point, reference, SPEED_FAST_PERCENT) {
-                self.spike_until = tick.saturating_add(SPEED_SPIKE_HOLD);
-            }
-        }
         let reference = self.speed_reference(tick, SPEED_WINDOW);
         if tick - self.start_tick >= SPEED_WINDOW {
             if let Some(reference) = reference {
@@ -624,9 +649,7 @@ mod tests {
                 assert!(timing.ends_with(label.as_str()));
                 assert!(timing.len() < timing.capacity());
                 for name in ["W".repeat(40), "界".repeat(40)] {
-                    let opp = crate::menu::opp_line(
-                        &name, "LessLag", "25f", "999 ms", "Ethernet",
-                    );
+                    let opp = crate::menu::opp_line(&name, "LessLag", "25f", "999 ms", "Ethernet");
                     let opp: crate::menu::StripText = crate::fixed!("Opp: {}", opp);
                     let facts = [opp.as_str(), "* Stealth: reconnect", timing.as_str()];
                     let second: FixedStr<512> = crate::fixed::join(&facts, "   ");
@@ -634,8 +657,11 @@ mod tests {
                     assert!(second.len() < second.capacity());
                     for scale in [0.5, 1.0] {
                         let size = crate::menu::compact_font_size(
-                            "You: LessLag | 25f | Ethernet", &second,
-                            1280.0 * scale, scale, scale,
+                            "You: LessLag | 25f | Ethernet",
+                            &second,
+                            1280.0 * scale,
+                            scale,
+                            scale,
                         );
                         assert!(size.is_finite() && size > 0.0 && size <= 16.0 * scale);
                     }
@@ -685,6 +711,483 @@ mod tests {
         assert_eq!(model.speed_reading().unwrap().cause, Cause::None);
     }
 
+    // Retained calibration4 samples, every third poll; host monotonic ns are
+    // projected to SystemTick units. This exercises model semantics, not UI
+    // sampling or a fresh runtime. Full derivation and SHA256 receipts are kept
+    // outside the repo in counter-fix/model/fixture-derivation.json.
+    const SPEED_RETAINED_80: &[(u64, u32)] = &[
+        (0, 0),
+        (1188657, 4),
+        (2379509, 7),
+        (3568102, 11),
+        (4761560, 13),
+        (5950493, 17),
+        (7135271, 19),
+        (8324060, 22),
+        (9509844, 25),
+        (10707534, 29),
+        (11893324, 31),
+        (13077062, 34),
+        (14264194, 37),
+        (15451953, 39),
+        (16637635, 44),
+        (17822043, 47),
+        (19010503, 49),
+        (20204661, 52),
+        (21398587, 55),
+        (22583872, 58),
+        (23770817, 60),
+        (24959510, 64),
+        (26152578, 67),
+        (27340887, 70),
+        (28532566, 73),
+        (29732702, 76),
+        (30922528, 79),
+        (32108238, 81),
+        (33296879, 85),
+        (34489290, 87),
+        (35675106, 91),
+        (36860726, 94),
+        (38045457, 97),
+        (39232276, 99),
+        (40428283, 102),
+        (41615569, 105),
+        (42805866, 109),
+        (43990441, 112),
+        (45177904, 114),
+        (46367540, 118),
+        (47554588, 121),
+        (48746030, 123),
+        (49952502, 126),
+        (51139170, 130),
+        (52330155, 133),
+        (53517702, 135),
+        (54704486, 138),
+        (55890420, 142),
+        (57077406, 144),
+        (58266060, 147),
+        (59467791, 150),
+        (60659155, 153),
+        (61843251, 155),
+        (63035088, 159),
+        (64227238, 162),
+        (65417186, 165),
+        (66605704, 168),
+        (67791628, 171),
+        (68979735, 174),
+        (70181838, 176),
+        (71377353, 179),
+        (72559625, 183),
+        (73750146, 187),
+        (74939110, 189),
+        (76139708, 191),
+        (77327965, 195),
+        (78514121, 198),
+        (79717972, 200),
+        (80902971, 204),
+        (82089368, 207),
+        (83274698, 210),
+        (84463976, 212),
+        (85647469, 216),
+        (86840725, 219),
+        (88025221, 222),
+        (89226664, 225),
+        (90409770, 228),
+        (91596800, 231),
+        (92787908, 234),
+        (93976783, 236),
+        (95168640, 239),
+        (96367137, 242),
+        (97555190, 245),
+        (98747698, 248),
+        (99942417, 252),
+        (101128576, 255),
+        (102314772, 258),
+        (103501754, 260),
+        (104684214, 262),
+        (105869483, 267),
+        (107055143, 269),
+        (108241498, 272),
+        (109437891, 275),
+        (110628529, 278),
+        (111819775, 281),
+        (113005090, 284),
+        (114193372, 286),
+        (115383649, 290),
+        (116573104, 292),
+        (117761030, 295),
+    ];
+    const SPEED_RETAINED_250: &[(u64, u32)] = &[
+        (0, 0),
+        (1197709, 4),
+        (2390732, 8),
+        (3584049, 11),
+        (4781543, 15),
+        (5973312, 19),
+        (7167098, 23),
+        (8353737, 26),
+        (9540197, 29),
+        (10728904, 34),
+        (11917334, 38),
+        (13114207, 41),
+        (14312288, 44),
+        (15502013, 49),
+        (16689770, 53),
+        (17876179, 56),
+        (19061121, 59),
+        (20249807, 64),
+        (21439816, 67),
+        (22623914, 71),
+        (23825890, 74),
+        (25013016, 79),
+        (26202140, 82),
+        (27389267, 85),
+        (28577919, 85),
+        (29776012, 85),
+        (30961890, 86),
+        (32144775, 90),
+        (33337510, 94),
+        (34536982, 97),
+        (35731201, 100),
+        (36925831, 104),
+        (38117003, 108),
+        (39305569, 111),
+        (40507985, 114),
+        (41700883, 119),
+        (42886268, 123),
+        (44080814, 126),
+        (45268016, 129),
+        (46453720, 133),
+        (47639181, 137),
+        (48826549, 141),
+        (50013713, 144),
+        (51200491, 148),
+        (52388490, 152),
+        (53582509, 156),
+        (54768316, 159),
+        (55954712, 163),
+        (57140257, 167),
+        (58331485, 171),
+        (59518245, 174),
+        (60704527, 177),
+        (61889148, 182),
+        (63076097, 186),
+        (64275497, 189),
+        (65460281, 192),
+        (66645641, 196),
+        (67832573, 200),
+        (69020984, 204),
+        (70208092, 207),
+        (71401825, 212),
+        (72588718, 215),
+        (73782640, 219),
+        (74969874, 222),
+        (76155588, 226),
+        (77344283, 230),
+        (78535603, 234),
+        (79728462, 237),
+        (80917280, 241),
+        (82103749, 245),
+        (83298512, 249),
+        (84483238, 252),
+        (85668503, 255),
+        (86853197, 260),
+        (88038956, 263),
+        (89226760, 267),
+        (90411488, 270),
+        (91593627, 275),
+        (92782441, 278),
+        (93979289, 282),
+        (95167757, 285),
+        (96359784, 290),
+        (97547999, 293),
+        (98735619, 297),
+        (99923267, 300),
+        (101114088, 305),
+        (102307081, 308),
+        (103506485, 312),
+        (104694400, 315),
+        (105886478, 318),
+        (107085034, 323),
+        (108272250, 326),
+        (109557770, 331),
+        (110743106, 334),
+        (111932031, 338),
+        (113132790, 341),
+        (114323652, 345),
+        (115542432, 349),
+        (116735838, 352),
+        (117929335, 357),
+        (119123878, 360),
+    ];
+    const SPEED_RETAINED_500: &[(u64, u32)] = &[
+        (0, 0),
+        (1188232, 3),
+        (2381568, 7),
+        (3578004, 11),
+        (4769208, 15),
+        (5953645, 18),
+        (7151766, 22),
+        (8344569, 26),
+        (9531953, 29),
+        (10717551, 34),
+        (11907306, 37),
+        (13109675, 41),
+        (14299485, 44),
+        (15489947, 49),
+        (16683679, 52),
+        (17872756, 56),
+        (19058743, 59),
+        (20242607, 64),
+        (21426780, 67),
+        (22624402, 71),
+        (23806827, 74),
+        (24996988, 77),
+        (26183601, 82),
+        (27366932, 86),
+        (28554961, 89),
+        (29745027, 92),
+        (30933961, 97),
+        (32126739, 97),
+        (33330497, 97),
+        (34520879, 97),
+        (35705439, 97),
+        (36898621, 97),
+        (38092480, 97),
+        (39280940, 97),
+        (40471528, 98),
+        (41659722, 102),
+        (42860062, 106),
+        (44049506, 110),
+        (45235763, 113),
+        (46424241, 116),
+        (47610709, 121),
+        (48799614, 125),
+        (49987867, 129),
+        (51172692, 132),
+        (52371821, 135),
+        (53561514, 140),
+        (54752839, 143),
+        (55937131, 147),
+        (57122485, 150),
+        (58306939, 154),
+        (59490687, 158),
+        (60672002, 162),
+        (61854049, 165),
+        (63051305, 168),
+        (64236072, 173),
+        (65421612, 176),
+        (66609236, 180),
+        (67795132, 183),
+        (68984831, 188),
+        (70170807, 192),
+        (71361447, 195),
+        (72555389, 198),
+        (73745421, 203),
+        (74934891, 207),
+        (76116997, 210),
+        (77307007, 213),
+        (78494404, 218),
+        (79677407, 221),
+        (80861476, 225),
+        (82060228, 228),
+        (83250138, 232),
+        (84441487, 236),
+        (85627310, 240),
+        (86816388, 243),
+        (88005376, 246),
+        (89188835, 251),
+        (90381726, 255),
+        (91566893, 258),
+        (92765353, 261),
+        (93950291, 266),
+        (95134760, 270),
+        (96319003, 273),
+        (97513149, 276),
+        (98698928, 281),
+        (99887859, 284),
+        (101073166, 288),
+        (102271795, 291),
+        (103457811, 295),
+        (104653237, 299),
+        (105839220, 303),
+        (107024850, 306),
+        (108218039, 310),
+        (109421606, 314),
+        (110616765, 318),
+        (111820694, 321),
+        (113010670, 325),
+        (114202094, 329),
+        (115389861, 333),
+        (116574339, 336),
+        (117758812, 339),
+        (118942209, 344),
+        (120138459, 347),
+        (121325525, 351),
+        (122532142, 354),
+        (123723593, 359),
+        (124937105, 362),
+        (126128423, 365),
+        (127320253, 370),
+    ];
+
+    #[test]
+    fn speed_retained_steady80_has_delay_without_false_spikes() {
+        let mut model = SpeedModel::new();
+        for &(tick, frames) in SPEED_RETAINED_80 {
+            model.observe_speed(1, tick, Some(frames));
+            assert_ne!(model.speed_reading().unwrap().cause, Cause::LagSpikes);
+        }
+        let reading = model.speed_reading().unwrap();
+        assert!((78..=82).contains(&reading.percent.unwrap()));
+        assert_eq!(reading.cause, Cause::DelayTooLow);
+    }
+
+    #[test]
+    fn speed_retained_250_and_500ms_gaps_spike_then_recover() {
+        for samples in [SPEED_RETAINED_250, SPEED_RETAINED_500] {
+            let mut model = SpeedModel::new();
+            let mut saw_spike = false;
+            for &(tick, frames) in samples {
+                model.observe_speed(1, tick, Some(frames));
+                saw_spike |= model.speed_reading().unwrap().cause == Cause::LagSpikes;
+            }
+            assert!(saw_spike);
+            let reading = model.speed_reading().unwrap();
+            assert_eq!(reading.cause, Cause::None);
+            assert!((98..=100).contains(&reading.percent.unwrap()));
+        }
+    }
+
+    #[test]
+    fn speed_object_replacement_and_invalid_reads_restart_same_stage() {
+        let mut model = SpeedModel::new();
+        let sample = |object_identity, elapsed_frames| {
+            Some(SpeedSample {
+                object_identity,
+                elapsed_frames,
+            })
+        };
+        for ms in (0..=4000).step_by(10) {
+            model.observe_speed_sample(
+                3,
+                speed_tick_ms(ms),
+                sample(11, (ms * 552 / 10_000) as u32),
+            );
+        }
+        assert_eq!(model.speed_reading().unwrap().cause, Cause::DelayTooLow);
+        model.observe_speed_sample(3, speed_tick_ms(4100), sample(12, 300));
+        assert_eq!(
+            model.speed_reading().unwrap(),
+            Reading {
+                percent: None,
+                cause: Cause::None
+            }
+        );
+        model.observe_speed_sample(3, speed_tick_ms(5100), sample(12, 360));
+        assert_eq!(model.speed_reading().unwrap().percent, Some(100));
+        // Inner counter rollback resets Self, but must preserve the new identity.
+        model.observe_speed_sample(3, speed_tick_ms(5200), sample(12, 1));
+        model.observe_speed_sample(3, speed_tick_ms(6200), sample(12, 61));
+        assert_eq!(model.speed_reading().unwrap().percent, Some(100));
+        for invalid in [None, sample(0, 65)] {
+            model.observe_speed_sample(3, speed_tick_ms(6300), invalid);
+            assert_eq!(model.speed_reading(), None);
+            model.observe_speed_sample(3, speed_tick_ms(6400), sample(12, 100));
+            assert_eq!(model.speed_reading().unwrap().percent, None);
+        }
+    }
+
+    // Proof3 A indices1955..2162 every third sample. Mirror remains7200 while
+    // the owner's cumulative +0xc advances. Raw source SHA7662af70a665f1cb.
+    #[test]
+    fn speed_retained_proof3_cumulative_clock_continues_past_mirror_hold() {
+        const SAMPLES: &[(u64, u32, u32)] = &[
+            (0, 7201, 7200),
+            (2934261, 7209, 7200),
+            (5898814, 7219, 7200),
+            (8836584, 7228, 7200),
+            (11763459, 7237, 7200),
+            (14695329, 7246, 7200),
+            (17635824, 7255, 7200),
+            (20563207, 7263, 7200),
+            (23565587, 7270, 7200),
+            (26630269, 7277, 7200),
+            (29557990, 7285, 7200),
+            (32499533, 7295, 7200),
+            (35437104, 7303, 7200),
+            (38367478, 7313, 7200),
+            (41304748, 7322, 7200),
+            (44261652, 7331, 7200),
+            (47209630, 7340, 7200),
+            (50139864, 7349, 7200),
+            (53063879, 7359, 7200),
+            (55999035, 7368, 7200),
+            (58924199, 7376, 7200),
+            (61857677, 7386, 7200),
+            (64815391, 7395, 7200),
+            (67748853, 7404, 7200),
+            (70689186, 7414, 7200),
+            (73615284, 7423, 7200),
+            (76571064, 7432, 7200),
+            (79506255, 7441, 7200),
+            (82444639, 7450, 7200),
+            (85402557, 7460, 7200),
+            (88324032, 7468, 7200),
+            (91268825, 7478, 7200),
+            (94212452, 7487, 7200),
+            (97162820, 7497, 7200),
+            (100088513, 7506, 7200),
+            (103041107, 7514, 7200),
+            (105980174, 7524, 7200),
+            (108906087, 7533, 7200),
+            (111838180, 7542, 7200),
+            (114804450, 7551, 7200),
+            (117778769, 7561, 7200),
+            (120711433, 7570, 7200),
+            (123914869, 7578, 7200),
+            (126834295, 7578, 7200),
+            (129749631, 7578, 7200),
+            (132665686, 7578, 7200),
+            (135588157, 7578, 7200),
+            (138502370, 7578, 7200),
+            (141419683, 7578, 7200),
+            (144948220, 7587, 7200),
+            (147868918, 7596, 7200),
+            (150791977, 7604, 7200),
+            (153746755, 7610, 7200),
+            (156691380, 7619, 7200),
+            (159625175, 7629, 7200),
+            (162564399, 7638, 7200),
+            (165496366, 7647, 7200),
+            (168421587, 7656, 7200),
+            (171349669, 7665, 7200),
+            (174297129, 7675, 7200),
+            (177222728, 7684, 7200),
+            (180149518, 7693, 7200),
+            (183097049, 7702, 7200),
+            (186030872, 7711, 7200),
+            (188967311, 7720, 7200),
+            (191893649, 7730, 7200),
+            (194835417, 7738, 7200),
+            (197762015, 7747, 7200),
+            (200689578, 7757, 7200),
+            (203639277, 7766, 7200),
+        ];
+        let mut cumulative = SpeedModel::new();
+        let mut mirror = SpeedModel::new();
+        for &(tick, frames, held) in SAMPLES {
+            assert_eq!(held, 7200);
+            cumulative.observe_speed(1, tick, Some(frames));
+            mirror.observe_speed(1, tick, Some(held));
+        }
+        let reading = cumulative.speed_reading().unwrap();
+        assert!((98..=100).contains(&reading.percent.unwrap()));
+        assert_eq!(reading.cause, Cause::None);
+        assert_eq!(mirror.speed_reading().unwrap().percent, Some(0));
+        assert_eq!(mirror.speed_reading().unwrap().cause, Cause::LagSpikes);
+    }
+
     #[test]
     fn speed_allocation_probe_detects_an_allocation() {
         SPEED_ALLOCATIONS.with(|count| count.set(0));
@@ -708,10 +1211,13 @@ mod tests {
         let armed = epoch.speed_arm_stage(ticket);
         let mut labels = 0usize;
         for ms in (0..=10_000).step_by(10) {
-            model.observe_speed(
+            model.observe_speed_sample(
                 epoch.speed_stage_token().unwrap(),
                 speed_tick_ms(ms),
-                Some((ms * 552 / 10_000) as u32),
+                Some(SpeedSample {
+                    object_identity: 11,
+                    elapsed_frames: (ms * 552 / 10_000) as u32,
+                }),
             );
             if let Some(reading) = model.speed_reading() {
                 labels += speed_label(reading).len();

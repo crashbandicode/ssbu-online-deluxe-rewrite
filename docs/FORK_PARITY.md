@@ -6,7 +6,7 @@ The Settings match strip adds a bounded native elapsed-match-time percentage and
 cause hint for current networked battles, including Arena and local wireless.
 This is a rewrite extension with no preserved-fork counterpart. Native banners,
 Auto profile policy and the two-row strip layout are unchanged. The new fact
-joins the existing timing segment. [Native source and provisional behavior](GAME_SPEED.md).
+joins the existing timing segment. [Native source and measured hint thresholds](GAME_SPEED.md).
 Host/runtime/media acceptance remains pending on the candidate; the older
 validation claims below retain their original builds and scope.
 
