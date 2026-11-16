@@ -1183,7 +1183,9 @@ mod tests {
         }
         let reading = cumulative.speed_reading().unwrap();
         assert!((98..=100).contains(&reading.percent.unwrap()));
-        assert_eq!(reading.cause, Cause::None);
+        // The retained clock includes a later flat interval; its final >=99%
+        // streak is only 0.153630s, so one-second recovery has not cleared delay.
+        assert_eq!(reading.cause, Cause::DelayTooLow);
         assert_eq!(mirror.speed_reading().unwrap().percent, Some(0));
         assert_eq!(mirror.speed_reading().unwrap().cause, Cause::LagSpikes);
     }
