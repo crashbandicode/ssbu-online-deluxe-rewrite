@@ -1,5 +1,24 @@
 # Validation record
 
+## 0.10.8 — online play on Switch — 2026-11-18
+
+The operator played online on their Switch and reported no crashes or desync.
+The card contained the exact release NRO installed and verified by readback on
+2026-11-16.
+
+**Tested on:** Super Smash Bros. Ultimate 13.0.5 · Switch firmware (HOS) 23.5.0 · Atmosphère 1.12.2.
+
+- Build commit: `e7720fd64c928df2c233d7923a98cb4f35ecacb3` (`v0.10.8`).
+- Build ID: `0.10.8-e7720fd64c92-1794800172`.
+- NRO: 1,286,144 B, SHA-256
+  `30cb25ddea78b2f14ec4da0c4a0306fb314eed7a4cafc3a29d17beca72770c33`.
+
+The report covers stability and sync during the operator's online play.
+Arena, Elite Smash, local wireless, the full negative-control and long-string
+runtime matrices, and a confirmed rematch-yes route remain unverified. The
+paired timing measurements and footage below come from Eden. The release
+has no fresh replay A/B result or separately exercised Sudden Death stall.
+
 ## 0.10.8 game speed — 2026-11-16 UTC
 
 Scope: the existing ImGui Settings match strip gains live game speed during
@@ -26,10 +45,11 @@ Production build `0.10.8-a4411607be20-1794789468`: NRO SHA-256
 `e7720fd64c928df2c233d7923a98cb4f35ecacb3`, build
 `0.10.8-e7720fd64c92-1794800172`: NRO SHA-256
 `30cb25ddea78b2f14ec4da0c4a0306fb314eed7a4cafc3a29d17beca72770c33`,
-1,286,144 B. Its manifest keeps `runtime_tested=false`. The following merge
-of the 0.10.6/0.10.7 release history changes only README, STATUS and this record;
-all compiled inputs and the packaged NRO remain byte-identical, so it is not
-rebuilt. Hardware runtime is untested.
+1,286,144 B. The manifest retains the original packaging-time value
+`runtime_tested=false`. The November 18 console result is recorded above.
+The subsequent merge of the 0.10.6/0.10.7 release history changed only
+README, STATUS and this record. Compiled inputs and the packaged NRO stayed
+byte-identical.
 
 Compared with v0.10.7, production file size is **+4096 B** and NRO-header resident
 sections are **1,331,200→1,335,296 B (+4096 B)**. DWARF gives SpeedModel **368 B**.
@@ -86,17 +106,17 @@ The new [game-speed GIF](media/game-speed.gif), normal/dip/recovered stills and
 refreshed match-strip trio use real retained frames from that same pair.
 Captures requested 10 fps but actually took 8.2–8.4 s per 30 frames.
 The new cut respects source timestamps and omits setup intervals, rather than
-speeding them up. Captions name UTC date/build and **Eden (untested on hardware)**.
+speeding them up. Captions identify the UTC date, build and Eden capture.
 [Media provenance](MEDIA_PROVENANCE.md) records exact inputs, hashes and transforms.
-Retained-media checks run with
-`python3 -I tools/verify_game_speed_release.py . --evidence <bundle> --out <report.json>`.
-Six checks bind GIF delays/source hashes, inventory, references, review chronology
-and the held publication boundary; two tampered source/delay fixtures were rejected.
+The pre-publication retained-media verifier
+(`tools/verify_game_speed_release.py`) ran against the sealed review state.
+Six checks bound GIF delays/source hashes, inventory, references, review chronology
+and the publication hold. Two tampered source/delay fixtures were rejected.
 Pixel truth and authorization remain explicit human receipts, not script inference.
 This tool is outside the compiled plugin and does not replace the existing gates.
 
-Final compliance discloses inherited failures and hardware/mode limitations;
-no publication or card install is claimed here.
+Final compliance disclosed the inherited failures and runtime coverage limits
+of the November 16 evidence.
 
 ## 0.10.7 release (`v0.10.7` on `426184e`) — card install and release assets, untested on hardware — 2026-11-14
 

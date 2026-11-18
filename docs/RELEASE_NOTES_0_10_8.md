@@ -1,6 +1,10 @@
 # Online Deluxe 0.10.8
 
-Prepared 2026-11-16 UTC. **Eden (untested on hardware).**
+The operator tested the release NRO online on their Switch on 2026-11-18
+and reported no crashes or desync.
+
+**Tested on:** Super Smash Bros. Ultimate 13.0.5 · Switch firmware (HOS) 23.5.0 · Atmosphère 1.12.2.
+[Download v0.10.8](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.10.8).
 
 The Settings match strip now shows **Game 100%** beside ping and buffer during
 networked battles. When native elapsed match time advances more slowly than real
@@ -23,7 +27,7 @@ Sudden Death continues to measure advancing match time. Native banners are uncha
 ![Game speed before, during and after a peer throttle](media/game-speed.gif)
 
 *2026-11-16 UTC; build 0.10.8-a4411607be20-1794789531 diagnostic observer;
-Eden (untested on hardware). Three real-frame cuts: normal → peer 92% speed
+Eden LAN Online Quickplay. Three real-frame cuts: normal → peer 92% speed
 limit → restored 100%; setup intervals omitted. Actual variable cadence,
 27 frames / 7.46 s; no 10 fps capture claim.*
 
@@ -42,6 +46,7 @@ over v0.10.7, with a **368 B** fixed speed model.
 [Measurement and limitations](GAME_SPEED.md) · [Validation record](VALIDATION.md) ·
 [Build and release](BUILD.md) · [Install](INSTALL.md)
 
-Publication, tag and card installation remain held for primary review of the
-complete package. The release build's manifest is authoritative for its commit,
-build ID and hashes; the media identifies its runtime-tested source build.
+Arena, Elite Smash, local wireless, the full negative-control and long-string
+runtime matrices, and an explicit rematch-yes route remain unverified.
+The release manifest records the production commit, build ID and hashes.
+The media captions identify the earlier Eden diagnostic build.

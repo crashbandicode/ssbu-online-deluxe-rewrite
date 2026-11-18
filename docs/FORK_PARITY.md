@@ -1,6 +1,6 @@
 # Fork feature parity
 
-## Unreleased0.10.8 extension — game speed
+## Released 0.10.8 extension — game speed
 
 The Settings match strip adds a bounded native elapsed-match-time percentage and
 cause hint for current networked battles, including Arena and local wireless.

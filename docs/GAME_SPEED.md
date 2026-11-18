@@ -10,8 +10,11 @@ The readout covers Quickplay, Elite Smash, Arena and local-wireless battles.
 It is absent in Training, waiting-room practice, offline play, character select,
 countdown, GAME/KO, results and menus. It starts as “Game --” while collecting
 the first second, or when current-object validation fails. Native banners are
-unchanged. Eden LAN Online Quickplay supplied the paired runtime evidence;
-hardware is untested.
+unchanged. Eden LAN Online Quickplay supplied the paired timing evidence.
+On 2026-11-18 the operator played online on their Switch with the release NRO
+and reported no crashes or desync. Arena, Elite Smash, local wireless, the full
+negative-control and long-string runtime matrices, and the explicit rematch-yes
+route remain unverified.
 
 The normal-time paired calibration selected these values:
 
@@ -101,7 +104,7 @@ SD stall: covered by the identical normal-time stall mechanism; not separately r
 See [VALIDATION.md](VALIDATION.md) and [media provenance](MEDIA_PROVENANCE.md).
 The new GIF uses three retained cuts at their actual capture cadence, showing
 normal speed, the 92% peer throttle's delay hint, and recovery. Setup intervals
-between cuts are omitted. **Eden (untested on hardware).**
+between cuts are omitted. Footage comes from Eden LAN Online Quickplay.
 
 ![Online game speed near 100%, then a throttle dip with delay hint, then recovery](media/game-speed.gif)
 

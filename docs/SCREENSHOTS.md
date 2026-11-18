@@ -3,7 +3,7 @@
 A short visual tour of the Deluxe window. The online match-strip and game-speed examples were
 captured on **2026-11-16 UTC**, using build
 `0.10.8-a4411607be20-1794789531` in a real paired LAN Online Quickplay match:
-**Eden (untested on hardware)**. The animation retains the measured capture
+**Eden**. The animation retains the measured capture
 timing; it is not an FPS benchmark.
 
 The other examples remain historical offline captures: most from 0.7.0 on
@@ -117,7 +117,7 @@ the strip also shows the Opp summary and Game speed percentage.
 ![Online match strip with Game 100% at source-pixel size](media/match-strip-closeup.png)
 
 2026-11-16 UTC · build `0.10.8-a4411607be20-1794789531` ·
-Eden (untested on hardware). This is the XPS DIAG observer in the paired match;
+Eden LAN Online Quickplay. This is the XPS DIAG observer in the paired match;
 the Yoga peer ran the production build from the same source commit.
 
 | | |
@@ -132,7 +132,7 @@ below retain their original labels and do not demonstrate online Game speed.
 ![Live online Game speed: normal, delay dip, recovered](media/game-speed.gif)
 
 2026-11-16 UTC · build `0.10.8-a4411607be20-1794789531` ·
-Eden (untested on hardware). The real paired match shows normal speed,
+Eden LAN Online Quickplay. The real paired match shows normal speed,
 a dip while the other peer is limited to 92%, and recovery after restoring
 100%. These are three chronological cuts, 7.46 seconds in total; the setting
 actions and intervening waits are omitted. Capture timing is preserved.
@@ -170,7 +170,7 @@ actions and intervening waits are omitted. Capture timing is preserved.
 
 | | |
 | --- | --- |
-| ![Online match with the Settings strip](media/match-settings-strip.png) <br> Real paired Quickplay: two Sephiroths, Opp summary and `Game 100%`. | ![Online match with the Settings strip, animated](media/match-strip.gif) <br> 3.50 seconds at the measured capture cadence, 1280 pixels wide. 2026-11-16 UTC, build `0.10.8-a4411607be20-1794789531`; Eden (untested on hardware). |
+| ![Online match with the Settings strip](media/match-settings-strip.png) <br> Real paired Quickplay: two Sephiroths, Opp summary and `Game 100%`. | ![Online match with the Settings strip, animated](media/match-strip.gif) <br> 3.50 seconds at the measured capture cadence, 1280 pixels wide. 2026-11-16 UTC, build `0.10.8-a4411607be20-1794789531`; Eden LAN Online Quickplay. |
 | ![Match with the Performance strip](media/match-performance.png) <br> Performance uses the compact strip too. | ![Debug table over the pause menu](media/match-debug.png) <br> Debug stays a vertical table; L+R+Plus also opens the game's pause menu. |
 | ![No Contest after quitting](media/results-quit.png) <br> Results after Quit and Yes: No Contest, not a completed match. | |
 

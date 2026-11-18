@@ -2,13 +2,18 @@
 
 ## Current release: 0.10.8
 
-**0.10.8 released, untested on hardware (Eden-tested only).**
+**0.10.8 released and tested online on the operator's Switch on 2026-11-18.**
+The operator reported no crashes or desync with the release NRO installed.
+
+**Tested on:** Super Smash Bros. Ultimate 13.0.5 · Switch firmware (HOS) 23.5.0 · Atmosphère 1.12.2.
 
 The Settings match strip now shows live game speed beside ping and buffer in
 networked battles. It reads the freshly validated current match object's +0x3dc
 cumulative elapsed accumulator, including Sudden Death. It never counts presents.
 [Game speed](GAME_SPEED.md) describes eligibility, smoothing and the bounded hints.
-Hardware is untested; the observed paired mode was Eden LAN Online Quickplay.
+The instrumented paired evidence comes from Eden LAN Online Quickplay.
+Arena, Elite Smash, local wireless, the full runtime negative-control and
+long-string matrices, and the explicit rematch-yes route remain unverified.
 
 Source `a4411607be20` passed all eight existing host/Skyline/diag gate steps:
 424 tests, zero failures/ignored, and zero clippy warnings. Production and diag
@@ -41,20 +46,12 @@ The remaining SD pair was cancelled before Up. Retained real online frames suppl
 the new game-speed GIF/stills and refreshed match-strip group. The final traced
 compliance report discloses the inherited baseline failures. The accepted package
 is build `0.10.8-e7720fd64c92-1794800172`, NRO `30cb25dd…`.
-This merge preserves the 0.10.6/0.10.7 documentation history without rebuilding
-or changing the compiled inputs or NRO.
+The v0.10.8 tag points to the exact production build commit. The card readback
+matched its NRO on 2026-11-16. See the [Forgejo release](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.10.8)
+and [Switch validation](VALIDATION.md#0108--online-play-on-switch--2026-11-18).
 
-Package review is accepted. Card installation waits for the operator to expose
-UMS or DBI; the tag and Forgejo release follow the operator's hardware
-confirmation. No push, tag, release or card write is part of this documentation
-merge; publication and card installation belong to the primary.
-See [VALIDATION.md](VALIDATION.md).
-
-Checked on 2026-11-16 against 0.10.8, **released, untested on hardware
-(Eden-tested only)**. The 0.10.6 and 0.10.7 releases were installed on the card
-but have not run on the console. The version sections below are dated records.
-Exact release/build and console evidence is in
-[VALIDATION.md](VALIDATION.md). Releases: 0.10.7 `426184e`, 0.10.6 `10e481f`, 0.10.4 `21c0009`, 0.10.2 `73488c1`,
+The version sections below are dated records. Exact release/build and console
+evidence is in [VALIDATION.md](VALIDATION.md). Releases: 0.10.7 `426184e`, 0.10.6 `10e481f`, 0.10.4 `21c0009`, 0.10.2 `73488c1`,
 0.10.1 `03e9d42`, 0.10.0 `89e9b47`, 0.9.0 `d6402b4`, 0.8.1 `84da224`, 0.8.0
 `d92bc3d`, 0.7.0 `9a7f81c`, 0.6.2 `302c095`, 0.6.1 `9d0cec2`, 0.6.0 `a0dc5d6`,
 0.5.7 `282a2df`, 0.5.6 `fb2012a`, 0.5.5 `6a9e61a`, 0.5.4 `a63bc8c`. The rewrite is one Rust/Skyline
@@ -67,16 +64,11 @@ the clock probe (0.5.3) only records the clock state so that performance
 captures can be classified, and since 0.8.1 `hoc_oc=online` tells the
 game-aware Horizon-OC fork when Smash's saved profile may apply.
 
-On 2026-10-25 the operator reported testing in **Eden and on an Erista Switch
-without issues**, with Switch firmware **23.0.1**, Atmosphère **1.12.1** and
-Skyline **beta `2eb226f`** (latest checked 2026-10-25;
-[version links and report](VALIDATION.md#operator-report--eden-and-erista-switch--2026-10-25)).
-0.10.4 ran on the same firmware and Atmosphère on 2026-11-10. Atmosphère
-1.12.2p1, hekate 6.5.5 and Horizon OC 2.6.1 were written to the card on
-2026-11-12; nothing is console-tested on Atmosphère 1.12.2 or firmware 23.5.0
-yet. The 2026-10-24 offline UI review also covers the released 0.7.0 menu, privacy
-shortcuts and strips. Specific measurements and online/negative-control checks
-below remain distinct from that general compatibility report.
+Earlier console environments and version links are recorded in
+[Validation](VALIDATION.md#operator-report--eden-and-erista-switch--2026-10-25).
+The 2026-10-24 offline UI review covers the released 0.7.0 menu, privacy
+shortcuts and strips. The specific measurements and online/negative-control
+checks below have their own validation records.
 
 Publication routing: `origin` is Forgejo
 (`git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite`), authoritative

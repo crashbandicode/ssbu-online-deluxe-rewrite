@@ -2,14 +2,12 @@
 
 > AI-assisted, human-directed and reviewed.
 
-**0.10.8 is released, untested on hardware (Eden-tested only).**
-Card installation is pending; the tag and public release assets follow hardware
-confirmation. 0.10.6 and 0.10.7 were installed on the card but not yet played.
-0.10.4 is the latest release that ran on the operator's **Switch**: on
-2026-11-10 with
-[Switch firmware 23.0.1][firmware] and [Atmosphère 1.12.1][atmosphere].
-Firmware 23.5.0 and Atmosphère 1.12.2 aren't tested yet.
-[Validation](docs/VALIDATION.md).
+**[Download Online Deluxe 0.10.8](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.10.8).**
+The operator played online on their **Switch** on 2026-11-18 with the
+release NRO installed and reported no crashes or desync.
+
+**Tested on:** Super Smash Bros. Ultimate 13.0.5 · Switch firmware (HOS) 23.5.0 · Atmosphère 1.12.2.
+[Validation](docs/VALIDATION.md#0108--online-play-on-switch--2026-11-18).
 
 A Rust/Skyline rebuild of Online Deluxe for **Super Smash Bros. Ultimate
 13.0.5**, shipped as **one NRO**: lower-latency rendering, a small in-game
@@ -21,7 +19,6 @@ match strip. It shows how quickly native elapsed match time advances, with
 brief hints for sustained slowdown or observed freezes. It covers networked
 battles, including Sudden Death, and stays out of Training and offline play.
 [Release notes](docs/RELEASE_NOTES_0_10_8.md) · [How it is measured](docs/GAME_SPEED.md).
-The 0.10.8 package passed review; **Eden (untested on hardware)**.
 
 ![The Player Info Settings window: the You row with eye and TV icons, NetLatency and NetProfile](docs/media/settings-window.png)
 
@@ -113,7 +110,7 @@ In ordinary matches the window becomes a two-row strip at the top left.
 ![Real online game speed near 100%, a 92% peer throttle with the delay-too-low hint, then recovery](docs/media/game-speed.gif)
 
 *2026-11-16 UTC, 0.10.8-a4411607be20-1794789531 diagnostic observer;
-Eden (untested on hardware). Three cuts from one real online pair: normal →
+Eden LAN Online Quickplay. Three cuts from one pair: normal →
 peer speed limit lowered to 92% → restored to 100%. Setup intervals are omitted;
 7.46 s at the actual variable capture cadence (about 3.6 frames/s).*
 [Media provenance](docs/MEDIA_PROVENANCE.md).
@@ -314,6 +311,3 @@ Exceptions, **not** covered by `LICENSE`:
   [Coolsonickirby/imgui-smash](https://github.com/Coolsonickirby/imgui-smash) (`bb47b205`). They keep
   imgui-smash's license, the GNU GPL v2 ([patches/imgui-smash/LICENSE](patches/imgui-smash/LICENSE), copied
   verbatim from `imgui-smash/LICENSE` at `bb47b205`).
-
-[firmware]: https://en-americas-support.nintendo.com/app/answers/detail/a_id/22525/~/nintendo-switch-system-updates-and-change-history
-[atmosphere]: https://github.com/Atmosphere-NX/Atmosphere/releases/tag/1.12.1

@@ -5,7 +5,7 @@ builds, source intervals and transforms.
 
 ## Online match strip (0.10.8 candidate, 2026-11-16 UTC)
 
-**Eden (untested on hardware).** The current `match-strip.gif`,
+**Eden LAN Online Quickplay.** The current `match-strip.gif`,
 `match-settings-strip.png` and `match-strip-closeup.png` come from one real
 cross-PC LAN Online Quickplay match, Smash 13.0.5, with two Sephiroths.
 They replace only the canonical match-strip trio. The old
@@ -62,7 +62,7 @@ and its review are retained separately; the final trim is authoritative.
 
 ## Game-speed dip and recovery (same 0.10.8 candidate)
 
-**Eden (untested on hardware).** These additive assets use the same
+**Eden LAN Online Quickplay.** These additive assets use the same
 2026-11-16 UTC paired run, XPS A DIAG build
 `0.10.8-a4411607be20-1794789531` and Yoga B production peer identified
 above. B was limited to 92%, then restored to 100%. The root reviewer
