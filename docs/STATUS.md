@@ -5,7 +5,7 @@
 **0.10.8 released and tested online on the operator's Switch on 2026-11-18.**
 The operator reported no crashes or desync with the release NRO installed.
 
-**Tested on:** Super Smash Bros. Ultimate 13.0.5 · Switch firmware (HOS) 23.5.0 · Atmosphère 1.12.2.
+**Tested on:** Super Smash Bros. Ultimate 13.0.5 · Switch firmware 23.5.0 · Atmosphère 1.12.2
 
 The Settings match strip now shows live game speed beside ping and buffer in
 networked battles. It reads the freshly validated current match object's +0x3dc

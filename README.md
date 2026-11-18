@@ -6,7 +6,7 @@
 The operator played online on their **Switch** on 2026-11-18 with the
 release NRO installed and reported no crashes or desync.
 
-**Tested on:** Super Smash Bros. Ultimate 13.0.5 · Switch firmware (HOS) 23.5.0 · Atmosphère 1.12.2.
+**Tested on:** Super Smash Bros. Ultimate 13.0.5 · Switch firmware 23.5.0 · Atmosphère 1.12.2
 [Validation](docs/VALIDATION.md#0108--online-play-on-switch--2026-11-18).
 
 A Rust/Skyline rebuild of Online Deluxe for **Super Smash Bros. Ultimate

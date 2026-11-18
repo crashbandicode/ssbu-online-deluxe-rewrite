@@ -3,7 +3,7 @@
 The operator tested the release NRO online on their Switch on 2026-11-18
 and reported no crashes or desync.
 
-**Tested on:** Super Smash Bros. Ultimate 13.0.5 · Switch firmware (HOS) 23.5.0 · Atmosphère 1.12.2.
+**Tested on:** Super Smash Bros. Ultimate 13.0.5 · Switch firmware 23.5.0 · Atmosphère 1.12.2
 [Download v0.10.8](https://git.syntaxbyexample.com/intpa/ssbu-online-deluxe-rewrite/releases/tag/v0.10.8).
 
 The Settings match strip now shows **Game 100%** beside ping and buffer during

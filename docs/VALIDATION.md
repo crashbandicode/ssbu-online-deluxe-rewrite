@@ -6,7 +6,7 @@ The operator played online on their Switch and reported no crashes or desync.
 The card contained the exact release NRO installed and verified by readback on
 2026-11-16.
 
-**Tested on:** Super Smash Bros. Ultimate 13.0.5 · Switch firmware (HOS) 23.5.0 · Atmosphère 1.12.2.
+**Tested on:** Super Smash Bros. Ultimate 13.0.5 · Switch firmware 23.5.0 · Atmosphère 1.12.2
 
 - Build commit: `e7720fd64c928df2c233d7923a98cb4f35ecacb3` (`v0.10.8`).
 - Build ID: `0.10.8-e7720fd64c92-1794800172`.
